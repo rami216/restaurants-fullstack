@@ -1,0 +1,10 @@
+fastapi
+uvicorn
+pydantic
+sqlalchemy
+python-jose[cryptography]
+passlib[bcrypt]
+PyJWT
+python-decouple
+python-multipart
+asyncpg
