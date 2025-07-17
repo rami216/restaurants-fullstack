@@ -817,7 +817,9 @@ const MainPage = () => {
                                       ? `${BACKEND_URL}${item[field.key]}`
                                       : "https://placehold.co/60x60/e2e8f0/a0aec0?text=No+Image"
                                   }
-                                  alt={item.item_name || "Menu item"}
+                                  alt={
+                                    item.name || item.item_name || "Item image"
+                                  }
                                   className="w-16 h-16 object-cover rounded"
                                   onError={(e) => {
                                     e.currentTarget.src =

@@ -51,7 +51,15 @@ export const tableConfigs: Record<string, TableConfig> = {
 
   categories: {
     primaryKey: "id",
-    fields: [{ key: "name", label: "Category Name", dataType: "string" }],
+    fields: [
+      { key: "name", label: "Category Name", dataType: "string" },
+      {
+        key: "image_url",
+        label: "Image",
+        dataType: "string",
+        renderAs: { type: "image" },
+      },
+    ],
     createApi: "/restaurants/categories/",
     updateApi: "/restaurants/${restaurant_id}/categories/${id}",
     deleteApi: "/restaurants/${restaurant_id}/categories/${id}",
