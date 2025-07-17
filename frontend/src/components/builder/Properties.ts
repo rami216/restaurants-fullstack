@@ -65,3 +65,8 @@ export interface MenuItem {
   base_price: number;
   image_url?: string;
 }
+export interface Category {
+  id: number;
+  name: string;
+  image_url?: string;
+}

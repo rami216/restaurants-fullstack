@@ -134,6 +134,29 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </p>
           </div>
         );
+      case "CATEGORY":
+        return (
+          <div
+            className="rounded-lg overflow-hidden bg-white shadow-md"
+            style={style}
+          >
+            {props.image_url && (
+              <img
+                src={`${BACKEND_URL}${props.image_url}`}
+                alt={props.name}
+                className="w-full h-40 object-cover"
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            )}
+            <div className="p-4">
+              <h4 className="font-bold text-xl text-gray-800">
+                {props.name || "Category Name"}
+              </h4>
+            </div>
+          </div>
+        );
 
       default:
         return (

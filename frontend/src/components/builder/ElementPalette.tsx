@@ -4,7 +4,13 @@
 
 import React, { useState, useEffect } from "react";
 import api from "@/lib/axios";
-import { Page, Element as ElementType, Location, MenuItem } from "./Properties";
+import {
+  Page,
+  Element as ElementType,
+  Location,
+  MenuItem,
+  Category,
+} from "./Properties";
 
 interface ElementPaletteProps {
   selectedSubsectionId: string | null;
@@ -13,6 +19,7 @@ interface ElementPaletteProps {
   locations: Location[];
   selectedLocationId: string | null;
   onLocationChange: (locationId: string) => void;
+  categories: Category[];
 }
 
 const availableElements = [
@@ -62,6 +69,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   locations,
   selectedLocationId,
   onLocationChange,
+  categories,
 }) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
@@ -134,6 +142,18 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
     };
     handleAddElement("MENU_ITEM", menuItemProps);
   };
+  const handleAddCategoryElement = (category: Category) => {
+    const categoryProps = {
+      id: category.id,
+      name: category.name,
+      image_url: category.image_url,
+      style: {
+        maxWidth: "320px",
+        textAlign: "center",
+      },
+    };
+    handleAddElement("CATEGORY", categoryProps);
+  };
 
   return (
     <div>
@@ -164,11 +184,32 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
 
       <div>
         <h3 className="text-lg font-semibold mb-2">Dynamic Content</h3>
+
+        <div className="mt-4">
+          <h4 className="font-semibold text-md mb-2">Categories</h4>
+          <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+            {categories.length > 0 ? (
+              categories.map((cat) => (
+                <button
+                  key={cat.id}
+                  onClick={() => handleAddCategoryElement(cat)}
+                  disabled={!selectedSubsectionId}
+                  className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                >
+                  {cat.name}
+                </button>
+              ))
+            ) : (
+              <p className="text-sm text-gray-500">No categories found.</p>
+            )}
+          </div>
+        </div>
+
         <label
           htmlFor="location-select"
-          className="block text-sm font-medium text-gray-700 mb-1"
+          className="block text-sm font-medium text-gray-700 mt-4 mb-1"
         >
-          Choose Location
+          Choose Location for Menu Items
         </label>
         <select
           id="location-select"
@@ -189,9 +230,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         {selectedLocationId && (
           <div className="mt-4">
             <h4 className="font-semibold text-md mb-2">Menu Items</h4>
-            <p className="text-xs text-gray-500 mb-2">
-              Click an item to add it to the canvas.
-            </p>
             <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
               {menuItems.length > 0 ? (
                 menuItems.map((item) => (

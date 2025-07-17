@@ -11,6 +11,7 @@ import {
   Page,
   Selection,
   Location,
+  Category,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 
@@ -22,54 +23,68 @@ const CreateWebsitePage = () => {
     type: null,
     id: null,
   });
-  // State for locations is now managed here
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
     null
   );
-
-  const fetchWebsiteData = async () => {
-    setLoading(true);
-    try {
-      const response = await api.get("/builder/website");
-      setWebsiteData(response.data);
-      if (response.data.pages?.length > 0 && !activePageId) {
-        setActivePageId(response.data.pages[0].page_id);
-      }
-    } catch (error) {
-      if ((error as any).response?.status === 404) {
-        setWebsiteData(null);
-      } else {
-        console.error("Error fetching website data:", error);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  // Fetches all available locations for the user
-  const fetchLocations = async () => {
-    try {
-      const response = await api.get("/locations/has-location");
-      setLocations(response.data);
-      // Automatically select the first location if none is selected
-      if (response.data.length > 0 && !selectedLocationId) {
-        setSelectedLocationId(response.data[0].location_id);
-      }
-    } catch (error) {
-      console.error("Error fetching locations:", error);
-    }
-  };
+  const [categories, setCategories] = useState<Category[]>([]);
+  const [restaurantId, setRestaurantId] = useState<string | null>(null);
 
   useEffect(() => {
-    fetchWebsiteData();
-    fetchLocations(); // Fetch locations on initial component mount
+    const fetchInitialData = async () => {
+      setLoading(true);
+      try {
+        // Fetch website data, locations, and restaurant ID in parallel
+        const [websiteRes, locationsRes, restaurantRes] = await Promise.all([
+          api.get("/builder/website").catch((e) => e.response),
+          api.get("/locations/has-location").catch((e) => e.response),
+          api.get("/restaurants/has-restaurant").catch((e) => e.response),
+        ]);
+
+        // Process website data
+        if (websiteRes && websiteRes.status === 200) {
+          setWebsiteData(websiteRes.data);
+          if (websiteRes.data.pages?.length > 0 && !activePageId) {
+            setActivePageId(websiteRes.data.pages[0].page_id);
+          }
+        } else {
+          setWebsiteData(null);
+        }
+
+        // Process locations data
+        if (locationsRes && locationsRes.status === 200) {
+          setLocations(locationsRes.data);
+          if (locationsRes.data.length > 0) {
+            setSelectedLocationId(locationsRes.data[0].location_id);
+          }
+        }
+
+        // Process restaurant and fetch categories
+        if (
+          restaurantRes &&
+          restaurantRes.status === 200 &&
+          restaurantRes.data.has_restaurant
+        ) {
+          const rId = restaurantRes.data.restaurant_id;
+          setRestaurantId(rId);
+          const categoriesRes = await api.get(`/restaurants/categories/${rId}`);
+          setCategories(categoriesRes.data);
+        }
+      } catch (error) {
+        console.error("Error fetching initial data:", error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchInitialData();
   }, []);
 
   const handleCreateWebsite = async () => {
     try {
       await api.post("/builder/website", {});
-      await fetchWebsiteData();
+      // Refetch all data after creation
+      window.location.reload();
     } catch (error) {
       alert("Failed to create website.");
       console.error(error);
@@ -151,10 +166,10 @@ const CreateWebsitePage = () => {
           }
           activePage={activePage || null}
           onUpdate={updateWebsiteData}
-          // Pass the location state and handler down to the palette
           locations={locations}
           selectedLocationId={selectedLocationId}
           onLocationChange={setSelectedLocationId}
+          categories={categories}
         />
       </aside>
 
