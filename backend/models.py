@@ -96,10 +96,10 @@ class Category(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     name = Column(String, nullable=False)
     restaurant_id = Column(UUID(as_uuid=True), ForeignKey("restaurant_owners.restaurant_id"))
-
+    image_url = Column(String, nullable=True)
     # Add relationship to MenuItem
     menu_items = relationship("MenuItem", back_populates="category")
-
+    
 
 
 class MenuItem(Base):

@@ -169,7 +169,8 @@ async def create_category(
 ):
     new_category = Category(
         name=payload.name,
-        restaurant_id=payload.restaurant_id
+        restaurant_id=payload.restaurant_id,
+        image_url=payload.image_url
     )
 
     db.add(new_category)
@@ -211,7 +212,6 @@ async def update_category(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db),
 ):
-    # Find the category where the ID and restaurant_id both match
     result = await db.execute(
         select(Category).where(
             Category.id == id,
@@ -220,22 +220,19 @@ async def update_category(
     )
     db_category = result.scalars().first()
 
-    # If no category matches both conditions, return a 404 error
     if not db_category:
         raise HTTPException(
             status_code=404, 
             detail="Category not found in this restaurant"
         )
 
-    # Update the category's data from the request payload
-    db_category.name = payload.name
+    # Use model_dump to handle partial updates cleanly for both name and image_url
+    update_data = payload.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_category, key, value)
     
-    # Commit changes and return the updated object
     await db.commit()
     await db.refresh(db_category)
 
     return db_category
-
-
-
 

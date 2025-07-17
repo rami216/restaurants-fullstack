@@ -1,4 +1,4 @@
-// app/createwebsite/page.tsx
+// frontend/src/app/createwebsite/page.tsx
 
 "use client";
 
@@ -6,7 +6,12 @@ import React, { useState, useEffect } from "react";
 import api from "@/lib/axios";
 import ElementPalette from "@/components/builder/ElementPalette";
 import BuilderCanvas from "@/components/builder/BuilderCanvas";
-import { WebsiteData, Page, Selection } from "@/components/builder/Properties";
+import {
+  WebsiteData,
+  Page,
+  Selection,
+  Location,
+} from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 
 const CreateWebsitePage = () => {
@@ -17,6 +22,11 @@ const CreateWebsitePage = () => {
     type: null,
     id: null,
   });
+  // State for locations is now managed here
+  const [locations, setLocations] = useState<Location[]>([]);
+  const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
+    null
+  );
 
   const fetchWebsiteData = async () => {
     setLoading(true);
@@ -37,8 +47,23 @@ const CreateWebsitePage = () => {
     }
   };
 
+  // Fetches all available locations for the user
+  const fetchLocations = async () => {
+    try {
+      const response = await api.get("/locations/has-location");
+      setLocations(response.data);
+      // Automatically select the first location if none is selected
+      if (response.data.length > 0 && !selectedLocationId) {
+        setSelectedLocationId(response.data[0].location_id);
+      }
+    } catch (error) {
+      console.error("Error fetching locations:", error);
+    }
+  };
+
   useEffect(() => {
     fetchWebsiteData();
+    fetchLocations(); // Fetch locations on initial component mount
   }, []);
 
   const handleCreateWebsite = async () => {
@@ -52,9 +77,6 @@ const CreateWebsitePage = () => {
   };
 
   const handleSaveChangesToDB = async () => {
-    // This is where you would iterate through the local websiteData state
-    // and send all the necessary PUT/POST requests to your backend API.
-    // This is a complex task for a later stage.
     alert(
       "Saving to database is not implemented yet, but all changes are in the local state!"
     );
@@ -129,6 +151,10 @@ const CreateWebsitePage = () => {
           }
           activePage={activePage || null}
           onUpdate={updateWebsiteData}
+          // Pass the location state and handler down to the palette
+          locations={locations}
+          selectedLocationId={selectedLocationId}
+          onLocationChange={setSelectedLocationId}
         />
       </aside>
 

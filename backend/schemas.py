@@ -91,12 +91,14 @@ class LocationUpdate(BaseModel):
 class CategoryCreate(BaseModel):
     name: str
     restaurant_id: UUID
+    image_url: Optional[str] = None # <-- ADDED
 
 
 class CategoryResponse(BaseModel):
     id: int
     restaurant_id: UUID
     name: str
+    image_url: Optional[str] = None # <-- ADDED
     created_at: Optional[datetime.datetime]
 
     class Config:
@@ -104,6 +106,7 @@ class CategoryResponse(BaseModel):
         
 class CategoryUpdate(BaseModel):
     name: str
+    image_url: Optional[str] = None # <-- ADDED
 
 class MenuItemBase(BaseModel):
     item_name: str

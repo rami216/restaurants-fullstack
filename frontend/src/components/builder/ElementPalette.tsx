@@ -1,14 +1,18 @@
-// components/builder/ElementPalette.tsx
+// frontend/src/components/builder/ElementPalette.tsx
 
 "use client";
 
-import React from "react";
-import { Page, Element as ElementType } from "./Properties";
+import React, { useState, useEffect } from "react";
+import api from "@/lib/axios";
+import { Page, Element as ElementType, Location, MenuItem } from "./Properties";
 
 interface ElementPaletteProps {
   selectedSubsectionId: string | null;
   activePage: Page | null;
   onUpdate: (updatedPage: Page) => void;
+  locations: Location[];
+  selectedLocationId: string | null;
+  onLocationChange: (locationId: string) => void;
 }
 
 const availableElements = [
@@ -55,7 +59,31 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   selectedSubsectionId,
   activePage,
   onUpdate,
+  locations,
+  selectedLocationId,
+  onLocationChange,
 }) => {
+  const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
+
+  useEffect(() => {
+    const fetchMenuItems = async () => {
+      if (selectedLocationId) {
+        try {
+          const response = await api.get(
+            `/locations/${selectedLocationId}/menu`
+          );
+          setMenuItems(response.data);
+        } catch (error) {
+          console.error("Error fetching menu items:", error);
+          setMenuItems([]);
+        }
+      } else {
+        setMenuItems([]);
+      }
+    };
+    fetchMenuItems();
+  }, [selectedLocationId]);
+
   const handleAddElement = (elementType: string, defaultProps: any) => {
     if (!selectedSubsectionId || !activePage)
       return alert("Please select a layout block first.");
@@ -85,6 +113,28 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
     onUpdate(updatedPage);
   };
 
+  // This function creates a 'MENU_ITEM' element with all the necessary data
+  const handleAddMenuItemElement = (item: MenuItem) => {
+    const menuItemProps = {
+      item_id: item.item_id,
+      item_name: item.item_name,
+      description: item.description,
+      base_price: item.base_price,
+      image_url: item.image_url,
+      // You can add default styles for the card here
+      style: {
+        padding: "1rem",
+        border: "1px solid #e2e8f0",
+        borderRadius: "0.5rem",
+        backgroundColor: "#ffffff",
+        boxShadow:
+          "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
+        maxWidth: "300px", // Set a maximum width for the card
+      },
+    };
+    handleAddElement("MENU_ITEM", menuItemProps);
+  };
+
   return (
     <div>
       <h2 className="text-xl font-bold mb-4">Add Elements</h2>
@@ -108,6 +158,58 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             {el.name}
           </button>
         ))}
+      </div>
+
+      <hr className="my-4 border-gray-300" />
+
+      <div>
+        <h3 className="text-lg font-semibold mb-2">Dynamic Content</h3>
+        <label
+          htmlFor="location-select"
+          className="block text-sm font-medium text-gray-700 mb-1"
+        >
+          Choose Location
+        </label>
+        <select
+          id="location-select"
+          value={selectedLocationId || ""}
+          onChange={(e) => onLocationChange(e.target.value)}
+          className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+        >
+          <option value="" disabled>
+            -- Select a location --
+          </option>
+          {locations.map((loc) => (
+            <option key={loc.location_id} value={loc.location_id}>
+              {loc.location_name}
+            </option>
+          ))}
+        </select>
+
+        {selectedLocationId && (
+          <div className="mt-4">
+            <h4 className="font-semibold text-md mb-2">Menu Items</h4>
+            <p className="text-xs text-gray-500 mb-2">
+              Click an item to add it to the canvas.
+            </p>
+            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+              {menuItems.length > 0 ? (
+                menuItems.map((item) => (
+                  <button
+                    key={item.item_id}
+                    onClick={() => handleAddMenuItemElement(item)}
+                    disabled={!selectedSubsectionId}
+                    className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                  >
+                    {item.item_name}
+                  </button>
+                ))
+              ) : (
+                <p className="text-sm text-gray-500">No menu items found.</p>
+              )}
+            </div>
+          </div>
+        )}
       </div>
     </div>
   );

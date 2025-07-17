@@ -1,4 +1,4 @@
-// components/builder/BuilderCanvas.tsx
+// frontend/src/components/builder/BuilderCanvas.tsx
 
 "use client";
 
@@ -73,6 +73,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   const renderElement = (element: ElementType) => {
     const props = element.properties || {};
     const style = props.style || {};
+    const BACKEND_URL = "http://127.0.0.1:8000";
+
     switch (element.element_type) {
       case "TEXT":
         return <div style={style}>{props.content || "New Text Block"}</div>;
@@ -105,6 +107,34 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             ))}
           </select>
         );
+
+      // This is the new case to render the menu item card
+      case "MENU_ITEM":
+        return (
+          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
+            {props.image_url && (
+              <img
+                src={`${BACKEND_URL}${props.image_url}`}
+                alt={props.item_name}
+                className="w-full object-cover rounded-md mb-4"
+                // Hide the image element if it fails to load
+                onError={(e) => {
+                  e.currentTarget.style.display = "none";
+                }}
+              />
+            )}
+            <h4 className="font-bold text-lg text-gray-800">
+              {props.item_name || "Menu Item"}
+            </h4>
+            <p className="text-sm text-gray-600 my-2">
+              {props.description || "No description available."}
+            </p>
+            <p className="font-semibold text-right text-gray-800">
+              ${props.base_price?.toFixed(2) || "0.00"}
+            </p>
+          </div>
+        );
+
       default:
         return (
           <div className="border p-2 bg-gray-300 text-black rounded">
@@ -155,7 +185,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                     id: subsection.subsection_id,
                   });
                 }}
-                className={`p-4 border-2 rounded-lg min-h-[100px] flex transition-all ${
+                className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 flex flex-col items-stretch transition-all ${
+                  // Added flex-1 and items-stretch
                   selection.type === "subsection" &&
                   selection.id === subsection.subsection_id
                     ? "border-green-500"
