@@ -11,9 +11,13 @@ import {
   Italic,
   Underline,
   Upload,
+  PanelRightClose,
+  PanelRightOpen,
 } from "lucide-react";
 
 interface PropertyEditorProps {
+  isExpanded: boolean;
+  onToggle: () => void;
   selectedItem: any | null;
   selectionType: Selection["type"];
   activePage: Page | null;
@@ -22,6 +26,8 @@ interface PropertyEditorProps {
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
+  isExpanded,
+  onToggle,
   selectedItem,
   selectionType,
   activePage,
@@ -688,25 +694,52 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   return (
-    <div>
-      <div className="flex justify-between items-center mb-4">
-        <div>
-          <h2 className="text-xl font-bold">Properties</h2>
-          <h3 className="text-lg text-gray-600 font-mono capitalize">
-            {selectionType}
-          </h3>
-        </div>
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center mb-4 flex-shrink-0">
+        {isExpanded && <h2 className="text-xl font-bold">Properties</h2>}
         <button
-          onClick={handleDelete}
-          className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100"
+          onClick={onToggle}
+          className="p-1 text-gray-500 hover:text-gray-800 ml-auto"
         >
-          <Trash2 size={18} />
+          {isExpanded ? (
+            <PanelRightClose size={20} />
+          ) : (
+            <PanelRightOpen size={20} />
+          )}
         </button>
       </div>
 
-      {selectionType === "section" && renderSectionEditor()}
-      {selectionType === "subsection" && renderSubsectionEditor()}
-      {selectionType === "element" && renderElementEditor()}
+      {isExpanded && (
+        <div className="overflow-y-auto flex-grow">
+          {!selectedItem || !selectionType || !activePage ? (
+            <div>
+              <p className="text-gray-500">
+                Select an item on the canvas to edit its properties.
+              </p>
+            </div>
+          ) : (
+            <>
+              <div className="flex justify-between items-center mb-4">
+                <div>
+                  <h3 className="text-lg text-gray-600 font-mono capitalize">
+                    {selectionType}
+                  </h3>
+                </div>
+                <button
+                  onClick={handleDelete}
+                  className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100"
+                >
+                  <Trash2 size={18} />
+                </button>
+              </div>
+
+              {selectionType === "section" && renderSectionEditor()}
+              {selectionType === "subsection" && renderSubsectionEditor()}
+              {selectionType === "element" && renderElementEditor()}
+            </>
+          )}
+        </div>
+      )}
     </div>
   );
 };

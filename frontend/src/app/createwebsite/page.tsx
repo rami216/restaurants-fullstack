@@ -30,18 +30,20 @@ const CreateWebsitePage = () => {
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
 
+  // State to manage sidebar visibility
+  const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
+  const [isPropertiesExpanded, setIsPropertiesExpanded] = useState(true);
+
   useEffect(() => {
     const fetchInitialData = async () => {
       setLoading(true);
       try {
-        // Fetch website data, locations, and restaurant ID in parallel
         const [websiteRes, locationsRes, restaurantRes] = await Promise.all([
           api.get("/builder/website").catch((e) => e.response),
           api.get("/locations/has-location").catch((e) => e.response),
           api.get("/restaurants/has-restaurant").catch((e) => e.response),
         ]);
 
-        // Process website data
         if (websiteRes && websiteRes.status === 200) {
           setWebsiteData(websiteRes.data);
           if (websiteRes.data.pages?.length > 0 && !activePageId) {
@@ -51,7 +53,6 @@ const CreateWebsitePage = () => {
           setWebsiteData(null);
         }
 
-        // Process locations data
         if (locationsRes && locationsRes.status === 200) {
           setLocations(locationsRes.data);
           if (locationsRes.data.length > 0) {
@@ -59,7 +60,6 @@ const CreateWebsitePage = () => {
           }
         }
 
-        // Process restaurant and fetch categories
         if (
           restaurantRes &&
           restaurantRes.status === 200 &&
@@ -83,7 +83,6 @@ const CreateWebsitePage = () => {
   const handleCreateWebsite = async () => {
     try {
       await api.post("/builder/website", {});
-      // Refetch all data after creation
       window.location.reload();
     } catch (error) {
       alert("Failed to create website.");
@@ -159,8 +158,14 @@ const CreateWebsitePage = () => {
 
   return (
     <div className="flex h-screen bg-gray-200 font-sans">
-      <aside className="w-64 bg-white p-4 overflow-y-auto shadow-lg">
+      <aside
+        className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${
+          isPaletteExpanded ? "w-64 p-4" : "w-16 p-2"
+        }`}
+      >
         <ElementPalette
+          isExpanded={isPaletteExpanded}
+          onToggle={() => setIsPaletteExpanded(!isPaletteExpanded)}
           selectedSubsectionId={
             selection.type === "subsection" ? selection.id : null
           }
@@ -193,8 +198,14 @@ const CreateWebsitePage = () => {
         </main>
       </div>
 
-      <aside className="w-80 bg-white p-4 overflow-y-auto shadow-lg">
+      <aside
+        className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${
+          isPropertiesExpanded ? "w-80 p-4" : "w-16 p-2"
+        }`}
+      >
         <PropertyEditor
+          isExpanded={isPropertiesExpanded}
+          onToggle={() => setIsPropertiesExpanded(!isPropertiesExpanded)}
           selectedItem={selectedItem}
           selectionType={selection.type}
           activePage={activePage || null}

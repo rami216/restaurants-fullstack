@@ -11,8 +11,11 @@ import {
   MenuItem,
   Category,
 } from "./Properties";
+import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
 
 interface ElementPaletteProps {
+  isExpanded: boolean;
+  onToggle: () => void;
   selectedSubsectionId: string | null;
   activePage: Page | null;
   onUpdate: (updatedPage: Page) => void;
@@ -63,6 +66,8 @@ const availableElements = [
 ];
 
 const ElementPalette: React.FC<ElementPaletteProps> = ({
+  isExpanded,
+  onToggle,
   selectedSubsectionId,
   activePage,
   onUpdate,
@@ -156,99 +161,118 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   };
 
   return (
-    <div>
-      <h2 className="text-xl font-bold mb-4">Add Elements</h2>
-      <p
-        className={`text-sm mb-4 ${
-          selectedSubsectionId ? "text-green-600" : "text-red-600"
-        }`}
-      >
-        {selectedSubsectionId
-          ? "A layout block is selected."
-          : "Select a layout block to add elements."}
-      </p>
-      <div className="space-y-2">
-        {availableElements.map((el) => (
-          <button
-            key={el.type}
-            onClick={() => handleAddElement(el.type, el.defaultProps)}
-            disabled={!selectedSubsectionId}
-            className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
-          >
-            {el.name}
-          </button>
-        ))}
+    <div className="flex flex-col h-full">
+      <div className="flex justify-between items-center mb-4 flex-shrink-0">
+        {isExpanded && <h2 className="text-xl font-bold">Elements</h2>}
+        <button
+          onClick={onToggle}
+          className="p-1 text-gray-500 hover:text-gray-800"
+        >
+          {isExpanded ? (
+            <PanelLeftClose size={20} />
+          ) : (
+            <PanelLeftOpen size={20} />
+          )}
+        </button>
       </div>
 
-      <hr className="my-4 border-gray-300" />
+      {isExpanded && (
+        <div className="overflow-y-auto flex-grow">
+          <p
+            className={`text-sm mb-4 ${
+              selectedSubsectionId ? "text-green-600" : "text-red-600"
+            }`}
+          >
+            {selectedSubsectionId
+              ? "A layout block is selected."
+              : "Select a layout block to add elements."}
+          </p>
+          <div className="space-y-2">
+            {availableElements.map((el) => (
+              <button
+                key={el.type}
+                onClick={() => handleAddElement(el.type, el.defaultProps)}
+                disabled={!selectedSubsectionId}
+                className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+              >
+                {el.name}
+              </button>
+            ))}
+          </div>
 
-      <div>
-        <h3 className="text-lg font-semibold mb-2">Dynamic Content</h3>
+          <hr className="my-4 border-gray-300" />
 
-        <div className="mt-4">
-          <h4 className="font-semibold text-md mb-2">Categories</h4>
-          <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
-            {categories.length > 0 ? (
-              categories.map((cat) => (
-                <button
-                  key={cat.id}
-                  onClick={() => handleAddCategoryElement(cat)}
-                  disabled={!selectedSubsectionId}
-                  className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
-                >
-                  {cat.name}
-                </button>
-              ))
-            ) : (
-              <p className="text-sm text-gray-500">No categories found.</p>
+          <div>
+            <h3 className="text-lg font-semibold mb-2">Dynamic Content</h3>
+
+            <div className="mt-4">
+              <h4 className="font-semibold text-md mb-2">Categories</h4>
+              <div className="space-y-2 max-h-40 overflow-y-auto pr-2">
+                {categories.length > 0 ? (
+                  categories.map((cat) => (
+                    <button
+                      key={cat.id}
+                      onClick={() => handleAddCategoryElement(cat)}
+                      disabled={!selectedSubsectionId}
+                      className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                    >
+                      {cat.name}
+                    </button>
+                  ))
+                ) : (
+                  <p className="text-sm text-gray-500">No categories found.</p>
+                )}
+              </div>
+            </div>
+
+            <label
+              htmlFor="location-select"
+              className="block text-sm font-medium text-gray-700 mt-4 mb-1"
+            >
+              Choose Location for Menu Items
+            </label>
+            <select
+              id="location-select"
+              value={selectedLocationId || ""}
+              onChange={(e) => onLocationChange(e.target.value)}
+              className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+            >
+              <option value="" disabled>
+                -- Select a location --
+              </option>
+              {locations.map((loc) => (
+                <option key={loc.location_id} value={loc.location_id}>
+                  {loc.location_name}
+                </option>
+              ))}
+            </select>
+
+            {selectedLocationId && (
+              <div className="mt-4">
+                <h4 className="font-semibold text-md mb-2">Menu Items</h4>
+                <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
+                  {menuItems.length > 0 ? (
+                    menuItems.map((item) => (
+                      <button
+                        key={item.item_id}
+                        onClick={() => handleAddMenuItemElement(item)}
+                        disabled={!selectedSubsectionId}
+                        className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
+                      >
+                        {item.item_name}
+                      </button>
+                    ))
+                  ) : (
+                    <p className="text-sm text-gray-500">
+                      No menu items found.
+                    </p>
+                  )}
+                </div>
+              </div>
             )}
           </div>
         </div>
-
-        <label
-          htmlFor="location-select"
-          className="block text-sm font-medium text-gray-700 mt-4 mb-1"
-        >
-          Choose Location for Menu Items
-        </label>
-        <select
-          id="location-select"
-          value={selectedLocationId || ""}
-          onChange={(e) => onLocationChange(e.target.value)}
-          className="w-full border border-gray-300 rounded-md shadow-sm p-2"
-        >
-          <option value="" disabled>
-            -- Select a location --
-          </option>
-          {locations.map((loc) => (
-            <option key={loc.location_id} value={loc.location_id}>
-              {loc.location_name}
-            </option>
-          ))}
-        </select>
-
-        {selectedLocationId && (
-          <div className="mt-4">
-            <h4 className="font-semibold text-md mb-2">Menu Items</h4>
-            <div className="space-y-2 max-h-60 overflow-y-auto pr-2">
-              {menuItems.length > 0 ? (
-                menuItems.map((item) => (
-                  <button
-                    key={item.item_id}
-                    onClick={() => handleAddMenuItemElement(item)}
-                    disabled={!selectedSubsectionId}
-                    className="w-full text-left bg-gray-100 p-2 rounded hover:bg-gray-200 disabled:bg-gray-50 disabled:text-gray-400"
-                  >
-                    {item.item_name}
-                  </button>
-                ))
-              ) : (
-                <p className="text-sm text-gray-500">No menu items found.</p>
-              )}
-            </div>
-          </div>
-        )}
-      </div>
+      )}
     </div>
   );
 };
