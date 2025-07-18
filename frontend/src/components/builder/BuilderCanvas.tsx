@@ -2,7 +2,7 @@
 
 "use client";
 
-import React from "react";
+import React, { useState } from "react"; // Import useState
 import {
   Page,
   Selection,
@@ -10,8 +10,56 @@ import {
   Subsection as SubsectionType,
   Element as ElementType,
   FormField,
+  AccordionItem,
 } from "./Properties";
-import { Plus } from "lucide-react";
+import { Plus, ChevronDown } from "lucide-react";
+
+const Accordion = ({
+  items,
+  style,
+}: {
+  items: AccordionItem[];
+  style: any;
+}) => {
+  const [openIndex, setOpenIndex] = useState<number | null>(null);
+
+  const toggleItem = (index: number) => {
+    setOpenIndex(openIndex === index ? null : index);
+  };
+
+  return (
+    <div className="space-y-2" style={{ width: style.width || "100%" }}>
+      {(items || []).map((item, index) => (
+        <div key={item.id} className="border rounded-md overflow-hidden">
+          <button
+            onClick={() => toggleItem(index)}
+            className="w-full flex justify-between items-center p-3 font-semibold text-left"
+            style={{ backgroundColor: style.questionBg || "#f3f4f6" }}
+          >
+            <span>{item.question}</span>
+            <ChevronDown
+              size={20}
+              style={{
+                color: style.iconColor || "#6b7280",
+                transform:
+                  openIndex === index ? "rotate(180deg)" : "rotate(0deg)",
+              }}
+              className="transition-transform duration-300"
+            />
+          </button>
+          {openIndex === index && (
+            <div
+              className="p-3 text-gray-700"
+              style={{ backgroundColor: style.answerBg || "#ffffff" }}
+            >
+              {item.answer}
+            </div>
+          )}
+        </div>
+      ))}
+    </div>
+  );
+};
 
 interface BuilderCanvasProps {
   page: Page | undefined;
@@ -218,6 +266,9 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </div>
           </div>
         );
+      case "ACCORDION":
+        // Render the new interactive Accordion component
+        return <Accordion items={props.items || []} style={style} />;
 
       default:
         return (

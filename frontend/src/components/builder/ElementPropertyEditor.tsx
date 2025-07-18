@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useRef } from "react";
-import { Selection, Page, FormField } from "./Properties";
+import { Selection, Page, FormField, AccordionItem } from "./Properties";
 import {
   Trash2,
   PlusCircle,
@@ -1115,6 +1115,146 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     }
                     className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                     placeholder="e.g., 100px, 100%, auto"
+                  />
+                </div>
+              </div>
+            </div>
+          </div>
+        );
+      case "ACCORDION":
+        const handleAccordionChange = (
+          index: number,
+          key: "question" | "answer",
+          value: string
+        ) => {
+          const newItems = [...selectedItem.properties.items];
+          newItems[index] = { ...newItems[index], [key]: value };
+          handlePropertyChange("items", newItems);
+        };
+
+        const addAccordionItem = () => {
+          const newItems = [
+            ...(selectedItem.properties.items || []),
+            {
+              id: `accordion_${Date.now()}`,
+              question: "New Question",
+              answer: "New Answer",
+            },
+          ];
+          handlePropertyChange("items", newItems);
+        };
+
+        const removeAccordionItem = (index: number) => {
+          const newItems = selectedItem.properties.items.filter(
+            (_: any, i: number) => i !== index
+          );
+          handlePropertyChange("items", newItems);
+        };
+
+        return (
+          <div className="space-y-6">
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Accordion Items
+              </h4>
+              <div className="space-y-3">
+                {(selectedItem.properties.items || []).map(
+                  (item: AccordionItem, index: number) => (
+                    <div
+                      key={item.id}
+                      className="p-3 border rounded-md bg-gray-50 space-y-2"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-gray-500">
+                          Item {index + 1}
+                        </span>
+                        <button
+                          onClick={() => removeAccordionItem(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <textarea
+                        placeholder="Question"
+                        value={item.question}
+                        onChange={(e) =>
+                          handleAccordionChange(
+                            index,
+                            "question",
+                            e.target.value
+                          )
+                        }
+                        className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                        rows={2}
+                      />
+                      <textarea
+                        placeholder="Answer"
+                        value={item.answer}
+                        onChange={(e) =>
+                          handleAccordionChange(index, "answer", e.target.value)
+                        }
+                        className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                        rows={3}
+                      />
+                    </div>
+                  )
+                )}
+              </div>
+              <button
+                onClick={addAccordionItem}
+                className="mt-3 w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
+              >
+                <PlusCircle size={16} className="mr-2" /> Add Item
+              </button>
+            </div>
+            <hr />
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Styling
+              </h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Question Background
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.style?.questionBg || "#f3f4f6"
+                    }
+                    onChange={(e) =>
+                      handleStyleChange("questionBg", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Answer Background
+                  </label>
+                  <input
+                    type="color"
+                    value={selectedItem.properties.style?.answerBg || "#ffffff"}
+                    onChange={(e) =>
+                      handleStyleChange("answerBg", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Icon Color
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.style?.iconColor || "#6b7280"
+                    }
+                    onChange={(e) =>
+                      handleStyleChange("iconColor", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
                   />
                 </div>
               </div>

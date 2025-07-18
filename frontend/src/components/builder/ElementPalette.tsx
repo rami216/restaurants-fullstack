@@ -102,6 +102,27 @@ const availableElements = [
       },
     },
   },
+  {
+    type: "ACCORDION",
+    name: "Accordion",
+    defaultProps: {
+      items: [
+        {
+          id: `accordion_${Date.now()}`,
+          question: "First Question?",
+          answer: "This is the answer to the first question.",
+        },
+        {
+          id: `accordion_${Date.now() + 1}`,
+          question: "Second Question?",
+          answer: "This is the answer to the second question.",
+        },
+      ],
+      style: {
+        width: "100%",
+      },
+    },
+  },
 ];
 
 const ElementPalette: React.FC<ElementPaletteProps> = ({

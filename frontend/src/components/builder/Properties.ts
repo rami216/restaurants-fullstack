@@ -77,3 +77,8 @@ export interface FormField {
   label: string;
   placeholder: string;
 }
+export interface AccordionItem {
+  id: string;
+  question: string;
+  answer: string;
+}
