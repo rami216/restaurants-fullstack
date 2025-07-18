@@ -228,33 +228,97 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           Element Layout
         </label>
         <select
-          value={selectedItem.properties.flexDirection || "column"}
-          onChange={(e) =>
-            handlePropertyChange("flexDirection", e.target.value)
-          }
+          value={selectedItem.properties.display || "flex"}
+          onChange={(e) => {
+            const newDisplay = e.target.value;
+            handlePropertyChange("display", newDisplay);
+            // Set default grid properties when switching if they don't exist
+            if (newDisplay === "grid" && !selectedItem.properties.gridColumns) {
+              const newProps = {
+                ...selectedItem.properties,
+                display: "grid",
+                gridColumns: 2,
+                gridTemplateColumns: "repeat(2, 1fr)",
+              };
+              updateItem({ ...selectedItem, properties: newProps });
+            }
+          }}
           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
         >
-          <option value="column">Vertical</option>
-          <option value="row">Horizontal</option>
+          <option value="flex">Flexbox (Vertical/Horizontal)</option>
+          <option value="grid">Grid</option>
         </select>
       </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Justify Elements
-        </label>
-        <select
-          value={selectedItem.properties.justifyContent || "flex-start"}
-          onChange={(e) =>
-            handlePropertyChange("justifyContent", e.target.value)
-          }
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-        >
-          <option value="flex-start">Start</option>
-          <option value="center">Center</option>
-          <option value="flex-end">End</option>
-          <option value="space-between">Space Between</option>
-        </select>
-      </div>
+
+      {/* Conditional UI for Grid Layout */}
+      {selectedItem.properties.display === "grid" && (
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Number of Columns
+          </label>
+          <input
+            type="number"
+            min="1"
+            value={selectedItem.properties.gridColumns || ""}
+            onChange={(e) => {
+              const rawValue = e.target.value;
+              // Update the property that holds the input's value. This allows typing.
+              handlePropertyChange("gridColumns", rawValue);
+
+              const columns = parseInt(rawValue, 10);
+              // Only update the functional CSS property if the value is a valid, positive number.
+              if (!isNaN(columns) && columns > 0) {
+                handlePropertyChange(
+                  "gridTemplateColumns",
+                  `repeat(${columns}, 1fr)`
+                );
+              }
+            }}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          />
+        </div>
+      )}
+
+      {/* Conditional UI for Flexbox Layout */}
+      {(!selectedItem.properties.display ||
+        selectedItem.properties.display === "flex") && (
+        <>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Flex Direction
+            </label>
+            <select
+              value={selectedItem.properties.flexDirection || "column"}
+              onChange={(e) =>
+                handlePropertyChange("flexDirection", e.target.value)
+              }
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            >
+              <option value="column">Vertical</option>
+              <option value="row">Horizontal</option>
+            </select>
+          </div>
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Justify Elements
+            </label>
+            <select
+              value={selectedItem.properties.justifyContent || "flex-start"}
+              onChange={(e) =>
+                handlePropertyChange("justifyContent", e.target.value)
+              }
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            >
+              <option value="flex-start">Start</option>
+              <option value="center">Center</option>
+              <option value="flex-end">End</option>
+              <option value="space-between">Space Between</option>
+            </select>
+          </div>
+        </>
+      )}
+
+      {/* Common Properties */}
       <div>
         <label className="block text-sm font-medium text-gray-700">
           Gap Between Elements

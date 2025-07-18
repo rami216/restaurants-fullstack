@@ -10,10 +10,12 @@ export interface Subsection {
   subsection_id: string;
   position: number;
   properties: {
-    display?: "flex";
+    display?: "flex" | "grid";
     flexDirection?: "row" | "column";
     justifyContent?: "flex-start" | "center" | "flex-end" | "space-between";
     alignItems?: "flex-start" | "center" | "flex-end";
+    gridTemplateColumns?: string;
+    gridColumns?: number;
     gap?: string;
   };
   elements: Element[];

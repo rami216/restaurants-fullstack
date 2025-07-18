@@ -198,49 +198,69 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               gap: section.properties.gap,
             }}
           >
-            {section.subsections.map((subsection) => (
-              <div
-                key={subsection.subsection_id}
-                onClick={(e) => {
-                  e.stopPropagation();
-                  onSelect({
-                    type: "subsection",
-                    id: subsection.subsection_id,
-                  });
-                }}
-                className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 flex flex-col items-stretch transition-all ${
-                  // Added flex-1 and items-stretch
-                  selection.type === "subsection" &&
-                  selection.id === subsection.subsection_id
-                    ? "border-green-500"
-                    : "border-dashed border-gray-400"
-                }`}
-                style={subsection.properties}
-              >
-                {subsection.elements.map((element) => (
-                  <div
-                    key={element.element_id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelect({ type: "element", id: element.element_id });
-                    }}
-                    className={`p-2 rounded transition-all w-full ${
-                      selection.type === "element" &&
-                      selection.id === element.element_id
-                        ? "ring-2 ring-offset-2 ring-pink-500"
-                        : ""
-                    }`}
-                  >
-                    {renderElement(element)}
-                  </div>
-                ))}
-                {subsection.elements.length === 0 && (
-                  <div className="text-gray-400 self-center mx-auto">
-                    Add elements here
-                  </div>
-                )}
-              </div>
-            ))}
+            {section.subsections.map((subsection) => {
+              // Construct dynamic styles for the subsection
+              const subsectionStyle: React.CSSProperties = {
+                display: subsection.properties.display || "flex",
+                gap: subsection.properties.gap || "1rem",
+              };
+
+              if (subsection.properties.display === "grid") {
+                subsectionStyle.gridTemplateColumns =
+                  subsection.properties.gridTemplateColumns || "repeat(2, 1fr)";
+              } else {
+                // Default to flex properties
+                subsectionStyle.flexDirection =
+                  subsection.properties.flexDirection || "column";
+                subsectionStyle.justifyContent =
+                  subsection.properties.justifyContent || "flex-start";
+                subsectionStyle.alignItems =
+                  subsection.properties.alignItems || "stretch";
+              }
+
+              return (
+                <div
+                  key={subsection.subsection_id}
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    onSelect({
+                      type: "subsection",
+                      id: subsection.subsection_id,
+                    });
+                  }}
+                  className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
+                    selection.type === "subsection" &&
+                    selection.id === subsection.subsection_id
+                      ? "border-green-500"
+                      : "border-dashed border-gray-400"
+                  }`}
+                  style={subsectionStyle} // Apply the dynamic styles here
+                >
+                  {subsection.elements.map((element) => (
+                    <div
+                      key={element.element_id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect({ type: "element", id: element.element_id });
+                      }}
+                      className={`p-2 rounded transition-all ${
+                        selection.type === "element" &&
+                        selection.id === element.element_id
+                          ? "ring-2 ring-offset-2 ring-pink-500"
+                          : ""
+                      }`}
+                    >
+                      {renderElement(element)}
+                    </div>
+                  ))}
+                  {subsection.elements.length === 0 && (
+                    <div className="text-gray-400 self-center mx-auto">
+                      Add elements here
+                    </div>
+                  )}
+                </div>
+              );
+            })}
             <button
               onClick={(e) => {
                 e.stopPropagation();
