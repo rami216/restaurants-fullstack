@@ -35,6 +35,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onDelete,
 }) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const handleDelete = () => {
+    if (confirm(`Are you sure you want to delete this ${selectionType}?`)) {
+      onDelete(); // Just call the function passed from the parent
+    }
+  };
   if (!selectedItem || !selectionType || !activePage) {
     return (
       <div>
@@ -94,37 +99,37 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     updateItem({ ...selectedItem, properties: newProperties });
   };
 
-  const handleDelete = () => {
-    if (!confirm(`Are you sure you want to delete this ${selectionType}?`))
-      return;
-    let updatedSections = activePage.sections;
+  // const handleDelete = () => {
+  //   if (!confirm(`Are you sure you want to delete this ${selectionType}?`))
+  //     return;
+  //   let updatedSections = activePage.sections;
 
-    if (selectionType === "section") {
-      updatedSections = activePage.sections.filter(
-        (s) => s.section_id !== selectedItem.section_id
-      );
-    } else if (selectionType === "subsection") {
-      updatedSections = activePage.sections.map((s) => ({
-        ...s,
-        subsections: s.subsections.filter(
-          (sub) => sub.subsection_id !== selectedItem.subsection_id
-        ),
-      }));
-    } else if (selectionType === "element") {
-      updatedSections = activePage.sections.map((s) => ({
-        ...s,
-        subsections: s.subsections.map((sub) => ({
-          ...sub,
-          elements: sub.elements.filter(
-            (el) => el.element_id !== selectedItem.element_id
-          ),
-        })),
-      }));
-    }
+  //   if (selectionType === "section") {
+  //     updatedSections = activePage.sections.filter(
+  //       (s) => s.section_id !== selectedItem.section_id
+  //     );
+  //   } else if (selectionType === "subsection") {
+  //     updatedSections = activePage.sections.map((s) => ({
+  //       ...s,
+  //       subsections: s.subsections.filter(
+  //         (sub) => sub.subsection_id !== selectedItem.subsection_id
+  //       ),
+  //     }));
+  //   } else if (selectionType === "element") {
+  //     updatedSections = activePage.sections.map((s) => ({
+  //       ...s,
+  //       subsections: s.subsections.map((sub) => ({
+  //         ...sub,
+  //         elements: sub.elements.filter(
+  //           (el) => el.element_id !== selectedItem.element_id
+  //         ),
+  //       })),
+  //     }));
+  //   }
 
-    onUpdate({ ...activePage, sections: updatedSections });
-    onDelete();
-  };
+  //   onUpdate({ ...activePage, sections: updatedSections });
+  //   onDelete();
+  // };
   const handleLocalImageSelect = (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {

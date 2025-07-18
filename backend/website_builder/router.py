@@ -95,6 +95,35 @@ async def create_section(section_data: schemas.SectionCreate, db: AsyncSession =
     await db.refresh(new_section, ["subsections"])
     return new_section
 
+@router.put("/sections/{section_id}", response_model=schemas.SectionResponse)
+async def update_section(section_id: UUID, section_data: schemas.SectionUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # THE FIX: Eagerly load the 'subsections' and their 'elements' to prevent the async error
+    result = await db.execute(
+        select(Section).options(
+            selectinload(Section.subsections).selectinload(Subsection.elements)
+        ).where(Section.section_id == section_id)
+    )
+    db_section = result.scalars().first()
+    if not db_section: raise HTTPException(status_code=404, detail="Section not found")
+    
+    update_data = section_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_section, key, value)
+        if key == "properties":
+            flag_modified(db_section, "properties")
+
+    await db.commit()
+    await db.refresh(db_section)
+    return db_section
+
+@router.delete("/sections/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_section(section_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_section = await db.get(Section, section_id)
+    if db_section:
+        await db.delete(db_section)
+        await db.commit()
+    return
+
 # --- Subsection Endpoint ---
 @router.post("/subsections", response_model=schemas.SubsectionResponse, status_code=201)
 async def create_subsection(subsection_data: schemas.SubsectionCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
@@ -103,6 +132,34 @@ async def create_subsection(subsection_data: schemas.SubsectionCreate, db: Async
     await db.commit()
     await db.refresh(new_subsection, ["elements"])
     return new_subsection
+
+@router.put("/subsections/{subsection_id}", response_model=schemas.SubsectionResponse)
+async def update_subsection(subsection_id: UUID, subsection_data: schemas.SubsectionUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # THE FIX: Eagerly load the 'elements' relationship
+    result = await db.execute(
+        select(Subsection).options(selectinload(Subsection.elements)).where(Subsection.subsection_id == subsection_id)
+    )
+    db_subsection = result.scalars().first()
+    if not db_subsection: raise HTTPException(status_code=404, detail="Subsection not found")
+
+    update_data = subsection_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_subsection, key, value)
+        if key == "properties":
+            flag_modified(db_subsection, "properties")
+
+    await db.commit()
+    await db.refresh(db_subsection)
+    return db_subsection
+
+@router.delete("/subsections/{subsection_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_subsection(subsection_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_subsection = await db.get(Subsection, subsection_id)
+    if db_subsection:
+        await db.delete(db_subsection)
+        await db.commit()
+    return
+
 
 # --- Element Endpoints ---
 @router.post("/elements", response_model=schemas.ElementResponse, status_code=201)
@@ -128,3 +185,11 @@ async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, 
     await db.commit()
     await db.refresh(db_element)
     return db_element
+
+@router.delete("/elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_element(element_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_element = await db.get(Element, element_id)
+    if db_element:
+        await db.delete(db_element)
+        await db.commit()
+    return

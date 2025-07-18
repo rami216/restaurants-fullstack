@@ -14,9 +14,13 @@ import {
   Category,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
-
+type DeletedItem = {
+  type: "section" | "subsection" | "element";
+  id: string;
+};
 const CreateWebsitePage = () => {
   const [loading, setLoading] = useState(true);
+  const [isSaving, setIsSaving] = useState(false); // For save button loading state
   const [websiteData, setWebsiteData] = useState<WebsiteData | null>(null);
   const [activePageId, setActivePageId] = useState<string | null>(null);
   const [selection, setSelection] = useState<Selection>({
@@ -29,10 +33,16 @@ const CreateWebsitePage = () => {
   );
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
-
+  // Helper to check if an ID is temporary (created on the frontend)
+  const isTempId = (id: string) =>
+    typeof id === "string" &&
+    !id.match(
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+    );
   // State to manage sidebar visibility
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
   const [isPropertiesExpanded, setIsPropertiesExpanded] = useState(true);
+  const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
 
   useEffect(() => {
     const fetchInitialData = async () => {
@@ -91,10 +101,131 @@ const CreateWebsitePage = () => {
   };
 
   const handleSaveChangesToDB = async () => {
-    alert(
-      "Saving to database is not implemented yet, but all changes are in the local state!"
-    );
-    console.log("Current state to save:", websiteData);
+    if (!websiteData || !activePageId) return;
+    setIsSaving(true);
+
+    try {
+      // --- 1. Process Deletions First ---
+      const deletePromises = deletedItems.map((item) => {
+        if (!isTempId(item.id)) {
+          return api.delete(`/builder/${item.type}s/${item.id}`);
+        }
+        return Promise.resolve();
+      });
+      await Promise.all(deletePromises);
+      setDeletedItems([]); // Clear the deletion queue
+
+      // --- 2. Process Creates and Updates ---
+      let activePageData = JSON.parse(
+        JSON.stringify(
+          websiteData.pages.find((p) => p.page_id === activePageId)
+        )
+      );
+
+      if (!activePageData) throw new Error("Active page not found");
+
+      for (const [s_idx, section] of activePageData.sections.entries()) {
+        let sectionId = section.section_id;
+        if (isTempId(sectionId)) {
+          const res = await api.post("/builder/sections", {
+            page_id: activePageId,
+            section_type: section.section_type,
+            position: s_idx,
+            properties: section.properties,
+          });
+          sectionId = res.data.section_id;
+        } else {
+          await api.put(`/builder/sections/${sectionId}`, {
+            position: s_idx,
+            properties: section.properties,
+          });
+        }
+
+        for (const [sub_idx, subsection] of section.subsections.entries()) {
+          let subsectionId = subsection.subsection_id;
+          if (isTempId(subsectionId)) {
+            const res = await api.post("/builder/subsections", {
+              section_id: sectionId,
+              position: sub_idx,
+              properties: subsection.properties,
+            });
+            subsectionId = res.data.subsection_id;
+          } else {
+            await api.put(`/builder/subsections/${subsectionId}`, {
+              position: sub_idx,
+              properties: subsection.properties,
+            });
+          }
+
+          for (const [el_idx, element] of subsection.elements.entries()) {
+            if (isTempId(element.element_id)) {
+              await api.post("/builder/elements", {
+                subsection_id: subsectionId,
+                element_type: element.element_type,
+                position: el_idx,
+                properties: element.properties,
+              });
+            } else {
+              await api.put(`/builder/elements/${element.element_id}`, {
+                position: el_idx,
+                properties: element.properties,
+              });
+            }
+          }
+        }
+      }
+
+      alert("All changes saved successfully!");
+      window.location.reload();
+    } catch (error) {
+      console.error("Failed to save changes:", error);
+      alert("An error occurred while saving. Please check the console.");
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  // --- Deletion Handler ---
+  const handleDeleteItem = () => {
+    if (!activePage || !selectedItem || !selection.type) return;
+
+    const idKey = `${selection.type}_id` as keyof typeof selectedItem;
+    const idToDelete = selectedItem[idKey];
+
+    // Add to deletion queue if it's a real DB item
+    if (!isTempId(idToDelete)) {
+      setDeletedItems((prev) => [
+        ...prev,
+        { type: selection.type!, id: idToDelete },
+      ]);
+    }
+
+    // Remove from local UI state immediately
+    let updatedSections = activePage.sections;
+    if (selection.type === "section") {
+      updatedSections = activePage.sections.filter(
+        (s) => s.section_id !== idToDelete
+      );
+    } else if (selection.type === "subsection") {
+      updatedSections = activePage.sections.map((s) => ({
+        ...s,
+        subsections: s.subsections.filter(
+          (sub) => sub.subsection_id !== idToDelete
+        ),
+      }));
+    } else if (selection.type === "element") {
+      updatedSections = activePage.sections.map((s) => ({
+        ...s,
+        subsections: s.subsections.map((sub) => ({
+          ...sub,
+          elements: sub.elements.filter((el) => el.element_id !== idToDelete),
+        })),
+      }));
+    }
+
+    updateWebsiteData({ ...activePage, sections: updatedSections });
+    // Clear selection
+    setSelection({ type: null, id: null });
   };
 
   const updateWebsiteData = (updatedPage: Page) => {
@@ -210,7 +341,7 @@ const CreateWebsitePage = () => {
           selectionType={selection.type}
           activePage={activePage || null}
           onUpdate={updateWebsiteData}
-          onDelete={() => setSelection({ type: null, id: null })}
+          onDelete={handleDeleteItem} // Use the new handler
         />
       </aside>
     </div>
