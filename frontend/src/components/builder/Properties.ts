@@ -72,3 +72,8 @@ export interface Category {
   name: string;
   image_url?: string;
 }
+export interface FormField {
+  id: string;
+  label: string;
+  placeholder: string;
+}

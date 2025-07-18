@@ -63,6 +63,45 @@ const availableElements = [
       options: [{ text: "Go to Home", action_value: "/" }],
     },
   },
+  {
+    type: "FORM",
+    name: "Form",
+    defaultProps: {
+      title: "Contact Us",
+      fields: [
+        {
+          id: `field_${Date.now()}`,
+          label: "Your Name",
+          placeholder: "Enter your name",
+        },
+        {
+          id: `field_${Date.now() + 1}`,
+          label: "Your Email",
+          placeholder: "Enter your email",
+        },
+      ],
+      submitButton: {
+        text: "Submit",
+        style: {
+          backgroundColor: "#3498db",
+          color: "#ffffff",
+          padding: "0.75rem 1.5rem",
+          border: "none",
+          borderRadius: "8px",
+          width: "100%",
+        },
+      },
+      style: {
+        backgroundColor: "#f9fafb",
+        width: "100%",
+        padding: "3rem",
+        borderRadius: "8px",
+      },
+      labelStyle: {
+        color: "#374151",
+      },
+    },
+  },
 ];
 
 const ElementPalette: React.FC<ElementPaletteProps> = ({

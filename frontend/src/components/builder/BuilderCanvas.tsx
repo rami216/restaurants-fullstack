@@ -9,6 +9,7 @@ import {
   Section as SectionType,
   Subsection as SubsectionType,
   Element as ElementType,
+  FormField,
 } from "./Properties";
 import { Plus } from "lucide-react";
 
@@ -76,6 +77,63 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
     const BACKEND_URL = "http://127.0.0.1:8000";
 
     switch (element.element_type) {
+      case "FORM":
+        const buttonStyle = props.submitButton?.style || {};
+        const labelStyle = props.labelStyle || {}; // Get the label style object
+        return (
+          <div className="border rounded-lg" style={style}>
+            <h3 className="text-2xl font-bold mb-4 text-gray-800">
+              {props.title || "Form Title"}
+            </h3>
+            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+              {(props.fields || []).map((field: FormField) => (
+                <div key={field.id}>
+                  <label
+                    className="block text-sm font-medium mb-1"
+                    style={labelStyle}
+                  >
+                    {field.label}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={field.placeholder}
+                    className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    readOnly
+                  />
+                </div>
+              ))}
+              <button type="submit" style={buttonStyle}>
+                {props.submitButton?.text || "Submit"}
+              </button>
+            </form>
+          </div>
+        );
+
+        return (
+          <div className="p-4 border rounded-lg bg-gray-50" style={style}>
+            <h3 className="text-2xl font-bold mb-4 text-gray-800">
+              {props.title || "Form Title"}
+            </h3>
+            <form className="space-y-4">
+              {(props.fields || []).map((field: FormField) => (
+                <div key={field.id}>
+                  <label className="block text-sm font-medium text-gray-700 mb-1">
+                    {field.label}
+                  </label>
+                  <input
+                    type="text"
+                    placeholder={field.placeholder}
+                    className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    readOnly // Make inputs read-only in the builder
+                  />
+                </div>
+              ))}
+              <button type="submit" style={buttonStyle}>
+                {props.submitButton?.text || "Submit"}
+              </button>
+            </form>
+          </div>
+        );
       case "TEXT":
         return <div style={style}>{props.content || "New Text Block"}</div>;
       case "BUTTON":

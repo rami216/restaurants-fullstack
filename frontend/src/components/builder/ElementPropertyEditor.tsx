@@ -3,7 +3,7 @@
 "use client";
 
 import React, { useRef } from "react";
-import { Selection, Page } from "./Properties";
+import { Selection, Page, FormField } from "./Properties";
 import {
   Trash2,
   PlusCircle,
@@ -343,6 +343,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const newProperties = {
       ...selectedItem.properties,
       nameStyle: { ...selectedItem.properties.nameStyle, [key]: value },
+    };
+    updateItem({ ...selectedItem, properties: newProperties });
+  };
+  const handleLabelStyleChange = (key: string, value: any) => {
+    if (!selectedItem) return;
+    const newProperties = {
+      ...selectedItem.properties,
+      labelStyle: { ...selectedItem.properties.labelStyle, [key]: value },
     };
     updateItem({ ...selectedItem, properties: newProperties });
   };
@@ -863,6 +871,253 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 onChange={(e) => handleNameStyleChange("color", e.target.value)}
                 className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
               />
+            </div>
+          </div>
+        );
+      case "FORM":
+        const handleFieldChange = (
+          index: number,
+          key: "label" | "placeholder",
+          value: string
+        ) => {
+          const newFields = [...selectedItem.properties.fields];
+          newFields[index] = { ...newFields[index], [key]: value };
+          handlePropertyChange("fields", newFields);
+        };
+
+        const addField = () => {
+          const newFields = [
+            ...(selectedItem.properties.fields || []),
+            {
+              id: `field_${Date.now()}`,
+              label: "New Field",
+              placeholder: "Enter value",
+            },
+          ];
+          handlePropertyChange("fields", newFields);
+        };
+
+        const removeField = (index: number) => {
+          const newFields = selectedItem.properties.fields.filter(
+            (_: any, i: number) => i !== index
+          );
+          handlePropertyChange("fields", newFields);
+        };
+
+        const handleButtonPropChange = (key: string, value: string) => {
+          const newButtonProps = {
+            ...selectedItem.properties.submitButton,
+            [key]: value,
+          };
+          handlePropertyChange("submitButton", newButtonProps);
+        };
+
+        const handleButtonStyleChange = (key: string, value: string) => {
+          const newButtonProps = {
+            ...selectedItem.properties.submitButton,
+            style: {
+              ...selectedItem.properties.submitButton.style,
+              [key]: value,
+            },
+          };
+          handlePropertyChange("submitButton", newButtonProps);
+        };
+
+        return (
+          <div className="space-y-6">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Form Title
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.title || ""}
+                onChange={(e) => handlePropertyChange("title", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+
+            <hr />
+
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Form Styling
+              </h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Form Width
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedItem.properties.style?.width || "100%"}
+                    onChange={(e) => handleStyleChange("width", e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    placeholder="e.g., 100%, 500px"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Background Color
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.style?.backgroundColor ||
+                      "#f9fafb"
+                    }
+                    onChange={(e) =>
+                      handleStyleChange("backgroundColor", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Field Label Color
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.labelStyle?.color || "#374151"
+                    }
+                    onChange={(e) =>
+                      handleLabelStyleChange("color", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+              </div>
+            </div>
+
+            <hr />
+
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Form Fields
+              </h4>
+              <div className="space-y-3">
+                {(selectedItem.properties.fields || []).map(
+                  (field: FormField, index: number) => (
+                    <div
+                      key={field.id}
+                      className="p-3 border rounded-md bg-gray-50 space-y-2"
+                    >
+                      <div className="flex justify-between items-center">
+                        <span className="text-xs font-bold text-gray-500">
+                          Field {index + 1}
+                        </span>
+                        <button
+                          onClick={() => removeField(index)}
+                          className="text-red-500 hover:text-red-700"
+                        >
+                          <Trash2 size={16} />
+                        </button>
+                      </div>
+                      <input
+                        type="text"
+                        placeholder="Label"
+                        value={field.label}
+                        onChange={(e) =>
+                          handleFieldChange(index, "label", e.target.value)
+                        }
+                        className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                      />
+                      <input
+                        type="text"
+                        placeholder="Placeholder"
+                        value={field.placeholder}
+                        onChange={(e) =>
+                          handleFieldChange(
+                            index,
+                            "placeholder",
+                            e.target.value
+                          )
+                        }
+                        className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                      />
+                    </div>
+                  )
+                )}
+              </div>
+              <button
+                onClick={addField}
+                className="mt-3 w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
+              >
+                <PlusCircle size={16} className="mr-2" /> Add Field
+              </button>
+            </div>
+
+            <hr />
+
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Submit Button
+              </h4>
+              <div className="space-y-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Button Text
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedItem.properties.submitButton?.text || ""}
+                    onChange={(e) =>
+                      handleButtonPropChange("text", e.target.value)
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Background Color
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.submitButton?.style
+                        ?.backgroundColor || "#3498db"
+                    }
+                    onChange={(e) =>
+                      handleButtonStyleChange("backgroundColor", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Text Color
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.submitButton?.style?.color ||
+                      "#ffffff"
+                    }
+                    onChange={(e) =>
+                      handleButtonStyleChange("color", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Width
+                  </label>
+                  <input
+                    type="text"
+                    value={
+                      selectedItem.properties.submitButton?.style?.width ||
+                      "100%"
+                    }
+                    onChange={(e) =>
+                      handleButtonStyleChange("width", e.target.value)
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    placeholder="e.g., 100px, 100%, auto"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         );
