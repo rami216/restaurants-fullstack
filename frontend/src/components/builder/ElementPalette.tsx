@@ -152,6 +152,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       id: category.id,
       name: category.name,
       image_url: category.image_url,
+      menu_items_url: `/locations/${selectedLocationId}/menu?category_id=${category.id}`,
       style: {
         maxWidth: "320px",
         textAlign: "center",

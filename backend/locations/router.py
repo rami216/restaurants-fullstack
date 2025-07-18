@@ -1,4 +1,4 @@
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status,Query
 from uuid import UUID
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
@@ -6,7 +6,7 @@ from database import get_db
 from models import Location, RestaurantOwner, RestaurantBrand, User,MenuItem
 from auth.auth_handler import get_current_active_user
 from schemas import LocationCreate, LocationResponse,MenuItemResponse,LocationUpdate
-from typing import List
+from typing import List, Optional
 
 router = APIRouter(prefix="/locations", tags=["locations"])
 
@@ -121,14 +121,22 @@ async def update_location(
 @router.get("/{location_id}/menu", response_model=List[MenuItemResponse])
 async def get_menu_by_location_id(
     location_id: UUID,
+    category_id: Optional[int] = Query(None), # <-- ADDED THIS
     db: AsyncSession = Depends(get_db)
 ):
     """
     Retrieves all menu items for a specific location.
+    Can be optionally filtered by category_id.
     """
-    result = await db.execute(
-        select(MenuItem).where(MenuItem.location_id == location_id)
-    )
+    # Start the base query
+    query = select(MenuItem).where(MenuItem.location_id == location_id)
+
+    # If a category_id is provided, add another filter to the query
+    if category_id is not None:
+        query = query.where(MenuItem.category_id == category_id)
+
+    # Execute the final query
+    result = await db.execute(query)
     menu_items = result.scalars().all()
     return menu_items
 
