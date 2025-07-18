@@ -333,6 +333,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       </div>
     </div>
   );
+  const handleNameStyleChange = (key: string, value: any) => {
+    if (!selectedItem) return;
+    const newProperties = {
+      ...selectedItem.properties,
+      nameStyle: { ...selectedItem.properties.nameStyle, [key]: value },
+    };
+    updateItem({ ...selectedItem, properties: newProperties });
+  };
 
   const renderElementEditor = () => {
     const toggleStyle = (
@@ -343,6 +351,15 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       const currentVal = selectedItem.properties.style?.[styleKey];
       const newVal = currentVal === onValue ? offValue : onValue;
       handleStyleChange(styleKey, newVal);
+    };
+    const toggleNameStyle = (
+      styleKey: string,
+      onValue: string,
+      offValue: string
+    ) => {
+      const currentVal = selectedItem.properties.nameStyle?.[styleKey];
+      const newVal = currentVal === onValue ? offValue : onValue;
+      handleNameStyleChange(styleKey, newVal);
     };
     switch (selectedItem.element_type) {
       case "TEXT":
@@ -748,6 +765,98 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 onChange={(e) => handleStyleChange("height", e.target.value)}
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
                 placeholder="e.g., 200px, auto"
+              />
+            </div>
+          </div>
+        );
+      case "CATEGORY":
+        const nameStyle = selectedItem.properties.nameStyle || {};
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Category Name
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.name || ""}
+                onChange={(e) => handlePropertyChange("name", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <hr />
+            <h4 className="text-md font-medium text-gray-800 pt-2">
+              Name Styling
+            </h4>
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Text Styles
+              </label>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() =>
+                    toggleNameStyle("fontWeight", "bold", "normal")
+                  }
+                  className={`p-2 rounded ${
+                    nameStyle.fontWeight === "bold"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <Bold size={16} />
+                </button>
+                <button
+                  onClick={() =>
+                    toggleNameStyle("fontStyle", "italic", "normal")
+                  }
+                  className={`p-2 rounded ${
+                    nameStyle.fontStyle === "italic"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <Italic size={16} />
+                </button>
+                <button
+                  onClick={() =>
+                    toggleNameStyle("textDecoration", "underline", "none")
+                  }
+                  className={`p-2 rounded ${
+                    nameStyle.textDecoration === "underline"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <Underline size={16} />
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Font Family
+              </label>
+              <select
+                value={nameStyle.fontFamily || "sans-serif"}
+                onChange={(e) =>
+                  handleNameStyleChange("fontFamily", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="sans-serif">Sans-serif</option>
+                <option value="serif">Serif</option>
+                <option value="monospace">Monospace</option>
+                <option value="cursive">Cursive</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Text Color
+              </label>
+              <input
+                type="color"
+                value={nameStyle.color || "#000000"}
+                onChange={(e) => handleNameStyleChange("color", e.target.value)}
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
               />
             </div>
           </div>

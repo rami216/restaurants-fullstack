@@ -135,6 +135,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
       case "CATEGORY":
+        // Get the specific styles for the name, or default to an empty object
+        const nameStyle = props.nameStyle || {};
         return (
           <div
             className="rounded-lg overflow-hidden bg-white shadow-md"
@@ -151,7 +153,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               />
             )}
             <div className="p-4">
-              <h4 className="font-bold text-xl text-gray-800">
+              {/* Apply the nameStyle object directly to the h4 element */}
+              <h4 className="font-bold text-xl text-gray-800" style={nameStyle}>
                 {props.name || "Category Name"}
               </h4>
             </div>
