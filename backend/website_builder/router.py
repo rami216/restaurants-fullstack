@@ -193,3 +193,55 @@ async def delete_element(element_id: UUID, db: AsyncSession = Depends(get_db), c
         await db.delete(db_element)
         await db.commit()
     return
+
+# --- Navbar Endpoints ---
+@router.put("/navbars/{navbar_id}", response_model=schemas.NavbarResponse)
+async def update_navbar(navbar_id: UUID, navbar_data: schemas.NavbarUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    result = await db.execute(
+        select(Navbar).options(selectinload(Navbar.items)).where(Navbar.navbar_id == navbar_id)
+    )
+    db_navbar = result.scalars().first()
+    if not db_navbar:
+        raise HTTPException(status_code=404, detail="Navbar not found")
+
+    update_data = navbar_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_navbar, key, value)
+        if key == "properties":
+            flag_modified(db_navbar, "properties")
+
+    await db.commit()
+    await db.refresh(db_navbar)
+    return db_navbar
+
+# --- NEW: Navbar Item Endpoints ---
+@router.post("/navbar-items", response_model=schemas.NavbarItemResponse, status_code=status.HTTP_201_CREATED)
+async def create_navbar_item(item_data: schemas.NavbarItemCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # A proper check would ensure the user owns the navbar's parent website
+    new_item = NavbarItem(**item_data.model_dump())
+    db.add(new_item)
+    await db.commit()
+    await db.refresh(new_item)
+    return new_item
+
+@router.put("/navbar-items/{item_id}", response_model=schemas.NavbarItemResponse)
+async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_item = await db.get(NavbarItem, item_id)
+    if not db_item:
+        raise HTTPException(status_code=404, detail="Navbar item not found")
+
+    update_data = item_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_item, key, value)
+
+    await db.commit()
+    await db.refresh(db_item)
+    return db_item
+
+@router.delete("/navbar-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_item = await db.get(NavbarItem, item_id)
+    if db_item:
+        await db.delete(db_item)
+        await db.commit()
+    return

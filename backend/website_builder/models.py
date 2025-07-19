@@ -83,6 +83,7 @@ class Navbar(Base):
 
     navbar_id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id"), nullable=False, unique=True)
+    properties = Column(JSON, nullable=False, server_default=text("'{}'::jsonb")) # <-- ADDED THIS LINE
 
     # Relationships
     website = relationship("Website", back_populates="navbar")

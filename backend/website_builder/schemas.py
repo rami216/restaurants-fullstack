@@ -100,8 +100,13 @@ class NavbarItemResponse(NavbarItemBase):
     class Config:
         from_attributes = True
 
+# ADDED THIS SCHEMA FOR UPDATES
+class NavbarUpdate(BaseModel):
+    properties: Optional[Dict[str, Any]] = None
+
 class NavbarResponse(BaseModel):
     navbar_id: UUID
+    properties: Dict[str, Any] = {} # <-- ADDED THIS
     items: List[NavbarItemResponse] = []
     class Config:
         from_attributes = True
