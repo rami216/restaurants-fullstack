@@ -34,6 +34,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onUpdate,
   onDelete,
 }) => {
+  const renderNavbarEditor = () => {
+    // ... (logic to edit navbar properties like background color)
+    return <div>Navbar Editor</div>;
+  };
+
+  const renderNavbarItemEditor = () => {
+    // ... (logic to edit navbar item text and link)
+    return <div>Navbar Item Editor</div>;
+  };
+
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleDelete = () => {
     if (confirm(`Are you sure you want to delete this ${selectionType}?`)) {
@@ -1284,32 +1294,30 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
       {isExpanded && (
         <div className="overflow-y-auto flex-grow">
-          {!selectedItem || !selectionType || !activePage ? (
-            <div>
-              <p className="text-gray-500">
-                Select an item on the canvas to edit its properties.
-              </p>
-            </div>
-          ) : (
+          {selectedItem ? (
             <>
               <div className="flex justify-between items-center mb-4">
-                <div>
-                  <h3 className="text-lg text-gray-600 font-mono capitalize">
-                    {selectionType}
-                  </h3>
-                </div>
-                <button
-                  onClick={handleDelete}
-                  className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100"
-                >
-                  <Trash2 size={18} />
-                </button>
+                <h3 className="text-lg text-gray-600 font-mono capitalize">
+                  {selectionType?.replace("_", " ")}
+                </h3>
+                {selectionType !== "navbar" && (
+                  <button
+                    onClick={handleDelete}
+                    className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100"
+                  >
+                    <Trash2 size={18} />
+                  </button>
+                )}
               </div>
 
               {selectionType === "section" && renderSectionEditor()}
               {selectionType === "subsection" && renderSubsectionEditor()}
               {selectionType === "element" && renderElementEditor()}
+              {selectionType === "navbar" && renderNavbarEditor()}
+              {selectionType === "navbar_item" && renderNavbarItemEditor()}
             </>
+          ) : (
+            <p className="text-gray-500">Select an item to edit.</p>
           )}
         </div>
       )}

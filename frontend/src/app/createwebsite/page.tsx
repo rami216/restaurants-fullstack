@@ -12,10 +12,12 @@ import {
   Selection,
   Location,
   Category,
+  Navbar,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
+
 type DeletedItem = {
-  type: "section" | "subsection" | "element";
+  type: "section" | "subsection" | "element" | "navbar_item";
   id: string;
 };
 const CreateWebsitePage = () => {
@@ -186,47 +188,6 @@ const CreateWebsitePage = () => {
   };
 
   // --- Deletion Handler ---
-  const handleDeleteItem = () => {
-    if (!activePage || !selectedItem || !selection.type) return;
-
-    const idKey = `${selection.type}_id` as keyof typeof selectedItem;
-    const idToDelete = selectedItem[idKey];
-
-    // Add to deletion queue if it's a real DB item
-    if (!isTempId(idToDelete)) {
-      setDeletedItems((prev) => [
-        ...prev,
-        { type: selection.type!, id: idToDelete },
-      ]);
-    }
-
-    // Remove from local UI state immediately
-    let updatedSections = activePage.sections;
-    if (selection.type === "section") {
-      updatedSections = activePage.sections.filter(
-        (s) => s.section_id !== idToDelete
-      );
-    } else if (selection.type === "subsection") {
-      updatedSections = activePage.sections.map((s) => ({
-        ...s,
-        subsections: s.subsections.filter(
-          (sub) => sub.subsection_id !== idToDelete
-        ),
-      }));
-    } else if (selection.type === "element") {
-      updatedSections = activePage.sections.map((s) => ({
-        ...s,
-        subsections: s.subsections.map((sub) => ({
-          ...sub,
-          elements: sub.elements.filter((el) => el.element_id !== idToDelete),
-        })),
-      }));
-    }
-
-    updateWebsiteData({ ...activePage, sections: updatedSections });
-    // Clear selection
-    setSelection({ type: null, id: null });
-  };
 
   const updateWebsiteData = (updatedPage: Page) => {
     if (!websiteData) return;
@@ -239,9 +200,21 @@ const CreateWebsitePage = () => {
   };
 
   const activePage = websiteData?.pages.find((p) => p.page_id === activePageId);
+  const navbar = websiteData?.navbar || null;
 
   const findSelectedItem = () => {
-    if (!selection.id || !activePage) return null;
+    if (!selection.id || !websiteData) return null;
+
+    if (selection.type === "navbar" && navbar?.navbar_id === selection.id) {
+      return navbar;
+    }
+    if (selection.type === "navbar_item") {
+      return (
+        navbar?.items.find((item) => item.item_id === selection.id) || null
+      );
+    }
+
+    if (!activePage) return null;
     for (const section of activePage.sections) {
       if (selection.type === "section" && section.section_id === selection.id)
         return section;
@@ -264,6 +237,61 @@ const CreateWebsitePage = () => {
   };
 
   const selectedItem = findSelectedItem();
+  const handleDeleteItem = () => {
+    if (!selectedItem || !selection.type) return;
+
+    // Explicitly prevent deleting the navbar container
+    if (selection.type === "navbar") {
+      alert(
+        "The main navbar container cannot be deleted. You can delete individual items from it."
+      );
+      return;
+    }
+
+    const idKey = `${selection.type}_id` as keyof typeof selectedItem;
+    const idToDelete = selectedItem[idKey];
+
+    if (!isTempId(idToDelete)) {
+      // Now that we've excluded 'navbar', this is safe.
+      setDeletedItems((prev) => [
+        ...prev,
+        { type: selection.type as DeletedItem["type"], id: idToDelete },
+      ]);
+    }
+
+    if (selection.type === "navbar_item") {
+      const newNavbar = {
+        ...navbar!,
+        items: navbar!.items.filter((item) => item.item_id !== idToDelete),
+      };
+      setWebsiteData({ ...websiteData!, navbar: newNavbar });
+    } else if (activePage) {
+      let updatedSections = activePage.sections;
+      if (selection.type === "section") {
+        updatedSections = activePage.sections.filter(
+          (s) => s.section_id !== idToDelete
+        );
+      } else if (selection.type === "subsection") {
+        updatedSections = activePage.sections.map((s) => ({
+          ...s,
+          subsections: s.subsections.filter(
+            (sub) => sub.subsection_id !== idToDelete
+          ),
+        }));
+      } else if (selection.type === "element") {
+        updatedSections = activePage.sections.map((s) => ({
+          ...s,
+          subsections: s.subsections.map((sub) => ({
+            ...sub,
+            elements: sub.elements.filter((el) => el.element_id !== idToDelete),
+          })),
+        }));
+      }
+      updateWebsiteData({ ...activePage, sections: updatedSections });
+    }
+
+    setSelection({ type: null, id: null });
+  };
 
   if (loading)
     return (
@@ -322,6 +350,7 @@ const CreateWebsitePage = () => {
         <main className="flex-1 p-4 overflow-y-auto">
           <BuilderCanvas
             page={activePage}
+            navbar={navbar}
             selection={selection}
             onSelect={setSelection}
             onUpdate={updateWebsiteData}

@@ -47,11 +47,12 @@ export interface Page {
 
 export interface WebsiteData {
   website_id: string;
+  navbar: Navbar | null;
   pages: Page[];
 }
 
 export type Selection = {
-  type: "section" | "subsection" | "element" | null;
+  type: "section" | "subsection" | "element" | "navbar" | "navbar_item" | null;
   id: string | null;
 };
 
@@ -81,4 +82,16 @@ export interface AccordionItem {
   id: string;
   question: string;
   answer: string;
+}
+export interface NavbarItem {
+  item_id: string;
+  text: string;
+  link_url: string;
+  position: number;
+}
+
+export interface Navbar {
+  navbar_id: string;
+  properties: any;
+  items: NavbarItem[];
 }
