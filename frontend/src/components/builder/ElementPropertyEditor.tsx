@@ -2,7 +2,7 @@
 
 "use client";
 
-import React, { useRef } from "react";
+import React, { useRef, useState } from "react";
 import { Selection, Page, FormField, AccordionItem } from "./Properties";
 import {
   Trash2,
@@ -13,16 +13,20 @@ import {
   Upload,
   PanelRightClose,
   PanelRightOpen,
+  Save,
+  X,
 } from "lucide-react";
-
 interface PropertyEditorProps {
   isExpanded: boolean;
   onToggle: () => void;
   selectedItem: any | null;
   selectionType: Selection["type"];
   activePage: Page | null;
+  websiteData: any; // Pass the full website data to access all pages
   onUpdate: (updatedPage: Page) => void;
+  onUpdateWebsite: (updatedWebsite: any) => void; // For navbar updates
   onDelete: () => void;
+  onCreatePage: (title: string) => void;
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
@@ -31,12 +35,71 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   selectedItem,
   selectionType,
   activePage,
+  websiteData,
   onUpdate,
+  onUpdateWebsite,
   onDelete,
+  onCreatePage,
 }) => {
+  const [isAddingPage, setIsAddingPage] = useState(false);
+  const [newPageTitle, setNewPageTitle] = useState("");
+
+  const handleCreatePage = () => {
+    if (newPageTitle.trim()) {
+      onCreatePage(newPageTitle.trim());
+      setNewPageTitle("");
+      setIsAddingPage(false);
+    }
+  };
   const renderNavbarEditor = () => {
-    // ... (logic to edit navbar properties like background color)
-    return <div>Navbar Editor</div>;
+    if (!websiteData) return null;
+
+    return (
+      <div className="space-y-4">
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">Pages</h4>
+          <div className="space-y-2">
+            {websiteData.pages.map((page: Page) => (
+              <div key={page.page_id} className="p-2 border rounded bg-gray-50">
+                {page.title}
+              </div>
+            ))}
+          </div>
+          {!isAddingPage ? (
+            <button
+              onClick={() => setIsAddingPage(true)}
+              className="mt-3 w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
+            >
+              <PlusCircle size={16} className="mr-2" /> Add New Page
+            </button>
+          ) : (
+            <div className="mt-3 p-3 border rounded-md bg-gray-100">
+              <input
+                type="text"
+                value={newPageTitle}
+                onChange={(e) => setNewPageTitle(e.target.value)}
+                placeholder="New page title"
+                className="block w-full border-gray-300 rounded-md shadow-sm p-2 text-sm"
+              />
+              <div className="flex items-center justify-end space-x-2 mt-2">
+                <button
+                  onClick={() => setIsAddingPage(false)}
+                  className="p-2 text-gray-500 hover:bg-gray-200 rounded-full"
+                >
+                  <X size={16} />
+                </button>
+                <button
+                  onClick={handleCreatePage}
+                  className="p-2 text-green-600 hover:bg-green-100 rounded-full"
+                >
+                  <Save size={16} />
+                </button>
+              </div>
+            </div>
+          )}
+        </div>
+      </div>
+    );
   };
 
   const renderNavbarItemEditor = () => {

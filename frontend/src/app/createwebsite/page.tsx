@@ -45,51 +45,49 @@ const CreateWebsitePage = () => {
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
   const [isPropertiesExpanded, setIsPropertiesExpanded] = useState(true);
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
+  const fetchWebsiteData = async () => {
+    setLoading(true);
+    try {
+      const [websiteRes, locationsRes, restaurantRes] = await Promise.all([
+        api.get("/builder/website").catch((e) => e.response),
+        api.get("/locations/has-location").catch((e) => e.response),
+        api.get("/restaurants/has-restaurant").catch((e) => e.response),
+      ]);
 
-  useEffect(() => {
-    const fetchInitialData = async () => {
-      setLoading(true);
-      try {
-        const [websiteRes, locationsRes, restaurantRes] = await Promise.all([
-          api.get("/builder/website").catch((e) => e.response),
-          api.get("/locations/has-location").catch((e) => e.response),
-          api.get("/restaurants/has-restaurant").catch((e) => e.response),
-        ]);
-
-        if (websiteRes && websiteRes.status === 200) {
-          setWebsiteData(websiteRes.data);
-          if (websiteRes.data.pages?.length > 0 && !activePageId) {
-            setActivePageId(websiteRes.data.pages[0].page_id);
-          }
-        } else {
-          setWebsiteData(null);
+      if (websiteRes && websiteRes.status === 200) {
+        setWebsiteData(websiteRes.data);
+        if (websiteRes.data.pages?.length > 0 && !activePageId) {
+          setActivePageId(websiteRes.data.pages[0].page_id);
         }
-
-        if (locationsRes && locationsRes.status === 200) {
-          setLocations(locationsRes.data);
-          if (locationsRes.data.length > 0) {
-            setSelectedLocationId(locationsRes.data[0].location_id);
-          }
-        }
-
-        if (
-          restaurantRes &&
-          restaurantRes.status === 200 &&
-          restaurantRes.data.has_restaurant
-        ) {
-          const rId = restaurantRes.data.restaurant_id;
-          setRestaurantId(rId);
-          const categoriesRes = await api.get(`/restaurants/categories/${rId}`);
-          setCategories(categoriesRes.data);
-        }
-      } catch (error) {
-        console.error("Error fetching initial data:", error);
-      } finally {
-        setLoading(false);
+      } else {
+        setWebsiteData(null);
       }
-    };
 
-    fetchInitialData();
+      if (locationsRes && locationsRes.status === 200) {
+        setLocations(locationsRes.data);
+        if (locationsRes.data.length > 0) {
+          setSelectedLocationId(locationsRes.data[0].location_id);
+        }
+      }
+
+      if (
+        restaurantRes &&
+        restaurantRes.status === 200 &&
+        restaurantRes.data.has_restaurant
+      ) {
+        const rId = restaurantRes.data.restaurant_id;
+        setRestaurantId(rId);
+        const categoriesRes = await api.get(`/restaurants/categories/${rId}`);
+        setCategories(categoriesRes.data);
+      }
+    } catch (error) {
+      console.error("Error fetching initial data:", error);
+    } finally {
+      setLoading(false);
+    }
+  };
+  useEffect(() => {
+    fetchWebsiteData();
   }, []);
 
   const handleCreateWebsite = async () => {
@@ -292,6 +290,22 @@ const CreateWebsitePage = () => {
 
     setSelection({ type: null, id: null });
   };
+  const handleCreatePage = async (title: string) => {
+    if (!websiteData) return;
+    try {
+      const slug = `/${title.toLowerCase().replace(/\s+/g, "-")}`;
+      const response = await api.post("/builder/pages", {
+        website_id: websiteData.website_id,
+        title,
+        slug,
+      });
+      await fetchWebsiteData();
+      setActivePageId(response.data.page_id);
+    } catch (error) {
+      console.error("Failed to create page:", error);
+      alert("Error creating page.");
+    }
+  };
 
   if (loading)
     return (
@@ -351,9 +365,11 @@ const CreateWebsitePage = () => {
           <BuilderCanvas
             page={activePage}
             navbar={navbar}
+            websiteData={websiteData}
             selection={selection}
             onSelect={setSelection}
             onUpdate={updateWebsiteData}
+            onPageSwitch={setActivePageId}
           />
         </main>
       </div>
@@ -369,8 +385,11 @@ const CreateWebsitePage = () => {
           selectedItem={selectedItem}
           selectionType={selection.type}
           activePage={activePage || null}
+          websiteData={websiteData}
           onUpdate={updateWebsiteData}
-          onDelete={handleDeleteItem} // Use the new handler
+          onUpdateWebsite={(updatedWebsite) => setWebsiteData(updatedWebsite)}
+          onDelete={handleDeleteItem}
+          onCreatePage={handleCreatePage}
         />
       </aside>
     </div>

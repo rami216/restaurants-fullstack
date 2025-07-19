@@ -72,13 +72,24 @@ async def create_website(website_data: schemas.WebsiteCreate, current_user: User
 # --- Page Endpoints ---
 @router.post("/pages", response_model=schemas.PageResponse, status_code=status.HTTP_201_CREATED)
 async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    website = await get_website_and_check_ownership(page_data.website_id, current_user, db)
-    await db.refresh(website, ['navbar']) # Eagerly load navbar to get items
-    if not website.navbar: raise HTTPException(status_code=404, detail="Navbar not found.")
+    # THE FIX: Eagerly load the navbar and its items to prevent the async error
+    result = await db.execute(
+        select(Website)
+        .options(selectinload(Website.navbar).selectinload(Navbar.items))
+        .join(RestaurantOwner)
+        .where(Website.website_id == page_data.website_id, RestaurantOwner.user_id == current_user.id)
+    )
+    website = result.scalars().first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found or you do not have permission.")
+
+    if not website.navbar: 
+        raise HTTPException(status_code=404, detail="Navbar not found.")
     
     new_page = Page(title=page_data.title, slug=page_data.slug, website_id=page_data.website_id)
     db.add(new_page)
     
+    # This line is now safe because website.navbar.items is pre-loaded
     new_navbar_item = NavbarItem(navbar_id=website.navbar.navbar_id, text=new_page.title, link_url=new_page.slug, position=len(website.navbar.items) + 1)
     db.add(new_navbar_item)
     

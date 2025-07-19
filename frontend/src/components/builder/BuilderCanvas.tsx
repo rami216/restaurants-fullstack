@@ -12,6 +12,8 @@ import {
   FormField,
   AccordionItem,
   Navbar,
+  NavbarItem,
+  WebsiteData, // Import WebsiteData
 } from "./Properties";
 import { Plus, ChevronDown } from "lucide-react";
 
@@ -68,6 +70,8 @@ interface BuilderCanvasProps {
   selection: Selection;
   onSelect: (selection: Selection) => void;
   onUpdate: (updatedPage: Page) => void;
+  onPageSwitch: (pageId: string) => void;
+  websiteData: WebsiteData | null; // Add websiteData to props
 }
 
 const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
@@ -76,6 +80,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   selection,
   onUpdate,
   onSelect,
+  onPageSwitch,
+  websiteData,
 }) => {
   const handleAddSection = () => {
     if (!page) return;
@@ -306,25 +312,37 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           <div className="flex items-center justify-between">
             <div className="text-lg font-bold">Your Logo</div>
             <div className="flex items-center space-x-4">
-              {navbar.items.map((item) => (
-                <a
-                  key={item.item_id}
-                  href="#"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    onSelect({ type: "navbar_item", id: item.item_id });
-                  }}
-                  className={`px-3 py-2 rounded ${
-                    selection.type === "navbar_item" &&
-                    selection.id === item.item_id
-                      ? "ring-2 ring-purple-500"
-                      : ""
-                  }`}
-                >
-                  {item.text}
-                </a>
-              ))}
+              {navbar.items.map((item: NavbarItem) => {
+                const targetPage = websiteData?.pages.find(
+                  (p) => p.slug === item.link_url
+                );
+                return (
+                  <a
+                    key={item.item_id}
+                    href="#"
+                    onClick={(e) => {
+                      e.preventDefault();
+                      e.stopPropagation();
+                      if (targetPage) {
+                        onPageSwitch(targetPage.page_id);
+                      }
+                      onSelect({ type: "navbar_item", id: item.item_id });
+                    }}
+                    className={`px-3 py-2 rounded ${
+                      selection.type === "navbar_item" &&
+                      selection.id === item.item_id
+                        ? "ring-2 ring-purple-500"
+                        : ""
+                    } ${
+                      page?.page_id === targetPage?.page_id
+                        ? "bg-purple-100 text-purple-700"
+                        : ""
+                    }`}
+                  >
+                    {item.text}
+                  </a>
+                );
+              })}
             </div>
           </div>
         </nav>
