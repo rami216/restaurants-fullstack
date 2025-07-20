@@ -94,7 +94,7 @@ async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(
     db.add(new_navbar_item)
     
     await db.commit()
-    await db.refresh(new_page)
+    # await db.refresh(new_page)
     return new_page
 
 # --- Section Endpoints ---
@@ -103,7 +103,7 @@ async def create_section(section_data: schemas.SectionCreate, db: AsyncSession =
     new_section = Section(**section_data.model_dump())
     db.add(new_section)
     await db.commit()
-    await db.refresh(new_section, ["subsections"])
+    # await db.refresh(new_section, ["subsections"])
     return new_section
 
 @router.put("/sections/{section_id}", response_model=schemas.SectionResponse)
@@ -124,7 +124,7 @@ async def update_section(section_id: UUID, section_data: schemas.SectionUpdate, 
             flag_modified(db_section, "properties")
 
     await db.commit()
-    await db.refresh(db_section)
+    # await db.refresh(db_section)
     return db_section
 
 @router.delete("/sections/{section_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -141,7 +141,7 @@ async def create_subsection(subsection_data: schemas.SubsectionCreate, db: Async
     new_subsection = Subsection(**subsection_data.model_dump())
     db.add(new_subsection)
     await db.commit()
-    await db.refresh(new_subsection, ["elements"])
+    # await db.refresh(new_subsection, ["elements"])
     return new_subsection
 
 @router.put("/subsections/{subsection_id}", response_model=schemas.SubsectionResponse)
@@ -160,7 +160,7 @@ async def update_subsection(subsection_id: UUID, subsection_data: schemas.Subsec
             flag_modified(db_subsection, "properties")
 
     await db.commit()
-    await db.refresh(db_subsection)
+    # await db.refresh(db_subsection)
     return db_subsection
 
 @router.delete("/subsections/{subsection_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -178,7 +178,7 @@ async def create_element(element_data: schemas.ElementCreate, db: AsyncSession =
     new_element = Element(**element_data.model_dump())
     db.add(new_element)
     await db.commit()
-    await db.refresh(new_element)
+    # await db.refresh(new_element)
     return new_element
 
 @router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
@@ -194,7 +194,7 @@ async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, 
         db_element.position = element_data.position
     
     await db.commit()
-    await db.refresh(db_element)
+    # await db.refresh(db_element)
     return db_element
 
 @router.delete("/elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -222,7 +222,7 @@ async def update_navbar(navbar_id: UUID, navbar_data: schemas.NavbarUpdate, db: 
             flag_modified(db_navbar, "properties")
 
     await db.commit()
-    await db.refresh(db_navbar)
+    # await db.refresh(db_navbar)
     return db_navbar
 
 # --- NEW: Navbar Item Endpoints ---
@@ -232,7 +232,7 @@ async def create_navbar_item(item_data: schemas.NavbarItemCreate, db: AsyncSessi
     new_item = NavbarItem(**item_data.model_dump())
     db.add(new_item)
     await db.commit()
-    await db.refresh(new_item)
+    # await db.refresh(new_item)
     return new_item
 
 @router.put("/navbar-items/{item_id}", response_model=schemas.NavbarItemResponse)
@@ -246,7 +246,7 @@ async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate,
         setattr(db_item, key, value)
 
     await db.commit()
-    await db.refresh(db_item)
+    # await db.refresh(db_item)
     return db_item
 
 @router.delete("/navbar-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
