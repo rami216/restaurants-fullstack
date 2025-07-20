@@ -103,8 +103,12 @@ async def create_section(section_data: schemas.SectionCreate, db: AsyncSession =
     new_section = Section(**section_data.model_dump())
     db.add(new_section)
     await db.commit()
-    # await db.refresh(new_section, ["subsections"])
-    return new_section
+    
+    # UPDATED: Re-fetch the created section with its relationships
+    result = await db.execute(
+        select(Section).options(selectinload(Section.subsections)).where(Section.section_id == new_section.section_id)
+    )
+    return result.scalars().first()
 
 @router.put("/sections/{section_id}", response_model=schemas.SectionResponse)
 async def update_section(section_id: UUID, section_data: schemas.SectionUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
@@ -141,8 +145,12 @@ async def create_subsection(subsection_data: schemas.SubsectionCreate, db: Async
     new_subsection = Subsection(**subsection_data.model_dump())
     db.add(new_subsection)
     await db.commit()
-    # await db.refresh(new_subsection, ["elements"])
-    return new_subsection
+    
+    # UPDATED: Re-fetch the created subsection with its relationships to fix the Greenlet error
+    result = await db.execute(
+        select(Subsection).options(selectinload(Subsection.elements)).where(Subsection.subsection_id == new_subsection.subsection_id)
+    )
+    return result.scalars().first()
 
 @router.put("/subsections/{subsection_id}", response_model=schemas.SubsectionResponse)
 async def update_subsection(subsection_id: UUID, subsection_data: schemas.SubsectionUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):

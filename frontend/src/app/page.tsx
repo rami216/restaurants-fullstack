@@ -18,7 +18,7 @@ export default function MainPage() {
           transition={{ duration: 0.8 }}
           className="text-3xl md:text-5xl font-extrabold mb-2"
         >
-          Super simple chatbot
+          Super simple chatbot and website builder
         </motion.h1>
 
         {/* 2) After a short delay, fade in “for your restaurant” */}

@@ -4,6 +4,8 @@
 
 import React, { useRef, useState } from "react";
 import { Selection, Page, FormField, AccordionItem } from "./Properties";
+import api from "@/lib/axios";
+
 import {
   Trash2,
   PlusCircle,
@@ -41,9 +43,33 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onDelete,
   onCreatePage,
 }) => {
+  const [isUploading, setIsUploading] = useState(false);
   const [isAddingPage, setIsAddingPage] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
+  // --- NEW: Function to handle the actual image file upload ---
+  const handleImageUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
 
+    setIsUploading(true);
+    const formData = new FormData();
+    formData.append("file", file);
+
+    try {
+      const response = await api.post("/uploads/image", formData, {
+        headers: { "Content-Type": "multipart/form-data" },
+      });
+      const { image_url } = response.data;
+      handlePropertyChange("backgroundImage", image_url);
+    } catch (error) {
+      console.error("Image upload failed:", error);
+      alert("Image upload failed. Please check the console for details.");
+    } finally {
+      setIsUploading(false);
+    }
+  };
   const handleCreatePage = () => {
     if (newPageTitle.trim()) {
       onCreatePage(newPageTitle.trim());
@@ -125,6 +151,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   }
 
   const updateItem = (updatedItem: any) => {
+    if (!activePage) return;
     const updatedPage = {
       ...activePage,
       sections: activePage.sections.map((section) => {
@@ -211,9 +238,54 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const localUrl = URL.createObjectURL(file);
     handlePropertyChange("src", localUrl);
   };
-
+  // --- THIS IS THE UPDATED SECTION EDITOR ---
   const renderSectionEditor = () => (
     <div className="space-y-4">
+      {/* --- NEW: Background Image Uploader --- */}
+      <div>
+        <label className="block text-sm font-medium text-gray-700">
+          Background Image
+        </label>
+        <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
+          {selectedItem.properties.backgroundImage ? (
+            <div className="text-center">
+              <img
+                src={`${api.defaults.baseURL}${selectedItem.properties.backgroundImage}`}
+                alt="Background Preview"
+                className="max-h-32 w-full object-cover mx-auto rounded-md"
+              />
+              <button
+                onClick={() => handlePropertyChange("backgroundImage", "")}
+                className="mt-2 text-xs text-red-600 hover:text-red-800"
+              >
+                Remove Image
+              </button>
+            </div>
+          ) : (
+            <div className="text-center py-4">
+              <input
+                type="file"
+                id="bg-image-upload"
+                className="hidden"
+                accept="image/png, image/jpeg, image/webp, image/gif"
+                onChange={handleImageUpload}
+                disabled={isUploading}
+              />
+              <label
+                htmlFor="bg-image-upload"
+                className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
+                  isUploading ? "opacity-50 cursor-not-allowed" : ""
+                }`}
+              >
+                {isUploading ? "Uploading..." : "Upload an image"}
+              </label>
+              <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, GIF</p>
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* Other section properties */}
       <div>
         <label className="block text-sm font-medium text-gray-700">
           Layout Direction (for subsections)
@@ -280,20 +352,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             handlePropertyChange("backgroundColor", e.target.value)
           }
           className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Background Image URL
-        </label>
-        <input
-          type="text"
-          value={selectedItem.properties.backgroundImage || ""}
-          onChange={(e) =>
-            handlePropertyChange("backgroundImage", e.target.value)
-          }
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          placeholder="https://example.com/image.jpg"
         />
       </div>
     </div>

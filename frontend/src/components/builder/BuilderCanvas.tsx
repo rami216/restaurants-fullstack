@@ -16,6 +16,7 @@ import {
   WebsiteData, // Import WebsiteData
 } from "./Properties";
 import { Plus, ChevronDown } from "lucide-react";
+import api from "@/lib/axios"; // Import api to get the base URL
 
 const Accordion = ({
   items,
@@ -349,106 +350,120 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       )}
 
       <div className="space-y-4">
-        {page.sections.map((section) => (
-          <div
-            key={section.section_id}
-            onClick={() =>
-              onSelect({ type: "section", id: section.section_id })
-            }
-            className={`p-4 border-2 rounded-lg transition-all cursor-pointer ${
-              selection.type === "section" &&
-              selection.id === section.section_id
-                ? "border-blue-500"
-                : "border-dashed border-gray-300"
-            }`}
-            style={section.properties}
-          >
+        {page.sections.map((section) => {
+          // --- NEW: Create a dynamic style object for the section ---
+          const sectionStyle: React.CSSProperties = { ...section.properties };
+
+          // If a backgroundImage URL exists, format it correctly for CSS
+          if (section.properties.backgroundImage) {
+            sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${section.properties.backgroundImage})`;
+            sectionStyle.backgroundSize = "cover";
+            sectionStyle.backgroundPosition = "center";
+          }
+
+          return (
             <div
-              className="flex flex-wrap"
-              style={{
-                display: "flex",
-                flexDirection: section.properties.flexDirection,
-                justifyContent: section.properties.justifyContent,
-                alignItems: section.properties.alignItems,
-                gap: section.properties.gap,
-              }}
+              key={section.section_id}
+              onClick={() =>
+                onSelect({ type: "section", id: section.section_id })
+              }
+              className={`p-4 border-2 rounded-lg transition-all cursor-pointer ${
+                selection.type === "section" &&
+                selection.id === section.section_id
+                  ? "border-blue-500"
+                  : "border-dashed border-gray-300"
+              }`}
+              // --- UPDATED: Use the new sectionStyle object ---
+              style={sectionStyle}
             >
-              {section.subsections.map((subsection) => {
-                // Construct dynamic styles for the subsection
-                const subsectionStyle: React.CSSProperties = {
-                  display: subsection.properties.display || "flex",
-                  gap: subsection.properties.gap || "1rem",
-                };
-
-                if (subsection.properties.display === "grid") {
-                  subsectionStyle.gridTemplateColumns =
-                    subsection.properties.gridTemplateColumns ||
-                    "repeat(2, 1fr)";
-                } else {
-                  // Default to flex properties
-                  subsectionStyle.flexDirection =
-                    subsection.properties.flexDirection || "column";
-                  subsectionStyle.justifyContent =
-                    subsection.properties.justifyContent || "flex-start";
-                  subsectionStyle.alignItems =
-                    subsection.properties.alignItems || "stretch";
-                }
-
-                return (
-                  <div
-                    key={subsection.subsection_id}
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      onSelect({
-                        type: "subsection",
-                        id: subsection.subsection_id,
-                      });
-                    }}
-                    className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
-                      selection.type === "subsection" &&
-                      selection.id === subsection.subsection_id
-                        ? "border-green-500"
-                        : "border-dashed border-gray-400"
-                    }`}
-                    style={subsectionStyle} // Apply the dynamic styles here
-                  >
-                    {subsection.elements.map((element) => (
-                      <div
-                        key={element.element_id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onSelect({ type: "element", id: element.element_id });
-                        }}
-                        className={`p-2 rounded transition-all ${
-                          selection.type === "element" &&
-                          selection.id === element.element_id
-                            ? "ring-2 ring-offset-2 ring-pink-500"
-                            : ""
-                        }`}
-                      >
-                        {renderElement(element)}
-                      </div>
-                    ))}
-                    {subsection.elements.length === 0 && (
-                      <div className="text-gray-400 self-center mx-auto">
-                        Add elements here
-                      </div>
-                    )}
-                  </div>
-                );
-              })}
-              <button
-                onClick={(e) => {
-                  e.stopPropagation();
-                  handleAddSubsection(section.section_id);
+              <div
+                className="flex flex-wrap"
+                style={{
+                  display: "flex",
+                  flexDirection: section.properties.flexDirection,
+                  justifyContent: section.properties.justifyContent,
+                  alignItems: section.properties.alignItems,
+                  gap: section.properties.gap,
                 }}
-                className="flex items-center justify-center min-h-[100px] w-32 border-2 border-dashed border-gray-400 rounded-lg text-gray-400 hover:border-green-500 hover:text-green-500 transition-all"
               >
-                <Plus size={24} />
-              </button>
+                {section.subsections.map((subsection) => {
+                  const subsectionStyle: React.CSSProperties = {
+                    display: subsection.properties.display || "flex",
+                    gap: subsection.properties.gap || "1rem",
+                  };
+
+                  if (subsection.properties.display === "grid") {
+                    subsectionStyle.gridTemplateColumns =
+                      subsection.properties.gridTemplateColumns ||
+                      "repeat(2, 1fr)";
+                  } else {
+                    subsectionStyle.flexDirection =
+                      subsection.properties.flexDirection || "column";
+                    subsectionStyle.justifyContent =
+                      subsection.properties.justifyContent || "flex-start";
+                    subsectionStyle.alignItems =
+                      subsection.properties.alignItems || "stretch";
+                  }
+
+                  return (
+                    <div
+                      key={subsection.subsection_id}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect({
+                          type: "subsection",
+                          id: subsection.subsection_id,
+                        });
+                      }}
+                      className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
+                        selection.type === "subsection" &&
+                        selection.id === subsection.subsection_id
+                          ? "border-green-500"
+                          : "border-dashed border-gray-400"
+                      }`}
+                      style={subsectionStyle}
+                    >
+                      {subsection.elements.map((element) => (
+                        <div
+                          key={element.element_id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect({
+                              type: "element",
+                              id: element.element_id,
+                            });
+                          }}
+                          className={`p-2 rounded transition-all ${
+                            selection.type === "element" &&
+                            selection.id === element.element_id
+                              ? "ring-2 ring-offset-2 ring-pink-500"
+                              : ""
+                          }`}
+                        >
+                          {renderElement(element)}
+                        </div>
+                      ))}
+                      {subsection.elements.length === 0 && (
+                        <div className="text-gray-400 self-center mx-auto">
+                          Add elements here
+                        </div>
+                      )}
+                    </div>
+                  );
+                })}
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    handleAddSubsection(section.section_id);
+                  }}
+                  className="flex items-center justify-center min-h-[100px] w-32 border-2 border-dashed border-gray-400 rounded-lg text-gray-400 hover:border-green-500 hover:text-green-500 transition-all"
+                >
+                  <Plus size={24} />
+                </button>
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
         <button
           onClick={handleAddSection}
           className="w-full py-4 border-2 border-dashed border-gray-400 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500"
