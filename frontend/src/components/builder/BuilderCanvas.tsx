@@ -317,6 +317,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 const targetPage = websiteData?.pages.find(
                   (p) => p.slug === item.link_url
                 );
+
+                // --- NEW: Get the item style from navbar properties ---
+                const itemStyle = navbar.properties?.itemStyle || {};
+
                 return (
                   <a
                     key={item.item_id}
@@ -329,7 +333,9 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                       }
                       onSelect({ type: "navbar_item", id: item.item_id });
                     }}
-                    className={`px-3 py-2 rounded ${
+                    // --- UPDATED: Apply the itemStyle object ---
+                    style={itemStyle}
+                    className={`px-3 py-2 rounded transition-all ${
                       selection.type === "navbar_item" &&
                       selection.id === item.item_id
                         ? "ring-2 ring-purple-500"

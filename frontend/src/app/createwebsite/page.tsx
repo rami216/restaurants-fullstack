@@ -126,7 +126,7 @@ const CreateWebsitePage = () => {
       await Promise.all(deletePromises);
       setDeletedItems([]);
 
-      // --- 2. Process Creates and Updates ---
+      // --- 2. Process Page Content Creates and Updates ---
       const activePageData = websiteData.pages.find(
         (p) => p.page_id === activePageId
       );
@@ -134,11 +134,11 @@ const CreateWebsitePage = () => {
         (p) => p.page_id === activePageId
       );
 
-      if (!activePageData) throw new Error("Active page not found");
+      if (!activePageData || !originalPageData)
+        throw new Error("Active page data not found");
 
-      // Create maps of original items for quick lookup
       const originalItems = new Map();
-      originalPageData?.sections.forEach((s) => {
+      originalPageData.sections.forEach((s) => {
         originalItems.set(s.section_id, s);
         s.subsections.forEach((sub) => {
           originalItems.set(sub.subsection_id, sub);
@@ -149,7 +149,6 @@ const CreateWebsitePage = () => {
       for (const [s_idx, section] of activePageData.sections.entries()) {
         let sectionId = section.section_id;
         if (isTempId(sectionId)) {
-          // CREATE new section
           const res = await api.post("/builder/sections", {
             page_id: activePageId,
             section_type: section.section_type,
@@ -158,7 +157,6 @@ const CreateWebsitePage = () => {
           });
           sectionId = res.data.section_id;
         } else {
-          // UPDATE existing section, but only if it changed
           const originalSection = originalItems.get(sectionId);
           if (
             originalSection &&
@@ -175,15 +173,13 @@ const CreateWebsitePage = () => {
         for (const [sub_idx, subsection] of section.subsections.entries()) {
           let subsectionId = subsection.subsection_id;
           if (isTempId(subsectionId)) {
-            // CREATE new subsection
             const res = await api.post("/builder/subsections", {
-              section_id: sectionId, // Use the potentially new sectionId
+              section_id: sectionId,
               position: sub_idx,
               properties: subsection.properties,
             });
             subsectionId = res.data.subsection_id;
           } else {
-            // UPDATE existing subsection, only if changed
             const originalSubsection = originalItems.get(subsectionId);
             if (
               originalSubsection &&
@@ -199,15 +195,13 @@ const CreateWebsitePage = () => {
 
           for (const [el_idx, element] of subsection.elements.entries()) {
             if (isTempId(element.element_id)) {
-              // CREATE new element
               await api.post("/builder/elements", {
-                subsection_id: subsectionId, // Use the potentially new subsectionId
+                subsection_id: subsectionId,
                 element_type: element.element_type,
                 position: el_idx,
                 properties: element.properties,
               });
             } else {
-              // UPDATE existing element, only if changed
               const originalElement = originalItems.get(element.element_id);
               if (
                 originalElement &&
@@ -224,8 +218,22 @@ const CreateWebsitePage = () => {
         }
       }
 
+      // --- 3. Process Navbar Property Updates ---
+      if (websiteData.navbar && originalWebsiteData.navbar) {
+        if (
+          !isEqual(
+            websiteData.navbar.properties,
+            originalWebsiteData.navbar.properties
+          )
+        ) {
+          await api.put(`/builder/navbars/${websiteData.navbar.navbar_id}`, {
+            properties: websiteData.navbar.properties,
+          });
+        }
+      }
+
       alert("All changes saved successfully!");
-      await fetchWebsiteData(); // Refetch all data to get a clean, updated state
+      await fetchWebsiteData();
     } catch (error) {
       console.error("Failed to save changes:", error);
       alert("An error occurred while saving. Please check the console.");

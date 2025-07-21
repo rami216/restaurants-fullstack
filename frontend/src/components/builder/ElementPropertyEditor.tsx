@@ -128,70 +128,23 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const renderNavbarEditor = () => {
     if (!websiteData?.navbar) return null;
 
+    const navProps = websiteData.navbar.properties || {};
+    const itemStyle = navProps.itemStyle || {};
+
     return (
-      <div className="space-y-4">
+      <div className="space-y-6">
+        {/* Section for managing pages and links */}
         <div>
           <h4 className="text-md font-medium text-gray-800 mb-2">
-            Navigation Links
+            Pages & Links
           </h4>
           <div className="space-y-2">
-            {websiteData.navbar.items.map((item: NavbarItem) => (
-              <div
-                key={item.item_id}
-                className="flex items-center space-x-2 p-2 border rounded bg-gray-50"
-              >
-                {editingItemId === item.item_id ? (
-                  <input
-                    type="text"
-                    value={editedItemText}
-                    onChange={(e) => setEditedItemText(e.target.value)}
-                    className="flex-grow border-blue-500 ring-2 ring-blue-300 rounded-md shadow-sm p-1 text-sm"
-                    autoFocus
-                  />
-                ) : (
-                  <span
-                    className="flex-grow p-1 text-sm cursor-pointer"
-                    onClick={() => {
-                      setEditingItemId(item.item_id);
-                      setEditedItemText(item.text);
-                    }}
-                  >
-                    {item.text}
-                  </span>
-                )}
-
-                {editingItemId === item.item_id ? (
-                  <>
-                    <button
-                      onClick={handleUpdateNavbarItem}
-                      className="p-2 text-green-600 hover:bg-green-100 rounded-full"
-                    >
-                      <Check size={16} />
-                    </button>
-                    <button
-                      onClick={() => setEditingItemId(null)}
-                      className="p-2 text-gray-500 hover:bg-gray-200 rounded-full"
-                    >
-                      <X size={16} />
-                    </button>
-                  </>
-                ) : (
-                  <button
-                    onClick={() =>
-                      handleDeleteNavbarItem(item.item_id, item.text)
-                    }
-                    className="p-2 text-red-500 hover:bg-red-100 rounded-full"
-                  >
-                    <Trash2 size={16} />
-                  </button>
-                )}
+            {websiteData.pages.map((page: Page) => (
+              <div key={page.page_id} className="p-2 border rounded bg-gray-50">
+                {page.title}
               </div>
             ))}
           </div>
-        </div>
-        <hr />
-        <div>
-          <h4 className="text-md font-medium text-gray-800 mb-2">Pages</h4>
           {!isAddingPage ? (
             <button
               onClick={() => setIsAddingPage(true)}
@@ -225,6 +178,111 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           )}
         </div>
+
+        <hr />
+
+        {/* Section for styling the navbar container */}
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Navbar Styling
+          </h4>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Background Color
+              </label>
+              <input
+                type="color"
+                value={navProps.backgroundColor || "#ffffff"}
+                onChange={(e) =>
+                  handleNavbarPropertyChange("backgroundColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+          </div>
+        </div>
+
+        <hr />
+
+        {/* Section for styling the navigation links */}
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Link Styling
+          </h4>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-1">
+                Text Style
+              </label>
+              <div className="flex items-center space-x-2">
+                <button
+                  onClick={() =>
+                    toggleNavbarStyle("fontWeight", "bold", "normal")
+                  }
+                  className={`p-2 rounded ${
+                    itemStyle.fontWeight === "bold"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <Bold size={16} />
+                </button>
+                <button
+                  onClick={() =>
+                    toggleNavbarStyle("fontStyle", "italic", "normal")
+                  }
+                  className={`p-2 rounded ${
+                    itemStyle.fontStyle === "italic"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <Italic size={16} />
+                </button>
+                <button
+                  onClick={() =>
+                    toggleNavbarStyle("textDecoration", "underline", "none")
+                  }
+                  className={`p-2 rounded ${
+                    itemStyle.textDecoration === "underline"
+                      ? "bg-blue-500 text-white"
+                      : "bg-gray-200"
+                  }`}
+                >
+                  <Underline size={16} />
+                </button>
+              </div>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Font Size
+              </label>
+              <input
+                type="text"
+                value={itemStyle.fontSize || "1rem"}
+                onChange={(e) =>
+                  handleNavbarStyleChange("fontSize", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                placeholder="e.g., 16px, 1.2rem"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Text Color
+              </label>
+              <input
+                type="color"
+                value={itemStyle.color || "#000000"}
+                onChange={(e) =>
+                  handleNavbarStyleChange("color", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+          </div>
+        </div>
       </div>
     );
   };
@@ -232,6 +290,33 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const renderNavbarItemEditor = () => {
     // ... (logic to edit navbar item text and link)
     return <div>Navbar Item Editor</div>;
+  };
+  const handleNavbarPropertyChange = (key: string, value: any) => {
+    if (!websiteData?.navbar) return;
+    const currentProperties = websiteData.navbar.properties || {};
+    const newProperties = { ...currentProperties, [key]: value };
+    onUpdateWebsite({
+      ...websiteData,
+      navbar: { ...websiteData.navbar, properties: newProperties },
+    });
+  };
+
+  const handleNavbarStyleChange = (key: string, value: any) => {
+    if (!websiteData?.navbar) return;
+    const currentProperties = websiteData.navbar.properties || {};
+    const currentItemStyle = currentProperties.itemStyle || {};
+    const newItemStyle = { ...currentItemStyle, [key]: value };
+    handleNavbarPropertyChange("itemStyle", newItemStyle);
+  };
+
+  const toggleNavbarStyle = (
+    styleKey: string,
+    onValue: string,
+    offValue: string
+  ) => {
+    const currentVal = websiteData?.navbar?.properties?.itemStyle?.[styleKey];
+    const newVal = currentVal === onValue ? offValue : onValue;
+    handleNavbarStyleChange(styleKey, newVal);
   };
 
   const fileInputRef = useRef<HTMLInputElement>(null);
