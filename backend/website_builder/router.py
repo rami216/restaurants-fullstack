@@ -245,22 +245,55 @@ async def create_navbar_item(item_data: schemas.NavbarItemCreate, db: AsyncSessi
 
 @router.put("/navbar-items/{item_id}", response_model=schemas.NavbarItemResponse)
 async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Updates a navbar item and also finds and updates the corresponding page.
+    """
     db_item = await db.get(NavbarItem, item_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Navbar item not found")
 
+    # Store the old link_url to find the associated page
+    old_link_url = db_item.link_url
+
+    # Update the navbar item with new data from the request
     update_data = item_data.model_dump(exclude_unset=True)
     for key, value in update_data.items():
         setattr(db_item, key, value)
 
+    # Find the page that corresponds to the OLD navbar link
+    if old_link_url:
+        result = await db.execute(select(Page).where(Page.slug == old_link_url))
+        page_to_update = result.scalars().first()
+        
+        # If a page is found, update its title and slug to match the new navbar item
+        if page_to_update:
+            page_to_update.title = db_item.text
+            page_to_update.slug = db_item.link_url
+
     await db.commit()
-    # await db.refresh(db_item)
+    await db.refresh(db_item)
     return db_item
 
 @router.delete("/navbar-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    """
+    Deletes a navbar item and also finds and deletes the corresponding page.
+    """
     db_item = await db.get(NavbarItem, item_id)
-    if db_item:
-        await db.delete(db_item)
-        await db.commit()
+    if not db_item:
+        # If it's already deleted, just return success
+        return
+
+    # Find the page that corresponds to the navbar link
+    if db_item.link_url:
+        result = await db.execute(select(Page).where(Page.slug == db_item.link_url))
+        page_to_delete = result.scalars().first()
+        
+        # If a page is found, delete it
+        if page_to_delete:
+            await db.delete(page_to_delete)
+
+    # Delete the navbar item itself
+    await db.delete(db_item)
+    await db.commit()
     return

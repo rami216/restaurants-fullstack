@@ -3,7 +3,13 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Selection, Page, FormField, AccordionItem } from "./Properties";
+import {
+  Selection,
+  Page,
+  FormField,
+  AccordionItem,
+  NavbarItem,
+} from "./Properties";
 import api from "@/lib/axios";
 
 import {
@@ -17,6 +23,7 @@ import {
   PanelRightOpen,
   Save,
   X,
+  Check,
 } from "lucide-react";
 interface PropertyEditorProps {
   isExpanded: boolean;
@@ -47,6 +54,47 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const [isAddingPage, setIsAddingPage] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
   // --- NEW: Function to handle the actual image file upload ---
+
+  //for navbaritems(new)
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [editedItemText, setEditedItemText] = useState("");
+  const handleUpdateNavbarItem = async () => {
+    if (!editingItemId || !editedItemText) return;
+
+    const slug = `/${editedItemText
+      .toLowerCase()
+      .replace(/\s+/g, "-")
+      .replace(/[?#]/g, "")}`;
+
+    try {
+      await api.put(`/builder/navbar-items/${editingItemId}`, {
+        text: editedItemText,
+        link_url: slug,
+      });
+      alert("Link updated successfully!");
+      window.location.reload(); // Easiest way to refresh all data
+    } catch (error) {
+      console.error("Failed to update link:", error);
+      alert("Error updating link.");
+    } finally {
+      setEditingItemId(null);
+      setEditedItemText("");
+    }
+  };
+
+  const handleDeleteNavbarItem = async (itemId: string, itemText: string) => {
+    const confirmationMessage = `Are you sure you want to delete the "${itemText}" link?\n\nThis will also permanently delete the entire page and all of its content. This action cannot be undone.`;
+    if (confirm(confirmationMessage)) {
+      try {
+        await api.delete(`/builder/navbar-items/${itemId}`);
+        alert("Page and link deleted successfully!");
+        window.location.reload();
+      } catch (error) {
+        console.error("Failed to delete link and page:", error);
+        alert("Error deleting link and page.");
+      }
+    }
+  };
   const handleImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>
   ) => {
@@ -78,19 +126,72 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     }
   };
   const renderNavbarEditor = () => {
-    if (!websiteData) return null;
+    if (!websiteData?.navbar) return null;
 
     return (
       <div className="space-y-4">
         <div>
-          <h4 className="text-md font-medium text-gray-800 mb-2">Pages</h4>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Navigation Links
+          </h4>
           <div className="space-y-2">
-            {websiteData.pages.map((page: Page) => (
-              <div key={page.page_id} className="p-2 border rounded bg-gray-50">
-                {page.title}
+            {websiteData.navbar.items.map((item: NavbarItem) => (
+              <div
+                key={item.item_id}
+                className="flex items-center space-x-2 p-2 border rounded bg-gray-50"
+              >
+                {editingItemId === item.item_id ? (
+                  <input
+                    type="text"
+                    value={editedItemText}
+                    onChange={(e) => setEditedItemText(e.target.value)}
+                    className="flex-grow border-blue-500 ring-2 ring-blue-300 rounded-md shadow-sm p-1 text-sm"
+                    autoFocus
+                  />
+                ) : (
+                  <span
+                    className="flex-grow p-1 text-sm cursor-pointer"
+                    onClick={() => {
+                      setEditingItemId(item.item_id);
+                      setEditedItemText(item.text);
+                    }}
+                  >
+                    {item.text}
+                  </span>
+                )}
+
+                {editingItemId === item.item_id ? (
+                  <>
+                    <button
+                      onClick={handleUpdateNavbarItem}
+                      className="p-2 text-green-600 hover:bg-green-100 rounded-full"
+                    >
+                      <Check size={16} />
+                    </button>
+                    <button
+                      onClick={() => setEditingItemId(null)}
+                      className="p-2 text-gray-500 hover:bg-gray-200 rounded-full"
+                    >
+                      <X size={16} />
+                    </button>
+                  </>
+                ) : (
+                  <button
+                    onClick={() =>
+                      handleDeleteNavbarItem(item.item_id, item.text)
+                    }
+                    className="p-2 text-red-500 hover:bg-red-100 rounded-full"
+                  >
+                    <Trash2 size={16} />
+                  </button>
+                )}
               </div>
             ))}
           </div>
+        </div>
+        <hr />
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">Pages</h4>
           {!isAddingPage ? (
             <button
               onClick={() => setIsAddingPage(true)}
