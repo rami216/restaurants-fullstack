@@ -49,6 +49,7 @@ export interface WebsiteData {
   website_id: string;
   navbar: Navbar | null;
   pages: Page[];
+  subdomain: string; // THIS LINE IS ADDED
 }
 
 export type Selection = {

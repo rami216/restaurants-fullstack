@@ -73,6 +73,7 @@ interface BuilderCanvasProps {
   onUpdate: (updatedPage: Page) => void;
   onPageSwitch: (pageId: string) => void;
   websiteData: WebsiteData | null; // Add websiteData to props
+  isPreview?: boolean;
 }
 
 const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
@@ -83,7 +84,16 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onSelect,
   onPageSwitch,
   websiteData,
+  isPreview = false,
 }) => {
+  // --- NEW: State for handling page navigation in preview mode ---
+  const [currentPage, setCurrentPage] = useState(page);
+  const handlePreviewPageSwitch = (pageId: string) => {
+    const newPage = websiteData?.pages.find((p) => p.page_id === pageId);
+    if (newPage) {
+      setCurrentPage(newPage);
+    }
+  };
   const handleAddSection = () => {
     if (!page) return;
     const newSection: SectionType = {
@@ -302,11 +312,20 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       {/* --- NAVBAR RENDERING --- */}
       {navbar && (
         <nav
-          onClick={() => onSelect({ type: "navbar", id: navbar.navbar_id })}
-          className={`p-4 mb-4 border-2 rounded-lg transition-all cursor-pointer ${
-            selection.type === "navbar" && selection.id === navbar.navbar_id
-              ? "border-purple-500"
-              : "border-dashed border-gray-300"
+          onClick={
+            !isPreview
+              ? () => onSelect({ type: "navbar", id: navbar.navbar_id })
+              : undefined
+          }
+          className={`p-4 mb-4 rounded-lg transition-all ${
+            !isPreview
+              ? `cursor-pointer border-2 ${
+                  selection.type === "navbar" &&
+                  selection.id === navbar.navbar_id
+                    ? "border-purple-500"
+                    : "border-dashed border-gray-300"
+                }`
+              : ""
           }`}
           style={navbar.properties}
         >
@@ -370,14 +389,20 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           return (
             <div
               key={section.section_id}
-              onClick={() =>
-                onSelect({ type: "section", id: section.section_id })
+              onClick={
+                !isPreview
+                  ? () => onSelect({ type: "section", id: section.section_id })
+                  : undefined
               }
-              className={`p-4 border-2 rounded-lg transition-all cursor-pointer ${
-                selection.type === "section" &&
-                selection.id === section.section_id
-                  ? "border-blue-500"
-                  : "border-dashed border-gray-300"
+              className={`p-4 rounded-lg transition-all ${
+                !isPreview
+                  ? `cursor-pointer border-2 ${
+                      selection.type === "section" &&
+                      selection.id === section.section_id
+                        ? "border-blue-500"
+                        : "border-dashed border-gray-300"
+                    }`
+                  : ""
               }`}
               // --- UPDATED: Use the new sectionStyle object ---
               style={sectionStyle}
@@ -470,12 +495,14 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </div>
           );
         })}
-        <button
-          onClick={handleAddSection}
-          className="w-full py-4 border-2 border-dashed border-gray-400 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500"
-        >
-          + Add New Section
-        </button>
+        {!isPreview && (
+          <button
+            onClick={handleAddSection}
+            className="w-full py-4 border-2 border-dashed border-gray-400 rounded-lg text-gray-500 hover:border-blue-500 hover:text-blue-500"
+          >
+            + Add New Section
+          </button>
+        )}
       </div>
     </div>
   );

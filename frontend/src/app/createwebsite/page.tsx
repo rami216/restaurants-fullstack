@@ -395,6 +395,16 @@ const CreateWebsitePage = () => {
       <div className="flex-1 flex flex-col">
         <header className="bg-gray-800 text-white p-4 flex justify-between items-center">
           <h1 className="text-xl font-bold">Website Builder</h1>
+          {websiteData?.subdomain && (
+            <a
+              href={`/${websiteData.subdomain}`}
+              target="_blank" // Opens in a new tab
+              rel="noopener noreferrer"
+              className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
+            >
+              Preview
+            </a>
+          )}
           <button
             onClick={handleSaveChangesToDB}
             disabled={isSaving}

@@ -297,3 +297,22 @@ async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), 
     await db.delete(db_item)
     await db.commit()
     return
+
+
+@router.get("/public/{subdomain}", response_model=schemas.WebsiteResponse)
+async def get_public_website_by_subdomain(subdomain: str, db: AsyncSession = Depends(get_db)):
+    """
+    Gets a website's data for public viewing, based on its subdomain.
+    This endpoint does NOT require authentication.
+    """
+    result = await db.execute(
+        select(Website).options(
+            selectinload(Website.pages).selectinload(Page.sections).selectinload(Section.subsections).selectinload(Subsection.elements),
+            selectinload(Website.navbar).selectinload(Navbar.items),
+            selectinload(Website.restaurant) # Eagerly load the restaurant details
+        ).where(Website.subdomain == subdomain)
+    )
+    website = result.scalars().first()
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found.")
+    return website
