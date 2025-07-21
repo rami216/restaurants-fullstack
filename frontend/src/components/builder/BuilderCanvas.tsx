@@ -1,7 +1,6 @@
 // frontend/src/components/builder/BuilderCanvas.tsx
 
 "use client";
-
 import React, { useState } from "react"; // Import useState
 import {
   Page,

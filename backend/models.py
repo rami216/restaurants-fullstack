@@ -41,7 +41,7 @@ class RestaurantOwner(Base):
     # --- NEW WALLET COLUMN ---
     # Use Numeric for precision with currency. Stores the balance in dollars.
     credit_balance = Column(Numeric(10, 4), nullable=False, default=0.0)
-    # website = relationship("Website", back_populates="owner", uselist=False, cascade="all, delete-orphan")
+    website = relationship("Website", back_populates="restaurant", uselist=False, cascade="all, delete-orphan")
     
 
 class RestaurantBrand(Base):

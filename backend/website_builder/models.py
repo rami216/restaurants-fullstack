@@ -23,7 +23,7 @@ class Website(Base):
     # owner = relationship("RestaurantOwner", back_populates="website") # This link is defined on the RestaurantOwner model
     pages = relationship("Page", back_populates="website", cascade="all, delete-orphan")
     navbar = relationship("Navbar", back_populates="website", uselist=False, cascade="all, delete-orphan")
-
+    restaurant = relationship("RestaurantOwner", back_populates="website")
 
 class Page(Base):
     __tablename__ = "pages"
