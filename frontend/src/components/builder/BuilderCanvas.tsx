@@ -165,7 +165,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                     type="text"
                     placeholder={field.placeholder}
                     className="w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    readOnly
                   />
                 </div>
               ))}
