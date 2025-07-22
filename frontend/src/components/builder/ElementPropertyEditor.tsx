@@ -50,6 +50,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onDelete,
   onCreatePage,
 }) => {
+  const apikey = "AIzaSyDoLJaKT1ivgRwIAmChmhE4CwuSlJW_UW8";
   const [isUploading, setIsUploading] = useState(false);
   const [isAddingPage, setIsAddingPage] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
@@ -1578,6 +1579,59 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
+      case "MAP":
+        const handleMapUrlChange = (newUrl: string) => {
+          const API_KEY = "AIzaSyDoLJaKT1ivgRwIAmChmhE4CwuSlJW_UW8";
+
+          // The check has been removed.
+
+          let embedUrl = newUrl;
+          if (newUrl.includes("/maps/place/")) {
+            const place = newUrl.split("/place/")[1].split("/")[0];
+            embedUrl = `https://www.google.com/maps/embed/v1/place?key=${API_KEY}&q=${place}`;
+          } else if (newUrl.includes("?q=")) {
+            const query = newUrl.split("?q=")[1];
+            embedUrl = `https://www.google.com/maps/embed/v1/place?key=${API_KEY}&q=${query}`;
+          }
+
+          handlePropertyChange("src", embedUrl);
+        };
+
+        return (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Google Maps URL
+              </label>
+              <textarea
+                defaultValue={selectedItem.properties.src}
+                onBlur={(e) => handleMapUrlChange(e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                rows={3}
+                placeholder="Paste a Google Maps URL here (e.g., from the 'Share' button)"
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Go to Google Maps, find a location, click "Share", and paste the
+                link here.
+              </p>
+            </div>
+            <hr />
+            <h4 className="text-md font-medium text-gray-800 pt-2">Styling</h4>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Height
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.height || "450px"}
+                onChange={(e) => handleStyleChange("height", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                placeholder="e.g., 450px"
+              />
+            </div>
+          </div>
+        );
+
       default:
         return <p>No editor for this element.</p>;
     }

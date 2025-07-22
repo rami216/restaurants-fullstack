@@ -11,7 +11,7 @@ import {
   MenuItem,
   Category,
 } from "./Properties";
-import { PanelLeftClose, PanelLeftOpen } from "lucide-react";
+import { PanelLeftClose, PanelLeftOpen, MapPin } from "lucide-react";
 
 interface ElementPaletteProps {
   isExpanded: boolean;
@@ -120,6 +120,21 @@ const availableElements = [
       ],
       style: {
         width: "100%",
+      },
+    },
+  },
+  {
+    type: "MAP",
+    icon: <MapPin size={24} />,
+    name: "map",
+    label: "Map",
+    defaultProps: {
+      // Default to a central location, user will change this
+      src: "https://www.google.com/maps/embed/v1/place?key=AIzaSyDoLJaKT1ivgRwIAmChmhE4CwuSlJW_UW8&q=Eiffel+Tower,Paris+France",
+      style: {
+        width: "100%",
+        height: "450px",
+        border: "0",
       },
     },
   },

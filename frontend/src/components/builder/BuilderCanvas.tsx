@@ -287,7 +287,21 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       case "ACCORDION":
         // Render the new interactive Accordion component
         return <Accordion items={props.items || []} style={style} />;
-
+      case "MAP":
+        return (
+          <div className="relative">
+            {/* This overlay captures the click so you can select the map */}
+            <div className="absolute inset-0 z-10 cursor-pointer"></div>
+            <iframe
+              src={props.src}
+              style={{ ...style, pointerEvents: "none" }} // pointerEvents:none is crucial
+              allowFullScreen={false}
+              loading="lazy"
+              referrerPolicy="no-referrer-when-downgrade"
+              title="Google Map"
+            ></iframe>
+          </div>
+        );
       default:
         return (
           <div className="border p-2 bg-gray-300 text-black rounded">

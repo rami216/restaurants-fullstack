@@ -199,6 +199,17 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             </form>
           </div>
         );
+      case "MAP":
+        return (
+          <iframe
+            src={props.src}
+            style={style} // pointerEvents:none is crucial
+            allowFullScreen={false}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            title="Google Map"
+          ></iframe>
+        );
       default:
         return (
           <div className="border p-2 bg-gray-300 text-black rounded">
