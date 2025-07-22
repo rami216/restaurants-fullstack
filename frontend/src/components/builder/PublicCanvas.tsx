@@ -15,6 +15,7 @@ import {
 } from "./Properties";
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
+import { useRouter } from "next/navigation";
 
 // You should move your Accordion component to its own file and import it here
 const Accordion = ({
@@ -70,15 +71,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   initialPage,
   websiteData,
 }) => {
+  const router = useRouter();
   const [currentPage, setCurrentPage] = useState(initialPage);
 
-  const handleNavClick = (
-    e: React.MouseEvent<HTMLAnchorElement>,
-    page: Page
-  ) => {
-    e.preventDefault();
+  const handleNavClick = (page: Page) => {
+    // 1) update your local state
     setCurrentPage(page);
-    window.history.pushState({}, "", page.slug);
+    // 2) tell Next to actually navigate (updates URL + SSR/fetch)
+    router.push(`/${websiteData.subdomain}${page.slug}`);
   };
 
   // This is a complete renderElement function copied from your BuilderCanvas
@@ -91,7 +91,25 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       case "TEXT":
         return <div style={style}>{props.content || "New Text Block"}</div>;
       case "BUTTON":
-        return <button style={style}>{props.text || "Button"}</button>;
+        // find the page whose slug matches this button’s action_value
+        const targetPage = websiteData.pages.find(
+          (p) => p.slug === props.action_value
+        );
+        return (
+          <button
+            style={style}
+            onClick={() => {
+              if (targetPage) {
+                setCurrentPage(targetPage);
+                // push either relative or prefixed, e.g.:
+                router.push(`/${websiteData.subdomain}${targetPage.slug}`);
+              }
+            }}
+          >
+            {props.text || "Button"}
+          </button>
+        );
+
       case "IMAGE":
         return (
           <img
@@ -230,17 +248,20 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           <div className="flex items-center justify-between p-4">
             <div className="text-lg font-bold">Your Logo</div>
             <div className="flex items-center space-x-4">
-              {websiteData.navbar.items.map((item: NavbarItem) => {
-                const targetPage = websiteData.pages.find(
+              {websiteData.navbar.items.map((item) => {
+                const target = websiteData.pages.find(
                   (p) => p.slug === item.link_url
                 );
-                if (!targetPage) return null;
+                if (!target) return null;
                 return (
                   <a
                     key={item.item_id}
                     href={item.link_url}
-                    onClick={(e) => handleNavClick(e, targetPage)}
-                    style={websiteData.navbar?.properties?.itemStyle}
+                    onClick={(e) => {
+                      e.preventDefault();
+                      handleNavClick(target);
+                    }}
+                    style={websiteData?.navbar?.properties.itemStyle}
                   >
                     {item.text}
                   </a>

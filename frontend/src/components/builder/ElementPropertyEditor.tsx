@@ -3,14 +3,9 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import {
-  Selection,
-  Page,
-  FormField,
-  AccordionItem,
-  NavbarItem,
-} from "./Properties";
+import { Selection, FormField, AccordionItem, NavbarItem } from "./Properties";
 import api from "@/lib/axios";
+import { Page } from "./Properties";
 
 import {
   Trash2,
@@ -830,14 +825,22 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               <label className="block text-sm font-medium text-gray-700">
                 Link URL
               </label>
-              <input
-                type="text"
-                value={selectedItem.properties.action_value || "#"}
+              <select
+                value={selectedItem.properties.action_value || ""}
                 onChange={(e) =>
                   handlePropertyChange("action_value", e.target.value)
                 }
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-              />
+              >
+                <option value="" disabled>
+                  -- Select Page --
+                </option>
+                {websiteData?.pages.map((page: Page) => (
+                  <option key={page.page_id} value={page.slug}>
+                    {page.title}
+                  </option>
+                ))}
+              </select>
             </div>
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">Styling</h4>
