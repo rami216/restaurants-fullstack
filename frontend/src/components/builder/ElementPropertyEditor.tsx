@@ -50,7 +50,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onDelete,
   onCreatePage,
 }) => {
-  const apikey = "AIzaSyDoLJaKT1ivgRwIAmChmhE4CwuSlJW_UW8";
   const [isUploading, setIsUploading] = useState(false);
   const [isAddingPage, setIsAddingPage] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
@@ -1581,7 +1580,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         );
       case "MAP":
         const handleMapUrlChange = (newUrl: string) => {
-          const API_KEY = "AIzaSyDoLJaKT1ivgRwIAmChmhE4CwuSlJW_UW8";
+          const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
 
           // The check has been removed.
 
@@ -1638,7 +1637,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   return (
-    <div className="flex flex-col h-full">
+    <div className="flex flex-col h-full" key={selectedItem.element_id}>
       <div className="flex justify-between items-center mb-4 flex-shrink-0">
         {isExpanded && <h2 className="text-xl font-bold">Properties</h2>}
         <button

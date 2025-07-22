@@ -24,7 +24,7 @@ interface ElementPaletteProps {
   onLocationChange: (locationId: string) => void;
   categories: Category[];
 }
-
+const GOOGLE_MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
 const availableElements = [
   {
     type: "TEXT",
@@ -130,7 +130,7 @@ const availableElements = [
     label: "Map",
     defaultProps: {
       // Default to a central location, user will change this
-      src: "https://www.google.com/maps/embed/v1/place?key=AIzaSyDoLJaKT1ivgRwIAmChmhE4CwuSlJW_UW8&q=Eiffel+Tower,Paris+France",
+      src: `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAP_KEY}&q=Eiffel+Tower,Paris+France`,
       style: {
         width: "100%",
         height: "450px",
