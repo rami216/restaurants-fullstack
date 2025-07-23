@@ -96,3 +96,17 @@ export interface Navbar {
   properties: any;
   items: NavbarItem[];
 }
+
+export interface Location {
+  location_id: string;
+  location_name: string;
+}
+
+export interface PublicWebsiteData {
+  website_id: string;
+  restaurant_id: string;
+  navbar: Navbar | null;
+  pages: Page[];
+  subdomain: string;
+  locations: Location[];
+}

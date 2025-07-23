@@ -9,7 +9,7 @@ from typing import List
 
 from database import get_db
 from auth.auth_handler import get_current_active_user
-from models import User, RestaurantOwner
+from models import User, RestaurantOwner,Location
 from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem
 from . import schemas
 
@@ -299,20 +299,38 @@ async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), 
     return
 
 
-@router.get("/public/{subdomain}", response_model=schemas.WebsiteResponse)
-async def get_public_website_by_subdomain(subdomain: str, db: AsyncSession = Depends(get_db)):
-    """
-    Gets a website's data for public viewing, based on its subdomain.
-    This endpoint does NOT require authentication.
-    """
+@router.get("/public/{subdomain}", response_model=schemas.PublicWebsiteResponse)
+async def get_public_website_by_subdomain(
+    subdomain: str,
+    db: AsyncSession = Depends(get_db),
+):
+    # 1) fetch the site + all its pages, sections, subsections, etc.
     result = await db.execute(
-        select(Website).options(
-            selectinload(Website.pages).selectinload(Page.sections).selectinload(Section.subsections).selectinload(Subsection.elements),
-            selectinload(Website.navbar).selectinload(Navbar.items),
-            selectinload(Website.restaurant) # Eagerly load the restaurant details
-        ).where(Website.subdomain == subdomain)
+        select(Website)
+        .options(
+            selectinload(Website.pages)
+                .selectinload(Page.sections)
+                .selectinload(Section.subsections)
+                .selectinload(Subsection.elements),
+            selectinload(Website.navbar)
+                .selectinload(Navbar.items),
+            # we’ll fetch locations separately
+        )
+        .where(Website.subdomain == subdomain)
     )
-    website = result.scalars().first()
+    website: Website = result.scalars().first()
     if not website:
         raise HTTPException(status_code=404, detail="Website not found.")
-    return website
+
+    # 2) now fetch all locations for that restaurant
+    loc_q = await db.execute(
+        select(Location)
+        .where(Location.restaurant_id == website.restaurant_id)
+    )
+    location_list = loc_q.scalars().all()
+
+    # 3) return a PublicWebsiteResponse, pydantic will pick up all fields + our new locations
+    return schemas.PublicWebsiteResponse(
+        **website.__dict__,      # all the fields from WebsiteResponse
+        locations=location_list  # our new list of LocationResponse
+    )

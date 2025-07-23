@@ -125,3 +125,16 @@ class WebsiteResponse(WebsiteBase):
     navbar: Optional[NavbarResponse] = None
     class Config:
         from_attributes = True
+
+class LocationResponse(BaseModel):
+    location_id: UUID
+    location_name: str
+
+    class Config:
+        from_attributes = True
+        
+class PublicWebsiteResponse(WebsiteResponse):
+    locations: List[LocationResponse] = []
+
+    class Config(WebsiteResponse.Config):
+        pass

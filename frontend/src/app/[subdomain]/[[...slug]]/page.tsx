@@ -1,23 +1,22 @@
-// app/[subdomain]/[[...slug]]/page.tsx
 import PublicCanvas from "@/components/builder/PublicCanvas";
 import api from "@/lib/axios";
-import { WebsiteData } from "@/components/builder/Properties";
+import { PublicWebsiteData } from "@/components/builder/Properties";
 
 export default async function PreviewPage({
   params,
 }: {
   params: { subdomain: string; slug?: string[] };
 }) {
-  // Fetch the site config for this subdomain
-  const { data: websiteData } = await api.get<WebsiteData>(
+  // 1. Fetch full site + locations
+  const { data: websiteData } = await api.get<PublicWebsiteData>(
     `/builder/public/${params.subdomain}`
   );
   if (!websiteData) return <p>Not found</p>;
 
-  // Reconstruct the requested path ("/", "/about", "/pricing", etc.)
+  // 2. Reconstruct the path from slug array
   const path = "/" + (params.slug?.join("/") || "");
 
-  // Find the matching page or fallback to the root page
+  // 3. Pick the matching page, or fallback
   const initialPage =
     websiteData.pages.find((p) => p.slug === path) ||
     websiteData.pages.find((p) => p.slug === "/") ||

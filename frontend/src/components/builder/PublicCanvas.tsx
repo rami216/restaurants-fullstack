@@ -1,23 +1,23 @@
 // frontend/src/components/builder/PublicCanvas.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
 import {
   Page,
-  WebsiteData,
+  PublicWebsiteData,
   NavbarItem,
   Section as SectionType,
   Subsection as SubsectionType,
   Element as ElementType,
   FormField,
   AccordionItem,
+  Location,
+  MenuItem,
 } from "./Properties";
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 
-// You should move your Accordion component to its own file and import it here
 const Accordion = ({
   items,
   style,
@@ -26,34 +26,31 @@ const Accordion = ({
   style: any;
 }) => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-  const toggleItem = (index: number) =>
-    setOpenIndex(openIndex === index ? null : index);
   return (
     <div className="space-y-2" style={{ width: style.width || "100%" }}>
-      {(items || []).map((item, index) => (
-        <div key={item.id} className="border rounded-md overflow-hidden">
+      {items.map((it, i) => (
+        <div key={it.id} className="border rounded-md overflow-hidden">
           <button
-            onClick={() => toggleItem(index)}
+            onClick={() => setOpenIndex(openIndex === i ? null : i)}
             className="w-full flex justify-between items-center p-3 font-semibold text-left"
             style={{ backgroundColor: style.questionBg || "#f3f4f6" }}
           >
-            <span>{item.question}</span>
+            <span>{it.question}</span>
             <ChevronDown
               size={20}
+              className="transition-transform"
               style={{
                 color: style.iconColor || "#6b7280",
-                transform:
-                  openIndex === index ? "rotate(180deg)" : "rotate(0deg)",
+                transform: openIndex === i ? "rotate(180deg)" : "rotate(0deg)",
               }}
-              className="transition-transform duration-300"
             />
           </button>
-          {openIndex === index && (
+          {openIndex === i && (
             <div
               className="p-3 text-gray-700"
-              style={{ backgroundColor: style.answerBg || "#ffffff" }}
+              style={{ backgroundColor: style.answerBg || "#fff" }}
             >
-              {item.answer}
+              {it.answer}
             </div>
           )}
         </div>
@@ -62,9 +59,74 @@ const Accordion = ({
   );
 };
 
+export const CategoryMenuInCanvas = ({
+  locations,
+  categoryId,
+}: {
+  locations: Location[];
+  categoryId: string;
+}) => {
+  const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
+  const [items, setItems] = useState<MenuItem[]>([]);
+
+  useEffect(() => {
+    if (!locationId) return;
+    api
+      .get<MenuItem[]>(
+        `/locations/${locationId}/menu?category_id=${categoryId}`
+      )
+      .then((r) => setItems(r.data))
+      .catch(() => setItems([]));
+  }, [locationId, categoryId]);
+
+  return (
+    <div className="p-4">
+      {/* location dropdown */}
+      <div className="mb-4">
+        <label className="block font-medium mb-1">Choose location:</label>
+        <select
+          className="border rounded p-2"
+          value={locationId}
+          onChange={(e) => setLocationId(e.target.value)}
+        >
+          {locations.map((loc) => (
+            <option key={loc.location_id} value={loc.location_id}>
+              {loc.location_name}
+            </option>
+          ))}
+        </select>
+      </div>
+
+      {/* menu items grid */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {items.map((item) => (
+          <div
+            key={item.item_id}
+            className="border rounded-lg bg-white shadow hover:shadow-lg transition overflow-hidden"
+            style={{ maxWidth: 280 }}
+          >
+            <div className="w-full aspect-[4/3] overflow-hidden">
+              <img
+                src={`${api.defaults.baseURL}${item.image_url}`}
+                alt={item.item_name}
+                className="w-full h-full object-cover"
+              />
+            </div>
+            <div className="p-3">
+              <h4 className="font-semibold text-base mb-1">{item.item_name}</h4>
+              <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+              <p className="font-medium">${item.base_price.toFixed(2)}</p>
+            </div>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
 interface PublicCanvasProps {
-  initialPage: Page | undefined;
-  websiteData: WebsiteData;
+  initialPage?: Page;
+  websiteData: PublicWebsiteData;
 }
 
 const PublicCanvas: React.FC<PublicCanvasProps> = ({
@@ -72,225 +134,81 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   websiteData,
 }) => {
   const router = useRouter();
-  const [currentPage, setCurrentPage] = useState(initialPage);
+  const [currentPage, setCurrentPage] = useState<Page | undefined>(initialPage);
+  const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
-  const handleNavClick = (page: Page) => {
-    // 1) update your local state
-    setCurrentPage(page);
-    // 2) tell Next to actually navigate (updates URL + SSR/fetch)
-    router.push(`/${websiteData.subdomain}${page.slug}`);
-  };
+  // always render navbar
+  const NavBar = () => (
+    <nav style={websiteData.navbar!.properties}>
+      <div className="flex items-center justify-between px-6 py-3 shadow-sm">
+        <div className="font-bold text-xl">Your Logo</div>
+        <div className="flex space-x-4">
+          {websiteData.navbar!.items.map((ni: NavbarItem) => {
+            const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
+            if (!tgt) return null;
+            return (
+              <a
+                key={ni.item_id}
+                href={ni.link_url}
+                onClick={(e) => {
+                  e.preventDefault();
+                  setActiveCategory(null);
+                  setCurrentPage(tgt);
+                  router.push(`/${websiteData.subdomain}${tgt.slug}`);
+                }}
+                style={websiteData.navbar!.properties.itemStyle}
+                className="text-sm font-medium hover:underline"
+              >
+                {ni.text}
+              </a>
+            );
+          })}
+        </div>
+      </div>
+    </nav>
+  );
 
-  // This is a complete renderElement function copied from your BuilderCanvas
-  const renderElement = (element: ElementType) => {
-    const props = element.properties || {};
-    const style = props.style || {};
-    const BACKEND_URL = api.defaults.baseURL || "http://127.0.0.1:8000";
-
-    switch (element.element_type) {
-      case "TEXT":
-        return <div style={style}>{props.content || "New Text Block"}</div>;
-      case "BUTTON":
-        // find the page whose slug matches this button’s action_value
-        const targetPage = websiteData.pages.find(
-          (p) => p.slug === props.action_value
-        );
-        return (
-          <button
-            style={style}
-            onClick={() => {
-              if (targetPage) {
-                setCurrentPage(targetPage);
-                // push either relative or prefixed, e.g.:
-                router.push(`/${websiteData.subdomain}${targetPage.slug}`);
-              }
-            }}
-          >
-            {props.text || "Button"}
-          </button>
-        );
-
-      case "IMAGE":
-        return (
-          <img
-            src={props.src || "https://placehold.co/600x400"}
-            alt={props.alt || "placeholder"}
-            style={style}
+  // show category drill-down in place of the page content
+  const MainContent = () => {
+    if (activeCategory) {
+      return (
+        <>
+          {/* category selector */}
+          <div className="p-4">
+            <button
+              onClick={() => setActiveCategory(null)}
+              className="text-blue-600 underline mb-4"
+            >
+              ← Back to "{currentPage?.title}"
+            </button>
+          </div>
+          <CategoryMenuInCanvas
+            locations={websiteData.locations}
+            categoryId={activeCategory}
           />
-        );
-      case "LIST":
-        return (
-          <ul style={style}>
-            {(props.items || []).map((item: string, index: number) => (
-              <li key={index}>{item}</li>
-            ))}
-          </ul>
-        );
-      case "DROPDOWN":
-        return (
-          <select className="border border-gray-300 rounded p-2">
-            {props.label && <option disabled>{props.label}</option>}
-            {(props.options || []).map((opt: any, index: number) => (
-              <option key={index} value={opt.action_value}>
-                {opt.text}
-              </option>
-            ))}
-          </select>
-        );
-      case "MENU_ITEM":
-        return (
-          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
-            {props.image_url && (
-              <img
-                src={`${BACKEND_URL}${props.image_url}`}
-                alt={props.item_name}
-                className="w-full object-cover rounded-md mb-4"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            )}
-            <h4 className="font-bold text-lg text-gray-800">
-              {props.item_name || "Menu Item"}
-            </h4>
-            <p className="text-sm text-gray-600 my-2">
-              {props.description || "No description available."}
-            </p>
-            <p className="font-semibold text-right text-gray-800">
-              ${props.base_price?.toFixed(2) || "0.00"}
-            </p>
-          </div>
-        );
-      case "CATEGORY":
-        const nameStyle = props.nameStyle || {};
-        return (
-          <div
-            className="rounded-lg overflow-hidden bg-white shadow-md"
-            style={style}
-          >
-            {props.image_url && (
-              <img
-                src={`${BACKEND_URL}${props.image_url}`}
-                alt={props.name}
-                className="w-full h-40 object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
-              />
-            )}
-            <div className="p-4">
-              <h4 className="font-bold text-xl text-gray-800" style={nameStyle}>
-                {props.name || "Category Name"}
-              </h4>
-            </div>
-          </div>
-        );
-      case "ACCORDION":
-        return <Accordion items={props.items || []} style={style} />;
-      case "FORM":
-        const buttonStyle = props.submitButton?.style || {};
-        const labelStyle = props.labelStyle || {};
-        return (
-          <div className="border rounded-lg" style={style}>
-            <h3 className="text-2xl font-bold mb-4 text-gray-800">
-              {props.title || "Form Title"}
-            </h3>
-            <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
-              {(props.fields || []).map((field: FormField) => (
-                <div key={field.id}>
-                  <label
-                    className="block text-sm font-medium mb-1"
-                    style={labelStyle}
-                  >
-                    {field.label}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={field.placeholder}
-                    className="w-full border border-gray-300 rounded-md shadow-sm p-2"
-                  />
-                </div>
-              ))}
-              <button type="submit" style={buttonStyle}>
-                {props.submitButton?.text || "Submit"}
-              </button>
-            </form>
-          </div>
-        );
-      case "MAP":
-        return (
-          <iframe
-            src={props.src}
-            style={style} // pointerEvents:none is crucial
-            allowFullScreen={false}
-            loading="lazy"
-            referrerPolicy="no-referrer-when-downgrade"
-            title="Google Map"
-          ></iframe>
-        );
-      default:
-        return (
-          <div className="border p-2 bg-gray-300 text-black rounded">
-            Unknown Element
-          </div>
-        );
+        </>
+      );
     }
-  };
 
-  if (!currentPage) {
-    return <div>Page not found.</div>;
-  }
-
-  return (
-    <div className="bg-white">
-      {websiteData.navbar && (
-        <nav style={websiteData.navbar.properties}>
-          <div className="flex items-center justify-between p-4">
-            <div className="text-lg font-bold">Your Logo</div>
-            <div className="flex items-center space-x-4">
-              {websiteData.navbar.items.map((item) => {
-                const target = websiteData.pages.find(
-                  (p) => p.slug === item.link_url
-                );
-                if (!target) return null;
-                return (
-                  <a
-                    key={item.item_id}
-                    href={item.link_url}
-                    onClick={(e) => {
-                      e.preventDefault();
-                      handleNavClick(target);
-                    }}
-                    style={websiteData?.navbar?.properties.itemStyle}
-                  >
-                    {item.text}
-                  </a>
-                );
-              })}
-            </div>
-          </div>
-        </nav>
-      )}
-      <div className="space-y-4">
-        {currentPage.sections.map((section: SectionType) => (
-          <div key={section.section_id} style={section.properties}>
+    // Normal page sections
+    return (
+      <div className="space-y-0">
+        {currentPage?.sections.map((sec: SectionType) => (
+          <div key={sec.section_id} style={sec.properties}>
             <div
               className="flex flex-wrap"
               style={{
                 display: "flex",
-                flexDirection: section.properties.flexDirection,
-                justifyContent: section.properties.justifyContent,
-                alignItems: section.properties.alignItems,
-                gap: section.properties.gap,
+                flexDirection: sec.properties.flexDirection,
+                justifyContent: sec.properties.justifyContent,
+                alignItems: sec.properties.alignItems,
+                gap: sec.properties.gap,
               }}
             >
-              {section.subsections.map((subsection: SubsectionType) => (
-                <div
-                  key={subsection.subsection_id}
-                  style={subsection.properties}
-                >
-                  {subsection.elements.map((element: ElementType) => (
-                    <div key={element.element_id}>{renderElement(element)}</div>
+              {sec.subsections.map((sub: SubsectionType) => (
+                <div key={sub.subsection_id} style={sub.properties}>
+                  {sub.elements.map((el: ElementType) => (
+                    <div key={el.element_id}>{renderElement(el)}</div>
                   ))}
                 </div>
               ))}
@@ -298,6 +216,133 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           </div>
         ))}
       </div>
+    );
+  };
+
+  function renderElement(element: ElementType) {
+    const props = element.properties || {};
+    const style = props.style || {};
+    const BACKEND = api.defaults.baseURL || "";
+
+    switch (element.element_type) {
+      case "TEXT":
+        return <div style={style}>{props.content}</div>;
+
+      case "BUTTON": {
+        const tgt = websiteData.pages.find(
+          (p) => p.slug === props.action_value
+        );
+        return (
+          <button
+            style={style}
+            onClick={() => {
+              if (tgt) {
+                setActiveCategory(null);
+                setCurrentPage(tgt);
+                router.push(`/${websiteData.subdomain}${tgt.slug}`);
+              }
+            }}
+          >
+            {props.text}
+          </button>
+        );
+      }
+
+      case "IMAGE":
+        return <img src={props.src} alt={props.alt} style={style} />;
+
+      case "LIST":
+        return (
+          <ul style={style}>
+            {(props.items || []).map((it: string, i: number) => (
+              <li key={i}>{it}</li>
+            ))}
+          </ul>
+        );
+
+      case "DROPDOWN":
+        return (
+          <select style={style}>
+            {(props.options || []).map((o: any, i: number) => (
+              <option key={i} value={o.action_value}>
+                {o.text}
+              </option>
+            ))}
+          </select>
+        );
+
+      case "MENU_ITEM":
+        return (
+          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
+            {props.image_url && (
+              <img
+                src={`${BACKEND}${props.image_url}`}
+                alt={props.item_name}
+                className="w-full object-cover rounded-md mb-4"
+              />
+            )}
+            <h4 className="font-bold text-lg">{props.item_name}</h4>
+            <p className="text-sm text-gray-600 my-2">{props.description}</p>
+            <p className="font-semibold text-right">
+              ${props.base_price.toFixed(2)}
+            </p>
+          </div>
+        );
+
+      case "CATEGORY":
+        return (
+          <div
+            className="cursor-pointer rounded-lg overflow-hidden shadow hover:shadow-lg transition"
+            style={style}
+            onClick={() => setActiveCategory(props.id)}
+          >
+            {props.image_url && (
+              <img
+                src={`${BACKEND}${props.image_url}`}
+                alt={props.name}
+                className="w-full h-40 object-cover"
+              />
+            )}
+            <div className="p-4 bg-white">
+              <h4 className="font-bold text-lg">{props.name}</h4>
+            </div>
+          </div>
+        );
+
+      case "ACCORDION":
+        return <Accordion items={props.items || []} style={style} />;
+
+      case "FORM":
+        return (
+          <form style={style} className="space-y-4">
+            <h3 className="font-bold">{props.title}</h3>
+            {(props.fields || []).map((f: FormField) => (
+              <div key={f.id}>
+                <label>{f.label}</label>
+                <input
+                  placeholder={f.placeholder}
+                  className="border p-2 w-full"
+                />
+              </div>
+            ))}
+            <button type="submit">{props.submitButton?.text}</button>
+          </form>
+        );
+
+      case "MAP":
+        return <iframe src={props.src} style={style} />;
+
+      default:
+        return <div>Unknown element</div>;
+    }
+  }
+
+  if (!currentPage) return <div className="p-8">Page not found</div>;
+
+  return (
+    <div className="bg-white min-h-screen m-0 p-0">
+      <NavBar />
+      <MainContent />
     </div>
   );
 };
