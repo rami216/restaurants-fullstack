@@ -1,5 +1,7 @@
 // frontend/src/components/builder/PublicCanvas.tsx
 "use client";
+import { motion } from "framer-motion";
+import { getMotionConfig } from "./animate";
 
 import React, { useState, useEffect } from "react";
 import {
@@ -153,7 +155,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 onClick={(e) => {
                   e.preventDefault();
                   setActiveCategory(null);
-                  setCurrentPage(tgt);
                   router.push(`/${websiteData.subdomain}${tgt.slug}`);
                 }}
                 style={websiteData.navbar!.properties.itemStyle}
@@ -205,13 +206,28 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 gap: sec.properties.gap,
               }}
             >
-              {sec.subsections.map((sub: SubsectionType) => (
-                <div key={sub.subsection_id} style={sub.properties}>
-                  {sub.elements.map((el: ElementType) => (
-                    <div key={el.element_id}>{renderElement(el)}</div>
-                  ))}
-                </div>
-              ))}
+              {sec.subsections.map((sub) => {
+                // remove animation before spreading into style
+                const { animation, ...styleProps } = sub.properties;
+
+                // get your motion config from that optional animation
+                const { initial, animate, transition } =
+                  getMotionConfig(animation);
+
+                return (
+                  <motion.div
+                    key={sub.subsection_id}
+                    style={styleProps}
+                    initial={initial}
+                    animate={animate}
+                    transition={transition}
+                  >
+                    {sub.elements.map((el) => (
+                      <div key={el.element_id}>{renderElement(el)}</div>
+                    ))}
+                  </motion.div>
+                );
+              })}
             </div>
           </div>
         ))}
@@ -224,17 +240,32 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     const style = props.style || {};
     const BACKEND = api.defaults.baseURL || "";
 
+    // pull out any motion settings (falls back to no‑ops)
+    const { initial, animate, transition } = getMotionConfig(props.animation);
+
     switch (element.element_type) {
       case "TEXT":
-        return <div style={style}>{props.content}</div>;
+        return (
+          <motion.div
+            style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
+          >
+            {props.content}
+          </motion.div>
+        );
 
       case "BUTTON": {
         const tgt = websiteData.pages.find(
           (p) => p.slug === props.action_value
         );
         return (
-          <button
+          <motion.button
             style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
             onClick={() => {
               if (tgt) {
                 setActiveCategory(null);
@@ -244,36 +275,61 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             }}
           >
             {props.text}
-          </button>
+          </motion.button>
         );
       }
 
       case "IMAGE":
-        return <img src={props.src} alt={props.alt} style={style} />;
+        return (
+          <motion.img
+            src={props.src}
+            alt={props.alt}
+            style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
+          />
+        );
 
       case "LIST":
         return (
-          <ul style={style}>
+          <motion.ul
+            style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
+          >
             {(props.items || []).map((it: string, i: number) => (
               <li key={i}>{it}</li>
             ))}
-          </ul>
+          </motion.ul>
         );
 
       case "DROPDOWN":
         return (
-          <select style={style}>
+          <motion.select
+            style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
+          >
             {(props.options || []).map((o: any, i: number) => (
               <option key={i} value={o.action_value}>
                 {o.text}
               </option>
             ))}
-          </select>
+          </motion.select>
         );
 
       case "MENU_ITEM":
         return (
-          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
+          <motion.div
+            className="border rounded-lg p-4 bg-white shadow"
+            style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
+          >
             {props.image_url && (
               <img
                 src={`${BACKEND}${props.image_url}`}
@@ -286,14 +342,17 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             <p className="font-semibold text-right">
               ${props.base_price.toFixed(2)}
             </p>
-          </div>
+          </motion.div>
         );
 
       case "CATEGORY":
         return (
-          <div
+          <motion.div
             className="cursor-pointer rounded-lg overflow-hidden shadow hover:shadow-lg transition"
             style={style}
+            initial={initial}
+            animate={animate}
+            transition={transition}
             onClick={() => setActiveCategory(props.id)}
           >
             {props.image_url && (
@@ -306,7 +365,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             <div className="p-4 bg-white">
               <h4 className="font-bold text-lg">{props.name}</h4>
             </div>
-          </div>
+          </motion.div>
         );
 
       case "ACCORDION":
@@ -314,7 +373,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
       case "FORM":
         return (
-          <form style={style} className="space-y-4">
+          <motion.form
+            style={style}
+            className="space-y-4"
+            initial={initial}
+            animate={animate}
+            transition={transition}
+            onSubmit={(e) => e.preventDefault()}
+          >
             <h3 className="font-bold">{props.title}</h3>
             {(props.fields || []).map((f: FormField) => (
               <div key={f.id}>
@@ -326,7 +392,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               </div>
             ))}
             <button type="submit">{props.submitButton?.text}</button>
-          </form>
+          </motion.form>
         );
 
       case "MAP":

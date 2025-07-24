@@ -1,9 +1,30 @@
 // frontend/src/components/builder/Properties.ts
+
+export type PropType = "text" | "number" | "color" | "select" | "boolean";
+export interface EditableProp {
+  /** the property name on `properties` */
+  key: string;
+  /** human‑friendly label for the form field */
+  label: string;
+  /** which input to render */
+  type: PropType;
+  /** only for `type: "select"` */
+  options?: string[];
+}
+
+export interface AnimationProps {
+  type: "fade-in" | "slide-up" | "bounce" | "pulse";
+  duration?: number; // seconds, e.g. 0.5
+  delay?: number; // seconds, e.g. 0.1
+  repeat?: number | "Infinity";
+}
+
 export interface Element {
   element_id: string;
   element_type: string;
   position: number;
   properties: any;
+  // editableProps?: EditableProp[];
 }
 
 export interface Subsection {
@@ -17,6 +38,8 @@ export interface Subsection {
     gridTemplateColumns?: string;
     gridColumns?: number;
     gap?: string;
+    /** ← this must be here: */
+    animation?: AnimationProps;
   };
   elements: Element[];
 }

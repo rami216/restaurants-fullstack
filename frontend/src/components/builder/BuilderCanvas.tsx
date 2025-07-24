@@ -16,6 +16,8 @@ import {
 } from "./Properties";
 import { Plus, ChevronDown } from "lucide-react";
 import api from "@/lib/axios"; // Import api to get the base URL
+import { motion } from "framer-motion";
+import { getMotionConfig } from "./animate";
 
 const Accordion = ({
   items,
@@ -138,16 +140,32 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
     onUpdate({ ...page, sections: updatedSections });
   };
 
-  const renderElement = (element: ElementType) => {
+  function renderElement(element: ElementType) {
     const props = element.properties || {};
     const style = props.style || {};
     const BACKEND_URL = "http://127.0.0.1:8000";
 
+    // pull motion configs (will be {} if no anim requested)
+    const { initial, animate, transition } = getMotionConfig(props.animation);
+
+    // helper to wrap any JSX in motion.div
+    const wrap = (children: React.ReactNode) => (
+      <motion.div
+        style={style}
+        initial={initial}
+        animate={animate}
+        transition={transition}
+      >
+        {children}
+      </motion.div>
+    );
+
     switch (element.element_type) {
-      case "FORM":
+      case "FORM": {
         const buttonStyle = props.submitButton?.style || {};
-        const labelStyle = props.labelStyle || {}; // Get the label style object
-        return (
+        const labelStyle = props.labelStyle || {};
+
+        const formJSX = (
           <div className="border rounded-lg" style={style}>
             <h3 className="text-2xl font-bold mb-4 text-gray-800">
               {props.title || "Form Title"}
@@ -175,73 +193,74 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
 
-        return (
-          <div className="p-4 border rounded-lg bg-gray-50" style={style}>
-            <h3 className="text-2xl font-bold mb-4 text-gray-800">
-              {props.title || "Form Title"}
-            </h3>
-            <form className="space-y-4">
-              {(props.fields || []).map((field: FormField) => (
-                <div key={field.id}>
-                  <label className="block text-sm font-medium text-gray-700 mb-1">
-                    {field.label}
-                  </label>
-                  <input
-                    type="text"
-                    placeholder={field.placeholder}
-                    className="w-full border border-gray-300 rounded-md shadow-sm p-2"
-                    readOnly // Make inputs read-only in the builder
-                  />
-                </div>
-              ))}
-              <button type="submit" style={buttonStyle}>
-                {props.submitButton?.text || "Submit"}
-              </button>
-            </form>
-          </div>
+        return wrap(formJSX);
+      }
+
+      case "TEXT": {
+        return wrap(<div>{props.content}</div>);
+      }
+
+      case "BUTTON": {
+        // navigate on click if action_value is a slug
+        const targetPage = websiteData?.pages.find(
+          (p) => p.slug === props.action_value
         );
-      case "TEXT":
-        return <div style={style}>{props.content || "New Text Block"}</div>;
-      case "BUTTON":
-        return <button style={style}>{props.text || "Button"}</button>;
-      case "IMAGE":
-        return (
+
+        return wrap(
+          <button
+            style={style}
+            // onClick={(e) => {
+            //   e.preventDefault();
+            //   e.stopPropagation();
+            //   if (targetPage) onPageSwitch(targetPage.page_id);
+            // }}
+          >
+            {props.text || "Button"}
+          </button>
+        );
+      }
+
+      case "IMAGE": {
+        return wrap(
           <img
             src={props.src || "https://placehold.co/600x400"}
             alt={props.alt || "placeholder"}
             style={style}
           />
         );
-      case "LIST":
-        return (
+      }
+
+      case "LIST": {
+        return wrap(
           <ul style={style}>
-            {(props.items || []).map((item: string, index: number) => (
-              <li key={index}>{item}</li>
+            {(props.items || []).map((item: string, i: number) => (
+              <li key={i}>{item}</li>
             ))}
           </ul>
         );
-      case "DROPDOWN":
-        return (
+      }
+
+      case "DROPDOWN": {
+        return wrap(
           <select className="border border-gray-300 rounded p-2">
             {props.label && <option disabled>{props.label}</option>}
-            {(props.options || []).map((opt: any, index: number) => (
-              <option key={index} value={opt.action_value}>
+            {(props.options || []).map((opt: any, i: number) => (
+              <option key={i} value={opt.action_value}>
                 {opt.text}
               </option>
             ))}
           </select>
         );
+      }
 
-      // This is the new case to render the menu item card
-      case "MENU_ITEM":
-        return (
+      case "MENU_ITEM": {
+        const card = (
           <div className="border rounded-lg p-4 bg-white shadow" style={style}>
             {props.image_url && (
               <img
                 src={`${BACKEND_URL}${props.image_url}`}
                 alt={props.item_name}
                 className="w-full object-cover rounded-md mb-4"
-                // Hide the image element if it fails to load
                 onError={(e) => {
                   e.currentTarget.style.display = "none";
                 }}
@@ -258,13 +277,16 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </p>
           </div>
         );
-      case "CATEGORY":
-        // Get the specific styles for the name, or default to an empty object
+        return wrap(card);
+      }
+
+      case "CATEGORY": {
         const nameStyle = props.nameStyle || {};
-        return (
+        const card = (
           <div
-            className="rounded-lg overflow-hidden bg-white shadow-md"
+            className="rounded-lg overflow-hidden bg-white shadow-md cursor-pointer"
             style={style}
+            // onClick={() => setActiveCategory(props.id)}
           >
             {props.image_url && (
               <img
@@ -277,39 +299,43 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               />
             )}
             <div className="p-4">
-              {/* Apply the nameStyle object directly to the h4 element */}
-              <h4 className="font-bold text-xl text-gray-800" style={nameStyle}>
+              <h4 className="font-bold text-xl" style={nameStyle}>
                 {props.name || "Category Name"}
               </h4>
             </div>
           </div>
         );
-      case "ACCORDION":
-        // Render the new interactive Accordion component
-        return <Accordion items={props.items || []} style={style} />;
-      case "MAP":
-        return (
+        return wrap(card);
+      }
+
+      case "ACCORDION": {
+        return wrap(<Accordion items={props.items || []} style={style} />);
+      }
+
+      case "MAP": {
+        return wrap(
           <div className="relative">
-            {/* This overlay captures the click so you can select the map */}
-            <div className="absolute inset-0 z-10 cursor-pointer"></div>
+            <div className="absolute inset-0 z-10 cursor-pointer" />
             <iframe
               src={props.src}
-              style={{ ...style, pointerEvents: "none" }} // pointerEvents:none is crucial
+              style={{ ...style, pointerEvents: "none" }}
               allowFullScreen={false}
               loading="lazy"
               referrerPolicy="no-referrer-when-downgrade"
               title="Google Map"
-            ></iframe>
+            />
           </div>
         );
+      }
+
       default:
-        return (
+        return wrap(
           <div className="border p-2 bg-gray-300 text-black rounded">
             Unknown Element
           </div>
         );
     }
-  };
+  }
 
   if (!page) {
     return (
@@ -348,8 +374,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 const targetPage = websiteData?.pages.find(
                   (p) => p.slug === item.link_url
                 );
-
-                // --- NEW: Get the item style from navbar properties ---
                 const itemStyle = navbar.properties?.itemStyle || {};
 
                 return (
@@ -359,12 +383,9 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                     onClick={(e) => {
                       e.preventDefault();
                       e.stopPropagation();
-                      if (targetPage) {
-                        onPageSwitch(targetPage.page_id);
-                      }
+                      if (targetPage) onPageSwitch(targetPage.page_id);
                       onSelect({ type: "navbar_item", id: item.item_id });
                     }}
-                    // --- UPDATED: Apply the itemStyle object ---
                     style={itemStyle}
                     className={`px-3 py-2 rounded transition-all ${
                       selection.type === "navbar_item" &&
@@ -388,10 +409,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
       <div className="space-y-4">
         {page.sections.map((section) => {
-          // --- NEW: Create a dynamic style object for the section ---
+          // build section style
           const sectionStyle: React.CSSProperties = { ...section.properties };
-
-          // If a backgroundImage URL exists, format it correctly for CSS
           if (section.properties.backgroundImage) {
             sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${section.properties.backgroundImage})`;
             sectionStyle.backgroundSize = "cover";
@@ -416,7 +435,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                     }`
                   : ""
               }`}
-              // --- UPDATED: Use the new sectionStyle object ---
               style={sectionStyle}
             >
               <div
@@ -429,71 +447,78 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                   gap: section.properties.gap,
                 }}
               >
-                {section.subsections.map((subsection) => {
+                {section.subsections.map((sub) => {
+                  // build subsection style
                   const subsectionStyle: React.CSSProperties = {
-                    display: subsection.properties.display || "flex",
-                    gap: subsection.properties.gap || "1rem",
+                    display: sub.properties.display || "flex",
+                    gap: sub.properties.gap || "1rem",
                   };
-
-                  if (subsection.properties.display === "grid") {
+                  if (sub.properties.display === "grid") {
                     subsectionStyle.gridTemplateColumns =
-                      subsection.properties.gridTemplateColumns ||
-                      "repeat(2, 1fr)";
+                      sub.properties.gridTemplateColumns || "repeat(2, 1fr)";
                   } else {
                     subsectionStyle.flexDirection =
-                      subsection.properties.flexDirection || "column";
+                      sub.properties.flexDirection || "column";
                     subsectionStyle.justifyContent =
-                      subsection.properties.justifyContent || "flex-start";
+                      sub.properties.justifyContent || "flex-start";
                     subsectionStyle.alignItems =
-                      subsection.properties.alignItems || "stretch";
+                      sub.properties.alignItems || "stretch";
                   }
 
+                  // pull motion config
+                  const { initial, animate, transition } = getMotionConfig(
+                    sub.properties.animation
+                  );
+
                   return (
-                    <div
-                      key={subsection.subsection_id}
+                    <motion.div
+                      key={sub.subsection_id}
+                      initial={initial}
+                      animate={animate}
+                      transition={transition}
                       onClick={(e) => {
                         e.stopPropagation();
                         onSelect({
                           type: "subsection",
-                          id: subsection.subsection_id,
+                          id: sub.subsection_id,
                         });
                       }}
                       className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
                         selection.type === "subsection" &&
-                        selection.id === subsection.subsection_id
+                        selection.id === sub.subsection_id
                           ? "border-green-500"
                           : "border-dashed border-gray-400"
                       }`}
                       style={subsectionStyle}
                     >
-                      {subsection.elements.map((element) => (
+                      {sub.elements.map((el) => (
                         <div
-                          key={element.element_id}
+                          key={el.element_id}
                           onClick={(e) => {
                             e.stopPropagation();
-                            onSelect({
-                              type: "element",
-                              id: element.element_id,
-                            });
+                            onSelect({ type: "element", id: el.element_id });
                           }}
                           className={`p-2 rounded transition-all ${
                             selection.type === "element" &&
-                            selection.id === element.element_id
+                            selection.id === el.element_id
                               ? "ring-2 ring-offset-2 ring-pink-500"
                               : ""
                           }`}
                         >
-                          {renderElement(element)}
+                          {renderElement(el)}
                         </div>
                       ))}
-                      {subsection.elements.length === 0 && (
+
+                      {sub.elements.length === 0 && (
                         <div className="text-gray-400 self-center mx-auto">
                           Add elements here
                         </div>
                       )}
-                    </div>
+                    </motion.div>
                   );
                 })}
+
+                {/* one Add Subsection per section */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -507,6 +532,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </div>
           );
         })}
+
+        {/* one Add New Section at bottom */}
         {!isPreview && (
           <button
             onClick={handleAddSection}

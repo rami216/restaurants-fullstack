@@ -3,7 +3,13 @@
 "use client";
 
 import React, { useRef, useState } from "react";
-import { Selection, FormField, AccordionItem, NavbarItem } from "./Properties";
+import {
+  Selection,
+  FormField,
+  AccordionItem,
+  NavbarItem,
+  AnimationProps,
+} from "./Properties";
 import api from "@/lib/axios";
 import { Page } from "./Properties";
 
@@ -53,6 +59,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   //for navbaritems(new)
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editedItemText, setEditedItemText] = useState("");
+  // at top of PropertyEditor component
+  const handleAnimationChange = (key: keyof AnimationProps, value: any) => {
+    if (!selectedItem) return;
+    const anim: AnimationProps = {
+      ...(selectedItem.properties.animation || {}),
+      [key]: value,
+    };
+    handlePropertyChange("animation", anim);
+  };
+
   const handleUpdateNavbarItem = async () => {
     if (!editingItemId || !editedItemText) return;
 
@@ -648,6 +664,84 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           placeholder="e.g., 1rem, 16px"
         />
       </div>
+      {/* ────────── ANIMATION PANEL ────────── */}
+      <div>
+        <h4 className="text-md font-medium text-gray-800 mb-2">Animation</h4>
+        <div className="space-y-3">
+          {/* Type */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Type
+            </label>
+            <select
+              value={selectedItem.properties.animation?.type || ""}
+              onChange={(e) =>
+                handleAnimationChange(
+                  "type",
+                  e.target.value as AnimationProps["type"]
+                )
+              }
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+            >
+              <option value="">None</option>
+              <option value="fade-in">Fade In</option>
+              <option value="slide-up">Slide Up</option>
+              <option value="bounce">Bounce</option>
+              <option value="pulse">Pulse</option>
+            </select>
+          </div>
+
+          {/* Delay */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Delay (s)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              value={selectedItem.properties.animation?.delay ?? 0}
+              onChange={(e) =>
+                handleAnimationChange("delay", parseFloat(e.target.value))
+              }
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+            />
+          </div>
+
+          {/* Duration */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Duration (s)
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={0.1}
+              value={selectedItem.properties.animation?.duration ?? 0.3}
+              onChange={(e) =>
+                handleAnimationChange("duration", parseFloat(e.target.value))
+              }
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+            />
+          </div>
+
+          {/* Repeat */}
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Repeat count
+            </label>
+            <input
+              type="number"
+              min={0}
+              value={selectedItem.properties.animation?.repeat ?? 0}
+              onChange={(e) =>
+                handleAnimationChange("repeat", parseInt(e.target.value, 10))
+              }
+              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+            />
+          </div>
+        </div>
+      </div>
     </div>
   );
   const handleNameStyleChange = (key: string, value: any) => {
@@ -765,6 +859,86 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 onChange={(e) => handleStyleChange("color", e.target.value)}
                 className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
               />
+            </div>
+            {/* ────────── ANIMATION PANEL ────────── */}
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Animation
+              </h4>
+              <div className="space-y-3">
+                {/* Type */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Type
+                  </label>
+                  <select
+                    value={selectedItem.properties.animation?.type || ""}
+                    onChange={(e) =>
+                      handleAnimationChange("type", e.target.value)
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+                  >
+                    <option value="">None</option>
+                    <option value="fade-in">Fade In</option>
+                    <option value="slide-up">Slide Up</option>
+                    <option value="bounce">Bounce</option>
+                    <option value="pulse">Pulse</option>
+                  </select>
+                </div>
+                {/* Delay */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Delay (s)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={selectedItem.properties.animation?.delay ?? 0}
+                    onChange={(e) =>
+                      handleAnimationChange("delay", parseFloat(e.target.value))
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+                  />
+                </div>
+                {/* Duration */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Duration (s)
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    step={0.1}
+                    value={selectedItem.properties.animation?.duration ?? 0.3}
+                    onChange={(e) =>
+                      handleAnimationChange(
+                        "duration",
+                        parseFloat(e.target.value)
+                      )
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+                  />
+                </div>
+                {/* Repeat */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Repeat count
+                  </label>
+                  <input
+                    type="number"
+                    min={0}
+                    value={selectedItem.properties.animation?.repeat ?? 0}
+                    onChange={(e) =>
+                      handleAnimationChange(
+                        "repeat",
+                        parseInt(e.target.value, 10)
+                      )
+                    }
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+                  />
+                </div>
+              </div>
             </div>
           </div>
         );
