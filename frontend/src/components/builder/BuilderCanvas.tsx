@@ -329,11 +329,18 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         );
       }
       case "AI": {
-        const { aiTemplate, properties: aiProps } = element.aiPayload!; // ← note the camelCase
+        // THE FIX: Add a check to ensure aiPayload exists
+        if (!element.aiPayload) {
+          return wrap(
+            <div className="border p-2 bg-red-200 text-red-800 rounded">
+              AI Element Data Missing
+            </div>
+          );
+        }
+        const { aiTemplate, properties: aiProps } = element.aiPayload;
         const html = Mustache.render(aiTemplate, aiProps);
         return wrap(<div dangerouslySetInnerHTML={{ __html: html }} />);
       }
-
       default:
         return wrap(
           <div className="border p-2 bg-gray-300 text-black rounded">

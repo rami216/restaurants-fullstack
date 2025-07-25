@@ -6,9 +6,9 @@ export interface EditableProp {
   type: "text" | "number" | "color";
 }
 export interface AiElementPayload {
-  aiTemplate: string; // mustache template
-  properties: Record<string, any>; // live values
-  editableProps: EditableProp[]; // drives the editor form
+  aiTemplate: string;
+  properties: Record<string, any>;
+  editableProps: EditableProp[];
 }
 
 export interface AnimationProps {
@@ -24,11 +24,7 @@ export interface Element {
   position: number;
   properties: any;
   // editableProps?: EditableProp[];
-  aiPayload?: {
-    aiTemplate: string;
-    properties: Record<string, any>;
-    editableProps: { key: string; label: string; type: string }[];
-  };
+  aiPayload?: AiElementPayload;
 }
 
 export interface Subsection {

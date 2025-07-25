@@ -13,74 +13,38 @@ def to_camel(s: str) -> str:
 class EditableProp(BaseModel):
     key: str
     label: str
-    type: str  # "text" | "number" | "color"
-
+    type: str
 
 class AiElementPayload(BaseModel):
-    aiTemplate:     str                   = Field(..., alias="aiTemplate")
-    properties:     Dict[str, Any]
-    editableProps:  List[EditableProp]    = Field(..., alias="editableProps")
+    aiTemplate: str
+    properties: Dict[str, Any]
+    editableProps: List[EditableProp]
 
-    class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
-        extra = "ignore"    # <-- ignore any unexpected keys inside aiPayload
-        
 # --- Element Schemas ---
 class ElementBase(BaseModel):
     element_type: str
     position: int
     properties: Dict[str, Any]
-    ai_payload: Optional[AiElementPayload] = None
 
-    class Config:
-        allow_population_by_field_name = True
-        alias_generator = to_camel
-        orm_mode = True
-        
-class ElementCreate(BaseModel):
+class ElementCreate(ElementBase):
     subsection_id: UUID
-    element_type:  str
-    position:      int
-    properties:    Dict[str, Any]
-    # ai_payload:    Optional[AiElementPayload] = Field(None, alias="aiPayload")
-    ai_payload: Optional[AiElementPayload] = None
-
-    class Config:
-        allow_population_by_field_name = True
-        orm_mode = True
-        extra = "ignore"    # <-- ignore any unexpected keys at top level
-
-
+    # THE FIX: Add aiPayload field, aliased from snake_case
+    ai_payload: Optional[AiElementPayload] = Field(None, alias="aiPayload")
 
 class ElementUpdate(BaseModel):
-    position:   Optional[int]           = None
+    position: Optional[int] = None
     properties: Optional[Dict[str, Any]] = None
-    ai_payload: Optional[AiElementPayload] = None
+    # THE FIX: Add ai_payload field
+    ai_payload: Optional[AiElementPayload] = Field(None, alias="aiPayload")
 
-
-class ElementResponse(BaseModel):
-    # elementId:   UUID                  = Field(..., alias="element_id")
-    # elementType: str                   = Field(..., alias="element_type")
-    # position:    int
-    # properties:  Dict[str, Any]
-    # aiPayload:    Optional[AiElementPayload] = Field(None, alias="ai_payload")
-    # element_id:   UUID
-    # element_type: str
-    # position:     int
-    # properties:   Dict[str, Any]
-    # aiPayload:    Optional[AiElementPayload] = Field(None, alias="ai_payload")
-    element_id:   UUID
-    element_type: str
-    position:     int
-    properties:   Dict[str, Any]
-    # ← camelCase on the left, snake_case alias on the right
-    aiPayload:    Optional[AiElementPayload] = Field(None, alias="ai_payload")
+class ElementResponse(ElementBase):
+    element_id: UUID
+    # THE FIX: Add aiPayload field for responses
+    ai_payload: Optional[AiElementPayload] = Field(None, alias="aiPayload")
 
     class Config:
-        orm_mode = True
-        allow_population_by_field_name = True
-        allow_population_by_alias = True
+        from_attributes = True
+        populate_by_name = True # Allow aliasing
 
 
 # --- Subsection Schemas ---

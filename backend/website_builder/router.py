@@ -181,36 +181,33 @@ async def delete_subsection(subsection_id: UUID, db: AsyncSession = Depends(get_
 
 
 # --- Element Endpoints ---
-@router.post("/elements", response_model=schemas.ElementResponse, status_code=201,response_model_by_alias=True,)
-async def create_element(
-    element_data: schemas.ElementCreate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    vals = element_data.model_dump()   # this now includes ai_payload if you sent it
-    el = Element(**vals)
-    db.add(el)
+@router.post("/elements", response_model=schemas.ElementResponse, status_code=201)
+async def create_element(element_data: schemas.ElementCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    # The model_dump now correctly processes the aliased 'aiPayload'
+    new_element = Element(**element_data.model_dump(by_alias=False))
+    db.add(new_element)
     await db.commit()
-    await db.refresh(el)
-    return el
+    await db.refresh(new_element)
+    return new_element
 
+# --- UPDATE update_element ---
 @router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
-async def update_element(
-    element_id: UUID,
-    data: schemas.ElementUpdate,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
-    el = await db.get(Element, element_id)
-    if data.properties is not None:
-        el.properties = data.properties
-        flag_modified(el, "properties")
-    # we do NOT overwrite ai_payload here
-    if data.position is not None:
-        el.position = data.position
+async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+    db_element = await db.get(Element, element_id)
+    if not db_element: raise HTTPException(status_code=404, detail="Element not found")
+
+    update_data = element_data.model_dump(exclude_unset=True)
+    for key, value in update_data.items():
+        setattr(db_element, key, value)
+        # --- THIS IS THE FIX ---
+        # We need to tell SQLAlchemy that the JSON fields have been modified.
+        if key in ["properties", "ai_payload"]:
+            flag_modified(db_element, key)
+
     await db.commit()
-    await db.refresh(el)
-    return el
+    await db.refresh(db_element)
+    return db_element
+
 
 
 @router.delete("/elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
@@ -311,6 +308,7 @@ async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), 
 async def get_public_website_by_subdomain(
     subdomain: str,
     db: AsyncSession = Depends(get_db),
+    
 ):
     # 1) fetch the site + all its pages, sections, subsections, etc.
     result = await db.execute(

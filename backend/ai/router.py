@@ -34,7 +34,7 @@ async def generate_ai_element(body: GenerateRequest):
                 {"role": "user",   "content": body.prompt},
             ],
             temperature=0.8,
-            max_tokens=800,
+            max_tokens=2048,
         )
         content = resp.choices[0].message.content
         payload = json.loads(content)
