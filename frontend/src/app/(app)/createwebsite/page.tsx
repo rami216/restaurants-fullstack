@@ -207,6 +207,9 @@ const CreateWebsitePage = () => {
               if (
                 originalElement &&
                 (!isEqual(originalElement.properties, element.properties) ||
+                  // --- THIS IS THE FIX ---
+                  // Add a check to see if the aiPayload has changed
+                  !isEqual(originalElement.aiPayload, element.aiPayload) ||
                   originalElement.position !== el_idx)
               ) {
                 await api.put(`/builder/elements/${element.element_id}`, {
