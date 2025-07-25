@@ -1,15 +1,14 @@
 // frontend/src/components/builder/Properties.ts
 
-export type PropType = "text" | "number" | "color" | "select" | "boolean";
 export interface EditableProp {
-  /** the property name on `properties` */
   key: string;
-  /** human‑friendly label for the form field */
   label: string;
-  /** which input to render */
-  type: PropType;
-  /** only for `type: "select"` */
-  options?: string[];
+  type: "text" | "number" | "color";
+}
+export interface AiElementPayload {
+  aiTemplate: string; // mustache template
+  properties: Record<string, any>; // live values
+  editableProps: EditableProp[]; // drives the editor form
 }
 
 export interface AnimationProps {
@@ -25,6 +24,11 @@ export interface Element {
   position: number;
   properties: any;
   // editableProps?: EditableProp[];
+  aiPayload?: {
+    aiTemplate: string;
+    properties: Record<string, any>;
+    editableProps: { key: string; label: string; type: string }[];
+  };
 }
 
 export interface Subsection {

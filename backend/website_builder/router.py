@@ -28,7 +28,7 @@ async def get_website_and_check_ownership(website_id: UUID, current_user: User, 
     return website
 
 # --- Website Endpoints ---
-@router.get("/website", response_model=schemas.WebsiteResponse)
+@router.get("/website", response_model=schemas.WebsiteResponse,response_model_by_alias=True,)
 async def get_my_website(current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
     """Gets the current user's website with all nested data."""
     result = await db.execute(
@@ -181,29 +181,37 @@ async def delete_subsection(subsection_id: UUID, db: AsyncSession = Depends(get_
 
 
 # --- Element Endpoints ---
-@router.post("/elements", response_model=schemas.ElementResponse, status_code=201)
-async def create_element(element_data: schemas.ElementCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    new_element = Element(**element_data.model_dump())
-    db.add(new_element)
+@router.post("/elements", response_model=schemas.ElementResponse, status_code=201,response_model_by_alias=True,)
+async def create_element(
+    element_data: schemas.ElementCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    vals = element_data.model_dump()   # this now includes ai_payload if you sent it
+    el = Element(**vals)
+    db.add(el)
     await db.commit()
-    # await db.refresh(new_element)
-    return new_element
+    await db.refresh(el)
+    return el
 
 @router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
-async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    db_element = await db.get(Element, element_id)
-    if not db_element: raise HTTPException(status_code=404, detail="Element not found")
-
-    if element_data.properties is not None:
-        db_element.properties = element_data.properties
-        flag_modified(db_element, "properties")
-
-    if element_data.position is not None:
-        db_element.position = element_data.position
-    
+async def update_element(
+    element_id: UUID,
+    data: schemas.ElementUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    el = await db.get(Element, element_id)
+    if data.properties is not None:
+        el.properties = data.properties
+        flag_modified(el, "properties")
+    # we do NOT overwrite ai_payload here
+    if data.position is not None:
+        el.position = data.position
     await db.commit()
-    # await db.refresh(db_element)
-    return db_element
+    await db.refresh(el)
+    return el
+
 
 @router.delete("/elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_element(element_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):

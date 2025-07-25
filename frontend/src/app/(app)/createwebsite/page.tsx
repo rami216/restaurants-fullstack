@@ -200,6 +200,7 @@ const CreateWebsitePage = () => {
                 element_type: element.element_type,
                 position: el_idx,
                 properties: element.properties,
+                ai_payload: element.aiPayload,
               });
             } else {
               const originalElement = originalItems.get(element.element_id);
@@ -211,6 +212,7 @@ const CreateWebsitePage = () => {
                 await api.put(`/builder/elements/${element.element_id}`, {
                   position: el_idx,
                   properties: element.properties,
+                  ai_payload: element.aiPayload,
                 });
               }
             }

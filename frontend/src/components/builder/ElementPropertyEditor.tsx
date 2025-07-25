@@ -26,6 +26,8 @@ import {
   X,
   Check,
 } from "lucide-react";
+import Mustache from "mustache";
+
 interface PropertyEditorProps {
   isExpanded: boolean;
   onToggle: () => void;
@@ -759,6 +761,31 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       labelStyle: { ...selectedItem.properties.labelStyle, [key]: value },
     };
     updateItem({ ...selectedItem, properties: newProperties });
+  };
+
+  // inside your component, alongside handlePropertyChange:
+  const handleAiPropChange = (key: string, value: any) => {
+    if (!selectedItem.aiPayload) return;
+    // 1) update the live values
+    const newProps = {
+      ...selectedItem.aiPayload.properties,
+      [key]: value,
+    };
+    // 2) re‑render the template
+    const newTemplate = Mustache.render(
+      selectedItem.aiPayload.aiTemplate,
+      newProps
+    );
+    // 3) write back into the element
+    const updated = {
+      ...selectedItem,
+      aiPayload: {
+        ...selectedItem.aiPayload,
+        properties: newProps,
+        aiTemplate: newTemplate,
+      },
+    };
+    updateItem(updated);
   };
 
   const renderElementEditor = () => {
@@ -1807,6 +1834,72 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
+      /*** inside switch(selectedItem.element_type) { ***/
+      case "AI": {
+        // 1) Destructure the mustache template payload
+        const { editableProps, properties: aiProps } = selectedItem.aiPayload!;
+
+        // 2) Helper to update a single AI property and re‑inject it into the page
+        const handleAiPropChange = (key: string, value: any) => {
+          const newAiPayload = {
+            ...selectedItem.aiPayload!,
+            properties: {
+              ...aiProps,
+              [key]: value,
+            },
+          };
+          updateItem({
+            ...selectedItem,
+            aiPayload: newAiPayload,
+          });
+        };
+
+        // 3) Render one control per `editableProps` entry
+        return (
+          <div className="space-y-4">
+            {editableProps.map((field: any) => (
+              <div key={field.key}>
+                <label className="block text-sm font-medium text-gray-700 mb-1">
+                  {field.label}
+                </label>
+
+                {field.type === "number" && (
+                  <input
+                    type="number"
+                    value={aiProps[field.key]}
+                    onChange={(e) =>
+                      handleAiPropChange(field.key, +e.currentTarget.value)
+                    }
+                    className="w-full border p-2 rounded"
+                  />
+                )}
+
+                {field.type === "text" && (
+                  <input
+                    type="text"
+                    value={aiProps[field.key]}
+                    onChange={(e) =>
+                      handleAiPropChange(field.key, e.currentTarget.value)
+                    }
+                    className="w-full border p-2 rounded"
+                  />
+                )}
+
+                {field.type === "color" && (
+                  <input
+                    type="color"
+                    value={aiProps[field.key]}
+                    onChange={(e) =>
+                      handleAiPropChange(field.key, e.currentTarget.value)
+                    }
+                    className="w-full h-10 p-1 rounded border"
+                  />
+                )}
+              </div>
+            ))}
+          </div>
+        );
+      }
 
       default:
         return <p>No editor for this element.</p>;

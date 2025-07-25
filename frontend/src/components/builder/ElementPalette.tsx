@@ -24,6 +24,7 @@ interface ElementPaletteProps {
   onLocationChange: (locationId: string) => void;
   categories: Category[];
 }
+
 const GOOGLE_MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
 const availableElements = [
   {
@@ -153,6 +154,51 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
 }) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
+  //for ai generated element
+
+  const [aiPrompt, setAiPrompt] = useState("");
+  const [loadingAi, setLoadingAi] = useState(false);
+  const handleGenerateAi = async () => {
+    if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
+    setLoadingAi(true);
+    try {
+      const { data } = await api.post("/ai/generate-ai-element", {
+        prompt: aiPrompt,
+      });
+
+      // build the new element *with* its aiPayload
+      const aiEl: ElementType = {
+        element_id: `ai_${Date.now()}`,
+        element_type: "AI",
+        position: 999,
+        properties: {}, // or `{}` if you have no static props
+        aiPayload: data, // <-- top‑level
+      };
+
+      // inject it (a one‑off rather than using handleAddElement)
+      if (!selectedSubsectionId || !activePage) return;
+      const updatedPage = {
+        ...activePage,
+        sections: activePage.sections.map((sec) => ({
+          ...sec,
+          subsections: sec.subsections.map((sub) =>
+            sub.subsection_id === selectedSubsectionId
+              ? { ...sub, elements: [...sub.elements, aiEl] }
+              : sub
+          ),
+        })),
+      };
+      onUpdate(updatedPage);
+      setAiPrompt("");
+    } catch (err) {
+      console.error(err);
+      alert("AI generation failed");
+    } finally {
+      setLoadingAi(false);
+    }
+  };
+
+  // end for ai generated element
   useEffect(() => {
     const fetchMenuItems = async () => {
       if (selectedLocationId) {
@@ -254,6 +300,25 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
 
       {isExpanded && (
         <div className="overflow-y-auto flex-grow">
+          {/* ─── AI GENERATOR ─── */}
+          <div className="mb-4">
+            <textarea
+              rows={3}
+              className="w-full border rounded p-2"
+              placeholder="Describe your custom element…"
+              value={aiPrompt}
+              onChange={(e) => setAiPrompt(e.target.value)}
+            />
+            <button
+              onClick={handleGenerateAi}
+              disabled={loadingAi || !aiPrompt.trim()}
+              className="mt-2 w-full bg-blue-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {loadingAi ? "Generating…" : "Generate AI Element"}
+            </button>
+          </div>
+          <hr className="my-4 border-gray-300" />
+
           <p
             className={`text-sm mb-4 ${
               selectedSubsectionId ? "text-green-600" : "text-red-600"

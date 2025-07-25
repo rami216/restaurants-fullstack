@@ -73,7 +73,7 @@ class Element(Base):
     element_type = Column(String, nullable=False)
     position = Column(Integer, nullable=False)
     properties = Column(JSON, nullable=False)
-
+    ai_payload     = Column(JSON, nullable=True) 
     # Relationships
     subsection = relationship("Subsection", back_populates="elements")
 

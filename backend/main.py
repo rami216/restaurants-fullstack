@@ -20,7 +20,7 @@ from payments.router import router as paymentRouter
 from website_builder.router import router as websiteBuilderRouter
 from uploads.router import router as uploads_router # Import the new router
 from fastapi.staticfiles import StaticFiles # Import StaticFiles
-
+from ai.router import router as ai_router
 app = FastAPI()
 
 origins = [
@@ -49,6 +49,8 @@ app.include_router(schedulesrouter)
 app.include_router(paymentRouter)
 app.include_router(websiteBuilderRouter)
 app.include_router(uploads_router)
+app.include_router(ai_router)
+
 @app.on_event("startup")
 async def on_startup():
     await init_db()

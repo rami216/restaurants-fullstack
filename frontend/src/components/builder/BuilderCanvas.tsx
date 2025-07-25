@@ -18,6 +18,7 @@ import { Plus, ChevronDown } from "lucide-react";
 import api from "@/lib/axios"; // Import api to get the base URL
 import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
+import Mustache from "mustache";
 
 const Accordion = ({
   items,
@@ -326,6 +327,11 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             />
           </div>
         );
+      }
+      case "AI": {
+        const { aiTemplate, properties: aiProps } = element.aiPayload!; // ← note the camelCase
+        const html = Mustache.render(aiTemplate, aiProps);
+        return wrap(<div dangerouslySetInnerHTML={{ __html: html }} />);
       }
 
       default:
