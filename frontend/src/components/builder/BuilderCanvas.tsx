@@ -328,8 +328,20 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
       }
+      // case "AI": {
+      //   if (!element.aiPayload) {
+      //     return wrap(
+      //       <div className="border p-2 bg-red-200 text-red-800 rounded">
+      //         AI Element Data Missing
+      //       </div>
+      //     );
+      //   }
+      //   // THE FIX: Re-render the Mustache template with the current properties on every render.
+      //   const { aiTemplate, properties: aiProps } = element.aiPayload;
+      //   const html = Mustache.render(aiTemplate, aiProps);
+      //   return wrap(<div dangerouslySetInnerHTML={{ __html: html }} />);
+      // }
       case "AI": {
-        // THE FIX: Add a check to ensure aiPayload exists
         if (!element.aiPayload) {
           return wrap(
             <div className="border p-2 bg-red-200 text-red-800 rounded">
@@ -337,9 +349,26 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </div>
           );
         }
+
         const { aiTemplate, properties: aiProps } = element.aiPayload;
+
+        // THE FIX: This correctly handles both text rendering and live style updates.
+        // 1. Render the template to get the correct text values.
         const html = Mustache.render(aiTemplate, aiProps);
-        return wrap(<div dangerouslySetInnerHTML={{ __html: html }} />);
+
+        // 2. Create a style object for the dynamic CSS variables.
+        const styleVariables: React.CSSProperties = {};
+        for (const [key, value] of Object.entries(aiProps)) {
+          // This tells TypeScript to allow custom properties like "--primaryColor"
+          (styleVariables as any)[`--${key}`] = value;
+        }
+
+        // 3. Return a wrapper div with the dynamic styles, containing the rendered HTML.
+        return (
+          <div style={styleVariables}>
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          </div>
+        );
       }
       default:
         return wrap(
