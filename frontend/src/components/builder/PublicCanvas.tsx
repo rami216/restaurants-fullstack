@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   Page,
   PublicWebsiteData,
@@ -20,7 +20,31 @@ import {
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
+// --- Add this component inside PublicCanvas.tsx ---
+const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { aiPayload } = element;
 
+  useEffect(() => {
+    if (containerRef.current && aiPayload?.script) {
+      try {
+        const scriptFunction = new Function("container", aiPayload.script);
+        scriptFunction(containerRef.current);
+      } catch (error) {
+        console.error("Error executing AI-generated script:", error);
+      }
+    }
+  }, [aiPayload]); // Re-run if the payload changes
+
+  if (!aiPayload) {
+    return <div>AI Element Data Missing</div>;
+  }
+
+  const { aiTemplate, properties: aiProps } = aiPayload;
+  const html = Mustache.render(aiTemplate, aiProps);
+
+  return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
+};
 const Accordion = ({
   items,
   style,
@@ -399,26 +423,21 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       case "MAP":
         return <iframe src={props.src} style={style} />;
       case "AI": {
-        if (!element.aiPayload) {
-          return <div>AI Element Data Missing</div>;
-        }
+        // We also need to get the animation properties for the wrapper
+        const { initial, animate, transition } = getMotionConfig(
+          element.properties.animation
+        );
 
-        const { aiTemplate, properties: aiProps } = element.aiPayload;
-        const html = Mustache.render(aiTemplate, aiProps);
-
-        const styleVariables: React.CSSProperties = {};
-        for (const [key, value] of Object.entries(aiProps)) {
-          (styleVariables as any)[`--${key}`] = value;
-        }
-
-        const isClickable = props.linkEnabled && props.action_value;
+        const isClickable =
+          element.properties.linkEnabled && element.properties.action_value;
         const targetPage = isClickable
-          ? websiteData.pages.find((p) => p.slug === props.action_value)
+          ? websiteData.pages.find(
+              (p) => p.slug === element.properties.action_value
+            )
           : null;
 
         return (
           <motion.div
-            style={styleVariables}
             initial={initial}
             animate={animate}
             transition={transition}
@@ -431,7 +450,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             }}
             className={isClickable ? "cursor-pointer" : ""}
           >
-            <div dangerouslySetInnerHTML={{ __html: html }} />
+            <AiElementRunner element={element} />
           </motion.div>
         );
       }

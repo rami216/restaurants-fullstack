@@ -19,6 +19,7 @@ class AiElementPayload(BaseModel):
     aiTemplate: str
     properties: Dict[str, Any]
     editableProps: List[EditableProp]
+    script: Optional[str] = None # Add this line
 
 # --- Element Schemas ---
 class ElementBase(BaseModel):

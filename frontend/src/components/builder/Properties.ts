@@ -9,6 +9,7 @@ export interface AiElementPayload {
   aiTemplate: string;
   properties: Record<string, any>;
   editableProps: EditableProp[];
+  script?: string;
 }
 
 export interface AnimationProps {

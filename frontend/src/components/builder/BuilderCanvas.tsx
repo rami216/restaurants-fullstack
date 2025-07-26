@@ -1,7 +1,7 @@
 // frontend/src/components/builder/BuilderCanvas.tsx
 
 "use client";
-import React, { useState } from "react"; // Import useState
+import React, { useState, useRef, useEffect } from "react";
 import {
   Page,
   Selection,
@@ -65,6 +65,32 @@ const Accordion = ({
       ))}
     </div>
   );
+};
+const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
+  const containerRef = useRef<HTMLDivElement>(null);
+  const { aiPayload } = element;
+
+  useEffect(() => {
+    if (containerRef.current && aiPayload?.script) {
+      try {
+        // Create a function that takes the container element as an argument
+        const scriptFunction = new Function("container", aiPayload.script);
+        // Execute the script, passing the actual container div to it
+        scriptFunction(containerRef.current);
+      } catch (error) {
+        console.error("Error executing AI-generated script:", error);
+      }
+    }
+  }, [aiPayload?.script, aiPayload?.properties]); // Re-run if script or properties change
+
+  if (!aiPayload) {
+    return <div>AI Element Data Missing</div>;
+  }
+
+  const { aiTemplate, properties: aiProps } = aiPayload;
+  const html = Mustache.render(aiTemplate, aiProps);
+
+  return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
 };
 
 interface BuilderCanvasProps {
@@ -341,34 +367,38 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       //   const html = Mustache.render(aiTemplate, aiProps);
       //   return wrap(<div dangerouslySetInnerHTML={{ __html: html }} />);
       // }
+      // case "AI": {
+      //   if (!element.aiPayload) {
+      //     return wrap(
+      //       <div className="border p-2 bg-red-200 text-red-800 rounded">
+      //         AI Element Data Missing
+      //       </div>
+      //     );
+      //   }
+
+      //   const { aiTemplate, properties: aiProps } = element.aiPayload;
+
+      //   // THE FIX: This correctly handles both text rendering and live style updates.
+      //   // 1. Render the template to get the correct text values.
+      //   const html = Mustache.render(aiTemplate, aiProps);
+
+      //   // 2. Create a style object for the dynamic CSS variables.
+      //   const styleVariables: React.CSSProperties = {};
+      //   for (const [key, value] of Object.entries(aiProps)) {
+      //     // This tells TypeScript to allow custom properties like "--primaryColor"
+      //     (styleVariables as any)[`--${key}`] = value;
+      //   }
+
+      //   // 3. Return a wrapper div with the dynamic styles, containing the rendered HTML.
+      //   return (
+      //     <div style={styleVariables}>
+      //       <div dangerouslySetInnerHTML={{ __html: html }} />
+      //     </div>
+      //   );
+      // }
       case "AI": {
-        if (!element.aiPayload) {
-          return wrap(
-            <div className="border p-2 bg-red-200 text-red-800 rounded">
-              AI Element Data Missing
-            </div>
-          );
-        }
-
-        const { aiTemplate, properties: aiProps } = element.aiPayload;
-
-        // THE FIX: This correctly handles both text rendering and live style updates.
-        // 1. Render the template to get the correct text values.
-        const html = Mustache.render(aiTemplate, aiProps);
-
-        // 2. Create a style object for the dynamic CSS variables.
-        const styleVariables: React.CSSProperties = {};
-        for (const [key, value] of Object.entries(aiProps)) {
-          // This tells TypeScript to allow custom properties like "--primaryColor"
-          (styleVariables as any)[`--${key}`] = value;
-        }
-
-        // 3. Return a wrapper div with the dynamic styles, containing the rendered HTML.
-        return (
-          <div style={styleVariables}>
-            <div dangerouslySetInnerHTML={{ __html: html }} />
-          </div>
-        );
+        // --- REPLACE the old AI case with this ---
+        return <AiElementRunner element={element} />;
       }
       default:
         return wrap(
