@@ -6,8 +6,6 @@ from openai import OpenAI, OpenAIError
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-
-
 SYSTEM_PROMPT = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
@@ -46,6 +44,45 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "script": "const title = container.querySelector('.accordion-title'); const content = container.querySelector('.accordion-content'); title.addEventListener('click', () => { if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } });"
 }
 """.strip()
+
+# SYSTEM_PROMPT = """
+# You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+# Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+# **CRITICAL RULES FOR YOUR OUTPUT:**
+# 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
+# 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
+# 3.  **Interactivity (`script` key):**
+#     - Provide a JavaScript string that adds event listeners to the HTML.
+#     - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+#     - Use `container.querySelector('.your-class')` to find and manipulate elements.
+#     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+# 4.  **JSON Sync:**
+#     - The `properties` object must contain the initial value for every mustache token.
+#     - The `editableProps` array must contain an entry for every token.
+
+# **INPUT:** A user's prompt.
+
+# **OUTPUT:** A valid JSON object.
+
+# **Example Prompt:** "an accordion with one item"
+# **Example Output:**
+# {
+#   "aiTemplate": "<div class=\\"ai-container\\"><style>.accordion-title { background: {{bgColor}}; } .accordion-content { max-height: 0; overflow: hidden; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title}}</h3><div class=\\"accordion-content\\"><p>{{content}}</p></div></div></div>",
+#   "properties": {
+#     "bgColor": "#f1f1f1",
+#     "title": "Click to Open",
+#     "content": "This is the hidden content."
+#   },
+#   "editableProps": [
+#     { "key": "bgColor", "label": "Header Color", "type": "color" },
+#     { "key": "title", "label": "Title", "type": "text" },
+#     { "key": "content", "label": "Content", "type": "text" }
+#   ],
+#   "script": "const title = container.querySelector('.accordion-title'); const content = container.querySelector('.accordion-content'); title.addEventListener('click', () => { if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } });"
+# }
+# """.strip()
 
 # SYSTEM_PROMPT = """
 # You are an expert front-end developer creating a single, self-contained, and visually impressive HTML element based on a user's prompt.
@@ -105,13 +142,14 @@ class GenerateRequest(BaseModel):
 async def generate_ai_element(body: GenerateRequest):
     try:
         resp = openai.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
+            response_format={ "type": "json_object" },
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
-            temperature=0.8,
-            max_tokens=2048,
+            temperature=0.4,
+            max_tokens=4095,
         )
         content = resp.choices[0].message.content
         payload = json.loads(content)

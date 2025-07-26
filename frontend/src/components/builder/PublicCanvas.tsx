@@ -20,31 +20,61 @@ import {
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
-// --- Add this component inside PublicCanvas.tsx ---
+
 const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
   const containerRef = useRef<HTMLDivElement>(null);
   const { aiPayload } = element;
 
   useEffect(() => {
-    if (containerRef.current && aiPayload?.script) {
+    const container = containerRef.current;
+    // We only need the effect to run the script.
+    // The HTML is now handled by the main return statement.
+    if (container && aiPayload?.script) {
       try {
         const scriptFunction = new Function("container", aiPayload.script);
-        scriptFunction(containerRef.current);
+        scriptFunction(container);
       } catch (error) {
         console.error("Error executing AI-generated script:", error);
       }
     }
-  }, [aiPayload]); // Re-run if the payload changes
+  }, [element.element_id, aiPayload]); // Re-run when the element itself changes
 
   if (!aiPayload) {
     return <div>AI Element Data Missing</div>;
   }
 
+  // THE FIX: The HTML is now always rendered here, outside of the effect.
   const { aiTemplate, properties: aiProps } = aiPayload;
   const html = Mustache.render(aiTemplate, aiProps);
 
   return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
 };
+// --- Add this component inside PublicCanvas.tsx ---
+// const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
+//   const containerRef = useRef<HTMLDivElement>(null);
+//   const { aiPayload } = element;
+
+//   useEffect(() => {
+//     if (containerRef.current && aiPayload?.script) {
+//       try {
+//         const scriptFunction = new Function("container", aiPayload.script);
+//         scriptFunction(containerRef.current);
+//       } catch (error) {
+//         console.error("Error executing AI-generated script:", error);
+//       }
+//     }
+//   }, [aiPayload]); // Re-run if the payload changes
+
+//   if (!aiPayload) {
+//     return <div>AI Element Data Missing</div>;
+//   }
+
+//   const { aiTemplate, properties: aiProps } = aiPayload;
+//   const html = Mustache.render(aiTemplate, aiProps);
+
+//   return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
+// };
+
 const Accordion = ({
   items,
   style,
@@ -164,6 +194,9 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   const [currentPage, setCurrentPage] = useState<Page | undefined>(initialPage);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
+  useEffect(() => {
+    setCurrentPage(initialPage);
+  }, [initialPage]);
   // always render navbar
   const NavBar = () => (
     <nav style={websiteData.navbar!.properties}>
@@ -247,9 +280,26 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                     animate={animate}
                     transition={transition}
                   >
-                    {sub.elements.map((el) => (
-                      <div key={el.element_id}>{renderElement(el)}</div>
-                    ))}
+                    {sub.elements.map((el) => {
+                      // --- THIS IS THE FIX ---
+                      // We wrap the element rendering in a try-catch block.
+                      try {
+                        return (
+                          <div key={el.element_id}>{renderElement(el)}</div>
+                        );
+                      } catch (error) {
+                        console.error("Failed to render element:", el, error);
+                        return (
+                          <div
+                            key={el.element_id}
+                            className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
+                          >
+                            Error: This element could not be displayed.
+                          </div>
+                        );
+                      }
+                      // --- END OF FIX ---
+                    })}
                   </motion.div>
                 );
               })}
@@ -423,7 +473,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       case "MAP":
         return <iframe src={props.src} style={style} />;
       case "AI": {
-        // We also need to get the animation properties for the wrapper
         const { initial, animate, transition } = getMotionConfig(
           element.properties.animation
         );
@@ -449,6 +498,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               }
             }}
             className={isClickable ? "cursor-pointer" : ""}
+            // THE FIX: The key now forces a complete remount of the component on page change.
+            key={`${currentPage?.page_id}-${element.element_id}`}
           >
             <AiElementRunner element={element} />
           </motion.div>
