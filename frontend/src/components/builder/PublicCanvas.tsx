@@ -2,6 +2,7 @@
 "use client";
 import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
+import Mustache from "mustache";
 
 import React, { useState, useEffect } from "react";
 import {
@@ -397,7 +398,43 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
       case "MAP":
         return <iframe src={props.src} style={style} />;
+      case "AI": {
+        if (!element.aiPayload) {
+          return <div>AI Element Data Missing</div>;
+        }
 
+        const { aiTemplate, properties: aiProps } = element.aiPayload;
+        const html = Mustache.render(aiTemplate, aiProps);
+
+        const styleVariables: React.CSSProperties = {};
+        for (const [key, value] of Object.entries(aiProps)) {
+          (styleVariables as any)[`--${key}`] = value;
+        }
+
+        const isClickable = props.linkEnabled && props.action_value;
+        const targetPage = isClickable
+          ? websiteData.pages.find((p) => p.slug === props.action_value)
+          : null;
+
+        return (
+          <motion.div
+            style={styleVariables}
+            initial={initial}
+            animate={animate}
+            transition={transition}
+            onClick={() => {
+              if (targetPage) {
+                setActiveCategory(null);
+                setCurrentPage(targetPage);
+                router.push(`/${websiteData.subdomain}${targetPage.slug}`);
+              }
+            }}
+            className={isClickable ? "cursor-pointer" : ""}
+          >
+            <div dangerouslySetInnerHTML={{ __html: html }} />
+          </motion.div>
+        );
+      }
       default:
         return <div>Unknown element</div>;
     }
