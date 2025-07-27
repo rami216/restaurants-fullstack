@@ -680,148 +680,298 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     handlePropertyChange("src", localUrl);
   };
   // --- THIS IS THE UPDATED SECTION EDITOR ---
-  const renderSectionEditor = () => (
-    <div className="space-y-4">
-      {/* --- NEW: Background Image Uploader --- */}
-      {/* --- START: NEW AI SECTION GENERATOR UI --- */}
-      <div>
-        <h4 className="text-md font-medium text-gray-800 mb-2">
-          Generate Layout with AI
-        </h4>
-        <div className="p-3 border rounded-md bg-gray-50">
-          <textarea
-            rows={4}
-            className="w-full border rounded p-2 text-sm"
-            placeholder="Describe the layout you want, e.g., 'a two-column section with an image and a call-to-action button'."
-            value={sectionAiPrompt}
-            onChange={(e) => setSectionAiPrompt(e.target.value)}
-          />
-          <button
-            onClick={handleGenerateSectionClick}
-            disabled={isGeneratingSection || !sectionAiPrompt.trim()}
-            className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+  // const renderSectionEditor = () => (
+  //   <div className="space-y-4">
+  //     {/* --- NEW: Background Image Uploader --- */}
+  //     {/* --- START: NEW AI SECTION GENERATOR UI --- */}
+  //     <div>
+  //       <h4 className="text-md font-medium text-gray-800 mb-2">
+  //         Generate Layout with AI
+  //       </h4>
+  //       <div className="p-3 border rounded-md bg-gray-50">
+  //         <textarea
+  //           rows={4}
+  //           className="w-full border rounded p-2 text-sm"
+  //           placeholder="Describe the layout you want, e.g., 'a two-column section with an image and a call-to-action button'."
+  //           value={sectionAiPrompt}
+  //           onChange={(e) => setSectionAiPrompt(e.target.value)}
+  //         />
+  //         <button
+  //           onClick={handleGenerateSectionClick}
+  //           disabled={isGeneratingSection || !sectionAiPrompt.trim()}
+  //           className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+  //         >
+  //           {isGeneratingSection ? "Generating..." : "Generate Section Layout"}
+  //         </button>
+  //       </div>
+  //     </div>
+  //     <hr />
+  //     {/* --- END: NEW AI SECTION GENERATOR UI --- */}
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Background Image
+  //       </label>
+  //       <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
+  //         {selectedItem.properties.backgroundImage ? (
+  //           <div className="text-center">
+  //             <img
+  //               src={`${api.defaults.baseURL}${selectedItem.properties.backgroundImage}`}
+  //               alt="Background Preview"
+  //               className="max-h-32 w-full object-cover mx-auto rounded-md"
+  //             />
+  //             <button
+  //               onClick={() => handlePropertyChange("backgroundImage", "")}
+  //               className="mt-2 text-xs text-red-600 hover:text-red-800"
+  //             >
+  //               Remove Image
+  //             </button>
+  //           </div>
+  //         ) : (
+  //           <div className="text-center py-4">
+  //             <input
+  //               type="file"
+  //               id="bg-image-upload"
+  //               className="hidden"
+  //               accept="image/png, image/jpeg, image/webp, image/gif"
+  //               onChange={handleImageUpload}
+  //               disabled={isUploading}
+  //             />
+  //             <label
+  //               htmlFor="bg-image-upload"
+  //               className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
+  //                 isUploading ? "opacity-50 cursor-not-allowed" : ""
+  //               }`}
+  //             >
+  //               {isUploading ? "Uploading..." : "Upload an image"}
+  //             </label>
+  //             <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, GIF</p>
+  //           </div>
+  //         )}
+  //       </div>
+  //     </div>
+
+  //     {/* Other section properties */}
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Layout Direction (for subsections)
+  //       </label>
+  //       <select
+  //         value={selectedItem.properties.flexDirection || "row"}
+  //         onChange={(e) =>
+  //           handlePropertyChange("flexDirection", e.target.value)
+  //         }
+  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //       >
+  //         <option value="row">Horizontal (Columns)</option>
+  //         <option value="column">Vertical (Rows)</option>
+  //       </select>
+  //     </div>
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Justify Subsections
+  //       </label>
+  //       <select
+  //         value={selectedItem.properties.justifyContent || "flex-start"}
+  //         onChange={(e) =>
+  //           handlePropertyChange("justifyContent", e.target.value)
+  //         }
+  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //       >
+  //         <option value="flex-start">Start</option>
+  //         <option value="center">Center</option>
+  //         <option value="flex-end">End</option>
+  //         <option value="space-between">Space Between</option>
+  //       </select>
+  //     </div>
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Gap Between Subsections
+  //       </label>
+  //       <input
+  //         type="text"
+  //         value={selectedItem.properties.gap || "1rem"}
+  //         onChange={(e) => handlePropertyChange("gap", e.target.value)}
+  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //         placeholder="e.g., 1rem, 16px"
+  //       />
+  //     </div>
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Padding
+  //       </label>
+  //       <input
+  //         type="text"
+  //         value={selectedItem.properties.padding || "2rem"}
+  //         onChange={(e) => handlePropertyChange("padding", e.target.value)}
+  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //       />
+  //     </div>
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Background Color
+  //       </label>
+  //       <input
+  //         type="color"
+  //         value={selectedItem.properties.backgroundColor || "#ffffff"}
+  //         onChange={(e) =>
+  //           handlePropertyChange("backgroundColor", e.target.value)
+  //         }
+  //         className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+  //       />
+  //     </div>
+  //   </div>
+  // );
+  const renderSectionEditor = () => {
+    // THE FIX: Create a safe 'properties' object that defaults to an empty object
+    const properties = selectedItem.properties || {};
+
+    return (
+      <div className="space-y-4">
+        {/* --- AI SECTION GENERATOR UI --- */}
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Generate Layout with AI
+          </h4>
+          <div className="p-3 border rounded-md bg-gray-50">
+            <textarea
+              rows={4}
+              className="w-full border rounded p-2 text-sm"
+              placeholder="Describe the layout you want..."
+              value={sectionAiPrompt}
+              onChange={(e) => setSectionAiPrompt(e.target.value)}
+            />
+            <button
+              onClick={handleGenerateSectionClick}
+              disabled={isGeneratingSection || !sectionAiPrompt.trim()}
+              className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {isGeneratingSection
+                ? "Generating..."
+                : "Generate Section Layout"}
+            </button>
+          </div>
+        </div>
+        <hr />
+
+        {/* --- Background Image Uploader --- */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Background Image
+          </label>
+          <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
+            {/* Use the safe 'properties' object here */}
+            {properties.backgroundImage ? (
+              <div className="text-center">
+                <img
+                  src={`${api.defaults.baseURL}${properties.backgroundImage}`}
+                  alt="Background Preview"
+                  className="max-h-32 w-full object-cover mx-auto rounded-md"
+                />
+                <button
+                  onClick={() => handlePropertyChange("backgroundImage", "")}
+                  className="mt-2 text-xs text-red-600 hover:text-red-800"
+                >
+                  Remove Image
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <input
+                  type="file"
+                  id="bg-image-upload"
+                  className="hidden"
+                  accept="image/png, image/jpeg, image/webp, image/gif"
+                  onChange={handleImageUpload}
+                  disabled={isUploading}
+                />
+                <label
+                  htmlFor="bg-image-upload"
+                  className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
+                    isUploading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  {isUploading ? "Uploading..." : "Upload an image"}
+                </label>
+                <p className="text-xs text-gray-500 mt-1">
+                  PNG, JPG, WEBP, GIF
+                </p>
+              </div>
+            )}
+          </div>
+        </div>
+
+        {/* Other section properties --- all now using the safe 'properties' object */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Layout Direction (for subsections)
+          </label>
+          <select
+            value={properties.flexDirection || "row"}
+            onChange={(e) =>
+              handlePropertyChange("flexDirection", e.target.value)
+            }
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
           >
-            {isGeneratingSection ? "Generating..." : "Generate Section Layout"}
-          </button>
+            <option value="row">Horizontal (Columns)</option>
+            <option value="column">Vertical (Rows)</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Justify Subsections
+          </label>
+          <select
+            value={properties.justifyContent || "flex-start"}
+            onChange={(e) =>
+              handlePropertyChange("justifyContent", e.target.value)
+            }
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          >
+            <option value="flex-start">Start</option>
+            <option value="center">Center</option>
+            <option value="flex-end">End</option>
+            <option value="space-between">Space Between</option>
+          </select>
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Gap Between Subsections
+          </label>
+          <input
+            type="text"
+            value={properties.gap || "1rem"}
+            onChange={(e) => handlePropertyChange("gap", e.target.value)}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            placeholder="e.g., 1rem, 16px"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Padding
+          </label>
+          <input
+            type="text"
+            value={properties.padding || "2rem"}
+            onChange={(e) => handlePropertyChange("padding", e.target.value)}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          />
+        </div>
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Background Color
+          </label>
+          <input
+            type="color"
+            value={properties.backgroundColor || "#ffffff"}
+            onChange={(e) =>
+              handlePropertyChange("backgroundColor", e.target.value)
+            }
+            className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+          />
         </div>
       </div>
-      <hr />
-      {/* --- END: NEW AI SECTION GENERATOR UI --- */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Background Image
-        </label>
-        <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
-          {selectedItem.properties.backgroundImage ? (
-            <div className="text-center">
-              <img
-                src={`${api.defaults.baseURL}${selectedItem.properties.backgroundImage}`}
-                alt="Background Preview"
-                className="max-h-32 w-full object-cover mx-auto rounded-md"
-              />
-              <button
-                onClick={() => handlePropertyChange("backgroundImage", "")}
-                className="mt-2 text-xs text-red-600 hover:text-red-800"
-              >
-                Remove Image
-              </button>
-            </div>
-          ) : (
-            <div className="text-center py-4">
-              <input
-                type="file"
-                id="bg-image-upload"
-                className="hidden"
-                accept="image/png, image/jpeg, image/webp, image/gif"
-                onChange={handleImageUpload}
-                disabled={isUploading}
-              />
-              <label
-                htmlFor="bg-image-upload"
-                className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
-                  isUploading ? "opacity-50 cursor-not-allowed" : ""
-                }`}
-              >
-                {isUploading ? "Uploading..." : "Upload an image"}
-              </label>
-              <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, GIF</p>
-            </div>
-          )}
-        </div>
-      </div>
-
-      {/* Other section properties */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Layout Direction (for subsections)
-        </label>
-        <select
-          value={selectedItem.properties.flexDirection || "row"}
-          onChange={(e) =>
-            handlePropertyChange("flexDirection", e.target.value)
-          }
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-        >
-          <option value="row">Horizontal (Columns)</option>
-          <option value="column">Vertical (Rows)</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Justify Subsections
-        </label>
-        <select
-          value={selectedItem.properties.justifyContent || "flex-start"}
-          onChange={(e) =>
-            handlePropertyChange("justifyContent", e.target.value)
-          }
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-        >
-          <option value="flex-start">Start</option>
-          <option value="center">Center</option>
-          <option value="flex-end">End</option>
-          <option value="space-between">Space Between</option>
-        </select>
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Gap Between Subsections
-        </label>
-        <input
-          type="text"
-          value={selectedItem.properties.gap || "1rem"}
-          onChange={(e) => handlePropertyChange("gap", e.target.value)}
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          placeholder="e.g., 1rem, 16px"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Padding
-        </label>
-        <input
-          type="text"
-          value={selectedItem.properties.padding || "2rem"}
-          onChange={(e) => handlePropertyChange("padding", e.target.value)}
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-        />
-      </div>
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Background Color
-        </label>
-        <input
-          type="color"
-          value={selectedItem.properties.backgroundColor || "#ffffff"}
-          onChange={(e) =>
-            handlePropertyChange("backgroundColor", e.target.value)
-          }
-          className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-        />
-      </div>
-    </div>
-  );
-
+    );
+  };
   const renderSubsectionEditor = () => (
     <div className="space-y-4">
       <div>

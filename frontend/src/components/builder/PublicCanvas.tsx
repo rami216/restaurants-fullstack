@@ -259,7 +259,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     return (
       <div className="space-y-0">
         {currentPage?.sections.map((sec: SectionType) => (
-          <div key={sec.section_id} style={sec.properties}>
+          <div
+          key={sec.section_id}
+          style={sec.properties || {}}
+        >
             <div
               className="w-full overflow-x-hidden"
               style={{
@@ -272,7 +275,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             >
               {sec.subsections.map((sub) => {
                 // remove animation before spreading into style
-                const { animation, ...styleProps } = sub.properties;
+                const { animation, style, ...styleProps } = sub.properties; // <-- CHANGE IS HERE
 
                 // get your motion config from that optional animation
                 const { initial, animate, transition } =
@@ -282,7 +285,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   <motion.div
                     className="max-w-full"
                     key={sub.subsection_id}
-                    style={styleProps}
+                    style={{ ...styleProps, ...(style || {}) }}
                     initial={initial}
                     animate={animate}
                     transition={transition}

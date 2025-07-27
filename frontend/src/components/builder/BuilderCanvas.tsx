@@ -482,12 +482,25 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       <div className="space-y-4">
         {page.sections.map((section) => {
           // build section style
-          const sectionStyle: React.CSSProperties = { ...section.properties };
-          if (section.properties.backgroundImage) {
-            sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${section.properties.backgroundImage})`;
+          // THIS IS THE CORRECT REVERTED CODE (WITH SAFETY CHECK)
+          const properties = section.properties || {};
+
+          // 2. Build the main section style using the safe 'properties' object.
+          const sectionStyle: React.CSSProperties = { ...properties };
+          if (properties.backgroundImage) {
+            sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${properties.backgroundImage})`;
             sectionStyle.backgroundSize = "cover";
             sectionStyle.backgroundPosition = "center";
           }
+          // const sectionStyle: React.CSSProperties = {
+          //   ...section.properties,
+          //   ...(section.properties.style || {}), // THE FIX IS HERE
+          // };
+          // if (section.properties.backgroundImage) {
+          //   sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${section.properties.backgroundImage})`;
+          //   sectionStyle.backgroundSize = "cover";
+          //   sectionStyle.backgroundPosition = "center";
+          // }
 
           return (
             <div
@@ -513,17 +526,23 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 className="flex flex-wrap"
                 style={{
                   display: "flex",
-                  flexDirection: section.properties.flexDirection,
-                  justifyContent: section.properties.justifyContent,
-                  alignItems: section.properties.alignItems,
-                  gap: section.properties.gap,
+
+                  flexDirection: properties.flexDirection,
+                  justifyContent: properties.justifyContent,
+                  alignItems: properties.alignItems,
+                  gap: properties.gap,
                 }}
               >
                 {section.subsections.map((sub) => {
                   // build subsection style
+                  // const subsectionStyle: React.CSSProperties = {
+                  //   display: sub.properties.display || "flex",
+                  //   gap: sub.properties.gap || "1rem",
+                  // };
                   const subsectionStyle: React.CSSProperties = {
                     display: sub.properties.display || "flex",
                     gap: sub.properties.gap || "1rem",
+                    ...(sub.properties.style || {}), // THE FIX IS HERE
                   };
                   if (sub.properties.display === "grid") {
                     subsectionStyle.gridTemplateColumns =

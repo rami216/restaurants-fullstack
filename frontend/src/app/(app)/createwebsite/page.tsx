@@ -406,10 +406,49 @@ const CreateWebsitePage = () => {
   };
   //endregion copy
   // --- START: NEW FUNCTION TO HANDLE SECTION GENERATION ---
+  // const handleGenerateSection = async (prompt: string, sectionId: string) => {
+  //   if (!activePage) return;
+
+  //   try {
+  //     const { data } = await api.post("/ai/generate-ai-section", { prompt });
+
+  //     // The AI returns subsections. We need to assign new unique IDs to them and their elements.
+  //     const newSubsections: Subsection[] = data.subsections.map((sub: any) => ({
+  //       ...sub,
+  //       subsection_id: `subsection_${Date.now()}_${Math.random()}`,
+  //       elements: sub.elements.map((el: any) => ({
+  //         ...el,
+  //         element_id: `element_${Date.now()}_${Math.random()}`,
+  //       })),
+  //     }));
+
+  //     const updatedPage = {
+  //       ...activePage,
+  //       sections: activePage.sections.map((section) => {
+  //         if (section.section_id === sectionId) {
+  //           // Replace the subsections of the selected section
+  //           return {
+  //             ...section,
+  //             subsections: newSubsections,
+  //           };
+  //         }
+  //         return section;
+  //       }),
+  //     };
+
+  //     updateWebsiteData(updatedPage);
+  //   } catch (err) {
+  //     console.error("AI section generation failed:", err);
+  //     alert("AI section generation failed. Please check the console.");
+  //     // Re-throw to let the child component know the request failed
+  //     throw err;
+  //   }
+  // };
   const handleGenerateSection = async (prompt: string, sectionId: string) => {
     if (!activePage) return;
 
     try {
+      // The AI response now contains { properties: {...}, subsections: [...] }
       const { data } = await api.post("/ai/generate-ai-section", { prompt });
 
       // The AI returns subsections. We need to assign new unique IDs to them and their elements.
@@ -426,9 +465,11 @@ const CreateWebsitePage = () => {
         ...activePage,
         sections: activePage.sections.map((section) => {
           if (section.section_id === sectionId) {
-            // Replace the subsections of the selected section
+            // THE FIX:
+            // Replace the section's properties AND its subsections with the AI's response.
             return {
               ...section,
+              properties: data.properties, // <-- THIS IS THE NEW LINE
               subsections: newSubsections,
             };
           }

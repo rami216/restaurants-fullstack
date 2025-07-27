@@ -41,6 +41,7 @@ export interface Subsection {
     gap?: string;
     /** ← this must be here: */
     animation?: AnimationProps;
+    style?: React.CSSProperties; // <-- ADD THIS
   };
   elements: Element[];
 }
@@ -58,6 +59,7 @@ export interface Section {
     justifyContent?: "flex-start" | "center" | "flex-end" | "space-between";
     alignItems?: "flex-start" | "center" | "flex-end";
     gap?: string;
+    // style?: React.CSSProperties; // <-- OPTIONAL BUT RECOMMENDED
   };
   subsections: Subsection[];
 }
