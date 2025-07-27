@@ -187,7 +187,7 @@ async def create_element(element_data: schemas.ElementCreate, db: AsyncSession =
     new_element = Element(**element_data.model_dump(by_alias=False))
     db.add(new_element)
     await db.commit()
-    await db.refresh(new_element)
+    # await db.refresh(new_element)
     return new_element
 
 # --- UPDATE update_element ---
@@ -205,7 +205,7 @@ async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, 
             flag_modified(db_element, key)
 
     await db.commit()
-    await db.refresh(db_element)
+    # await db.refresh(db_element)
     return db_element
 
 

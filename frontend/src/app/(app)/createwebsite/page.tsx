@@ -13,6 +13,8 @@ import {
   Location,
   Category,
   Navbar,
+  Element,
+  Subsection,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 import { v4 as uuidv4 } from "uuid";
@@ -44,6 +46,10 @@ const CreateWebsitePage = () => {
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
   const [isPropertiesExpanded, setIsPropertiesExpanded] = useState(true);
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
+
+  // --- START: ADD STATE FOR CLIPBOARD ---
+  const [clipboard, setClipboard] = useState<Element | null>(null);
+  // --- END: ADD STATE FOR CLIPBOARD ---
 
   const isTempId = (id: string) =>
     typeof id === "string" &&
@@ -355,6 +361,90 @@ const CreateWebsitePage = () => {
     }
   };
 
+  //region copy-paste
+  const handleCopyElement = () => {
+    if (selectedItem && selection.type === "element") {
+      setClipboard(selectedItem as Element);
+      // You can add a toast notification here for better UX
+      console.log("Element copied:", selectedItem);
+    }
+  };
+
+  const handlePasteElement = () => {
+    if (
+      !clipboard ||
+      selection.type !== "subsection" ||
+      !selection.id ||
+      !activePage
+    ) {
+      return;
+    }
+
+    // Create a deep copy with a new unique ID
+    const newElement: Element = {
+      ...JSON.parse(JSON.stringify(clipboard)),
+      element_id: `element_${Date.now()}`,
+    };
+
+    const updatedPage = {
+      ...activePage,
+      sections: activePage.sections.map((section) => ({
+        ...section,
+        subsections: section.subsections.map((subsection) => {
+          if (subsection.subsection_id === selection.id) {
+            return {
+              ...subsection,
+              elements: [...subsection.elements, newElement],
+            };
+          }
+          return subsection;
+        }),
+      })),
+    };
+
+    updateWebsiteData(updatedPage);
+  };
+  //endregion copy
+  // --- START: NEW FUNCTION TO HANDLE SECTION GENERATION ---
+  const handleGenerateSection = async (prompt: string, sectionId: string) => {
+    if (!activePage) return;
+
+    try {
+      const { data } = await api.post("/ai/generate-ai-section", { prompt });
+
+      // The AI returns subsections. We need to assign new unique IDs to them and their elements.
+      const newSubsections: Subsection[] = data.subsections.map((sub: any) => ({
+        ...sub,
+        subsection_id: `subsection_${Date.now()}_${Math.random()}`,
+        elements: sub.elements.map((el: any) => ({
+          ...el,
+          element_id: `element_${Date.now()}_${Math.random()}`,
+        })),
+      }));
+
+      const updatedPage = {
+        ...activePage,
+        sections: activePage.sections.map((section) => {
+          if (section.section_id === sectionId) {
+            // Replace the subsections of the selected section
+            return {
+              ...section,
+              subsections: newSubsections,
+            };
+          }
+          return section;
+        }),
+      };
+
+      updateWebsiteData(updatedPage);
+    } catch (err) {
+      console.error("AI section generation failed:", err);
+      alert("AI section generation failed. Please check the console.");
+      // Re-throw to let the child component know the request failed
+      throw err;
+    }
+  };
+  // --- END: NEW FUNCTION TO HANDLE SECTION GENERATION ---
   if (loading)
     return (
       <div className="flex justify-center items-center h-screen">
@@ -446,6 +536,10 @@ const CreateWebsitePage = () => {
           onUpdateWebsite={(updatedWebsite) => setWebsiteData(updatedWebsite)}
           onDelete={handleDeleteItem}
           onCreatePage={handleCreatePage}
+          clipboard={clipboard}
+          onCopy={handleCopyElement}
+          onPaste={handlePasteElement}
+          onGenerateSection={handleGenerateSection}
         />
       </aside>
     </div>
