@@ -47,7 +47,13 @@ const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
   const { aiTemplate, properties: aiProps } = aiPayload;
   const html = Mustache.render(aiTemplate, aiProps);
 
-  return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
+  return (
+    <div
+      ref={containerRef}
+      className="w-full max-w-full overflow-x-hidden"
+      dangerouslySetInnerHTML={{ __html: html }}
+    />
+  );
 };
 // --- Add this component inside PublicCanvas.tsx ---
 // const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
@@ -255,7 +261,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         {currentPage?.sections.map((sec: SectionType) => (
           <div key={sec.section_id} style={sec.properties}>
             <div
-              className="flex flex-wrap"
+              className="w-full overflow-x-hidden"
               style={{
                 display: "flex",
                 flexDirection: sec.properties.flexDirection,
@@ -274,6 +280,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
                 return (
                   <motion.div
+                    className="max-w-full"
                     key={sub.subsection_id}
                     style={styleProps}
                     initial={initial}
@@ -497,7 +504,9 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 router.push(`/${websiteData.subdomain}${targetPage.slug}`);
               }
             }}
-            className={isClickable ? "cursor-pointer" : ""}
+            className={`${
+              isClickable ? "cursor-pointer" : ""
+            } w-full max-w-full`}
             // THE FIX: The key now forces a complete remount of the component on page change.
             key={`${currentPage?.page_id}-${element.element_id}`}
           >
@@ -513,7 +522,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   if (!currentPage) return <div className="p-8">Page not found</div>;
 
   return (
-    <div className="bg-white min-h-screen m-0 p-0">
+    <div className="bg-white min-h-screen m-0 p-0 w-full overflow-x-hidden">
       <NavBar />
       <MainContent />
     </div>

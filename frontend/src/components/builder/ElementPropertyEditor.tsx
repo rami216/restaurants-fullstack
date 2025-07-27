@@ -9,6 +9,7 @@ import {
   AccordionItem,
   NavbarItem,
   AnimationProps,
+  Element,
 } from "./Properties";
 import api from "@/lib/axios";
 import { Page } from "./Properties";
@@ -26,6 +27,8 @@ import {
   X,
   Check,
   Edit,
+  Copy,
+  ClipboardPaste,
 } from "lucide-react";
 import Mustache from "mustache";
 
@@ -40,6 +43,10 @@ interface PropertyEditorProps {
   onUpdateWebsite: (updatedWebsite: any) => void; // For navbar updates
   onDelete: () => void;
   onCreatePage: (title: string) => void;
+  clipboard: Element | null;
+  onCopy: () => void;
+  onPaste: () => void;
+  onGenerateSection: (prompt: string, sectionId: string) => void;
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
@@ -53,7 +60,30 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onUpdateWebsite,
   onDelete,
   onCreatePage,
+  clipboard,
+  onCopy,
+  onPaste,
+  onGenerateSection,
 }) => {
+  // --- START: ADD STATE FOR SECTION AI ---
+  const [sectionAiPrompt, setSectionAiPrompt] = useState("");
+  const [isGeneratingSection, setIsGeneratingSection] = useState(false);
+
+  const handleGenerateSectionClick = async () => {
+    if (!sectionAiPrompt.trim() || !selectedItem || selectionType !== "section")
+      return;
+    setIsGeneratingSection(true);
+    try {
+      await onGenerateSection(sectionAiPrompt, selectedItem.section_id);
+      setSectionAiPrompt("");
+    } catch (error) {
+      // Error is handled in the parent component
+    } finally {
+      setIsGeneratingSection(false);
+    }
+  };
+  // --- END: ADD STATE FOR SECTION AI ---
+
   const [isUploading, setIsUploading] = useState(false);
   const [isAddingPage, setIsAddingPage] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
@@ -653,6 +683,30 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const renderSectionEditor = () => (
     <div className="space-y-4">
       {/* --- NEW: Background Image Uploader --- */}
+      {/* --- START: NEW AI SECTION GENERATOR UI --- */}
+      <div>
+        <h4 className="text-md font-medium text-gray-800 mb-2">
+          Generate Layout with AI
+        </h4>
+        <div className="p-3 border rounded-md bg-gray-50">
+          <textarea
+            rows={4}
+            className="w-full border rounded p-2 text-sm"
+            placeholder="Describe the layout you want, e.g., 'a two-column section with an image and a call-to-action button'."
+            value={sectionAiPrompt}
+            onChange={(e) => setSectionAiPrompt(e.target.value)}
+          />
+          <button
+            onClick={handleGenerateSectionClick}
+            disabled={isGeneratingSection || !sectionAiPrompt.trim()}
+            className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+          >
+            {isGeneratingSection ? "Generating..." : "Generate Section Layout"}
+          </button>
+        </div>
+      </div>
+      <hr />
+      {/* --- END: NEW AI SECTION GENERATOR UI --- */}
       <div>
         <label className="block text-sm font-medium text-gray-700">
           Background Image
@@ -2181,7 +2235,45 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         <div className="overflow-y-auto flex-grow">
           {selectedItem ? (
             <>
+              {/* --- START: EDIT --- */}
               <div className="flex justify-between items-center mb-4">
+                <h3 className="text-lg text-gray-600 font-mono capitalize">
+                  {selectionType?.replace("_", " ")}
+                </h3>
+                <div className="flex items-center space-x-2">
+                  {/* Show Copy button for elements */}
+                  {selectionType === "element" && (
+                    <button
+                      onClick={onCopy}
+                      title="Copy Element"
+                      className="p-2 rounded-full hover:bg-gray-200"
+                    >
+                      <Copy size={16} />
+                    </button>
+                  )}
+                  {/* Show Paste button for subsections if something is in clipboard */}
+                  {selectionType === "subsection" && clipboard && (
+                    <button
+                      onClick={onPaste}
+                      title="Paste Element"
+                      className="p-2 rounded-full hover:bg-gray-200"
+                    >
+                      <ClipboardPaste size={16} />
+                    </button>
+                  )}
+                  {/* Delete button */}
+                  {selectionType !== "navbar" && (
+                    <button
+                      onClick={handleDelete}
+                      className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100"
+                    >
+                      <Trash2 size={18} />
+                    </button>
+                  )}
+                </div>
+              </div>
+              {/* --- END: EDIT --- */}
+              {/* <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg text-gray-600 font-mono capitalize">
                   {selectionType?.replace("_", " ")}
                 </h3>
@@ -2193,7 +2285,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     <Trash2 size={18} />
                   </button>
                 )}
-              </div>
+              </div> */}
 
               {selectionType === "section" && renderSectionEditor()}
               {selectionType === "subsection" && renderSubsectionEditor()}

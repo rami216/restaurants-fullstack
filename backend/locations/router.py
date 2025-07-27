@@ -47,7 +47,7 @@ async def create_location(
         select(RestaurantBrand).where(RestaurantBrand.brand_id == payload.brand_id)
     )
     brand = result.scalars().first()
-
+    
     if not brand:
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
