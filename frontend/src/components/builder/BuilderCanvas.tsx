@@ -481,26 +481,34 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
       <div className="space-y-4">
         {page.sections.map((section) => {
-          // build section style
-          // THIS IS THE CORRECT REVERTED CODE (WITH SAFETY CHECK)
+          // // build section style
+          // // THIS IS THE CORRECT REVERTED CODE (WITH SAFETY CHECK)
+          // const properties = section.properties || {};
+
+          // // 2. Build the main section style using the safe 'properties' object.
+          // const sectionStyle: React.CSSProperties = { ...properties };
+          // if (properties.backgroundImage) {
+          //   sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${properties.backgroundImage})`;
+          //   sectionStyle.backgroundSize = "cover";
+          //   sectionStyle.backgroundPosition = "center";
+          // }
           const properties = section.properties || {};
 
-          // 2. Build the main section style using the safe 'properties' object.
-          const sectionStyle: React.CSSProperties = { ...properties };
-          if (properties.backgroundImage) {
+          // THE NEW LOGIC: Combine manual properties and AI styles
+          const sectionStyle: React.CSSProperties = {
+            ...properties, // 1. Apply manual properties first as a base
+            ...(properties.style || {}), // 2. Apply AI styles, which will override the base
+          };
+
+          // 3. Keep this block to handle manually uploaded images correctly
+          if (
+            properties.backgroundImage &&
+            !properties.backgroundImage.startsWith("linear-gradient")
+          ) {
             sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${properties.backgroundImage})`;
             sectionStyle.backgroundSize = "cover";
             sectionStyle.backgroundPosition = "center";
           }
-          // const sectionStyle: React.CSSProperties = {
-          //   ...section.properties,
-          //   ...(section.properties.style || {}), // THE FIX IS HERE
-          // };
-          // if (section.properties.backgroundImage) {
-          //   sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${section.properties.backgroundImage})`;
-          //   sectionStyle.backgroundSize = "cover";
-          //   sectionStyle.backgroundPosition = "center";
-          // }
 
           return (
             <div

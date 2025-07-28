@@ -29,6 +29,8 @@ import {
   Edit,
   Copy,
   ClipboardPaste,
+  ArrowUp, // <-- ADD THIS
+  ArrowDown, // <-- ADD THIS
 } from "lucide-react";
 import Mustache from "mustache";
 
@@ -47,6 +49,7 @@ interface PropertyEditorProps {
   onCopy: () => void;
   onPaste: () => void;
   onGenerateSection: (prompt: string, sectionId: string) => void;
+  onMoveSection: (sectionId: string, direction: "up" | "down") => void; // <-- ADD THIS
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
@@ -64,6 +67,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onCopy,
   onPaste,
   onGenerateSection,
+  onMoveSection,
 }) => {
   // --- START: ADD STATE FOR SECTION AI ---
   const [sectionAiPrompt, setSectionAiPrompt] = useState("");
@@ -821,13 +825,164 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   //     </div>
   //   </div>
   // );
+  // const renderSectionEditor = () => {
+  //   const properties = selectedItem.properties || {};
+
+  //   return (
+  //     <div className="space-y-4">
+  //       {/* --- AI SECTION GENERATOR UI --- */}
+  //       <div>
+  //         <h4 className="text-md font-medium text-gray-800 mb-2">
+  //           Generate Layout with AI
+  //         </h4>
+  //         <div className="p-3 border rounded-md bg-gray-50">
+  //           <textarea
+  //             rows={4}
+  //             className="w-full border rounded p-2 text-sm"
+  //             placeholder="Describe the layout you want..."
+  //             value={sectionAiPrompt}
+  //             onChange={(e) => setSectionAiPrompt(e.target.value)}
+  //           />
+  //           <button
+  //             onClick={handleGenerateSectionClick}
+  //             disabled={isGeneratingSection || !sectionAiPrompt.trim()}
+  //             className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+  //           >
+  //             {isGeneratingSection
+  //               ? "Generating..."
+  //               : "Generate Section Layout"}
+  //           </button>
+  //         </div>
+  //       </div>
+  //       <hr />
+
+  //       {/* --- Background Image Uploader --- */}
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Background Image
+  //         </label>
+  //         <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
+  //           {/* Use the safe 'properties' object here */}
+  //           {properties.backgroundImage ? (
+  //             <div className="text-center">
+  //               <img
+  //                 src={`${api.defaults.baseURL}${properties.backgroundImage}`}
+  //                 alt="Background Preview"
+  //                 className="max-h-32 w-full object-cover mx-auto rounded-md"
+  //               />
+  //               <button
+  //                 onClick={() => handlePropertyChange("backgroundImage", "")}
+  //                 className="mt-2 text-xs text-red-600 hover:text-red-800"
+  //               >
+  //                 Remove Image
+  //               </button>
+  //             </div>
+  //           ) : (
+  //             <div className="text-center py-4">
+  //               <input
+  //                 type="file"
+  //                 id="bg-image-upload"
+  //                 className="hidden"
+  //                 accept="image/png, image/jpeg, image/webp, image/gif"
+  //                 onChange={handleImageUpload}
+  //                 disabled={isUploading}
+  //               />
+  //               <label
+  //                 htmlFor="bg-image-upload"
+  //                 className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
+  //                   isUploading ? "opacity-50 cursor-not-allowed" : ""
+  //                 }`}
+  //               >
+  //                 {isUploading ? "Uploading..." : "Upload an image"}
+  //               </label>
+  //               <p className="text-xs text-gray-500 mt-1">
+  //                 PNG, JPG, WEBP, GIF
+  //               </p>
+  //             </div>
+  //           )}
+  //         </div>
+  //       </div>
+
+  //       {/* Other section properties --- all now using the safe 'properties' object */}
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Layout Direction (for subsections)
+  //         </label>
+  //         <select
+  //           value={properties.flexDirection || "row"}
+  //           onChange={(e) =>
+  //             handlePropertyChange("flexDirection", e.target.value)
+  //           }
+  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //         >
+  //           <option value="row">Horizontal (Columns)</option>
+  //           <option value="column">Vertical (Rows)</option>
+  //         </select>
+  //       </div>
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Justify Subsections
+  //         </label>
+  //         <select
+  //           value={properties.justifyContent || "flex-start"}
+  //           onChange={(e) =>
+  //             handlePropertyChange("justifyContent", e.target.value)
+  //           }
+  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //         >
+  //           <option value="flex-start">Start</option>
+  //           <option value="center">Center</option>
+  //           <option value="flex-end">End</option>
+  //           <option value="space-between">Space Between</option>
+  //         </select>
+  //       </div>
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Gap Between Subsections
+  //         </label>
+  //         <input
+  //           type="text"
+  //           value={properties.gap || "1rem"}
+  //           onChange={(e) => handlePropertyChange("gap", e.target.value)}
+  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //           placeholder="e.g., 1rem, 16px"
+  //         />
+  //       </div>
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Padding
+  //         </label>
+  //         <input
+  //           type="text"
+  //           value={properties.padding || "2rem"}
+  //           onChange={(e) => handlePropertyChange("padding", e.target.value)}
+  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //         />
+  //       </div>
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Background Color
+  //         </label>
+  //         <input
+  //           type="color"
+  //           value={properties.backgroundColor || "#ffffff"}
+  //           onChange={(e) =>
+  //             handlePropertyChange("backgroundColor", e.target.value)
+  //           }
+  //           className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+  //         />
+  //       </div>
+  //     </div>
+  //   );
+  // };
   const renderSectionEditor = () => {
-    // THE FIX: Create a safe 'properties' object that defaults to an empty object
+    // Create safe objects for properties and the nested style object
     const properties = selectedItem.properties || {};
+    const style = properties.style || {};
 
     return (
       <div className="space-y-4">
-        {/* --- AI SECTION GENERATOR UI --- */}
+        {/* --- AI SECTION GENERATOR UI (No changes needed) --- */}
         <div>
           <h4 className="text-md font-medium text-gray-800 mb-2">
             Generate Layout with AI
@@ -853,13 +1008,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         </div>
         <hr />
 
-        {/* --- Background Image Uploader --- */}
+        {/* --- Background Image Uploader (No changes needed) --- */}
+        {/* This continues to work with the top-level 'backgroundImage' property */}
         <div>
           <label className="block text-sm font-medium text-gray-700">
             Background Image
           </label>
           <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
-            {/* Use the safe 'properties' object here */}
             {properties.backgroundImage ? (
               <div className="text-center">
                 <img
@@ -900,7 +1055,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           </div>
         </div>
 
-        {/* Other section properties --- all now using the safe 'properties' object */}
+        {/* --- Layout Controls (No changes needed) --- */}
+        {/* These correctly edit the top-level layout properties */}
         <div>
           <label className="block text-sm font-medium text-gray-700">
             Layout Direction (for subsections)
@@ -945,14 +1101,18 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             placeholder="e.g., 1rem, 16px"
           />
         </div>
+
+        {/* --- Visual Style Controls (THE FIX IS HERE) --- */}
         <div>
           <label className="block text-sm font-medium text-gray-700">
             Padding
           </label>
           <input
             type="text"
-            value={properties.padding || "2rem"}
-            onChange={(e) => handlePropertyChange("padding", e.target.value)}
+            // 1. Read from the AI's 'style' object first, then fall back to the manual property
+            value={style.padding || properties.padding || "2rem"}
+            // 2. ALWAYS write the change to the 'style' object so it overrides the AI style
+            onChange={(e) => handleStyleChange("padding", e.target.value)}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
           />
         </div>
@@ -962,9 +1122,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           </label>
           <input
             type="color"
-            value={properties.backgroundColor || "#ffffff"}
+            // 1. Read from the AI's 'style' object first, then fall back to the manual property
+            value={
+              style.backgroundColor || properties.backgroundColor || "#ffffff"
+            }
+            // 2. ALWAYS write the change to the 'style' object
             onChange={(e) =>
-              handlePropertyChange("backgroundColor", e.target.value)
+              handleStyleChange("backgroundColor", e.target.value)
             }
             className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
           />
@@ -2421,6 +2585,44 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       <Trash2 size={18} />
                     </button>
                   )}
+                  {/* START: ADD THE NEW MOVE CONTROLS HERE */}
+                  <div className="flex justify-between items-center mb-4 p-2 border rounded-md">
+                    <span className="text-sm font-medium text-gray-700">
+                      Move Section
+                    </span>
+                    <div className="flex items-center space-x-1">
+                      <button
+                        onClick={() =>
+                          onMoveSection(selectedItem.section_id, "up")
+                        }
+                        disabled={
+                          activePage?.sections.findIndex(
+                            (s) => s.section_id === selectedItem.section_id
+                          ) === 0
+                        }
+                        className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Move Up"
+                      >
+                        <ArrowUp size={16} />
+                      </button>
+                      <button
+                        onClick={() =>
+                          onMoveSection(selectedItem.section_id, "down")
+                        }
+                        disabled={
+                          activePage?.sections.findIndex(
+                            (s) => s.section_id === selectedItem.section_id
+                          ) ===
+                          activePage.sections.length - 1
+                        }
+                        className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
+                        title="Move Down"
+                      >
+                        <ArrowDown size={16} />
+                      </button>
+                    </div>
+                  </div>
+                  {/* END: NEW MOVE CONTROLS */}
                 </div>
               </div>
               {/* --- END: EDIT --- */}

@@ -256,66 +256,228 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     }
 
     // Normal page sections
+    // return (
+    //   <div className="space-y-0">
+    //     {currentPage?.sections.map((sec: SectionType) => (
+    //       <div key={sec.section_id} style={sec.properties || {}}>
+    //         <div
+    //           className="w-full overflow-x-hidden"
+    //           style={{
+    //             display: "flex",
+    //             flexDirection: sec.properties.flexDirection,
+    //             justifyContent: sec.properties.justifyContent,
+    //             alignItems: sec.properties.alignItems,
+    //             gap: sec.properties.gap,
+    //           }}
+    //         >
+    //           {sec.subsections.map((sub) => {
+    //             // remove animation before spreading into style
+    //             const { animation, style, ...styleProps } = sub.properties; // <-- CHANGE IS HERE
+
+    //             // get your motion config from that optional animation
+    //             const { initial, animate, transition } =
+    //               getMotionConfig(animation);
+
+    //             return (
+    //               <motion.div
+    //                 className="max-w-full"
+    //                 key={sub.subsection_id}
+    //                 style={{ ...styleProps, ...(style || {}) }}
+    //                 initial={initial}
+    //                 animate={animate}
+    //                 transition={transition}
+    //               >
+    //                 {sub.elements.map((el) => {
+    //                   // --- THIS IS THE FIX ---
+    //                   // We wrap the element rendering in a try-catch block.
+    //                   try {
+    //                     return (
+    //                       <div key={el.element_id}>{renderElement(el)}</div>
+    //                     );
+    //                   } catch (error) {
+    //                     console.error("Failed to render element:", el, error);
+    //                     return (
+    //                       <div
+    //                         key={el.element_id}
+    //                         className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
+    //                       >
+    //                         Error: This element could not be displayed.
+    //                       </div>
+    //                     );
+    //                   }
+    //                   // --- END OF FIX ---
+    //                 })}
+    //               </motion.div>
+    //             );
+    //           })}
+    //         </div>
+    //       </div>
+    //     ))}
+    //   </div>
+    // );
+    // return (
+    //   <div className="space-y-0">
+    //     {currentPage?.sections.map((sec: SectionType) => {
+    //       // 1. Create a safe properties object for the section
+    //       const secProperties = sec.properties || {};
+
+    //       // 2. Combine the section's manual properties with its AI-generated style object
+    //       const sectionStyle: React.CSSProperties = {
+    //         ...secProperties,
+    //         ...(secProperties.style || {}),
+    //       };
+
+    //       // 3. Keep the special handling for manually uploaded images
+    //       if (
+    //         sectionStyle.backgroundImage &&
+    //         !sectionStyle.backgroundImage.startsWith("linear-gradient") &&
+    //         !sectionStyle.backgroundImage.startsWith("radial-gradient")
+    //       ) {
+    //         sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${sectionStyle.backgroundImage})`;
+    //         sectionStyle.backgroundSize = "cover";
+    //         sectionStyle.backgroundPosition = "center";
+    //       }
+
+    //       return (
+    //         // The main section container now has all the correct styles
+    //         <div key={sec.section_id} style={sectionStyle}>
+    //           {/* This inner div is now just for structure, no style prop needed */}
+    //           <div className="w-full overflow-x-hidden flex flex-wrap">
+    //             {sec.subsections.map((sub) => {
+    //               // 4. Create a safe properties object for the subsection
+    //               const subProperties = sub.properties || {};
+    //               const { animation, style, ...layoutProps } = subProperties;
+
+    //               // 5. Get animation config
+    //               const { initial, animate, transition } =
+    //                 getMotionConfig(animation);
+
+    //               // 6. Combine subsection layout styles with its AI style object
+    //               const subsectionStyle = { ...layoutProps, ...(style || {}) };
+
+    //               return (
+    //                 <motion.div
+    //                   className="max-w-full"
+    //                   key={sub.subsection_id}
+    //                   style={subsectionStyle}
+    //                   initial={initial}
+    //                   animate={animate}
+    //                   transition={transition}
+    //                 >
+    //                   {sub.elements.map((el) => {
+    //                     try {
+    //                       return (
+    //                         <div key={el.element_id}>{renderElement(el)}</div>
+    //                       );
+    //                     } catch (error) {
+    //                       console.error("Failed to render element:", el, error);
+    //                       return (
+    //                         <div
+    //                           key={el.element_id}
+    //                           className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
+    //                         >
+    //                           Error: This element could not be displayed.
+    //                         </div>
+    //                       );
+    //                     }
+    //                   })}
+    //                 </motion.div>
+    //               );
+    //             })}
+    //           </div>
+    //         </div>
+    //       );
+    //     })}
+    //   </div>
+    // );
     return (
       <div className="space-y-0">
-        {currentPage?.sections.map((sec: SectionType) => (
-          <div
-          key={sec.section_id}
-          style={sec.properties || {}}
-        >
-            <div
-              className="w-full overflow-x-hidden"
-              style={{
-                display: "flex",
-                flexDirection: sec.properties.flexDirection,
-                justifyContent: sec.properties.justifyContent,
-                alignItems: sec.properties.alignItems,
-                gap: sec.properties.gap,
-              }}
-            >
-              {sec.subsections.map((sub) => {
-                // remove animation before spreading into style
-                const { animation, style, ...styleProps } = sub.properties; // <-- CHANGE IS HERE
+        {currentPage?.sections.map((sec: SectionType) => {
+          // 1. Safely get the section's properties, defaulting to an empty object
+          const properties = sec.properties || {};
 
-                // get your motion config from that optional animation
-                const { initial, animate, transition } =
-                  getMotionConfig(animation);
+          // 2. Separate styles for the outer container (background, padding)
+          const containerStyle: React.CSSProperties = {
+            backgroundColor: properties.backgroundColor,
+            backgroundImage: properties.backgroundImage,
+            padding: properties.padding,
+            ...(properties.style || {}), // Merge AI styles, which can override the above
+          };
 
-                return (
-                  <motion.div
-                    className="max-w-full"
-                    key={sub.subsection_id}
-                    style={{ ...styleProps, ...(style || {}) }}
-                    initial={initial}
-                    animate={animate}
-                    transition={transition}
-                  >
-                    {sub.elements.map((el) => {
-                      // --- THIS IS THE FIX ---
-                      // We wrap the element rendering in a try-catch block.
-                      try {
-                        return (
-                          <div key={el.element_id}>{renderElement(el)}</div>
-                        );
-                      } catch (error) {
-                        console.error("Failed to render element:", el, error);
-                        return (
-                          <div
-                            key={el.element_id}
-                            className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
-                          >
-                            Error: This element could not be displayed.
-                          </div>
-                        );
-                      }
-                      // --- END OF FIX ---
-                    })}
-                  </motion.div>
-                );
-              })}
+          // 3. Separate styles for the inner layout container (flexbox, gap)
+          const layoutStyle: React.CSSProperties = {
+            display: "flex",
+            flexDirection: properties.flexDirection,
+            justifyContent: properties.justifyContent,
+            alignItems: properties.alignItems,
+            gap: properties.gap,
+          };
+
+          // 4. Handle special formatting for manually uploaded background images
+          if (
+            containerStyle.backgroundImage &&
+            !containerStyle.backgroundImage.includes("gradient") // <-- THE ONLY CHANGE IS HERE
+          ) {
+            containerStyle.backgroundImage = `url(${api.defaults.baseURL}${containerStyle.backgroundImage})`;
+            containerStyle.backgroundSize = "cover";
+            containerStyle.backgroundPosition = "center";
+          }
+
+          return (
+            // The outer div gets the container styles
+            <div key={sec.section_id} style={containerStyle}>
+              {/* The inner div gets the layout styles, arranging the subsections */}
+              <div
+                className="w-full overflow-x-hidden flex flex-wrap"
+                style={layoutStyle}
+              >
+                {sec.subsections.map((sub) => {
+                  // Safely get subsection properties
+                  const subProperties = sub.properties || {};
+                  const { animation, style, ...subLayoutParams } =
+                    subProperties;
+                  const { initial, animate, transition } =
+                    getMotionConfig(animation);
+
+                  // Combine subsection layout and AI styles
+                  const subsectionStyle = {
+                    ...subLayoutParams,
+                    ...(style || {}),
+                  };
+
+                  return (
+                    <motion.div
+                      className="max-w-full"
+                      key={sub.subsection_id}
+                      style={subsectionStyle}
+                      initial={initial}
+                      animate={animate}
+                      transition={transition}
+                    >
+                      {sub.elements.map((el) => {
+                        try {
+                          return (
+                            <div key={el.element_id}>{renderElement(el)}</div>
+                          );
+                        } catch (error) {
+                          console.error("Failed to render element:", el, error);
+                          return (
+                            <div
+                              key={el.element_id}
+                              className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
+                            >
+                              Error: This element could not be displayed.
+                            </div>
+                          );
+                        }
+                      })}
+                    </motion.div>
+                  );
+                })}
+              </div>
             </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     );
   };

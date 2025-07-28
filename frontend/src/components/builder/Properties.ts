@@ -59,7 +59,7 @@ export interface Section {
     justifyContent?: "flex-start" | "center" | "flex-end" | "space-between";
     alignItems?: "flex-start" | "center" | "flex-end";
     gap?: string;
-    // style?: React.CSSProperties; // <-- OPTIONAL BUT RECOMMENDED
+    style?: React.CSSProperties; // <-- OPTIONAL BUT RECOMMENDED
   };
   subsections: Subsection[];
 }

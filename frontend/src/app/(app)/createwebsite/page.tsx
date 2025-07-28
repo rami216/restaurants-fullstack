@@ -57,6 +57,35 @@ const CreateWebsitePage = () => {
       /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
     );
 
+  const handleMoveSection = (sectionId: string, direction: "up" | "down") => {
+    if (!activePage) return;
+
+    const sections = [...activePage.sections];
+    const index = sections.findIndex((s) => s.section_id === sectionId);
+
+    // Stop if the section is already at the top or bottom
+    if (
+      (direction === "up" && index === 0) ||
+      (direction === "down" && index === sections.length - 1)
+    ) {
+      return;
+    }
+
+    const newIndex = direction === "up" ? index - 1 : index + 1;
+
+    // Swap the elements
+    const movedSection = sections.splice(index, 1)[0];
+    sections.splice(newIndex, 0, movedSection);
+
+    // Update the 'position' property for all sections to reflect the new order
+    const updatedSections = sections.map((section, pos) => ({
+      ...section,
+      position: pos,
+    }));
+
+    updateWebsiteData({ ...activePage, sections: updatedSections });
+  };
+
   const fetchWebsiteData = async () => {
     setLoading(true);
     try {
@@ -581,6 +610,7 @@ const CreateWebsitePage = () => {
           onCopy={handleCopyElement}
           onPaste={handlePasteElement}
           onGenerateSection={handleGenerateSection}
+          onMoveSection={handleMoveSection} // <-- ADD THIS PROP
         />
       </aside>
     </div>

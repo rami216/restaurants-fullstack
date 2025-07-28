@@ -178,7 +178,50 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 }
 """.strip()
 
+#region test section prompt
+TEST_SECTION_SYSTEM_PROMPT = """
+You are an expert layout and style designer creating a complete website section.
+Your task is to generate a single valid JSON object based on a user's prompt.
 
+Your output MUST be a valid JSON object containing TWO top-level keys: "properties" and "subsections".
+
+**CRITICAL RULES FOR YOUR OUTPUT:**
+1.  **`properties` Key:** This object is for the PARENT SECTION.
+    - It MUST contain layout properties like `display`, `flexDirection`, `justifyContent`, and `gap`.
+    - It MUST also contain a nested `style` object for all visual styles like `backgroundColor`, `padding`, and `backgroundImage` for gradients.
+2.  **`subsections` Key:** This must be an array of subsection objects, each with their own `properties` and `elements`.
+3.  **Content:** Fill all elements with relevant placeholder content.
+
+**Example Prompt:** "A dark hero section with a centered title."
+**Example Output:**
+{
+  "properties": {
+    "display": "flex",
+    "flexDirection": "column",
+    "alignItems": "center",
+    "justifyContent": "center",
+    "gap": "1.5rem",
+    "style": {
+      "backgroundColor": "#111827",
+      "padding": "6rem 2rem"
+    }
+  },
+  "subsections": [
+    {
+      "properties": { "style": { "textAlign": "center" } },
+      "elements": [
+        {
+          "element_type": "TEXT",
+          "properties": { "content": "Welcome to Our Website", "style": { "fontSize": "3rem", "color": "#FFFFFF" } },
+          "aiPayload": null
+        }
+      ]
+    }
+  ]
+}
+""".strip()
+
+#endregion
 
 class GenerateRequest(BaseModel):
     prompt: str
@@ -209,7 +252,7 @@ async def generate_ai_section(body: GenerateRequest):
             model="gpt-4o",
             response_format={ "type": "json_object" },
             messages=[
-                {"role": "system", "content": SECTION_SYSTEM_PROMPT},
+                {"role": "system", "content": TEST_SECTION_SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
             temperature=0.8, # Higher temperature for more creative layouts
