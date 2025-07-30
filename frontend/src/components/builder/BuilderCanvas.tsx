@@ -105,6 +105,7 @@ interface BuilderCanvasProps {
   onPageSwitch: (pageId: string) => void;
   websiteData: WebsiteData | null;
   isPreview?: boolean;
+  onGeneratePage: (prompt: string) => Promise<void>; // <-- ADD THIS
 }
 
 const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
@@ -116,7 +117,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onPageSwitch,
   websiteData,
   isPreview = false,
+  onGeneratePage,
 }) => {
+  const [pageAiPrompt, setPageAiPrompt] = useState("");
+  const [isGeneratingPage, setIsGeneratingPage] = useState(false);
   // --- State for preview navigation ---
   const [currentPage, setCurrentPage] = useState(page);
   const handlePreviewPageSwitch = (pageId: string) => {
@@ -532,6 +536,33 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </div>
           );
         })}
+        {/* --- START: NEW PAGE GENERATOR UI --- */}
+        {!isPreview && (
+          <div className="mt-6 p-4 border-2 border-dashed border-purple-400 rounded-lg bg-purple-50">
+            <h3 className="text-lg font-semibold text-purple-800 mb-2">
+              Generate Whole Page with AI
+            </h3>
+            <textarea
+              className="w-full border rounded p-2 text-sm"
+              rows={3}
+              placeholder="Describe the page you want to create, e.g., 'An elegant 'About Us' page for a cafe'."
+              value={pageAiPrompt}
+              onChange={(e) => setPageAiPrompt(e.target.value)}
+            />
+            <button
+              onClick={async () => {
+                setIsGeneratingPage(true);
+                await onGeneratePage(pageAiPrompt);
+                setIsGeneratingPage(false);
+              }}
+              disabled={isGeneratingPage || !pageAiPrompt.trim()}
+              className="mt-2 w-full bg-purple-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {isGeneratingPage ? "Generating Page..." : "Generate Page"}
+            </button>
+          </div>
+        )}
+        {/* --- END: NEW PAGE GENERATOR UI --- */}
 
         {!isPreview && (
           <button

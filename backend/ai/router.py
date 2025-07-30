@@ -300,3 +300,75 @@ async def refine_ai_section(body: RefineSectionRequest):
 # --- END: REFINE SECTION FEATURE ---
 
 
+#region pagegenerator
+# --- START: NEW PAGE GENERATION FEATURE ---
+
+PAGE_SYSTEM_PROMPT = """
+You are an expert website designer. Your task is to generate the JSON for a complete webpage layout based on a user's prompt.
+
+You must return a JSON object with a single top-level key: "sections".
+The value of "sections" must be an array of section objects.
+
+**CRITICAL RULES:**
+1.  **Think Logically:** Structure the page logically. For an "About Us" page, you might generate a hero section, a mission statement section, a team members section, and a contact footer.
+2.  **Use Correct Section JSON Structure:** Each object in the "sections" array MUST be a complete section. A section has two top-level keys: `"properties"` and `"subsections"`.
+    -   The **`properties`** object is for the parent section. It MUST contain layout properties like `display`, `flexDirection`, `justifyContent`, and a nested **`style`** object for all visual styles like `backgroundColor`, `padding`, and `backgroundImage`.
+    -   The **`subsections`** key must be an array of subsection objects, which contain their own `properties` and `elements`.
+    CRITICAL STYLE RULE: Inside any "style" object, all CSS property keys MUST be in camelCase format (e.g., backgroundColor, borderRadius, WebkitBackgroundClip).
+    **Here is an example of a single, valid section object:**
+    ```json
+    {
+      "properties": {
+        "display": "flex",
+        "flexDirection": "column",
+        "alignItems": "center",
+        "justifyContent": "center",
+        "gap": "1.5rem",
+        "style": {
+          "backgroundColor": "#111827",
+          "padding": "6rem 2rem"
+        }
+      },
+      "subsections": [
+        {
+          "properties": { "style": { "textAlign": "center" } },
+          "elements": [
+            {
+              "element_type": "TEXT",
+              "properties": { "content": "Welcome to Our Website", "style": { "fontSize": "3rem", "color": "#FFFFFF" } },
+              "aiPayload": null
+            }
+          ]
+        }
+      ]
+    }
+    ```
+3.  **Vary the Designs:** Make each section in the array visually distinct and appropriate for its purpose.
+4.  **Return a Full Array:** The "sections" key must contain an array of 2 to 4 complete section objects.
+
+**INPUT:** A user's prompt (e.g., "A contact page for a modern tech company").
+
+**OUTPUT:** A valid JSON object containing only the "sections" array.
+""".strip()
+@router.post("/generate-ai-page")
+async def generate_ai_page(body: GenerateRequest):
+    try:
+        resp = openai.chat.completions.create(
+            model="gpt-4o",
+            response_format={ "type": "json_object" },
+            messages=[
+                {"role": "system", "content": PAGE_SYSTEM_PROMPT},
+                {"role": "user",   "content": body.prompt},
+            ],
+            temperature=0.8,
+            max_tokens=4096,
+        )
+        payload = json.loads(resp.choices[0].message.content)
+    except (OpenAIError, json.JSONDecodeError) as e:
+        raise HTTPException(500, f"Page generation failed: {e}")
+    return payload
+
+# --- END: NEW PAGE GENERATION FEATURE ---
+
+
+#endregion pagegenerator

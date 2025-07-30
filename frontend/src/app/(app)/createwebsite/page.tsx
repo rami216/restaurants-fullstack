@@ -612,7 +612,41 @@ const CreateWebsitePage = () => {
       throw err;
     }
   };
+  const handleGeneratePage = async (prompt: string) => {
+    if (!activePage || !prompt.trim()) return;
 
+    try {
+      const { data } = await api.post("/ai/generate-ai-page", { prompt });
+
+      // Ensure data.sections is an array before mapping
+      const sectionsFromAI = data.sections || [];
+
+      const newSectionsWithIds = sectionsFromAI.map(
+        (section: any, index: number) => ({
+          ...section,
+          section_id: `section_${Date.now()}_${Math.random()}`,
+          section_type: section.section_type || "default",
+          position: index,
+          // THE FIX: Add a fallback to an empty array if subsections are missing
+          subsections: (section.subsections || []).map((sub: any) => ({
+            ...sub,
+            subsection_id: `subsection_${Date.now()}_${Math.random()}`,
+            // THE FIX: Add a fallback to an empty array if elements are missing
+            elements: (sub.elements || []).map((el: any) => ({
+              ...el,
+              element_id: `element_${Date.now()}_${Math.random()}`,
+            })),
+          })),
+        })
+      );
+
+      const updatedPage = { ...activePage, sections: newSectionsWithIds };
+      updateWebsiteData(updatedPage);
+    } catch (err) {
+      console.error("AI page generation failed:", err);
+      alert("AI page generation failed. Please check the console.");
+    }
+  };
   if (loading)
     return (
       <div className="flex justify-center items-center h-screen">
@@ -685,6 +719,7 @@ const CreateWebsitePage = () => {
             onSelect={setSelection}
             onUpdate={updateWebsiteData}
             onPageSwitch={setActivePageId}
+            onGeneratePage={handleGeneratePage} // <-- ADD THIS PROP
           />
         </main>
       </div>
