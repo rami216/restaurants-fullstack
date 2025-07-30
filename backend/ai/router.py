@@ -7,95 +7,7 @@ from typing import Dict, Any
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
-# --- START: NEW PROMPT FOR SECTIONS ---
-# SECTION_SYSTEM_PROMPT = """
-# You are an expert layout designer creating the content for a website section. Your task is to generate a valid JSON object representing the 'subsections' and 'elements' based on a user's prompt.
 
-# Your output MUST be a valid JSON object containing a single key: "subsections".
-
-# **CRITICAL RULES FOR YOUR OUTPUT:**
-# 1.  **Structure:** The value of "subsections" must be an array of subsection objects. Each subsection object must have two keys: "properties" (for CSS styling) and "elements" (an array of element objects).
-# 2.  **Elements:** Each element object must have three keys: "element_type", "properties", and "aiPayload".
-#     - `element_type` must be one of the standard types (e.g., "TEXT", "IMAGE", "BUTTON") or "AI" for custom components.
-#     - `properties` should contain the specific data for that element (e.g., `content` for TEXT, `src` for IMAGE).
-#     - For `element_type: "AI"`, the `aiPayload` must be a complete object with its own `aiTemplate`, `properties`, `editableProps`, and `script`.
-# 3.  **Styling:** Use the `properties` key within each subsection to define its layout (e.g., `{"display": "flex", "flexDirection": "row", "gap": "1rem"}`).
-# 4.  **Content:** Fill the elements with relevant placeholder content based on the user's prompt.
-
-# **INPUT:** A user's prompt describing the desired section layout.
-
-# **OUTPUT:** A valid JSON object containing only the "subsections" array.
-
-# **Example Prompt:** "A two-column feature section with an image on the left and text on the right."
-# **Example Output:**
-# {
-#   "subsections": [
-#     {
-#       "properties": { "display": "grid", "gridTemplateColumns": "1fr 1fr", "gap": "2rem", "alignItems": "center" },
-#       "elements": [
-#         {
-#           "element_type": "IMAGE",
-#           "properties": { "src": "https://placehold.co/600x400" },
-#           "aiPayload": null
-#         },
-#         {
-#           "element_type": "TEXT",
-#           "properties": { "content": "This is the feature description." },
-#           "aiPayload": null
-#         }
-#       ]
-#     }
-#   ]
-# }
-# """.strip()
-# --- END: NEW PROMPT FOR SECTIONS ---
-
-# # --- START: NEW PROMPT FOR SECTIONS ---
-# SECTION_SYSTEM_PROMPT = """
-# You are an expert layout and style designer creating a complete website section.
-# Your task is to generate a single valid JSON object based on a user's prompt.
-
-# Your output MUST be a valid JSON object containing TWO top-level keys: "properties" and "subsections".
-
-# **CRITICAL RULES FOR YOUR OUTPUT:**
-# 1.  **`properties` Key:** This object should contain the CSS styling for the PARENT SECTION. Include properties like `backgroundColor`, `padding`, `flexDirection`, `justifyContent`, `alignItems`, and `gap`.
-# 2.  **`subsections` Key:** This must be an array of subsection objects.
-#     - Each subsection must have its own `properties` key for its specific CSS styling.
-#     - Each subsection must have an `elements` array containing the content (like "TEXT", "IMAGE", "BUTTON").
-# 3.  **Content:** Fill the elements with relevant placeholder content that matches the user's prompt.
-# 4.  **JSON Format:** The final output must be a single, valid JSON object. Do not include any text or explanations outside of the JSON.
-
-# **Example Prompt:** "A dark-themed hero section with a centered title and a call-to-action button."
-# **Example Output:**
-# {
-#   "properties": {
-#     "backgroundColor": "#1a202c",
-#     "padding": "5rem 2rem",
-#     "display": "flex",
-#     "flexDirection": "column",
-#     "alignItems": "center",
-#     "justifyContent": "center",
-#     "gap": "1.5rem"
-#   },
-#   "subsections": [
-#     {
-#       "properties": { "display": "flex", "flexDirection": "column", "alignItems": "center", "gap": "1rem" },
-#       "elements": [
-#         {
-#           "element_type": "TEXT",
-#           "properties": { "content": "Welcome to Our Website", "style": { "fontSize": "3rem", "color": "#FFFFFF", "fontWeight": "bold" } },
-#           "aiPayload": null
-#         },
-#         {
-#           "element_type": "BUTTON",
-#           "properties": { "text": "Learn More", "style": { "backgroundColor": "#3b82f6", "color": "#FFFFFF", "padding": "0.75rem 1.5rem", "borderRadius": "8px" } },
-#           "aiPayload": null
-#         }
-#       ]
-#     }
-#   ]
-# }
-# """.strip()
 
 SECTION_SYSTEM_PROMPT = """
 You are an expert layout designer creating the content for a website section. Your task is to generate a valid JSON object representing the 'subsections' and 'elements' based on a user's prompt.
@@ -140,7 +52,8 @@ Your output MUST be a valid JSON object containing a single key: "subsections".
 }
 """.strip()
 
-# main_SYSTEM_PROMPT = """
+
+# PREVIOUS_WORKING_SYSTEM_PROMPT = """
 # You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
 # Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
@@ -178,44 +91,7 @@ Your output MUST be a valid JSON object containing a single key: "subsections".
 #   "script": "const title = container.querySelector('.accordion-title'); const content = container.querySelector('.accordion-content'); title.addEventListener('click', () => { if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } });"
 # }
 # """.strip()
-
-# test_SYSTEM_PROMPT = """
-# You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
-
-# Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
-
-# **CRITICAL RULES FOR YOUR OUTPUT:**
-# 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
-# 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
-# 3.  **Interactivity (`script` key):**
-#     - Provide a JavaScript string that adds event listeners to the HTML.
-#     - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
-#     - Use `container.querySelector` to find and manipulate elements.
-#     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
-# 4.  **JSON Sync:**
-#     - The `properties` object must contain the initial value for every mustache token.
-#     - The `editableProps` array must contain an entry for every token.
-
-# **INPUT:** A user's prompt.
-
-# **OUTPUT:** A valid JSON object.
-
-# **Example Prompt:** "an accordion with one item"
-# **Example Output:**
-# {
-#   "aiTemplate": "<div class=\\"ai-container\\"><style>.accordion-item { border: 1px solid #ddd; margin-bottom: 5px; } .accordion-title { background: #f1f1f1; color: #333; cursor: pointer; padding: 15px; } .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; padding: 0 15px; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title}}</h3><div class=\\"accordion-content\\"><p>{{content}}</p></div></div></div>",
-#   "properties": {
-#     "title": "Click to Open",
-#     "content": "This is the hidden content."
-#   },
-#   "editableProps": [
-#     { "key": "title", "label": "Title", "type": "text" },
-#     { "key": "content", "label": "Content", "type": "text" }
-#   ],
-#   "script": "const items = container.querySelectorAll('.accordion-item'); items.forEach(item => { const title = item.querySelector('.accordion-title'); const content = item.querySelector('.accordion-content'); title.addEventListener('click', () => { const isCurrentlyOpen = content.style.maxHeight; items.forEach(otherItem => { otherItem.querySelector('.accordion-content').style.maxHeight = null; }); if (!isCurrentlyOpen) { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
-# }
-# """.strip()
-PREVIOUS_WORKING_SYSTEM_PROMPT = """
+TEST_SYSTEM_PROMPT = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
 Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
@@ -223,34 +99,28 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **CRITICAL RULES FOR YOUR OUTPUT:**
 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
-3.  **Interactivity (`script` key):**
-    - Provide a JavaScript string that adds event listeners to the HTML.
-    - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
-    - Use `container.querySelector('.your-class')` to find and manipulate elements.
-    - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
-4.  **JSON Sync:**
-    - The `properties` object must contain the initial value for every mustache token.
-    - The `editableProps` array must contain an entry for every token.
+3.  **Interactivity (`script` key):** Provide a JavaScript string that adds event listeners. The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    -   Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    -   For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
 
 **INPUT:** A user's prompt.
-
 **OUTPUT:** A valid JSON object.
 
-**Example Prompt:** "an accordion with one item"
+**Example Prompt:** "an accordion with two items"
 **Example Output:**
 {
-  "aiTemplate": "<div class=\\"ai-container\\"><style>.accordion-title { background: {{bgColor}}; } .accordion-content { max-height: 0; overflow: hidden; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title}}</h3><div class=\\"accordion-content\\"><p>{{content}}</p></div></div></div>",
-  "properties": {
-    "bgColor": "#f1f1f1",
-    "title": "Click to Open",
-    "content": "This is the hidden content."
-  },
+  "aiTemplate": "<div class=\\"ai-container\\"><style>...</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
+  "properties": { "title1": "Question 1", "content1": "Answer 1.", "title2": "Question 2", "content2": "Answer 2." },
   "editableProps": [
-    { "key": "bgColor", "label": "Header Color", "type": "color" },
-    { "key": "title", "label": "Title", "type": "text" },
-    { "key": "content", "label": "Content", "type": "text" }
+    { "key": "title1", "label": "Title 1", "type": "text" },
+    { "key": "content1", "label": "Content 1", "type": "text" },
+    { "key": "title2", "label": "Title 2", "type": "text" },
+    { "key": "content2", "label": "Content 2", "type": "text" }
   ],
-  "script": "const title = container.querySelector('.accordion-title'); const content = container.querySelector('.accordion-content'); title.addEventListener('click', () => { if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } });"
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
 }
 """.strip()
 
@@ -309,7 +179,7 @@ async def generate_ai_element(body: GenerateRequest):
             model="gpt-4.1-mini",
             response_format={ "type": "json_object" },
             messages=[
-                {"role": "system", "content": PREVIOUS_WORKING_SYSTEM_PROMPT},
+                {"role": "system", "content": TEST_SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
             temperature=0.4,
