@@ -20,12 +20,16 @@ class AiElementPayload(BaseModel):
     properties: Dict[str, Any]
     editableProps: List[EditableProp]
     script: Optional[str] = None # Add this line
+    
+class ElementProperties(BaseModel):
+    class Config:
+        extra = "allow"
 
 # --- Element Schemas ---
 class ElementBase(BaseModel):
     element_type: str
     position: int
-    properties: Dict[str, Any]
+    properties: ElementProperties # <-- CHANGE THIS
 
 class ElementCreate(ElementBase):
     subsection_id: UUID
@@ -34,7 +38,7 @@ class ElementCreate(ElementBase):
 
 class ElementUpdate(BaseModel):
     position: Optional[int] = None
-    properties: Optional[Dict[str, Any]] = None
+    properties: Optional[Any] = None
     # THE FIX: Add ai_payload field
     ai_payload: Optional[AiElementPayload] = Field(None, alias="aiPayload")
 

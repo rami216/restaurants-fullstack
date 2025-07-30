@@ -1,7 +1,5 @@
-// frontend/src/components/builder/BuilderCanvas.tsx
-
 "use client";
-import React, { useState, useRef, useEffect } from "react";
+import React, { useState, useRef, useEffect, useLayoutEffect } from "react";
 import {
   Page,
   Selection,
@@ -12,26 +10,23 @@ import {
   AccordionItem,
   Navbar,
   NavbarItem,
-  WebsiteData, // Import WebsiteData
+  WebsiteData,
 } from "./Properties";
+import type { Element as BuilderElement } from "./Properties";
 import { Plus, ChevronDown } from "lucide-react";
-import api from "@/lib/axios"; // Import api to get the base URL
+import api from "@/lib/axios";
 import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 
-const Accordion = ({
+// Standard Accordion
+const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
   items,
   style,
-}: {
-  items: AccordionItem[];
-  style: any;
 }) => {
   const [openIndex, setOpenIndex] = useState<number | null>(null);
-
-  const toggleItem = (index: number) => {
+  const toggleItem = (index: number) =>
     setOpenIndex(openIndex === index ? null : index);
-  };
 
   return (
     <div className="space-y-2" style={{ width: style.width || "100%" }}>
@@ -66,41 +61,49 @@ const Accordion = ({
     </div>
   );
 };
-const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { aiPayload } = element;
 
-  useEffect(() => {
-    if (containerRef.current && aiPayload?.script) {
+// AI Element Runner (fixed for re-render & script)
+const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
+  element,
+}) => {
+  const { aiPayload } = element;
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!aiPayload || !containerRef.current) return;
+
+    // Render the Mustache template into container
+    containerRef.current.innerHTML = Mustache.render(
+      aiPayload.aiTemplate,
+      aiPayload.properties
+    );
+
+    // Execute attached script if provided
+    if (aiPayload.script) {
       try {
-        // Create a function that takes the container element as an argument
-        const scriptFunction = new Function("container", aiPayload.script);
-        // Execute the script, passing the actual container div to it
-        scriptFunction(containerRef.current);
-      } catch (error) {
-        console.error("Error executing AI-generated script:", error);
+        const fn = new Function("container", aiPayload.script);
+        fn(containerRef.current);
+      } catch (err) {
+        console.error("Error running AI script:", err);
       }
     }
-  }, [aiPayload?.script, aiPayload?.properties]); // Re-run if script or properties change
+  }, [
+    aiPayload?.aiTemplate,
+    aiPayload?.script,
+    JSON.stringify(aiPayload?.properties),
+  ]);
 
-  if (!aiPayload) {
-    return <div>AI Element Data Missing</div>;
-  }
-
-  const { aiTemplate, properties: aiProps } = aiPayload;
-  const html = Mustache.render(aiTemplate, aiProps);
-
-  return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
+  return <div ref={containerRef} />;
 };
 
 interface BuilderCanvasProps {
   page: Page | undefined;
-  navbar: Navbar | null; // Pass navbar data
+  navbar: Navbar | null;
   selection: Selection;
   onSelect: (selection: Selection) => void;
   onUpdate: (updatedPage: Page) => void;
   onPageSwitch: (pageId: string) => void;
-  websiteData: WebsiteData | null; // Add websiteData to props
+  websiteData: WebsiteData | null;
   isPreview?: boolean;
 }
 
@@ -114,14 +117,13 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   websiteData,
   isPreview = false,
 }) => {
-  // --- NEW: State for handling page navigation in preview mode ---
+  // --- State for preview navigation ---
   const [currentPage, setCurrentPage] = useState(page);
   const handlePreviewPageSwitch = (pageId: string) => {
     const newPage = websiteData?.pages.find((p) => p.page_id === pageId);
-    if (newPage) {
-      setCurrentPage(newPage);
-    }
+    if (newPage) setCurrentPage(newPage);
   };
+
   const handleAddSection = () => {
     if (!page) return;
     const newSection: SectionType = {
@@ -137,8 +139,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       },
       subsections: [],
     };
-    const updatedPage = { ...page, sections: [...page.sections, newSection] };
-    onUpdate(updatedPage);
+    onUpdate({ ...page, sections: [...page.sections, newSection] });
   };
 
   const handleAddSubsection = (sectionId: string) => {
@@ -170,12 +171,9 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   function renderElement(element: ElementType) {
     const props = element.properties || {};
     const style = props.style || {};
-    const BACKEND_URL = "http://127.0.0.1:8000";
-
-    // pull motion configs (will be {} if no anim requested)
+    const BACKEND_URL = api.defaults.baseURL || "";
     const { initial, animate, transition } = getMotionConfig(props.animation);
 
-    // helper to wrap any JSX in motion.div
     const wrap = (children: React.ReactNode) => (
       <motion.div
         style={style}
@@ -191,8 +189,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       case "FORM": {
         const buttonStyle = props.submitButton?.style || {};
         const labelStyle = props.labelStyle || {};
-
-        const formJSX = (
+        return wrap(
           <div className="border rounded-lg" style={style}>
             <h3 className="text-2xl font-bold mb-4 text-gray-800">
               {props.title || "Form Title"}
@@ -219,34 +216,14 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </form>
           </div>
         );
-
-        return wrap(formJSX);
       }
-
       case "TEXT": {
-        return wrap(<div>{props.content}</div>);
+        const contentHTML = { __html: props.content || "" };
+        return wrap(<div dangerouslySetInnerHTML={contentHTML} />);
       }
-
       case "BUTTON": {
-        // navigate on click if action_value is a slug
-        const targetPage = websiteData?.pages.find(
-          (p) => p.slug === props.action_value
-        );
-
-        return wrap(
-          <button
-            style={style}
-            // onClick={(e) => {
-            //   e.preventDefault();
-            //   e.stopPropagation();
-            //   if (targetPage) onPageSwitch(targetPage.page_id);
-            // }}
-          >
-            {props.text || "Button"}
-          </button>
-        );
+        return wrap(<button style={style}>{props.text || "Button"}</button>);
       }
-
       case "IMAGE": {
         return wrap(
           <img
@@ -256,41 +233,38 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           />
         );
       }
-
       case "LIST": {
         return wrap(
           <ul style={style}>
+            {" "}
             {(props.items || []).map((item: string, i: number) => (
               <li key={i}>{item}</li>
-            ))}
+            ))}{" "}
           </ul>
         );
       }
-
       case "DROPDOWN": {
         return wrap(
           <select className="border border-gray-300 rounded p-2">
-            {props.label && <option disabled>{props.label}</option>}
+            {" "}
+            {props.label && <option disabled>{props.label}</option>}{" "}
             {(props.options || []).map((opt: any, i: number) => (
               <option key={i} value={opt.action_value}>
                 {opt.text}
               </option>
-            ))}
+            ))}{" "}
           </select>
         );
       }
-
       case "MENU_ITEM": {
-        const card = (
+        return wrap(
           <div className="border rounded-lg p-4 bg-white shadow" style={style}>
             {props.image_url && (
               <img
                 src={`${BACKEND_URL}${props.image_url}`}
                 alt={props.item_name}
                 className="w-full object-cover rounded-md mb-4"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
+                onError={(e) => (e.currentTarget.style.display = "none")}
               />
             )}
             <h4 className="font-bold text-lg text-gray-800">
@@ -304,41 +278,37 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             </p>
           </div>
         );
-        return wrap(card);
       }
-
       case "CATEGORY": {
-        const nameStyle = props.nameStyle || {};
-        const card = (
+        const hasHover = Object.keys(style).some((k) =>
+          k.startsWith("--hover-")
+        );
+        return wrap(
           <div
-            className="rounded-lg overflow-hidden bg-white shadow-md cursor-pointer"
+            className={`rounded-lg overflow-hidden bg-white shadow-md cursor-pointer ${
+              hasHover ? "has-hover-effect" : ""
+            }`}
             style={style}
-            // onClick={() => setActiveCategory(props.id)}
           >
             {props.image_url && (
               <img
                 src={`${BACKEND_URL}${props.image_url}`}
                 alt={props.name}
                 className="w-full h-40 object-cover"
-                onError={(e) => {
-                  e.currentTarget.style.display = "none";
-                }}
+                onError={(e) => (e.currentTarget.style.display = "none")}
               />
             )}
             <div className="p-4">
-              <h4 className="font-bold text-xl" style={nameStyle}>
+              <h4 className="font-bold text-xl" style={props.nameStyle}>
                 {props.name || "Category Name"}
               </h4>
             </div>
           </div>
         );
-        return wrap(card);
       }
-
       case "ACCORDION": {
         return wrap(<Accordion items={props.items || []} style={style} />);
       }
-
       case "MAP": {
         return wrap(
           <div className="relative">
@@ -354,58 +324,16 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
       }
-      // case "AI": {
-      //   if (!element.aiPayload) {
-      //     return wrap(
-      //       <div className="border p-2 bg-red-200 text-red-800 rounded">
-      //         AI Element Data Missing
-      //       </div>
-      //     );
-      //   }
-      //   // THE FIX: Re-render the Mustache template with the current properties on every render.
-      //   const { aiTemplate, properties: aiProps } = element.aiPayload;
-      //   const html = Mustache.render(aiTemplate, aiProps);
-      //   return wrap(<div dangerouslySetInnerHTML={{ __html: html }} />);
-      // }
-      // case "AI": {
-      //   if (!element.aiPayload) {
-      //     return wrap(
-      //       <div className="border p-2 bg-red-200 text-red-800 rounded">
-      //         AI Element Data Missing
-      //       </div>
-      //     );
-      //   }
-
-      //   const { aiTemplate, properties: aiProps } = element.aiPayload;
-
-      //   // THE FIX: This correctly handles both text rendering and live style updates.
-      //   // 1. Render the template to get the correct text values.
-      //   const html = Mustache.render(aiTemplate, aiProps);
-
-      //   // 2. Create a style object for the dynamic CSS variables.
-      //   const styleVariables: React.CSSProperties = {};
-      //   for (const [key, value] of Object.entries(aiProps)) {
-      //     // This tells TypeScript to allow custom properties like "--primaryColor"
-      //     (styleVariables as any)[`--${key}`] = value;
-      //   }
-
-      //   // 3. Return a wrapper div with the dynamic styles, containing the rendered HTML.
-      //   return (
-      //     <div style={styleVariables}>
-      //       <div dangerouslySetInnerHTML={{ __html: html }} />
-      //     </div>
-      //   );
-      // }
       case "AI": {
-        // --- REPLACE the old AI case with this ---
-        return <AiElementRunner element={element} />;
+        return wrap(<AiElementRunner element={element as BuilderElement} />);
       }
-      default:
+      default: {
         return wrap(
           <div className="border p-2 bg-gray-300 text-black rounded">
             Unknown Element
           </div>
         );
+      }
     }
   }
 
@@ -419,7 +347,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-inner">
-      {/* --- NAVBAR RENDERING --- */}
       {navbar && (
         <nav
           onClick={
@@ -481,26 +408,11 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
       <div className="space-y-4">
         {page.sections.map((section) => {
-          // // build section style
-          // // THIS IS THE CORRECT REVERTED CODE (WITH SAFETY CHECK)
-          // const properties = section.properties || {};
-
-          // // 2. Build the main section style using the safe 'properties' object.
-          // const sectionStyle: React.CSSProperties = { ...properties };
-          // if (properties.backgroundImage) {
-          //   sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${properties.backgroundImage})`;
-          //   sectionStyle.backgroundSize = "cover";
-          //   sectionStyle.backgroundPosition = "center";
-          // }
           const properties = section.properties || {};
-
-          // THE NEW LOGIC: Combine manual properties and AI styles
           const sectionStyle: React.CSSProperties = {
-            ...properties, // 1. Apply manual properties first as a base
-            ...(properties.style || {}), // 2. Apply AI styles, which will override the base
+            ...properties,
+            ...(properties.style || {}),
           };
-
-          // 3. Keep this block to handle manually uploaded images correctly
           if (
             properties.backgroundImage &&
             !properties.backgroundImage.startsWith("linear-gradient")
@@ -534,7 +446,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 className="flex flex-wrap"
                 style={{
                   display: "flex",
-
                   flexDirection: properties.flexDirection,
                   justifyContent: properties.justifyContent,
                   alignItems: properties.alignItems,
@@ -542,15 +453,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 }}
               >
                 {section.subsections.map((sub) => {
-                  // build subsection style
-                  // const subsectionStyle: React.CSSProperties = {
-                  //   display: sub.properties.display || "flex",
-                  //   gap: sub.properties.gap || "1rem",
-                  // };
                   const subsectionStyle: React.CSSProperties = {
                     display: sub.properties.display || "flex",
                     gap: sub.properties.gap || "1rem",
-                    ...(sub.properties.style || {}), // THE FIX IS HERE
+                    ...(sub.properties.style || {}),
                   };
                   if (sub.properties.display === "grid") {
                     subsectionStyle.gridTemplateColumns =
@@ -564,7 +470,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                       sub.properties.alignItems || "stretch";
                   }
 
-                  // pull motion config
                   const { initial, animate, transition } = getMotionConfig(
                     sub.properties.animation
                   );
@@ -577,10 +482,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                       transition={transition}
                       onClick={(e) => {
                         e.stopPropagation();
-                        onSelect({
-                          type: "subsection",
-                          id: sub.subsection_id,
-                        });
+                        onSelect({ type: "subsection", id: sub.subsection_id });
                       }}
                       className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
                         selection.type === "subsection" &&
@@ -617,7 +519,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                   );
                 })}
 
-                {/* one Add Subsection per section */}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();
@@ -632,7 +533,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           );
         })}
 
-        {/* one Add New Section at bottom */}
         {!isPreview && (
           <button
             onClick={handleAddSection}

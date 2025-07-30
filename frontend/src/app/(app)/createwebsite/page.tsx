@@ -15,6 +15,8 @@ import {
   Navbar,
   Element,
   Subsection,
+  Section,
+  AiElementPayload,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 import { v4 as uuidv4 } from "uuid";
@@ -515,6 +517,102 @@ const CreateWebsitePage = () => {
     }
   };
   // --- END: NEW FUNCTION TO HANDLE SECTION GENERATION ---
+
+  const handleRefineSection = async (prompt: string) => {
+    // This check is correct and important
+    if (!selectedItem || selection.type !== "section" || !activePage) return;
+
+    // THE FIX: Create a new, correctly typed variable after the check
+    const currentSection = selectedItem as Section;
+
+    try {
+      // The API will return the complete, modified section object
+      const { data: refinedSection } = await api.post("/ai/refine-ai-section", {
+        prompt,
+        section_json: currentSection, // Use the new variable
+      });
+
+      // Replace the old section with the refined one
+      const updatedSections = activePage.sections.map((sec) =>
+        // Use the new variable here as well
+        sec.section_id === currentSection.section_id ? refinedSection : sec
+      );
+
+      updateWebsiteData({ ...activePage, sections: updatedSections });
+      setSelection({ type: "section", id: refinedSection.section_id });
+    } catch (err) {
+      console.error("AI section refinement failed:", err);
+      alert("AI section refinement failed.");
+      throw err;
+    }
+  };
+  const handleRefineElement = async (prompt: string) => {
+    if (!selectedItem || selection.type !== "element" || !activePage) return;
+
+    try {
+      const currentElement = selectedItem as Element;
+
+      // 1. Get just the delta from AI
+      const { data: partial } = await api.post("/ai/refine-ai-element", {
+        prompt,
+        element_json: currentElement,
+      });
+
+      // 2. Deep‑merge everything, never overwrite with undefined
+      const refinedElement: Element = {
+        ...currentElement,
+        ...partial,
+        properties: {
+          ...currentElement.properties,
+          ...(partial.properties ?? {}),
+        },
+        aiPayload: {
+          // start with the old aiPayload (or empty object)
+          ...(currentElement.aiPayload ?? {}),
+          // then layer on whatever AI returned
+          ...(partial.aiPayload ?? {}),
+          // make sure nested properties get merged too
+          properties: {
+            ...(currentElement.aiPayload?.properties ?? {}),
+            ...(partial.aiPayload?.properties ?? {}),
+          },
+          // and the aiTemplate—use the new one if present
+          aiTemplate:
+            partial.aiPayload?.aiTemplate ??
+            currentElement.aiPayload?.aiTemplate,
+        },
+      };
+
+      // 3. Inspect before you save
+      console.log("📤 refinedElement ready to PUT:", refinedElement);
+
+      // 4. Replace in your page model
+      const updatedSections = activePage.sections.map((section) => ({
+        ...section,
+        subsections: section.subsections.map((sub) => ({
+          ...sub,
+          elements: sub.elements.map((el) =>
+            el.element_id === currentElement.element_id ? refinedElement : el
+          ),
+        })),
+      }));
+
+      updateWebsiteData({ ...activePage, sections: updatedSections });
+      setSelection({ type: "element", id: refinedElement.element_id });
+    } catch (err: any) {
+      // 5. Log the backend validation error
+      console.error(
+        "AI element refinement failed:",
+        err.response?.data ?? err.message
+      );
+      alert(
+        "AI element refinement failed: " +
+          JSON.stringify(err.response?.data || err.message)
+      );
+      throw err;
+    }
+  };
+
   if (loading)
     return (
       <div className="flex justify-center items-center h-screen">
@@ -611,6 +709,8 @@ const CreateWebsitePage = () => {
           onPaste={handlePasteElement}
           onGenerateSection={handleGenerateSection}
           onMoveSection={handleMoveSection} // <-- ADD THIS PROP
+          onRefineSection={handleRefineSection}
+          onRefineElement={handleRefineElement} // <-- ADD THIS PROP
         />
       </aside>
     </div>

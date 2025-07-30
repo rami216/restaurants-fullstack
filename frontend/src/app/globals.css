@@ -24,3 +24,29 @@ body {
   color: var(--foreground);
   font-family: Arial, Helvetica, sans-serif;
 }
+@keyframes bounce {
+  0%,
+  20%,
+  50%,
+  80%,
+  100% {
+    transform: translateY(0);
+  }
+  40% {
+    transform: translateY(-30px);
+  }
+  60% {
+    transform: translateY(-15px);
+  }
+}
+.has-hover-effect {
+  /* This makes the hover effect smooth */
+  transition: all 0.3s ease;
+}
+
+.has-hover-effect:hover {
+  /* These are placeholders (CSS Variables) that the AI will fill in */
+  transform: var(--hover-transform);
+  background: var(--hover-background);
+  border-color: var(--hover-border-color);
+}

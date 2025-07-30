@@ -4,7 +4,7 @@ import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 
-import React, { useState, useEffect, useRef } from "react";
+import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
   Page,
   PublicWebsiteData,
@@ -20,41 +20,42 @@ import {
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
+import type { Element as BuilderElement } from "./Properties";
 
-const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
-  const containerRef = useRef<HTMLDivElement>(null);
-  const { aiPayload } = element;
+// const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
+//   const containerRef = useRef<HTMLDivElement>(null);
+//   const { aiPayload } = element;
 
-  useEffect(() => {
-    const container = containerRef.current;
-    // We only need the effect to run the script.
-    // The HTML is now handled by the main return statement.
-    if (container && aiPayload?.script) {
-      try {
-        const scriptFunction = new Function("container", aiPayload.script);
-        scriptFunction(container);
-      } catch (error) {
-        console.error("Error executing AI-generated script:", error);
-      }
-    }
-  }, [element.element_id, aiPayload]); // Re-run when the element itself changes
+//   useEffect(() => {
+//     const container = containerRef.current;
+//     // We only need the effect to run the script.
+//     // The HTML is now handled by the main return statement.
+//     if (container && aiPayload?.script) {
+//       try {
+//         const scriptFunction = new Function("container", aiPayload.script);
+//         scriptFunction(container);
+//       } catch (error) {
+//         console.error("Error executing AI-generated script:", error);
+//       }
+//     }
+//   }, [element.element_id, aiPayload]); // Re-run when the element itself changes
 
-  if (!aiPayload) {
-    return <div>AI Element Data Missing</div>;
-  }
+//   if (!aiPayload) {
+//     return <div>AI Element Data Missing</div>;
+//   }
 
-  // THE FIX: The HTML is now always rendered here, outside of the effect.
-  const { aiTemplate, properties: aiProps } = aiPayload;
-  const html = Mustache.render(aiTemplate, aiProps);
+//   // THE FIX: The HTML is now always rendered here, outside of the effect.
+//   const { aiTemplate, properties: aiProps } = aiPayload;
+//   const html = Mustache.render(aiTemplate, aiProps);
 
-  return (
-    <div
-      ref={containerRef}
-      className="w-full max-w-full overflow-x-hidden"
-      dangerouslySetInnerHTML={{ __html: html }}
-    />
-  );
-};
+//   return (
+//     <div
+//       ref={containerRef}
+//       className="w-full max-w-full overflow-x-hidden"
+//       dangerouslySetInnerHTML={{ __html: html }}
+//     />
+//   );
+// };
 // --- Add this component inside PublicCanvas.tsx ---
 // const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
 //   const containerRef = useRef<HTMLDivElement>(null);
@@ -80,6 +81,52 @@ const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
 
 //   return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
 // };
+const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
+  element,
+}) => {
+  const { aiPayload } = element;
+  const containerRef = useRef<HTMLDivElement>(null);
+
+  useLayoutEffect(() => {
+    if (!aiPayload || !containerRef.current) return;
+
+    // render HTML
+    containerRef.current.innerHTML = Mustache.render(
+      aiPayload.aiTemplate,
+      aiPayload.properties
+    );
+
+    // execute script
+    if (aiPayload.script) {
+      try {
+        const fn = new Function("container", aiPayload.script);
+        fn(containerRef.current);
+      } catch (e) {
+        console.error("AI script error:", e);
+      }
+    }
+  }, [
+    aiPayload?.aiTemplate,
+    aiPayload?.script,
+    JSON.stringify(aiPayload?.properties),
+  ]);
+
+  if (!aiPayload) {
+    return <div>AI Element Data Missing</div>;
+  }
+
+  // safety: template must be string
+  if (typeof aiPayload.aiTemplate !== "string") {
+    console.error("Invalid aiTemplate:", aiPayload.aiTemplate);
+    return (
+      <div className="p-4 bg-red-100 text-red-700 border border-red-400 rounded">
+        Error: AI template is corrupted.
+      </div>
+    );
+  }
+
+  return <div ref={containerRef} className="w-full overflow-hidden" />;
+};
 
 const Accordion = ({
   items,
@@ -491,18 +538,28 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     const { initial, animate, transition } = getMotionConfig(props.animation);
 
     switch (element.element_type) {
+      // case "TEXT":
+      //   return (
+      //     <motion.div
+      //       style={style}
+      //       initial={initial}
+      //       animate={animate}
+      //       transition={transition}
+      //     >
+      //       {props.content}
+      //     </motion.div>
+      //   );
       case "TEXT":
+        const contentHTML = { __html: props.content || "" };
         return (
           <motion.div
             style={style}
             initial={initial}
             animate={animate}
             transition={transition}
-          >
-            {props.content}
-          </motion.div>
+            dangerouslySetInnerHTML={contentHTML}
+          />
         );
-
       case "BUTTON": {
         const tgt = websiteData.pages.find(
           (p) => p.slug === props.action_value
@@ -592,10 +649,19 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           </motion.div>
         );
 
-      case "CATEGORY":
+      case "CATEGORY": {
+        const nameStyle = props.nameStyle || {};
+
+        // Check if any hover styles exist
+        const hasHover = Object.keys(style).some((k) =>
+          k.startsWith("--hover-")
+        );
+
         return (
           <motion.div
-            className="cursor-pointer rounded-lg overflow-hidden shadow hover:shadow-lg transition"
+            className={`cursor-pointer rounded-lg overflow-hidden shadow transition ${
+              hasHover ? "has-hover-effect" : ""
+            }`}
             style={style}
             initial={initial}
             animate={animate}
@@ -610,10 +676,13 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               />
             )}
             <div className="p-4 bg-white">
-              <h4 className="font-bold text-lg">{props.name}</h4>
+              <h4 className="font-bold text-lg" style={nameStyle}>
+                {props.name}
+              </h4>
             </div>
           </motion.div>
         );
+      }
 
       case "ACCORDION":
         return <Accordion items={props.items || []} style={style} />;

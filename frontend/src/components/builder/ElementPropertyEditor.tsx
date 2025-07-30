@@ -50,6 +50,8 @@ interface PropertyEditorProps {
   onPaste: () => void;
   onGenerateSection: (prompt: string, sectionId: string) => void;
   onMoveSection: (sectionId: string, direction: "up" | "down") => void; // <-- ADD THIS
+  onRefineSection: (prompt: string) => void;
+  onRefineElement: (prompt: string) => void; // <-- ADD THIS
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
@@ -68,10 +70,26 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onPaste,
   onGenerateSection,
   onMoveSection,
+  onRefineSection,
+  onRefineElement,
 }) => {
   // --- START: ADD STATE FOR SECTION AI ---
   const [sectionAiPrompt, setSectionAiPrompt] = useState("");
   const [isGeneratingSection, setIsGeneratingSection] = useState(false);
+
+  const [elementRefinePrompt, setElementRefinePrompt] = useState("");
+  const [isRefiningElement, setIsRefiningElement] = useState(false);
+
+  const handleRefineElementClick = async () => {
+    if (!elementRefinePrompt.trim()) return;
+    setIsRefiningElement(true);
+    try {
+      await onRefineElement(elementRefinePrompt);
+      setElementRefinePrompt("");
+    } finally {
+      setIsRefiningElement(false);
+    }
+  };
 
   const handleGenerateSectionClick = async () => {
     if (!sectionAiPrompt.trim() || !selectedItem || selectionType !== "section")
@@ -97,6 +115,20 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [editedItemText, setEditedItemText] = useState("");
   // at top of PropertyEditor component
+
+  // At the top of the PropertyEditor component, add these state variables
+  const [refinePrompt, setRefinePrompt] = useState("");
+  const [isRefining, setIsRefining] = useState(false);
+  const handleRefineClick = async () => {
+    if (!refinePrompt.trim() || !selectedItem) return;
+    setIsRefining(true);
+    try {
+      await onRefineSection(refinePrompt);
+      setRefinePrompt("");
+    } finally {
+      setIsRefining(false);
+    }
+  };
   const handleAnimationChange = (key: keyof AnimationProps, value: any) => {
     if (!selectedItem) return;
     const anim: AnimationProps = {
@@ -1007,6 +1039,29 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           </div>
         </div>
         <hr />
+        {/* --- START: NEW REFINE UI --- */}
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Refine Current Section
+          </h4>
+          <div className="p-3 border rounded-md bg-gray-50">
+            <textarea
+              rows={3}
+              className="w-full border rounded p-2 text-sm"
+              placeholder="e.g., 'Change the background to light blue' or 'Make the heading text larger'."
+              value={refinePrompt}
+              onChange={(e) => setRefinePrompt(e.target.value)}
+            />
+            <button
+              onClick={handleRefineClick}
+              disabled={isRefining || !refinePrompt.trim()}
+              className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {isRefining ? "Refining..." : "Refine with AI"}
+            </button>
+          </div>
+        </div>
+        {/* --- END: NEW REFINE UI --- */}
 
         {/* --- Background Image Uploader (No changes needed) --- */}
         {/* This continues to work with the top-level 'backgroundImage' property */}
@@ -1137,196 +1192,435 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     );
   };
   //hello
-  const renderSubsectionEditor = () => (
-    <div className="space-y-4">
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Element Layout
-        </label>
-        <select
-          value={selectedItem.properties.display || "flex"}
-          onChange={(e) => {
-            const newDisplay = e.target.value;
-            handlePropertyChange("display", newDisplay);
-            // Set default grid properties when switching if they don't exist
-            if (newDisplay === "grid" && !selectedItem.properties.gridColumns) {
-              const newProps = {
-                ...selectedItem.properties,
-                display: "grid",
-                gridColumns: 2,
-                gridTemplateColumns: "repeat(2, 1fr)",
-              };
-              updateItem({ ...selectedItem, properties: newProps });
-            }
-          }}
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-        >
-          <option value="flex">Flexbox (Vertical/Horizontal)</option>
-          <option value="grid">Grid</option>
-        </select>
-      </div>
+  // const renderSubsectionEditor = () => (
+  //   <div className="space-y-4">
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Element Layout
+  //       </label>
+  //       <select
+  //         value={selectedItem.properties.display || "flex"}
+  //         onChange={(e) => {
+  //           const newDisplay = e.target.value;
+  //           handlePropertyChange("display", newDisplay);
+  //           // Set default grid properties when switching if they don't exist
+  //           if (newDisplay === "grid" && !selectedItem.properties.gridColumns) {
+  //             const newProps = {
+  //               ...selectedItem.properties,
+  //               display: "grid",
+  //               gridColumns: 2,
+  //               gridTemplateColumns: "repeat(2, 1fr)",
+  //             };
+  //             updateItem({ ...selectedItem, properties: newProps });
+  //           }
+  //         }}
+  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //       >
+  //         <option value="flex">Flexbox (Vertical/Horizontal)</option>
+  //         <option value="grid">Grid</option>
+  //       </select>
+  //     </div>
 
-      {/* Conditional UI for Grid Layout */}
-      {selectedItem.properties.display === "grid" && (
+  //     {/* Conditional UI for Grid Layout */}
+  //     {selectedItem.properties.display === "grid" && (
+  //       <div>
+  //         <label className="block text-sm font-medium text-gray-700">
+  //           Number of Columns
+  //         </label>
+  //         <input
+  //           type="number"
+  //           min="1"
+  //           value={selectedItem.properties.gridColumns || ""}
+  //           onChange={(e) => {
+  //             const rawValue = e.target.value;
+  //             // Update the property that holds the input's value. This allows typing.
+  //             handlePropertyChange("gridColumns", rawValue);
+
+  //             const columns = parseInt(rawValue, 10);
+  //             // Only update the functional CSS property if the value is a valid, positive number.
+  //             if (!isNaN(columns) && columns > 0) {
+  //               handlePropertyChange(
+  //                 "gridTemplateColumns",
+  //                 `repeat(${columns}, 1fr)`
+  //               );
+  //             }
+  //           }}
+  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //         />
+  //       </div>
+  //     )}
+
+  //     {/* Conditional UI for Flexbox Layout */}
+  //     {(!selectedItem.properties.display ||
+  //       selectedItem.properties.display === "flex") && (
+  //       <>
+  //         <div>
+  //           <label className="block text-sm font-medium text-gray-700">
+  //             Flex Direction
+  //           </label>
+  //           <select
+  //             value={selectedItem.properties.flexDirection || "column"}
+  //             onChange={(e) =>
+  //               handlePropertyChange("flexDirection", e.target.value)
+  //             }
+  //             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //           >
+  //             <option value="column">Vertical</option>
+  //             <option value="row">Horizontal</option>
+  //           </select>
+  //         </div>
+  //         <div>
+  //           <label className="block text-sm font-medium text-gray-700">
+  //             Justify Elements
+  //           </label>
+  //           <select
+  //             value={selectedItem.properties.justifyContent || "flex-start"}
+  //             onChange={(e) =>
+  //               handlePropertyChange("justifyContent", e.target.value)
+  //             }
+  //             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //           >
+  //             <option value="flex-start">Start</option>
+  //             <option value="center">Center</option>
+  //             <option value="flex-end">End</option>
+  //             <option value="space-between">Space Between</option>
+  //           </select>
+  //         </div>
+  //       </>
+  //     )}
+
+  //     {/* Common Properties */}
+  //     <div>
+  //       <label className="block text-sm font-medium text-gray-700">
+  //         Gap Between Elements
+  //       </label>
+  //       <input
+  //         type="text"
+  //         value={selectedItem.properties.gap || "1rem"}
+  //         onChange={(e) => handlePropertyChange("gap", e.target.value)}
+  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //         placeholder="e.g., 1rem, 16px"
+  //       />
+  //     </div>
+  //     {/* ────────── ANIMATION PANEL ────────── */}
+  //     <div>
+  //       <h4 className="text-md font-medium text-gray-800 mb-2">Animation</h4>
+  //       <div className="space-y-3">
+  //         {/* Type */}
+  //         <div>
+  //           <label className="block text-sm font-medium text-gray-700">
+  //             Type
+  //           </label>
+  //           <select
+  //             value={selectedItem.properties.animation?.type || ""}
+  //             onChange={(e) =>
+  //               handleAnimationChange(
+  //                 "type",
+  //                 e.target.value as AnimationProps["type"]
+  //               )
+  //             }
+  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+  //           >
+  //             <option value="">None</option>
+  //             <option value="fade-in">Fade In</option>
+  //             <option value="slide-up">Slide Up</option>
+  //             <option value="bounce">Bounce</option>
+  //             <option value="pulse">Pulse</option>
+  //           </select>
+  //         </div>
+
+  //         {/* Delay */}
+  //         <div>
+  //           <label className="block text-sm font-medium text-gray-700">
+  //             Delay (s)
+  //           </label>
+  //           <input
+  //             type="number"
+  //             min={0}
+  //             step={0.1}
+  //             value={selectedItem.properties.animation?.delay ?? 0}
+  //             onChange={(e) =>
+  //               handleAnimationChange("delay", parseFloat(e.target.value))
+  //             }
+  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+  //           />
+  //         </div>
+
+  //         {/* Duration */}
+  //         <div>
+  //           <label className="block text-sm font-medium text-gray-700">
+  //             Duration (s)
+  //           </label>
+  //           <input
+  //             type="number"
+  //             min={0}
+  //             step={0.1}
+  //             value={selectedItem.properties.animation?.duration ?? 0.3}
+  //             onChange={(e) =>
+  //               handleAnimationChange("duration", parseFloat(e.target.value))
+  //             }
+  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+  //           />
+  //         </div>
+
+  //         {/* Repeat */}
+  //         <div>
+  //           <label className="block text-sm font-medium text-gray-700">
+  //             Repeat count
+  //           </label>
+  //           <input
+  //             type="number"
+  //             min={0}
+  //             value={selectedItem.properties.animation?.repeat ?? 0}
+  //             onChange={(e) =>
+  //               handleAnimationChange("repeat", parseInt(e.target.value, 10))
+  //             }
+  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+  //           />
+  //         </div>
+  //       </div>
+  //     </div>
+  //   </div>
+  // );
+  const renderSubsectionEditor = () => {
+    // Safely get properties and the nested style object at the top
+    const properties = selectedItem.properties || {};
+    const style = properties.style || {};
+
+    return (
+      <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium text-gray-700">
-            Number of Columns
+            Element Layout
           </label>
-          <input
-            type="number"
-            min="1"
-            value={selectedItem.properties.gridColumns || ""}
+          <select
+            value={properties.display || "flex"}
             onChange={(e) => {
-              const rawValue = e.target.value;
-              // Update the property that holds the input's value. This allows typing.
-              handlePropertyChange("gridColumns", rawValue);
-
-              const columns = parseInt(rawValue, 10);
-              // Only update the functional CSS property if the value is a valid, positive number.
-              if (!isNaN(columns) && columns > 0) {
-                handlePropertyChange(
-                  "gridTemplateColumns",
-                  `repeat(${columns}, 1fr)`
-                );
+              const newDisplay = e.target.value;
+              handlePropertyChange("display", newDisplay);
+              if (newDisplay === "grid" && !properties.gridColumns) {
+                const newProps = {
+                  ...properties,
+                  display: "grid",
+                  gridColumns: 2,
+                  gridTemplateColumns: "repeat(2, 1fr)",
+                };
+                updateItem({ ...selectedItem, properties: newProps });
               }
             }}
             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+          >
+            <option value="flex">Flexbox (Vertical/Horizontal)</option>
+            <option value="grid">Grid</option>
+          </select>
+        </div>
+
+        {/* Conditional UI for Grid Layout */}
+        {properties.display === "grid" && (
+          <div>
+            <label className="block text-sm font-medium text-gray-700">
+              Number of Columns
+            </label>
+            <input
+              type="number"
+              min="1"
+              value={properties.gridColumns || ""}
+              onChange={(e) => {
+                const rawValue = e.target.value;
+                handlePropertyChange("gridColumns", rawValue);
+                const columns = parseInt(rawValue, 10);
+                if (!isNaN(columns) && columns > 0) {
+                  handlePropertyChange(
+                    "gridTemplateColumns",
+                    `repeat(${columns}, 1fr)`
+                  );
+                }
+              }}
+              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            />
+          </div>
+        )}
+
+        {/* Conditional UI for Flexbox Layout */}
+        {(!properties.display || properties.display === "flex") && (
+          <>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Flex Direction
+              </label>
+              <select
+                value={properties.flexDirection || "column"}
+                onChange={(e) =>
+                  handlePropertyChange("flexDirection", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="column">Vertical</option>
+                <option value="row">Horizontal</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Justify Elements
+              </label>
+              <select
+                value={properties.justifyContent || "flex-start"}
+                onChange={(e) =>
+                  handlePropertyChange("justifyContent", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="flex-start">Start</option>
+                <option value="center">Center</option>
+                <option value="flex-end">End</option>
+                <option value="space-between">Space Between</option>
+              </select>
+            </div>
+          </>
+        )}
+
+        {/* Common Properties */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Gap Between Elements
+          </label>
+          <input
+            type="text"
+            value={properties.gap || "1rem"}
+            onChange={(e) => handlePropertyChange("gap", e.target.value)}
+            className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+            placeholder="e.g., 1rem, 16px"
           />
         </div>
-      )}
 
-      {/* Conditional UI for Flexbox Layout */}
-      {(!selectedItem.properties.display ||
-        selectedItem.properties.display === "flex") && (
-        <>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Flex Direction
-            </label>
-            <select
-              value={selectedItem.properties.flexDirection || "column"}
-              onChange={(e) =>
-                handlePropertyChange("flexDirection", e.target.value)
-              }
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-            >
-              <option value="column">Vertical</option>
-              <option value="row">Horizontal</option>
-            </select>
+        {/* Animation Panel */}
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">Animation</h4>
+          <div className="space-y-3">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Type
+              </label>
+              <select
+                value={properties.animation?.type || ""}
+                onChange={(e) =>
+                  handleAnimationChange(
+                    "type",
+                    e.target.value as AnimationProps["type"]
+                  )
+                }
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="">None</option>
+                <option value="fade-in">Fade In</option>
+                <option value="slide-up">Slide Up</option>
+                <option value="bounce">Bounce</option>
+                <option value="pulse">Pulse</option>
+              </select>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Delay (s)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={properties.animation?.delay ?? 0}
+                onChange={(e) =>
+                  handleAnimationChange("delay", parseFloat(e.target.value))
+                }
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Duration (s)
+              </label>
+              <input
+                type="number"
+                min={0}
+                step={0.1}
+                value={properties.animation?.duration ?? 0.3}
+                onChange={(e) =>
+                  handleAnimationChange("duration", parseFloat(e.target.value))
+                }
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Repeat count
+              </label>
+              <input
+                type="number"
+                min={0}
+                value={properties.animation?.repeat ?? 0}
+                onChange={(e) =>
+                  handleAnimationChange("repeat", parseInt(e.target.value, 10))
+                }
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
           </div>
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Justify Elements
-            </label>
-            <select
-              value={selectedItem.properties.justifyContent || "flex-start"}
-              onChange={(e) =>
-                handlePropertyChange("justifyContent", e.target.value)
-              }
-              className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-            >
-              <option value="flex-start">Start</option>
-              <option value="center">Center</option>
-              <option value="flex-end">End</option>
-              <option value="space-between">Space Between</option>
-            </select>
-          </div>
-        </>
-      )}
+        </div>
 
-      {/* Common Properties */}
-      <div>
-        <label className="block text-sm font-medium text-gray-700">
-          Gap Between Elements
-        </label>
-        <input
-          type="text"
-          value={selectedItem.properties.gap || "1rem"}
-          onChange={(e) => handlePropertyChange("gap", e.target.value)}
-          className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-          placeholder="e.g., 1rem, 16px"
-        />
-      </div>
-      {/* ────────── ANIMATION PANEL ────────── */}
-      <div>
-        <h4 className="text-md font-medium text-gray-800 mb-2">Animation</h4>
-        <div className="space-y-3">
-          {/* Type */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Type
-            </label>
-            <select
-              value={selectedItem.properties.animation?.type || ""}
-              onChange={(e) =>
-                handleAnimationChange(
-                  "type",
-                  e.target.value as AnimationProps["type"]
-                )
-              }
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-            >
-              <option value="">None</option>
-              <option value="fade-in">Fade In</option>
-              <option value="slide-up">Slide Up</option>
-              <option value="bounce">Bounce</option>
-              <option value="pulse">Pulse</option>
-            </select>
-          </div>
-
-          {/* Delay */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Delay (s)
-            </label>
-            <input
-              type="number"
-              min={0}
-              step={0.1}
-              value={selectedItem.properties.animation?.delay ?? 0}
-              onChange={(e) =>
-                handleAnimationChange("delay", parseFloat(e.target.value))
-              }
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-            />
-          </div>
-
-          {/* Duration */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Duration (s)
-            </label>
-            <input
-              type="number"
-              min={0}
-              step={0.1}
-              value={selectedItem.properties.animation?.duration ?? 0.3}
-              onChange={(e) =>
-                handleAnimationChange("duration", parseFloat(e.target.value))
-              }
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-            />
-          </div>
-
-          {/* Repeat */}
-          <div>
-            <label className="block text-sm font-medium text-gray-700">
-              Repeat count
-            </label>
-            <input
-              type="number"
-              min={0}
-              value={selectedItem.properties.animation?.repeat ?? 0}
-              onChange={(e) =>
-                handleAnimationChange("repeat", parseInt(e.target.value, 10))
-              }
-              className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-            />
+        {/* Positioning (Offset) Section */}
+        <hr />
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Positioning (Offset)
+          </h4>
+          <div className="space-y-3 p-3 border rounded-md bg-gray-50">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Position Type
+              </label>
+              <select
+                value={style.position || "static"}
+                onChange={(e) => handleStyleChange("position", e.target.value)}
+                className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="static">Static (Default)</option>
+                <option value="relative">Relative</option>
+              </select>
+              <p className="text-xs text-gray-500 mt-1">
+                Set to 'Relative' to use the offset controls below.
+              </p>
+            </div>
+            {style.position === "relative" && (
+              <div className="grid grid-cols-2 gap-4 pt-2">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Top
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., 20px, -1rem"
+                    value={style.top || ""}
+                    onChange={(e) => handleStyleChange("top", e.target.value)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Left
+                  </label>
+                  <input
+                    type="text"
+                    placeholder="e.g., -50px, 10%"
+                    value={style.left || ""}
+                    onChange={(e) => handleStyleChange("left", e.target.value)}
+                    className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
+                  />
+                </div>
+              </div>
+            )}
           </div>
         </div>
       </div>
-    </div>
-  );
+    );
+  };
   const handleNameStyleChange = (key: string, value: any) => {
     if (!selectedItem) return;
     const newProperties = {
@@ -2417,13 +2711,19 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         );
       /*** inside switch(selectedItem.element_type) { ***/
       case "AI": {
-        // 1) Destructure the mustache template payload
-        const { editableProps, properties: aiProps } = selectedItem.aiPayload!;
+        // 1) Safely destructure the payload
+        const payload = selectedItem.aiPayload || {};
+        const aiProps = payload.properties || {};
 
-        // 2) Helper to update a single AI property and re‑inject it into the page
+        // 2) THE FIX: Explicitly check if editableProps is an array. If not, use an empty array.
+        const editableProps = Array.isArray(payload.editableProps)
+          ? payload.editableProps
+          : [];
+
+        // 3) Helper to update a single AI property
         const handleAiPropChange = (key: string, value: any) => {
           const newAiPayload = {
-            ...selectedItem.aiPayload!,
+            ...payload, // Use the safe payload object
             properties: {
               ...aiProps,
               [key]: value,
@@ -2435,9 +2735,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           });
         };
 
-        // 3) Render one control per `editableProps` entry
+        // 4) Render the controls
         return (
           <div className="space-y-4">
+            {/* This map call is now safe */}
             {editableProps.map((field: any) => (
               <div key={field.key}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2550,13 +2851,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         <div className="overflow-y-auto flex-grow">
           {selectedItem ? (
             <>
-              {/* --- START: EDIT --- */}
+              {/* --- Top Toolbar (for all selected items) --- */}
               <div className="flex justify-between items-center mb-4">
                 <h3 className="text-lg text-gray-600 font-mono capitalize">
                   {selectionType?.replace("_", " ")}
                 </h3>
                 <div className="flex items-center space-x-2">
-                  {/* Show Copy button for elements */}
                   {selectionType === "element" && (
                     <button
                       onClick={onCopy}
@@ -2566,7 +2866,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       <Copy size={16} />
                     </button>
                   )}
-                  {/* Show Paste button for subsections if something is in clipboard */}
                   {selectionType === "subsection" && clipboard && (
                     <button
                       onClick={onPaste}
@@ -2576,7 +2875,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       <ClipboardPaste size={16} />
                     </button>
                   )}
-                  {/* Delete button */}
                   {selectionType !== "navbar" && (
                     <button
                       onClick={handleDelete}
@@ -2585,7 +2883,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       <Trash2 size={18} />
                     </button>
                   )}
-                  {/* START: ADD THE NEW MOVE CONTROLS HERE */}
+                </div>
+              </div>
+
+              {/* --- Section-Specific Editor --- */}
+              {selectionType === "section" && (
+                <>
                   <div className="flex justify-between items-center mb-4 p-2 border rounded-md">
                     <span className="text-sm font-medium text-gray-700">
                       Move Section
@@ -2622,27 +2925,48 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       </button>
                     </div>
                   </div>
-                  {/* END: NEW MOVE CONTROLS */}
-                </div>
-              </div>
-              {/* --- END: EDIT --- */}
-              {/* <div className="flex justify-between items-center mb-4">
-                <h3 className="text-lg text-gray-600 font-mono capitalize">
-                  {selectionType?.replace("_", " ")}
-                </h3>
-                {selectionType !== "navbar" && (
-                  <button
-                    onClick={handleDelete}
-                    className="text-red-500 hover:text-red-700 p-2 rounded-full hover:bg-red-100"
-                  >
-                    <Trash2 size={18} />
-                  </button>
-                )}
-              </div> */}
+                  {renderSectionEditor()}
+                </>
+              )}
 
-              {selectionType === "section" && renderSectionEditor()}
+              {/* --- Subsection-Specific Editor --- */}
               {selectionType === "subsection" && renderSubsectionEditor()}
-              {selectionType === "element" && renderElementEditor()}
+
+              {/* --- Element-Specific Editor --- */}
+              {selectionType === "element" && (
+                <>
+                  {/* START: RE-ADDED REFINE ELEMENT UI */}
+                  <div>
+                    <h4 className="text-md font-medium text-gray-800 mb-2">
+                      Refine Element with AI
+                    </h4>
+                    <div className="p-3 border rounded-md bg-gray-50">
+                      <textarea
+                        rows={3}
+                        className="w-full border rounded p-2 text-sm"
+                        placeholder="e.g., 'Make the text red' or 'Add a gradient background'."
+                        value={elementRefinePrompt}
+                        onChange={(e) => setElementRefinePrompt(e.target.value)}
+                      />
+                      <button
+                        onClick={handleRefineElementClick}
+                        disabled={
+                          isRefiningElement || !elementRefinePrompt.trim()
+                        }
+                        className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
+                      >
+                        {isRefiningElement ? "Refining..." : "Refine Element"}
+                      </button>
+                    </div>
+                  </div>
+                  <hr className="my-4" />
+                  {/* END: RE-ADDED REFINE ELEMENT UI */}
+
+                  {renderElementEditor()}
+                </>
+              )}
+
+              {/* --- Other Editors --- */}
               {selectionType === "navbar" && renderNavbarEditor()}
               {selectionType === "navbar_item" && renderNavbarItemEditor()}
             </>

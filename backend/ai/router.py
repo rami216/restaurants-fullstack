@@ -3,6 +3,7 @@ import os, json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from openai import OpenAI, OpenAIError
+from typing import Dict, Any
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -139,7 +140,82 @@ Your output MUST be a valid JSON object containing a single key: "subsections".
 }
 """.strip()
 
-SYSTEM_PROMPT = """
+# main_SYSTEM_PROMPT = """
+# You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+# Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+# **CRITICAL RULES FOR YOUR OUTPUT:**
+# 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
+# 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
+# 3.  **Interactivity (`script` key):**
+#     - Provide a JavaScript string that adds event listeners to the HTML.
+#     - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+#     - Use `container.querySelector('.your-class')` to find and manipulate elements.
+#     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+# 4.  **JSON Sync:**
+#     - The `properties` object must contain the initial value for every mustache token.
+#     - The `editableProps` array must contain an entry for every token.
+
+# **INPUT:** A user's prompt.
+
+# **OUTPUT:** A valid JSON object.
+
+# **Example Prompt:** "an accordion with one item"
+# **Example Output:**
+# {
+#   "aiTemplate": "<div class=\\"ai-container\\"><style>.accordion-title { background: {{bgColor}}; } .accordion-content { max-height: 0; overflow: hidden; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title}}</h3><div class=\\"accordion-content\\"><p>{{content}}</p></div></div></div>",
+#   "properties": {
+#     "bgColor": "#f1f1f1",
+#     "title": "Click to Open",
+#     "content": "This is the hidden content."
+#   },
+#   "editableProps": [
+#     { "key": "bgColor", "label": "Header Color", "type": "color" },
+#     { "key": "title", "label": "Title", "type": "text" },
+#     { "key": "content", "label": "Content", "type": "text" }
+#   ],
+#   "script": "const title = container.querySelector('.accordion-title'); const content = container.querySelector('.accordion-content'); title.addEventListener('click', () => { if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } });"
+# }
+# """.strip()
+
+# test_SYSTEM_PROMPT = """
+# You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+# Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+# **CRITICAL RULES FOR YOUR OUTPUT:**
+# 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
+# 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
+# 3.  **Interactivity (`script` key):**
+#     - Provide a JavaScript string that adds event listeners to the HTML.
+#     - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+#     - Use `container.querySelector` to find and manipulate elements.
+#     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+# 4.  **JSON Sync:**
+#     - The `properties` object must contain the initial value for every mustache token.
+#     - The `editableProps` array must contain an entry for every token.
+
+# **INPUT:** A user's prompt.
+
+# **OUTPUT:** A valid JSON object.
+
+# **Example Prompt:** "an accordion with one item"
+# **Example Output:**
+# {
+#   "aiTemplate": "<div class=\\"ai-container\\"><style>.accordion-item { border: 1px solid #ddd; margin-bottom: 5px; } .accordion-title { background: #f1f1f1; color: #333; cursor: pointer; padding: 15px; } .accordion-content { max-height: 0; overflow: hidden; transition: max-height 0.3s ease-out; padding: 0 15px; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title}}</h3><div class=\\"accordion-content\\"><p>{{content}}</p></div></div></div>",
+#   "properties": {
+#     "title": "Click to Open",
+#     "content": "This is the hidden content."
+#   },
+#   "editableProps": [
+#     { "key": "title", "label": "Title", "type": "text" },
+#     { "key": "content", "label": "Content", "type": "text" }
+#   ],
+#   "script": "const items = container.querySelectorAll('.accordion-item'); items.forEach(item => { const title = item.querySelector('.accordion-title'); const content = item.querySelector('.accordion-content'); title.addEventListener('click', () => { const isCurrentlyOpen = content.style.maxHeight; items.forEach(otherItem => { otherItem.querySelector('.accordion-content').style.maxHeight = null; }); if (!isCurrentlyOpen) { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
+# }
+# """.strip()
+PREVIOUS_WORKING_SYSTEM_PROMPT = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
 Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
@@ -233,7 +309,7 @@ async def generate_ai_element(body: GenerateRequest):
             model="gpt-4.1-mini",
             response_format={ "type": "json_object" },
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
+                {"role": "system", "content": PREVIOUS_WORKING_SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
             temperature=0.4,
@@ -263,3 +339,94 @@ async def generate_ai_section(body: GenerateRequest):
     except (OpenAIError, json.JSONDecodeError) as e:
         raise HTTPException(500, f"Generation failed: {e}")
     return payload
+  
+  
+  #region refining
+class RefineRequest(BaseModel):
+    prompt: str
+    element_json: Dict[str, Any]
+
+
+REFINE_ELEMENT_SYSTEM_PROMPT = """
+ You are an AI assistant that directly modifies a provided JSON object for a website element based on a user's request.
+ Your single most important rule is to **start with the user's provided JSON and return the complete, modified version of it.**
+
++ **MUST‑NOT DROP ANY FIELD**  
++ Under no circumstances remove a top‑level key (like `properties.image_url` or `properties.name`) unless the user explicitly asks.
+
+ **CRITICAL RULES:**
+ 1.  You will be given the `CURRENT ELEMENT JSON`. Use it as your starting point.
+ 2.  **DO NOT DELETE ANY DATA** unless the user explicitly asks you to (e.g., "remove the image"). You must preserve all existing keys like `element_id`, `name`, `image_url`, `properties`, etc.
+ 3.  Apply the user's requested change. For visual styles, modify the `properties.style` or `properties.nameStyle` objects.
+ 4.  If the user asks for an advanced effect like `:hover` or `@keyframes`, you must change `element_type` to "AI" and create/update the `aiPayload.aiTemplate` with the necessary HTML and a `<style>` tag. When you do this, you MUST ensure the new `aiTemplate` correctly displays the original data (like the `name` and `image_url`).
+ 5.  Your final output **MUST BE THE ENTIRE, COMPLETE, MODIFIED JSON OBJECT**.
+""".strip()
+@router.post("/refine-ai-element")
+async def refine_ai_element(body: RefineRequest):
+    try:
+        user_content = f"PROMPT: \"{body.prompt}\"\n\nCURRENT ELEMENT JSON:\n{json.dumps(body.element_json, indent=2)}"
+        
+        resp = openai.chat.completions.create(
+            model="gpt-4o",
+            response_format={ "type": "json_object" },
+            messages=[
+                {"role": "system", "content": REFINE_ELEMENT_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_content},
+            ]
+        )
+        payload = json.loads(resp.choices[0].message.content)
+        
+    except (OpenAIError, json.JSONDecodeError) as e:
+        raise HTTPException(500, f"Element refinement failed: {e}")
+    return payload
+
+
+
+  #endregion
+  
+  
+  #region refinesection
+  
+  # --- START: REFINE SECTION FEATURE ---
+
+# 1. Pydantic model for the request
+class RefineSectionRequest(BaseModel):
+    prompt: str
+    section_json: Dict[str, Any]
+
+# 2. System prompt for the AI
+REFINE_SECTION_SYSTEM_PROMPT = """
+You are an AI assistant that modifies a complete JSON object for a website section.
+Your single most important rule is to **start with the user's provided JSON and return the complete, modified version of it.**
+
+**CRITICAL RULES:**
+1.  You will be given the `CURRENT SECTION JSON`. Use it as your starting point.
+2.  **DO NOT DELETE ANY DATA** unless the user explicitly asks you to. Preserve all existing keys like `section_id`, `subsections`, `elements`, and their properties.
+3.  Apply the user's requested change. For visual styles of the main section, modify the `properties.style` object. For subsections, modify their respective `style` objects.
+4.  Your final output **MUST BE THE ENTIRE, COMPLETE, MODIFIED JSON OBJECT** for the section. Do not return partial data.
+""".strip()
+
+# 3. The API endpoint function
+@router.post("/refine-ai-section")
+async def refine_ai_section(body: RefineSectionRequest):
+    try:
+        user_content = f"PROMPT: \"{body.prompt}\"\n\nCURRENT SECTION JSON:\n{json.dumps(body.section_json, indent=2)}"
+        
+        resp = openai.chat.completions.create(
+            model="gpt-4o",
+            response_format={ "type": "json_object" },
+            messages=[
+                {"role": "system", "content": REFINE_SECTION_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_content},
+            ],
+            temperature=0.5,
+            max_tokens=4096,
+        )
+        payload = json.loads(resp.choices[0].message.content)
+    except (OpenAIError, json.JSONDecodeError) as e:
+        raise HTTPException(500, f"Section refinement failed: {e}")
+    return payload
+
+# --- END: REFINE SECTION FEATURE ---
+
+
