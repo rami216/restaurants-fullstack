@@ -191,21 +191,48 @@ async def create_element(element_data: schemas.ElementCreate, db: AsyncSession =
     return new_element
 
 # --- UPDATE update_element ---
-@router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
-async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    db_element = await db.get(Element, element_id)
-    if not db_element: raise HTTPException(status_code=404, detail="Element not found")
+# @router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
+# async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
+#     db_element = await db.get(Element, element_id)
+#     if not db_element: raise HTTPException(status_code=404, detail="Element not found")
 
+#     update_data = element_data.model_dump(exclude_unset=True)
+#     for key, value in update_data.items():
+#         setattr(db_element, key, value)
+#         # --- THIS IS THE FIX ---
+#         # We need to tell SQLAlchemy that the JSON fields have been modified.
+#         if key in ["properties", "ai_payload"]:
+#             flag_modified(db_element, key)
+
+#     await db.commit()
+#     # await db.refresh(db_element)
+#     return db_element
+@router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
+async def update_element(
+    element_id: UUID, 
+    element_data: schemas.ElementUpdate, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_active_user)
+):
+    db_element = await db.get(Element, element_id)
+    if not db_element:
+        raise HTTPException(status_code=404, detail="Element not found")
+
+    # Get the new data from the request
     update_data = element_data.model_dump(exclude_unset=True)
+    
+    # Loop through and update the database object
     for key, value in update_data.items():
         setattr(db_element, key, value)
-        # --- THIS IS THE FIX ---
-        # We need to tell SQLAlchemy that the JSON fields have been modified.
+        
+        # THIS IS THE CRITICAL FIX:
+        # We must flag JSON fields to ensure SQLAlchemy detects the change.
         if key in ["properties", "ai_payload"]:
             flag_modified(db_element, key)
 
     await db.commit()
-    # await db.refresh(db_element)
+    await db.refresh(db_element)
+    
     return db_element
 
 

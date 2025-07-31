@@ -39,7 +39,7 @@ class ElementCreate(ElementBase):
 class ElementUpdate(BaseModel):
     position: Optional[int] = None
     properties: Optional[Any] = None
-    # THE FIX: Add ai_payload field
+    element_type: Optional[str] = None  # <-- ADD THIS LINE
     ai_payload: Optional[AiElementPayload] = Field(None, alias="aiPayload")
 
 class ElementResponse(ElementBase):

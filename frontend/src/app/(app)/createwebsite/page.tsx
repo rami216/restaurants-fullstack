@@ -243,14 +243,14 @@ const CreateWebsitePage = () => {
               const originalElement = originalItems.get(element.element_id);
               if (
                 originalElement &&
-                (!isEqual(originalElement.properties, element.properties) ||
-                  // --- THIS IS THE FIX ---
-                  // Add a check to see if the aiPayload has changed
+                (originalElement.element_type !== element.element_type || // <-- ADD THIS CHECK
+                  !isEqual(originalElement.properties, element.properties) ||
                   !isEqual(originalElement.aiPayload, element.aiPayload) ||
                   originalElement.position !== el_idx)
               ) {
                 await api.put(`/builder/elements/${element.element_id}`, {
                   position: el_idx,
+                  element_type: element.element_type, // <-- ADD THIS LINE TO THE PAYLOAD
                   properties: element.properties,
                   aiPayload: element.aiPayload,
                 });
@@ -551,47 +551,131 @@ const CreateWebsitePage = () => {
 
     try {
       const currentElement = selectedItem as Element;
+      let refinedElement: Element;
 
-      // 1. Get just the delta from AI
-      const { data: partial } = await api.post("/ai/refine-ai-element", {
-        prompt,
-        element_json: currentElement,
-      });
+      if (currentElement.element_type === "AI") {
+        // --- A) LOGIC TO REFINE AN EXISTING AI ELEMENT ---
+        const currentTemplate = currentElement.aiPayload?.aiTemplate || "";
 
-      // 2. Deep‑merge everything, never overwrite with undefined
-      const refinedElement: Element = {
-        ...currentElement,
-        ...partial,
-        properties: {
-          ...currentElement.properties,
-          ...(partial.properties ?? {}),
-        },
-        aiPayload: {
-          // start with the old aiPayload (or empty object)
-          ...(currentElement.aiPayload ?? {}),
-          // then layer on whatever AI returned
-          ...(partial.aiPayload ?? {}),
-          // make sure nested properties get merged too
-          properties: {
-            ...(currentElement.aiPayload?.properties ?? {}),
-            ...(partial.aiPayload?.properties ?? {}),
+        const { data: cssResult } = await api.post("/ai/generate-element-css", {
+          prompt,
+          html_context: currentTemplate,
+        });
+
+        const updatedTemplate = currentTemplate.replace(
+          /<style>/,
+          `<style>${cssResult.css}\n`
+        );
+
+        refinedElement = {
+          ...currentElement,
+          aiPayload: {
+            ...currentElement.aiPayload!,
+            aiTemplate: updatedTemplate,
           },
-          // and the aiTemplate—use the new one if present
-          aiTemplate:
-            partial.aiPayload?.aiTemplate ??
-            currentElement.aiPayload?.aiTemplate,
-        },
-      };
+        };
+      } else {
+        // --- B) LOGIC TO CONVERT A STANDARD ELEMENT TO 'AI' ---
+        const props = currentElement.properties || {};
+        let html_context = "";
+        let newProperties = {}; // This will hold the action properties for the new AI element
 
-      // 3. Inspect before you save
-      console.log("📤 refinedElement ready to PUT:", refinedElement);
+        // --- Blueprints for each element type ---
+        if (currentElement.element_type === "CATEGORY") {
+          const nameStyle = props.nameStyle || {};
+          const cardStyle = props.style || {};
+          const nameStyleString = `color:${
+            nameStyle.color || "inherit"
+          };font-weight:${nameStyle.fontWeight || "bold"};font-style:${
+            nameStyle.fontStyle || "normal"
+          };`;
+          const cardStyleString = `max-width:${
+            cardStyle.maxWidth || "320px"
+          };text-align:${cardStyle.textAlign || "center"};border:${
+            cardStyle.border || "none"
+          };`;
 
-      // 4. Replace in your page model
+          html_context = `
+            <div class="card" style="${cardStyleString}">
+              <img src="http://127.0.0.1:8000${props.image_url}" alt="${props.name}" style="width:100%; height:160px; object-fit:cover;">
+              <div style="padding:1rem;"><h4 style="${nameStyleString}">${props.name}</h4></div>
+            </div>`;
+
+          // Preserve the category's special action
+          newProperties = {
+            actionType: "SET_CATEGORY",
+            actionValue: props.id,
+          };
+        } else if (currentElement.element_type === "BUTTON") {
+          const style = props.style || {};
+          const styleString = `background-color:${
+            style.backgroundColor || "blue"
+          };color:${style.color || "white"};padding:${
+            style.padding || "10px 20px"
+          };border:${style.border || "none"};border-radius:${
+            style.borderRadius || "5px"
+          };cursor:pointer;`;
+
+          html_context = `<button class="ai-button" style="${styleString}">${
+            props.text || "Click Me"
+          }</button>`;
+
+          // Preserve the button's navigation action
+          newProperties = {
+            actionType: "PAGE_NAV",
+            actionValue: props.action_value,
+          };
+        } else if (currentElement.element_type === "TEXT") {
+          const style = props.style || {};
+          const styleString = `color:${style.color || "inherit"};font-size:${
+            style.fontSize || "1rem"
+          };`;
+          html_context = `<div class="ai-text" style="${styleString}">${
+            props.content || ""
+          }</div>`;
+        } else if (currentElement.element_type === "IMAGE") {
+          const style = props.style || {};
+          const styleString = `width:${style.width || "100%"};height:${
+            style.height || "auto"
+          };object-fit:cover;`;
+          const src = props.src
+            ? `${api.defaults.baseURL}${props.src}`
+            : "https://placehold.co/600x400";
+          html_context = `<img class="ai-image" src="${src}" alt="${
+            props.alt || ""
+          }" style="${styleString}">`;
+        } else {
+          alert(
+            "This complex refinement is not yet supported for this element type."
+          );
+          return;
+        }
+
+        const { data: cssResult } = await api.post("/ai/generate-element-css", {
+          prompt,
+          html_context,
+        });
+
+        const newAiPayload: AiElementPayload = {
+          aiTemplate: `<style>${cssResult.css}</style>${html_context}`,
+          properties: {},
+          editableProps: [],
+        };
+
+        refinedElement = {
+          ...currentElement,
+          element_type: "AI",
+          properties: newProperties, // Add the preserved action properties
+          aiPayload: newAiPayload,
+        };
+      }
+
+      // --- C) UPDATE THE STATE ---
       const updatedSections = activePage.sections.map((section) => ({
         ...section,
-        subsections: section.subsections.map((sub) => ({
-          ...sub,
-          elements: sub.elements.map((el) =>
+        subsections: section.subsections.map((subsection) => ({
+          ...subsection,
+          elements: subsection.elements.map((el) =>
             el.element_id === currentElement.element_id ? refinedElement : el
           ),
         })),
@@ -599,16 +683,9 @@ const CreateWebsitePage = () => {
 
       updateWebsiteData({ ...activePage, sections: updatedSections });
       setSelection({ type: "element", id: refinedElement.element_id });
-    } catch (err: any) {
-      // 5. Log the backend validation error
-      console.error(
-        "AI element refinement failed:",
-        err.response?.data ?? err.message
-      );
-      alert(
-        "AI element refinement failed: " +
-          JSON.stringify(err.response?.data || err.message)
-      );
+    } catch (err) {
+      console.error("AI element refinement failed:", err);
+      alert("AI element refinement failed.");
       throw err;
     }
   };

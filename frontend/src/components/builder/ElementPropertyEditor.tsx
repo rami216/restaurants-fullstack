@@ -176,7 +176,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     }
   };
   const handleImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
+    event: React.ChangeEvent<HTMLInputElement>,
+    propertyName: string // e.g., 'backgroundImage', 'src', or 'image_url'
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -189,8 +190,18 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       const response = await api.post("/uploads/image", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
+      // image_url from your backend is a relative path like '/static/images/...'
       const { image_url } = response.data;
-      handlePropertyChange("backgroundImage", image_url);
+
+      // THE FIX: We need to handle CSS backgrounds and image sources differently.
+      if (propertyName === "backgroundImage") {
+        // Background images are a CSS property and go in the 'style' object with the url() wrapper.
+        handleStyleChange(propertyName, `url(${image_url})`);
+      } else {
+        // `src` (for <img> tags) and `image_url` (for Category) are direct properties.
+        // They should NOT be in the style object and should NOT have the url() wrapper.
+        handlePropertyChange(propertyName, image_url);
+      }
     } catch (error) {
       console.error("Image upload failed:", error);
       alert("Image upload failed. Please check the console for details.");
@@ -707,14 +718,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   //   onUpdate({ ...activePage, sections: updatedSections });
   //   onDelete();
   // };
-  const handleLocalImageSelect = (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
-    const file = event.target.files?.[0];
-    if (!file) return;
-    const localUrl = URL.createObjectURL(file);
-    handlePropertyChange("src", localUrl);
-  };
+  // const handleLocalImageSelect = (
+  //   event: React.ChangeEvent<HTMLInputElement>
+  // ) => {
+  //   const file = event.target.files?.[0];
+  //   if (!file) return;
+  //   const localUrl = URL.createObjectURL(file);
+  //   handlePropertyChange("src", localUrl);
+  // };
   // --- THIS IS THE UPDATED SECTION EDITOR ---
   // const renderSectionEditor = () => (
   //   <div className="space-y-4">
@@ -1091,7 +1102,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                   id="bg-image-upload"
                   className="hidden"
                   accept="image/png, image/jpeg, image/webp, image/gif"
-                  onChange={handleImageUpload}
+                  onChange={(e) => handleImageUpload(e, "backgroundImage")} // <-- UPDATE THIS
                   disabled={isUploading}
                 />
                 <label
@@ -2118,7 +2129,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               </label>
               <img
                 src={
-                  selectedItem.properties.src || "https://placehold.co/600x400"
+                  selectedItem.properties.src
+                    ? `${api.defaults.baseURL}${selectedItem.properties.src}`
+                    : "https://placehold.co/600x400"
                 }
                 alt="preview"
                 className="mt-1 w-full rounded-md border bg-gray-100"
@@ -2130,7 +2143,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 ref={fileInputRef}
                 className="hidden"
                 accept="image/*"
-                onChange={handleLocalImageSelect}
+                onChange={(e) => handleImageUpload(e, "src")}
               />
               <button
                 onClick={() => fileInputRef.current?.click()}

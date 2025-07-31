@@ -211,44 +211,38 @@ async def generate_ai_section(body: GenerateRequest):
     return payload
   
   
-  #region refining
-class RefineRequest(BaseModel):
+  #region refining element
+class CssGenRequest(BaseModel):
     prompt: str
-    element_json: Dict[str, Any]
+    html_context: str
 
+CSS_GEN_SYSTEM_PROMPT = """
+You are an expert CSS generator. Your task is to write a small snippet of CSS code based on a user's prompt and the provided HTML.
 
-REFINE_ELEMENT_SYSTEM_PROMPT = """
- You are an AI assistant that directly modifies a provided JSON object for a website element based on a user's request.
- Your single most important rule is to **start with the user's provided JSON and return the complete, modified version of it.**
-
-+ **MUST‑NOT DROP ANY FIELD**  
-+ Under no circumstances remove a top‑level key (like `properties.image_url` or `properties.name`) unless the user explicitly asks.
-
- **CRITICAL RULES:**
- 1.  You will be given the `CURRENT ELEMENT JSON`. Use it as your starting point.
- 2.  **DO NOT DELETE ANY DATA** unless the user explicitly asks you to (e.g., "remove the image"). You must preserve all existing keys like `element_id`, `name`, `image_url`, `properties`, etc.
- 3.  Apply the user's requested change. For visual styles, modify the `properties.style` or `properties.nameStyle` objects.
- 4.  If the user asks for an advanced effect like `:hover` or `@keyframes`, you must change `element_type` to "AI" and create/update the `aiPayload.aiTemplate` with the necessary HTML and a `<style>` tag. When you do this, you MUST ensure the new `aiTemplate` correctly displays the original data (like the `name` and `image_url`).
- 5.  Your final output **MUST BE THE ENTIRE, COMPLETE, MODIFIED JSON OBJECT**.
+You will receive a user's prompt and the HTML of the element to be styled.
+Your task is to write ONLY the CSS rule needed to achieve the user's request.
+Do not include <style> tags or explanations. Just the raw CSS.
+Example Prompt: "make the card glow on hover"
+Example HTML: `<div class="card">...</div>`
+Your Response: `.card:hover { box-shadow: 0 0 15px 5px rgba(138, 43, 226, 0.7); }`
 """.strip()
-@router.post("/refine-ai-element")
-async def refine_ai_element(body: RefineRequest):
+
+@router.post("/generate-element-css")
+async def generate_element_css(body: CssGenRequest):
     try:
-        user_content = f"PROMPT: \"{body.prompt}\"\n\nCURRENT ELEMENT JSON:\n{json.dumps(body.element_json, indent=2)}"
-        
+        user_content = f"PROMPT: \"{body.prompt}\"\n\nHTML CONTEXT:\n```{body.html_context}```"
         resp = openai.chat.completions.create(
             model="gpt-4o",
-            response_format={ "type": "json_object" },
             messages=[
-                {"role": "system", "content": REFINE_ELEMENT_SYSTEM_PROMPT},
+                {"role": "system", "content": CSS_GEN_SYSTEM_PROMPT},
                 {"role": "user",   "content": user_content},
             ]
         )
-        payload = json.loads(resp.choices[0].message.content)
-        
+        css_snippet = resp.choices[0].message.content.strip().replace("```css", "").replace("```", "")
     except (OpenAIError, json.JSONDecodeError) as e:
-        raise HTTPException(500, f"Element refinement failed: {e}")
-    return payload
+        raise HTTPException(500, f"CSS generation failed: {e}")
+    return {"css": css_snippet}
+
 
 
 

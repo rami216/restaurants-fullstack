@@ -231,7 +231,12 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       case "IMAGE": {
         return wrap(
           <img
-            src={props.src || "https://placehold.co/600x400"}
+            src={
+              props.src
+                ? `${api.defaults.baseURL}${props.src}`
+                : // Fallback to the original placeholder if src is empty
+                  "https://placehold.co/600x400"
+            }
             alt={props.alt || "placeholder"}
             style={style}
           />

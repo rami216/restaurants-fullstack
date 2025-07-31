@@ -586,7 +586,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       case "IMAGE":
         return (
           <motion.img
-            src={props.src}
+            src={
+              props.src
+                ? `${api.defaults.baseURL}${props.src}`
+                : "https://placehold.co/600x400"
+            }
             alt={props.alt}
             style={style}
             initial={initial}
@@ -714,35 +718,60 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       case "MAP":
         return <iframe src={props.src} style={style} />;
       case "AI": {
+        // 1. Safely get properties
+        const props = element.properties || {};
+
+        // 2. Safely get animation config
         const { initial, animate, transition } = getMotionConfig(
-          element.properties.animation
+          props.animation
         );
 
-        const isClickable =
-          element.properties.linkEnabled && element.properties.action_value;
-        const targetPage = isClickable
-          ? websiteData.pages.find(
-              (p) => p.slug === element.properties.action_value
-            )
-          : null;
+        // 3. NEW: Universal Click Logic
+        let isClickable = false;
+        let clickAction = () => {}; // Default to an empty function
+
+        // Check for our specific actionType system (from converted Categories/Buttons)
+        if (props.actionType === "SET_CATEGORY" && props.actionValue) {
+          isClickable = true;
+          clickAction = () => setActiveCategory(props.actionValue);
+        } else if (props.actionType === "PAGE_NAV" && props.actionValue) {
+          const targetPage = websiteData.pages.find(
+            (p) => p.slug === props.actionValue
+          );
+          if (targetPage) {
+            isClickable = true;
+            clickAction = () => {
+              setActiveCategory(null);
+              setCurrentPage(targetPage);
+              router.push(`/${websiteData.subdomain}${targetPage.slug}`);
+            };
+          }
+        }
+        // Fallback to check for the generic linkEnabled system (from other AI refinements)
+        else if (props.linkEnabled && props.action_value) {
+          const targetPage = websiteData.pages.find(
+            (p) => p.slug === props.action_value
+          );
+          if (targetPage) {
+            isClickable = true;
+            clickAction = () => {
+              setActiveCategory(null);
+              setCurrentPage(targetPage);
+              router.push(`/${websiteData.subdomain}${targetPage.slug}`);
+            };
+          }
+        }
 
         return (
           <motion.div
             initial={initial}
             animate={animate}
             transition={transition}
-            onClick={() => {
-              if (targetPage) {
-                setActiveCategory(null);
-                setCurrentPage(targetPage);
-                router.push(`/${websiteData.subdomain}${targetPage.slug}`);
-              }
-            }}
             className={`${
               isClickable ? "cursor-pointer" : ""
             } w-full max-w-full`}
-            // THE FIX: The key now forces a complete remount of the component on page change.
             key={`${currentPage?.page_id}-${element.element_id}`}
+            onClick={clickAction} // Use the determined click action
           >
             <AiElementRunner element={element} />
           </motion.div>
