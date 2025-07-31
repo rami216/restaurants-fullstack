@@ -172,7 +172,10 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         element_type: "AI",
         position: 999,
         properties: {}, // or `{}` if you have no static props
-        aiPayload: data, // <-- top‑level
+        aiPayload: {
+          ...data,
+          id: `ai_payload_${Date.now()}`, // Add the unique ID here
+        },
       };
 
       // inject it (a one‑off rather than using handleAddElement)

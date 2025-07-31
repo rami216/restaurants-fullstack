@@ -563,118 +563,291 @@ const CreateWebsitePage = () => {
       throw err;
     }
   };
+
+  // const handleRefineElement = async (prompt: string) => {
+  //   if (!selectedItem || selection.type !== "element" || !activePage) return;
+
+  //   try {
+  //     // Deep clone selected element
+  //     const currentElement = JSON.parse(
+  //       JSON.stringify(selectedItem)
+  //     ) as Element;
+  //     let refinedElement: Element;
+  //     const uniqueClassName = `ai-element-${
+  //       currentElement.element_id.split("-")[0]
+  //     }`;
+
+  //     if (currentElement.element_type === "AI") {
+  //       // --- A) REFINE EXISTING AI ELEMENT WITHOUT ADDING EXTRA WRAPPER ---
+  //       const currentTemplate = currentElement.aiPayload?.aiTemplate || "";
+  //       // Remove old <style> block
+  //       const htmlOnly = currentTemplate.replace(
+  //         /<style>[\s\S]*?<\/style>/,
+  //         ""
+  //       );
+
+  //       // Generate fresh CSS
+  //       const { data: cssResult } = await api.post("/ai/generate-element-css", {
+  //         prompt,
+  //         html_context: htmlOnly,
+  //         unique_class_name: `.${uniqueClassName}`,
+  //       });
+
+  //       // Rebuild template with new CSS + original HTML
+  //       const updatedTemplate = `<style>${cssResult.css}</style>${htmlOnly}`;
+
+  //       refinedElement = {
+  //         ...currentElement,
+  //         aiPayload: {
+  //           ...currentElement.aiPayload!,
+  //           id: `ai_payload_${Date.now()}`,
+  //           aiTemplate: updatedTemplate,
+  //         },
+  //       };
+  //     } else {
+  //       // --- B) CONVERT STANDARD ELEMENT TO 'AI' WITH WRAPPER FOR SCOPING ---
+  //       const props = currentElement.properties || {};
+  //       let html_context = "";
+  //       let newProperties = {};
+
+  //       switch (currentElement.element_type) {
+  //         case "CATEGORY": {
+  //           const {
+  //             nameStyle = {},
+  //             style: cardStyle = {},
+  //             image_url,
+  //             name,
+  //             id,
+  //           } = props;
+  //           const nameStyleStr = `color:${
+  //             nameStyle.color || "inherit"
+  //           };font-weight:$
+  // {nameStyle.fontWeight||"bold"};font-style:${
+  //   nameStyle.fontStyle || "normal"
+  // };`;
+  //           const cardStyleStr = `max-width:${
+  //             cardStyle.maxWidth || "320px"
+  //           };text-align:${cardStyle.textAlign || "center"};border:${
+  //             cardStyle.border || "none"
+  //           };`;
+  //           html_context = `
+  // <div class="card ${uniqueClassName}" style="${cardStyleStr}">
+  //   <img src="http://127.0.0.1:8000${image_url}" alt="${name}" style="width:100%;height:160px;object-fit:cover;" />
+  //   <div style="padding:1rem;"><h4 style="${nameStyleStr}">${name}</h4></div>
+  // </div>`;
+  //           newProperties = { actionType: "SET_CATEGORY", actionValue: id };
+  //           break;
+  //         }
+  //         case "BUTTON": {
+  //           const { style = {}, text, action_value } = props;
+  //           const styleStr = `background-color:${
+  //             style.backgroundColor || "blue"
+  //           };color:${style.color || "white"};padding:${
+  //             style.padding || "10px 20px"
+  //           };border:${style.border || "none"};border-radius:${
+  //             style.borderRadius || "5px"
+  //           };cursor:pointer;`;
+  //           html_context = `<button class="ai-button ${uniqueClassName}" style="${styleStr}">${
+  //             text || "Click Me"
+  //           }</button>`;
+  //           newProperties = {
+  //             actionType: "PAGE_NAV",
+  //             actionValue: action_value,
+  //           };
+  //           break;
+  //         }
+  //         case "TEXT": {
+  //           const { style = {}, content } = props;
+  //           const styleStr = `color:${style.color || "inherit"};font-size:${
+  //             style.fontSize || "1rem"
+  //           };`;
+  //           html_context = `<div class="ai-text ${uniqueClassName}" style="${styleStr}">${
+  //             content || ""
+  //           }</div>`;
+  //           break;
+  //         }
+  //         case "IMAGE": {
+  //           const { style = {}, src, alt } = props;
+  //           const styleStr = `width:${style.width || "100%"};height:${
+  //             style.height || "auto"
+  //           };object-fit:cover;`;
+  //           const url = src
+  //             ? `${api.defaults.baseURL}${src}`
+  //             : "https://placehold.co/600x400";
+  //           html_context = `<img class="ai-image ${uniqueClassName}" src="${url}" alt="${
+  //             alt || ""
+  //           }" style="${styleStr}" />`;
+  //           break;
+  //         }
+  //         default:
+  //           alert("Refinement not supported for this element type.");
+  //           return;
+  //       }
+
+  //       // Generate scoped CSS
+  //       const { data: cssResult } = await api.post("/ai/generate-element-css", {
+  //         prompt,
+  //         html_context,
+  //         unique_class_name: `.${uniqueClassName}`,
+  //       });
+
+  //       // Wrap HTML for scoping
+  //       const wrapper = `<div class="${uniqueClassName}">${html_context}</div>`;
+  //       const newAiPayload: AiElementPayload = {
+  //         id: `ai_payload_${Date.now()}`,
+  //         aiTemplate: `<style>${cssResult.css}</style>${wrapper}`,
+  //         properties: {},
+  //         editableProps: [],
+  //       };
+
+  //       refinedElement = {
+  //         ...currentElement,
+  //         element_type: "AI",
+  //         properties: newProperties,
+  //         aiPayload: newAiPayload,
+  //       };
+  //     }
+
+  //     // --- UPDATE STATE ---
+  //     const updatedSections = activePage.sections.map((section) => ({
+  //       ...section,
+  //       subsections: section.subsections.map((sub) => ({
+  //         ...sub,
+  //         elements: sub.elements.map((el) =>
+  //           el.element_id === currentElement.element_id ? refinedElement : el
+  //         ),
+  //       })),
+  //     }));
+
+  //     updateWebsiteData({ ...activePage, sections: updatedSections });
+  //     setSelection({ type: "element", id: refinedElement.element_id });
+  //   } catch (err) {
+  //     console.error("AI element refinement failed:", err);
+  //     alert("AI element refinement failed.");
+  //     throw err;
+  //   }
+  // };
+
   const handleRefineElement = async (prompt: string) => {
     if (!selectedItem || selection.type !== "element" || !activePage) return;
 
     try {
-      const currentElement = selectedItem as Element;
+      // Deep clone selected element
+      const currentElement = JSON.parse(
+        JSON.stringify(selectedItem)
+      ) as Element;
       let refinedElement: Element;
+      const uniqueClassName = `ai-element-${
+        currentElement.element_id.split("-")[0]
+      }`;
 
       if (currentElement.element_type === "AI") {
-        // --- A) LOGIC TO REFINE AN EXISTING AI ELEMENT ---
-        const currentTemplate = currentElement.aiPayload?.aiTemplate || "";
-
-        const { data: cssResult } = await api.post("/ai/generate-element-css", {
+        const fullTemplate = currentElement.aiPayload!.aiTemplate!;
+        const { data } = await api.post("/ai/refine-element", {
           prompt,
-          html_context: currentTemplate,
+          full_template: fullTemplate,
+          unique_class_name: `.${uniqueClassName}`,
         });
-
-        const updatedTemplate = currentTemplate.replace(
-          /<style>/,
-          `<style>${cssResult.css}\n`
-        );
 
         refinedElement = {
           ...currentElement,
           aiPayload: {
             ...currentElement.aiPayload!,
-            aiTemplate: updatedTemplate,
+            id: `ai_payload_${Date.now()}`,
+            aiTemplate: data.template,
           },
         };
       } else {
-        // --- B) LOGIC TO CONVERT A STANDARD ELEMENT TO 'AI' ---
+        // --- B) CONVERT STANDARD ELEMENT TO 'AI' WITH WRAPPER FOR SCOPING ---
         const props = currentElement.properties || {};
         let html_context = "";
-        let newProperties = {}; // This will hold the action properties for the new AI element
+        let newProperties = {};
 
-        // --- Blueprints for each element type ---
-        if (currentElement.element_type === "CATEGORY") {
-          const nameStyle = props.nameStyle || {};
-          const cardStyle = props.style || {};
-          const nameStyleString = `color:${
-            nameStyle.color || "inherit"
-          };font-weight:${nameStyle.fontWeight || "bold"};font-style:${
-            nameStyle.fontStyle || "normal"
-          };`;
-          const cardStyleString = `max-width:${
-            cardStyle.maxWidth || "320px"
-          };text-align:${cardStyle.textAlign || "center"};border:${
-            cardStyle.border || "none"
-          };`;
-
-          html_context = `
-            <div class="card" style="${cardStyleString}">
-              <img src="http://127.0.0.1:8000${props.image_url}" alt="${props.name}" style="width:100%; height:160px; object-fit:cover;">
-              <div style="padding:1rem;"><h4 style="${nameStyleString}">${props.name}</h4></div>
-            </div>`;
-
-          // Preserve the category's special action
-          newProperties = {
-            actionType: "SET_CATEGORY",
-            actionValue: props.id,
-          };
-        } else if (currentElement.element_type === "BUTTON") {
-          const style = props.style || {};
-          const styleString = `background-color:${
-            style.backgroundColor || "blue"
-          };color:${style.color || "white"};padding:${
-            style.padding || "10px 20px"
-          };border:${style.border || "none"};border-radius:${
-            style.borderRadius || "5px"
-          };cursor:pointer;`;
-
-          html_context = `<button class="ai-button" style="${styleString}">${
-            props.text || "Click Me"
-          }</button>`;
-
-          // Preserve the button's navigation action
-          newProperties = {
-            actionType: "PAGE_NAV",
-            actionValue: props.action_value,
-          };
-        } else if (currentElement.element_type === "TEXT") {
-          const style = props.style || {};
-          const styleString = `color:${style.color || "inherit"};font-size:${
-            style.fontSize || "1rem"
-          };`;
-          html_context = `<div class="ai-text" style="${styleString}">${
-            props.content || ""
-          }</div>`;
-        } else if (currentElement.element_type === "IMAGE") {
-          const style = props.style || {};
-          const styleString = `width:${style.width || "100%"};height:${
-            style.height || "auto"
-          };object-fit:cover;`;
-          const src = props.src
-            ? `${api.defaults.baseURL}${props.src}`
-            : "https://placehold.co/600x400";
-          html_context = `<img class="ai-image" src="${src}" alt="${
-            props.alt || ""
-          }" style="${styleString}">`;
-        } else {
-          alert(
-            "This complex refinement is not yet supported for this element type."
-          );
-          return;
+        switch (currentElement.element_type) {
+          case "CATEGORY": {
+            const {
+              nameStyle = {},
+              style: cardStyle = {},
+              image_url,
+              name,
+              id,
+            } = props;
+            const nameStyleStr = `color:${
+              nameStyle.color || "inherit"
+            };font-weight:${nameStyle.fontWeight || "bold"};font-style:${
+              nameStyle.fontStyle || "normal"
+            };`;
+            const cardStyleStr = `max-width:${
+              cardStyle.maxWidth || "320px"
+            };text-align:${cardStyle.textAlign || "center"};border:${
+              cardStyle.border || "none"
+            };`;
+            html_context = `
+  <div class="card ${uniqueClassName}" style="${cardStyleStr}">
+    <img src="http://127.0.0.1:8000${image_url}" alt="${name}" style="width:100%;height:160px;object-fit:cover;" />
+    <div style="padding:1rem;"><h4 style="${nameStyleStr}">${name}</h4></div>
+  </div>`;
+            newProperties = { actionType: "SET_CATEGORY", actionValue: id };
+            break;
+          }
+          case "BUTTON": {
+            const { style = {}, text, action_value } = props;
+            const styleStr = `background-color:${
+              style.backgroundColor || "blue"
+            };color:${style.color || "white"};padding:${
+              style.padding || "10px 20px"
+            };border:${style.border || "none"};border-radius:${
+              style.borderRadius || "5px"
+            };cursor:pointer;`;
+            html_context = `<button class="ai-button ${uniqueClassName}" style="${styleStr}">${
+              text || "Click Me"
+            }</button>`;
+            newProperties = {
+              actionType: "PAGE_NAV",
+              actionValue: action_value,
+            };
+            break;
+          }
+          case "TEXT": {
+            const { style = {}, content } = props;
+            const styleStr = `color:${style.color || "inherit"};font-size:${
+              style.fontSize || "1rem"
+            };`;
+            html_context = `<div class="ai-text ${uniqueClassName}" style="${styleStr}">${
+              content || ""
+            }</div>`;
+            break;
+          }
+          case "IMAGE": {
+            const { style = {}, src, alt } = props;
+            const styleStr = `width:${style.width || "100%"};height:${
+              style.height || "auto"
+            };object-fit:cover;`;
+            const url = src
+              ? `${api.defaults.baseURL}${src}`
+              : "https://placehold.co/600x400";
+            html_context = `<img class="ai-image ${uniqueClassName}" src="${url}" alt="${
+              alt || ""
+            }" style="${styleStr}" />`;
+            break;
+          }
+          default:
+            alert("Refinement not supported for this element type.");
+            return;
         }
 
+        // Generate scoped CSS
         const { data: cssResult } = await api.post("/ai/generate-element-css", {
           prompt,
           html_context,
+          unique_class_name: `.${uniqueClassName}`,
         });
 
+        // Wrap HTML for scoping
+        const wrapper = `<div class="${uniqueClassName}">${html_context}</div>`;
         const newAiPayload: AiElementPayload = {
-          aiTemplate: `<style>${cssResult.css}</style>${html_context}`,
+          id: `ai_payload_${Date.now()}`,
+          aiTemplate: `<style>${cssResult.css}</style>${wrapper}`,
           properties: {},
           editableProps: [],
         };
@@ -682,17 +855,17 @@ const CreateWebsitePage = () => {
         refinedElement = {
           ...currentElement,
           element_type: "AI",
-          properties: newProperties, // Add the preserved action properties
+          properties: newProperties,
           aiPayload: newAiPayload,
         };
       }
 
-      // --- C) UPDATE THE STATE ---
+      // --- UPDATE STATE ---
       const updatedSections = activePage.sections.map((section) => ({
         ...section,
-        subsections: section.subsections.map((subsection) => ({
-          ...subsection,
-          elements: subsection.elements.map((el) =>
+        subsections: section.subsections.map((sub) => ({
+          ...sub,
+          elements: sub.elements.map((el) =>
             el.element_id === currentElement.element_id ? refinedElement : el
           ),
         })),
@@ -706,6 +879,7 @@ const CreateWebsitePage = () => {
       throw err;
     }
   };
+
   const handleGeneratePage = async (prompt: string) => {
     if (!activePage || !prompt.trim()) return;
 

@@ -3,7 +3,8 @@ import os, json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from openai import OpenAI, OpenAIError
-from typing import Dict, Any
+from typing import Dict, Any, Optional
+import re
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -53,7 +54,8 @@ Your output MUST be a valid JSON object containing a single key: "subsections".
 """.strip()
 
 
-# PREVIOUS_WORKING_SYSTEM_PROMPT = """
+
+# TEST_SYSTEM_PROMPT_previous = """
 # You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
 # Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
@@ -61,34 +63,28 @@ Your output MUST be a valid JSON object containing a single key: "subsections".
 # **CRITICAL RULES FOR YOUR OUTPUT:**
 # 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
 # 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
-# 3.  **Interactivity (`script` key):**
-#     - Provide a JavaScript string that adds event listeners to the HTML.
-#     - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
-#     - Use `container.querySelector('.your-class')` to find and manipulate elements.
-#     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
-# 4.  **JSON Sync:**
-#     - The `properties` object must contain the initial value for every mustache token.
-#     - The `editableProps` array must contain an entry for every token.
+# 3.  **Interactivity (`script` key):** Provide a JavaScript string that adds event listeners. The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+# 4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+#     -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+#     -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
+#     -   Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+#     -   For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
 
 # **INPUT:** A user's prompt.
-
 # **OUTPUT:** A valid JSON object.
 
-# **Example Prompt:** "an accordion with one item"
+# **Example Prompt:** "an accordion with two items"
 # **Example Output:**
 # {
-#   "aiTemplate": "<div class=\\"ai-container\\"><style>.accordion-title { background: {{bgColor}}; } .accordion-content { max-height: 0; overflow: hidden; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title}}</h3><div class=\\"accordion-content\\"><p>{{content}}</p></div></div></div>",
-#   "properties": {
-#     "bgColor": "#f1f1f1",
-#     "title": "Click to Open",
-#     "content": "This is the hidden content."
-#   },
+#   "aiTemplate": "<div class=\\"ai-container\\"><style>...</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
+#   "properties": { "title1": "Question 1", "content1": "Answer 1.", "title2": "Question 2", "content2": "Answer 2." },
 #   "editableProps": [
-#     { "key": "bgColor", "label": "Header Color", "type": "color" },
-#     { "key": "title", "label": "Title", "type": "text" },
-#     { "key": "content", "label": "Content", "type": "text" }
+#     { "key": "title1", "label": "Title 1", "type": "text" },
+#     { "key": "content1", "label": "Content 1", "type": "text" },
+#     { "key": "title2", "label": "Title 2", "type": "text" },
+#     { "key": "content2", "label": "Content 2", "type": "text" }
 #   ],
-#   "script": "const title = container.querySelector('.accordion-title'); const content = container.querySelector('.accordion-content'); title.addEventListener('click', () => { if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } });"
+#   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
 # }
 # """.strip()
 TEST_SYSTEM_PROMPT = """
@@ -100,6 +96,43 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
 3.  **Interactivity (`script` key):** Provide a JavaScript string that adds event listeners. The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    -   Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    -   For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+
+**INPUT:** A user's prompt.
+**OUTPUT:** A valid JSON object.
+
+**Example Prompt:** "an accordion with two items"
+**Example Output:**
+{
+  "aiTemplate": "<div class=\\"ai-container\\"><style>...</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
+  "properties": { "title1": "Question 1", "content1": "Answer 1.", "title2": "Question 2", "content2": "Answer 2." },
+  "editableProps": [
+    { "key": "title1", "label": "Title 1", "type": "text" },
+    { "key": "content1", "label": "Content 1", "type": "text" },
+    { "key": "title2", "label": "Title 2", "type": "text" },
+    { "key": "content2", "label": "Content 2", "type": "text" }
+  ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
+}
+""".strip()
+
+SYSTEM_PROMPT = """
+You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+**CRITICAL RULES FOR YOUR OUTPUT:**
+1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
+2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
+3.  **Interactivity (`script` key):**
+    - Provide a JavaScript string that adds event listeners to the HTML.
+    - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+    - Use `container.querySelector('.your-class')` to find and manipulate elements.
+    - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
 4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
@@ -179,10 +212,10 @@ async def generate_ai_element(body: GenerateRequest):
             model="gpt-4.1-mini",
             response_format={ "type": "json_object" },
             messages=[
-                {"role": "system", "content": TEST_SYSTEM_PROMPT},
+                {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
-            temperature=0.4,
+            temperature=0.2, # <-- LOWER THIS VALUE
             max_tokens=4095,
         )
         content = resp.choices[0].message.content
@@ -212,38 +245,156 @@ async def generate_ai_section(body: GenerateRequest):
   
   
   #region refining element
-class CssGenRequest(BaseModel):
+# class CssGenRequest(BaseModel):
+#     prompt: str
+#     html_context: str
+#     unique_class_name: str # <-- ADD THIS
+#     old_css: Optional[str] = None
+
+
+# CSS_GEN_SYSTEM_PROMPT = """
+# You are a CSS code generator. Your only job is to write exactly one, valid CSS rule scoped to the unique class.
+
+# You will receive:
+# - A **user prompt** (e.g. “make on-hover spin” / “remove the spin animation”)
+# - The **HTML context** so you can pick the right selector or pseudo-selector
+# - A **unique class name** to scope your rule
+# - The **existing CSS** (if any) already applied to this element
+
+# Your task:
+# 1. **Interpret** the user's prompt.
+# 2. **Compare** against the existing CSS when provided:
+#    - If the prompt adds or changes a style, output the new rule.
+#    - If the prompt removes a style, output a rule that resets that property (e.g. `animation: none;`).
+# 3. **Write a single CSS rule** that starts with the unique class name.
+# 4. **Return only the raw CSS code**, no Markdown or explanation.
+
+# Example:
+# - Prompt: "make the card glow on hover"  
+# - HTML Context: `<div class="card unique-class-123">...</div>`  
+# - Unique Class Name: `.unique-class-123`  
+# - Response:  
+# .unique-class-123.card:hover { box-shadow: 0 0 15px 5px rgba(138, 43, 226, 0.7); }
+# """.strip()
+
+
+# @router.post("/generate-element-css")
+# async def generate_element_css(body: CssGenRequest):
+#   try:
+#       user_content = (
+#           f"EXISTING_CSS:\n```css\n{body.old_css or ''}\n```\n\n"
+#           f"PROMPT: \"{body.prompt}\"\n\n"
+#           f"HTML CONTEXT:\n```{body.html_context}```\n\n"
+#           f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+#       )
+
+#       resp = openai.chat.completions.create(
+#           model="gpt-4o",
+#           messages=[
+#               {"role": "system", "content": CSS_GEN_SYSTEM_PROMPT},
+#               {"role": "user",   "content": user_content},
+#           ],
+#           temperature=0.2
+#       )
+
+#       css_snippet = (
+#           resp.choices[0].message.content
+#           .strip()
+#           .replace("```css", "")
+#           .replace("```", "")
+#       )
+#   except (OpenAIError, json.JSONDecodeError) as e:
+#       raise HTTPException(500, f"CSS generation failed: {e}")
+
+#   return {"css": css_snippet}
+# class RefineRequest(BaseModel):
+#     prompt: str
+#     full_template: str         # the current aiTemplate (HTML + <style>)
+#     unique_class_name: str     # for scoping, if AI needs it
+
+# REFINE_SYSTEM_PROMPT = """
+# You are a combined HTML & CSS editor.  
+# You will receive:
+# - A **user prompt** describing exactly what to change (“swap the expand icon to a minus sign”, “remove the spin animation”, “make the text gradient”, etc.).
+# - The **full existing template**, which contains `<style>…</style>` followed by the HTML snippet.
+# - The **unique class name** used for scoping.
+
+# Your job is to produce a single, complete updated snippet that:
+# 1. Implements everything the user asked (structure, icons, classes, animations, styles).
+# 2. Keeps any unrelated parts of the original template intact.
+# 3. Returns the full `<style>` block (if you need to add/edit CSS) plus the updated HTML.
+
+# **Return ONLY the updated snippet** (no explanations, no Markdown fences).
+# """.strip()
+
+# @router.post("/refine-element")
+# async def refine_element(body: RefineRequest):
+#     try:
+#         user_content = (
+#             f"PROMPT: \"{body.prompt}\"\n\n"
+#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
+#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+#         )
+#         resp = openai.chat.completions.create(
+#             model="gpt-4o",
+#             messages=[
+#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
+#                 {"role": "user",    "content": user_content},
+#             ],
+#             temperature=0.25
+#         )
+#         updated = resp.choices[0].message.content.strip()
+#     except (OpenAIError, json.JSONDecodeError) as e:
+#         raise HTTPException(500, f"Refine-element failed: {e}")
+
+#     return {"template": updated}
+class RefineRequest(BaseModel):
     prompt: str
-    html_context: str
+    full_template: str         # may contain <style>…</style>, HTML, <script>…</script>
+    unique_class_name: str
 
-CSS_GEN_SYSTEM_PROMPT = """
-You are an expert CSS generator. Your task is to write a small snippet of CSS code based on a user's prompt and the provided HTML.
+REFINE_SYSTEM_PROMPT = """
+You are a combined HTML, CSS and JavaScript editor.
+You will receive:
+  • A **user prompt** describing exactly what they want (structure, style or behavior).
+  • The **full existing template**, which may include:
+      - A `<style>` block
+      - HTML markup
+      - `<script>` tags with JS interactivity
+  • The **unique class name** used for scoping CSS/JS if needed.
 
-You will receive a user's prompt and the HTML of the element to be styled.
-Your task is to write ONLY the CSS rule needed to achieve the user's request.
-Do not include <style> tags or explanations. Just the raw CSS.
-Example Prompt: "make the card glow on hover"
-Example HTML: `<div class="card">...</div>`
-Your Response: `.card:hover { box-shadow: 0 0 15px 5px rgba(138, 43, 226, 0.7); }`
+Your job is to return a single, complete updated snippet that:
+1. Implements everything the user asked (swap icons, add/remove animations, change event handlers, etc.).
+2. Keeps unrelated parts of the original intact.
+3. Returns any modified or new `<style>` and `<script>` blocks alongside the updated HTML.
+4. Uses the given unique class if you need to scope CSS or select elements in JS.
+
+**Return ONLY the updated snippet**, no explanations, no Markdown fences.
 """.strip()
 
-@router.post("/generate-element-css")
-async def generate_element_css(body: CssGenRequest):
+@router.post("/refine-element")
+async def refine_element(body: RefineRequest):
     try:
-        user_content = f"PROMPT: \"{body.prompt}\"\n\nHTML CONTEXT:\n```{body.html_context}```"
+        user_content = (
+            f"PROMPT: \"{body.prompt}\"\n\n"
+            f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
+            f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+        )
         resp = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system", "content": CSS_GEN_SYSTEM_PROMPT},
-                {"role": "user",   "content": user_content},
-            ]
+                {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
+                {"role": "user",    "content": user_content},
+            ],
+            temperature=0.25
         )
-        css_snippet = resp.choices[0].message.content.strip().replace("```css", "").replace("```", "")
+        raw = resp.choices[0].message.content.strip()
+        clean = re.sub(r"^```[^\n]*\n", "", raw)    
+        clean = re.sub(r"\n```$", "", clean)    
     except (OpenAIError, json.JSONDecodeError) as e:
-        raise HTTPException(500, f"CSS generation failed: {e}")
-    return {"css": css_snippet}
+        raise HTTPException(500, f"Refine-element failed: {e}")
 
-
+    return {"template": clean}
 
 
   #endregion

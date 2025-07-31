@@ -770,10 +770,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             className={`${
               isClickable ? "cursor-pointer" : ""
             } w-full max-w-full`}
-            key={`${currentPage?.page_id}-${element.element_id}`}
+            key={element.element_id}
             onClick={clickAction} // Use the determined click action
           >
-            <AiElementRunner element={element} />
+            <AiElementRunner key={element.aiPayload?.id} element={element} />
           </motion.div>
         );
       }

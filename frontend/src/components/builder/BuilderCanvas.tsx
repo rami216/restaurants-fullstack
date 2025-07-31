@@ -333,9 +333,15 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
       }
-      case "AI": {
-        return wrap(<AiElementRunner element={element as BuilderElement} />);
-      }
+      // case "AI": {
+      //   // Return the AiElementRunner directly, without the wrap()
+      //   return (
+      //     <AiElementRunner key={element.aiPayload?.id} element={element} />
+      //   );
+      // }
+      case "AI":
+        return wrap(<AiElementRunner element={element} />);
+
       default: {
         return wrap(
           <div className="border p-2 bg-gray-300 text-black rounded">

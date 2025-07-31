@@ -6,12 +6,12 @@ export interface EditableProp {
   type: "text" | "number" | "color";
 }
 export interface AiElementPayload {
+  id: string; // <-- ADD THIS LINE
   aiTemplate: string;
   properties: Record<string, any>;
   editableProps: EditableProp[];
   script?: string;
 }
-
 export interface AnimationProps {
   type: "fade-in" | "slide-up" | "bounce" | "pulse";
   duration?: number; // seconds, e.g. 0.5

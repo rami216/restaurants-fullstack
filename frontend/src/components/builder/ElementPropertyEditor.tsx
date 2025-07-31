@@ -1664,28 +1664,43 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   // inside your component, alongside handlePropertyChange:
+  // const handleAiPropChange = (key: string, value: any) => {
+  //   if (!selectedItem.aiPayload) return;
+
+  //   // 1. Create the new properties object
+  //   const newAiProps = {
+  //     ...(selectedItem.aiPayload.properties || {}),
+  //     [key]: value,
+  //   };
+
+  //   // 2. Update the aiPayload, but ONLY change the properties.
+  //   //    NEVER change the aiTemplate here.
+  //   const updated = {
+  //     ...selectedItem,
+  //     aiPayload: {
+  //       ...selectedItem.aiPayload,
+  //       properties: newAiProps, // Only update the data, not the template
+  //     },
+  //   };
+
+  //   updateItem(updated);
+  // };
   const handleAiPropChange = (key: string, value: any) => {
-    if (!selectedItem.aiPayload) return;
-    // 1) update the live values
-    const newProps = {
-      ...selectedItem.aiPayload.properties,
-      [key]: value,
-    };
-    // 2) re‑render the template
-    const newTemplate = Mustache.render(
-      selectedItem.aiPayload.aiTemplate,
-      newProps
-    );
-    // 3) write back into the element
-    const updated = {
-      ...selectedItem,
-      aiPayload: {
-        ...selectedItem.aiPayload,
-        properties: newProps,
-        aiTemplate: newTemplate,
-      },
-    };
-    updateItem(updated);
+    if (!selectedItem || !selectedItem.aiPayload) return;
+
+    // Create a complete, deep copy of the element to prevent any and all side effects.
+    const updatedElement = JSON.parse(JSON.stringify(selectedItem));
+
+    // Ensure the properties object exists on the new copy.
+    if (!updatedElement.aiPayload.properties) {
+      updatedElement.aiPayload.properties = {};
+    }
+
+    // Set the new value directly on the copy.
+    updatedElement.aiPayload.properties[key] = value;
+
+    // Send the pristine, updated copy to the main state.
+    updateItem(updatedElement);
   };
 
   const renderElementEditor = () => {
