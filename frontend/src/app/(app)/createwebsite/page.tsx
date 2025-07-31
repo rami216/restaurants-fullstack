@@ -17,6 +17,7 @@ import {
   Subsection,
   Section,
   AiElementPayload,
+  EditableProp,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 import { v4 as uuidv4 } from "uuid";
@@ -568,47 +569,24 @@ const CreateWebsitePage = () => {
   //   if (!selectedItem || selection.type !== "element" || !activePage) return;
 
   //   try {
-  //     // Deep clone selected element
+  //     // 1) Deep-clone the selected element
   //     const currentElement = JSON.parse(
   //       JSON.stringify(selectedItem)
   //     ) as Element;
-  //     let refinedElement: Element;
   //     const uniqueClassName = `ai-element-${
   //       currentElement.element_id.split("-")[0]
   //     }`;
 
+  //     // 2) Build a single “fullTemplate” string for the AI
+  //     //    - If it’s already AI, just reuse its aiTemplate
+  //     //    - Otherwise, wrap its HTML in a scoped container with an empty <style>
+  //     let fullTemplate: string;
   //     if (currentElement.element_type === "AI") {
-  //       // --- A) REFINE EXISTING AI ELEMENT WITHOUT ADDING EXTRA WRAPPER ---
-  //       const currentTemplate = currentElement.aiPayload?.aiTemplate || "";
-  //       // Remove old <style> block
-  //       const htmlOnly = currentTemplate.replace(
-  //         /<style>[\s\S]*?<\/style>/,
-  //         ""
-  //       );
-
-  //       // Generate fresh CSS
-  //       const { data: cssResult } = await api.post("/ai/generate-element-css", {
-  //         prompt,
-  //         html_context: htmlOnly,
-  //         unique_class_name: `.${uniqueClassName}`,
-  //       });
-
-  //       // Rebuild template with new CSS + original HTML
-  //       const updatedTemplate = `<style>${cssResult.css}</style>${htmlOnly}`;
-
-  //       refinedElement = {
-  //         ...currentElement,
-  //         aiPayload: {
-  //           ...currentElement.aiPayload!,
-  //           id: `ai_payload_${Date.now()}`,
-  //           aiTemplate: updatedTemplate,
-  //         },
-  //       };
+  //       fullTemplate = currentElement.aiPayload!.aiTemplate!;
   //     } else {
-  //       // --- B) CONVERT STANDARD ELEMENT TO 'AI' WITH WRAPPER FOR SCOPING ---
+  //       // recreate the element’s HTML + inline styles exactly as you want the AI to see it
   //       const props = currentElement.properties || {};
-  //       let html_context = "";
-  //       let newProperties = {};
+  //       let htmlOnly = "";
 
   //       switch (currentElement.element_type) {
   //         case "CATEGORY": {
@@ -621,21 +599,19 @@ const CreateWebsitePage = () => {
   //           } = props;
   //           const nameStyleStr = `color:${
   //             nameStyle.color || "inherit"
-  //           };font-weight:$
-  // {nameStyle.fontWeight||"bold"};font-style:${
-  //   nameStyle.fontStyle || "normal"
-  // };`;
+  //           };font-weight:${nameStyle.fontWeight || "bold"};font-style:${
+  //             nameStyle.fontStyle || "normal"
+  //           };`;
   //           const cardStyleStr = `max-width:${
   //             cardStyle.maxWidth || "320px"
   //           };text-align:${cardStyle.textAlign || "center"};border:${
   //             cardStyle.border || "none"
   //           };`;
-  //           html_context = `
-  // <div class="card ${uniqueClassName}" style="${cardStyleStr}">
-  //   <img src="http://127.0.0.1:8000${image_url}" alt="${name}" style="width:100%;height:160px;object-fit:cover;" />
-  //   <div style="padding:1rem;"><h4 style="${nameStyleStr}">${name}</h4></div>
-  // </div>`;
-  //           newProperties = { actionType: "SET_CATEGORY", actionValue: id };
+  //           htmlOnly = `
+  //   <div class="card ${uniqueClassName}" style="${cardStyleStr}">
+  //     <img src="http://127.0.0.1:8000${image_url}" alt="${name}" style="width:100%;height:160px;object-fit:cover;" />
+  //     <div style="padding:1rem;"><h4 style="${nameStyleStr}">${name}</h4></div>
+  //   </div>`;
   //           break;
   //         }
   //         case "BUTTON": {
@@ -647,13 +623,9 @@ const CreateWebsitePage = () => {
   //           };border:${style.border || "none"};border-radius:${
   //             style.borderRadius || "5px"
   //           };cursor:pointer;`;
-  //           html_context = `<button class="ai-button ${uniqueClassName}" style="${styleStr}">${
+  //           htmlOnly = `<button class="ai-button ${uniqueClassName}" style="${styleStr}">${
   //             text || "Click Me"
   //           }</button>`;
-  //           newProperties = {
-  //             actionType: "PAGE_NAV",
-  //             actionValue: action_value,
-  //           };
   //           break;
   //         }
   //         case "TEXT": {
@@ -661,7 +633,7 @@ const CreateWebsitePage = () => {
   //           const styleStr = `color:${style.color || "inherit"};font-size:${
   //             style.fontSize || "1rem"
   //           };`;
-  //           html_context = `<div class="ai-text ${uniqueClassName}" style="${styleStr}">${
+  //           htmlOnly = `<div class="ai-text ${uniqueClassName}" style="${styleStr}">${
   //             content || ""
   //           }</div>`;
   //           break;
@@ -674,7 +646,7 @@ const CreateWebsitePage = () => {
   //           const url = src
   //             ? `${api.defaults.baseURL}${src}`
   //             : "https://placehold.co/600x400";
-  //           html_context = `<img class="ai-image ${uniqueClassName}" src="${url}" alt="${
+  //           htmlOnly = `<img class="ai-image ${uniqueClassName}" src="${url}" alt="${
   //             alt || ""
   //           }" style="${styleStr}" />`;
   //           break;
@@ -684,31 +656,42 @@ const CreateWebsitePage = () => {
   //           return;
   //       }
 
-  //       // Generate scoped CSS
-  //       const { data: cssResult } = await api.post("/ai/generate-element-css", {
-  //         prompt,
-  //         html_context,
-  //         unique_class_name: `.${uniqueClassName}`,
-  //       });
-
-  //       // Wrap HTML for scoping
-  //       const wrapper = `<div class="${uniqueClassName}">${html_context}</div>`;
-  //       const newAiPayload: AiElementPayload = {
-  //         id: `ai_payload_${Date.now()}`,
-  //         aiTemplate: `<style>${cssResult.css}</style>${wrapper}`,
-  //         properties: {},
-  //         editableProps: [],
-  //       };
-
-  //       refinedElement = {
-  //         ...currentElement,
-  //         element_type: "AI",
-  //         properties: newProperties,
-  //         aiPayload: newAiPayload,
-  //       };
+  //       // combine into a blank-style + wrapper container
+  //       fullTemplate = `<style></style><div class="${uniqueClassName}">${htmlOnly}</div>`;
   //     }
 
-  //     // --- UPDATE STATE ---
+  //     // 3) One-shot API call: hand the AI the full snippet + your instruction
+  //     const { data } = await api.post("/ai/refine-element", {
+  //       prompt,
+  //       full_template: fullTemplate,
+  //       unique_class_name: `.${uniqueClassName}`,
+  //     });
+
+  //     // 4) Build the new Element with the AI’s response
+  //     // const refinedElement: Element = {
+  //     //   ...currentElement,
+  //     //   element_type: "AI",
+  //     //   properties: currentElement.properties,
+  //     //   aiPayload: {
+  //     //     id: `ai_payload_${Date.now()}`,
+  //     //     aiTemplate: data.template,
+  //     //     properties: {},
+  //     //     editableProps: [],
+  //     //   },
+  //     // };
+  //     const refinedElement: Element = {
+  //       ...currentElement,
+  //       element_type: "AI",
+  //       properties: currentElement.properties,
+  //       aiPayload: {
+  //         // copy all existing aiPayload fields (properties & editableProps)
+  //         ...currentElement.aiPayload!,
+  //         id: `ai_payload_${Date.now()}`,
+  //         aiTemplate: data.template,
+  //       },
+  //     };
+
+  //     // 5) Replace it in your page state
   //     const updatedSections = activePage.sections.map((section) => ({
   //       ...section,
   //       subsections: section.subsections.map((sub) => ({
@@ -727,108 +710,81 @@ const CreateWebsitePage = () => {
   //     throw err;
   //   }
   // };
-
   const handleRefineElement = async (prompt: string) => {
     if (!selectedItem || selection.type !== "element" || !activePage) return;
 
     try {
-      // Deep clone selected element
+      // 1) Clone the selected element
       const currentElement = JSON.parse(
         JSON.stringify(selectedItem)
       ) as Element;
-      let refinedElement: Element;
       const uniqueClassName = `ai-element-${
         currentElement.element_id.split("-")[0]
       }`;
 
-      if (currentElement.element_type === "AI") {
-        const fullTemplate = currentElement.aiPayload!.aiTemplate!;
-        const { data } = await api.post("/ai/refine-element", {
-          prompt,
-          full_template: fullTemplate,
-          unique_class_name: `.${uniqueClassName}`,
-        });
-
-        refinedElement = {
-          ...currentElement,
-          aiPayload: {
-            ...currentElement.aiPayload!,
-            id: `ai_payload_${Date.now()}`,
-            aiTemplate: data.template,
-          },
-        };
+      // 2) Build the “fullTemplate” for the AI:
+      //    – If already AI, reuse its aiTemplate
+      //    – Otherwise reconstruct its raw HTML + inline styles in a scoped wrapper
+      let fullTemplate: string;
+      if (currentElement.element_type === "AI" && currentElement.aiPayload) {
+        fullTemplate = currentElement.aiPayload.aiTemplate;
       } else {
-        // --- B) CONVERT STANDARD ELEMENT TO 'AI' WITH WRAPPER FOR SCOPING ---
         const props = currentElement.properties || {};
-        let html_context = "";
-        let newProperties = {};
+        let htmlOnly = "";
 
         switch (currentElement.element_type) {
+          case "TEXT": {
+            const { content = "", style = {} } = props;
+            htmlOnly = `<div class="${uniqueClassName}" style="
+              color:${style.color ?? "inherit"};
+              font-size:${style.fontSize ?? "1rem"};
+            ">${content}</div>`;
+            break;
+          }
+          case "IMAGE": {
+            const { src = "", alt = "", style = {} } = props;
+            const url = src ? `${api.defaults.baseURL}${src}` : "";
+            htmlOnly = `<img class="${uniqueClassName}" src="${url}" alt="${alt}" style="
+              width:${style.width ?? "100%"};
+              height:${style.height ?? "auto"};
+              object-fit:cover;
+            " />`;
+            break;
+          }
+          case "BUTTON": {
+            const { text = "", style = {} } = props;
+            htmlOnly = `<button class="${uniqueClassName}" style="
+              background-color:${style.backgroundColor ?? "blue"};
+              color:${style.color ?? "white"};
+              padding:${style.padding ?? "10px 20px"};
+              border:${style.border ?? "none"};
+              border-radius:${style.borderRadius ?? "5px"};
+              cursor:pointer;
+            ">${text}</button>`;
+            break;
+          }
           case "CATEGORY": {
             const {
               nameStyle = {},
               style: cardStyle = {},
               image_url,
-              name,
-              id,
+              name = "",
             } = props;
-            const nameStyleStr = `color:${
-              nameStyle.color || "inherit"
-            };font-weight:${nameStyle.fontWeight || "bold"};font-style:${
-              nameStyle.fontStyle || "normal"
-            };`;
-            const cardStyleStr = `max-width:${
-              cardStyle.maxWidth || "320px"
-            };text-align:${cardStyle.textAlign || "center"};border:${
-              cardStyle.border || "none"
-            };`;
-            html_context = `
-  <div class="card ${uniqueClassName}" style="${cardStyleStr}">
+            htmlOnly = `
+  <div class="card ${uniqueClassName}" style="
+    max-width:${cardStyle.maxWidth ?? "320px"};
+    text-align:${cardStyle.textAlign ?? "center"};
+    border:${cardStyle.border ?? "none"};
+  ">
     <img src="http://127.0.0.1:8000${image_url}" alt="${name}" style="width:100%;height:160px;object-fit:cover;" />
-    <div style="padding:1rem;"><h4 style="${nameStyleStr}">${name}</h4></div>
+    <div style="padding:1rem;">
+      <h4 style="
+        color:${nameStyle.color ?? "inherit"};
+        font-weight:${nameStyle.fontWeight ?? "bold"};
+        font-style:${nameStyle.fontStyle ?? "normal"};
+      ">${name}</h4>
+    </div>
   </div>`;
-            newProperties = { actionType: "SET_CATEGORY", actionValue: id };
-            break;
-          }
-          case "BUTTON": {
-            const { style = {}, text, action_value } = props;
-            const styleStr = `background-color:${
-              style.backgroundColor || "blue"
-            };color:${style.color || "white"};padding:${
-              style.padding || "10px 20px"
-            };border:${style.border || "none"};border-radius:${
-              style.borderRadius || "5px"
-            };cursor:pointer;`;
-            html_context = `<button class="ai-button ${uniqueClassName}" style="${styleStr}">${
-              text || "Click Me"
-            }</button>`;
-            newProperties = {
-              actionType: "PAGE_NAV",
-              actionValue: action_value,
-            };
-            break;
-          }
-          case "TEXT": {
-            const { style = {}, content } = props;
-            const styleStr = `color:${style.color || "inherit"};font-size:${
-              style.fontSize || "1rem"
-            };`;
-            html_context = `<div class="ai-text ${uniqueClassName}" style="${styleStr}">${
-              content || ""
-            }</div>`;
-            break;
-          }
-          case "IMAGE": {
-            const { style = {}, src, alt } = props;
-            const styleStr = `width:${style.width || "100%"};height:${
-              style.height || "auto"
-            };object-fit:cover;`;
-            const url = src
-              ? `${api.defaults.baseURL}${src}`
-              : "https://placehold.co/600x400";
-            html_context = `<img class="ai-image ${uniqueClassName}" src="${url}" alt="${
-              alt || ""
-            }" style="${styleStr}" />`;
             break;
           }
           default:
@@ -836,31 +792,39 @@ const CreateWebsitePage = () => {
             return;
         }
 
-        // Generate scoped CSS
-        const { data: cssResult } = await api.post("/ai/generate-element-css", {
-          prompt,
-          html_context,
-          unique_class_name: `.${uniqueClassName}`,
-        });
-
-        // Wrap HTML for scoping
-        const wrapper = `<div class="${uniqueClassName}">${html_context}</div>`;
-        const newAiPayload: AiElementPayload = {
-          id: `ai_payload_${Date.now()}`,
-          aiTemplate: `<style>${cssResult.css}</style>${wrapper}`,
-          properties: {},
-          editableProps: [],
-        };
-
-        refinedElement = {
-          ...currentElement,
-          element_type: "AI",
-          properties: newProperties,
-          aiPayload: newAiPayload,
-        };
+        // stub <style> so AI knows where to inject CSS
+        fullTemplate = `<style></style>${htmlOnly}`;
       }
 
-      // --- UPDATE STATE ---
+      // 3) One-shot call to your universal refine endpoint
+      const { data } = await api.post("/ai/refine-element", {
+        prompt,
+        full_template: fullTemplate,
+        unique_class_name: `.${uniqueClassName}`,
+      });
+
+      // 4) Build a new AiElementPayload, reusing any existing properties/editableProps
+      const oldPayload = currentElement.aiPayload;
+      const payloadProperties =
+        oldPayload?.properties ?? currentElement.properties ?? {};
+      const payloadEditableProps = oldPayload?.editableProps ?? [];
+
+      const newAiPayload: AiElementPayload = {
+        id: `ai_payload_${Date.now()}`,
+        aiTemplate: data.template,
+        properties: payloadProperties,
+        editableProps: payloadEditableProps,
+      };
+
+      // 5) Construct the refined Element (now always type "AI")
+      const refinedElement: Element = {
+        ...currentElement,
+        element_type: "AI",
+        properties: currentElement.properties,
+        aiPayload: newAiPayload,
+      };
+
+      // 6) Commit it into your page state
       const updatedSections = activePage.sections.map((section) => ({
         ...section,
         subsections: section.subsections.map((sub) => ({
