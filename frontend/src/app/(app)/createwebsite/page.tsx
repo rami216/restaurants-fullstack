@@ -137,6 +137,23 @@ const CreateWebsitePage = () => {
     fetchWebsiteData();
   }, []);
 
+  const handleCreateStandalonePage = async (title: string) => {
+    if (!websiteData) return;
+    try {
+      const slug = `/${title.toLowerCase().replace(/\s+/g, "-")}`;
+      const response = await api.post("/builder/pages/standalone", {
+        website_id: websiteData.website_id,
+        title,
+        slug,
+      });
+      await fetchWebsiteData();
+      setActivePageId(response.data.page_id); // Switch to the new page
+    } catch (error) {
+      console.error("Failed to create standalone page:", error);
+      alert("Error creating standalone page.");
+    }
+  };
+
   const handleCreateWebsite = async () => {
     try {
       await api.post("/builder/website", {});
@@ -823,6 +840,7 @@ const CreateWebsitePage = () => {
           onMoveSection={handleMoveSection} // <-- ADD THIS PROP
           onRefineSection={handleRefineSection}
           onRefineElement={handleRefineElement} // <-- ADD THIS PROP
+          onCreateStandalonePage={handleCreateStandalonePage} // <-- ADD THIS
         />
       </aside>
     </div>

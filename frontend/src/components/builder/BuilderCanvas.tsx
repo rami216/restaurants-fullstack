@@ -356,6 +356,25 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
   return (
     <div className="bg-white p-4 rounded-lg shadow-inner">
+      {/* --- START: NEW PAGE SELECTOR --- */}
+      <div className="mb-4 p-3 bg-gray-50 border rounded-lg flex items-center space-x-4">
+        <label htmlFor="page-selector" className="font-semibold text-gray-700">
+          Editing Page:
+        </label>
+        <select
+          id="page-selector"
+          value={page?.page_id || ""}
+          onChange={(e) => onPageSwitch(e.target.value)}
+          className="flex-grow border-gray-300 rounded-md shadow-sm p-2"
+        >
+          {websiteData?.pages.map((p) => (
+            <option key={p.page_id} value={p.page_id}>
+              {p.title}
+            </option>
+          ))}
+        </select>
+      </div>
+      {/* --- END: NEW PAGE SELECTOR --- */}
       {navbar && (
         <nav
           onClick={

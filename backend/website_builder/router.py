@@ -367,3 +367,33 @@ async def get_public_website_by_subdomain(
         **website.__dict__,      # all the fields from WebsiteResponse
         locations=location_list  # our new list of LocationResponse
     )
+
+
+#region standalon_page
+@router.post("/pages/standalone", response_model=schemas.PageResponse, status_code=status.HTTP_201_CREATED)
+async def create_page_standalone(
+    page_data: schemas.PageCreate, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_active_user)
+):
+    """Creates a new page without adding it to the navbar."""
+    # Check for website ownership
+    website = await db.scalar(
+        select(Website)
+        .join(RestaurantOwner)
+        .where(Website.website_id == page_data.website_id, RestaurantOwner.user_id == current_user.id)
+    )
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found or you do not have permission.")
+
+    # Create and save the new page
+    new_page = Page(
+        title=page_data.title,
+        slug=page_data.slug,
+        website_id=page_data.website_id
+    )
+    db.add(new_page)
+    await db.commit()
+    await db.refresh(new_page)
+    
+    return new_page

@@ -52,6 +52,7 @@ interface PropertyEditorProps {
   onMoveSection: (sectionId: string, direction: "up" | "down") => void; // <-- ADD THIS
   onRefineSection: (prompt: string) => void;
   onRefineElement: (prompt: string) => void; // <-- ADD THIS
+  onCreateStandalonePage: (title: string) => void; // <-- ADD THIS
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
@@ -72,6 +73,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onMoveSection,
   onRefineSection,
   onRefineElement,
+  onCreateStandalonePage,
 }) => {
   // --- START: ADD STATE FOR SECTION AI ---
   const [sectionAiPrompt, setSectionAiPrompt] = useState("");
@@ -79,6 +81,18 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
   const [elementRefinePrompt, setElementRefinePrompt] = useState("");
   const [isRefiningElement, setIsRefiningElement] = useState(false);
+
+  // 2. Add state and a handler for the new UI
+  const [isAddingStandalonePage, setIsAddingStandalonePage] = useState(false);
+  const [newStandalonePageTitle, setNewStandalonePageTitle] = useState("");
+
+  const handleCreateStandalone = () => {
+    if (newStandalonePageTitle.trim()) {
+      onCreateStandalonePage(newStandalonePageTitle.trim());
+      setNewStandalonePageTitle("");
+      setIsAddingStandalonePage(false);
+    }
+  };
 
   const handleRefineElementClick = async () => {
     if (!elementRefinePrompt.trim()) return;
@@ -2980,7 +2994,58 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               )}
 
               {/* --- Other Editors --- */}
-              {selectionType === "navbar" && renderNavbarEditor()}
+              {selectionType === "navbar" && (
+                <>
+                  {renderNavbarEditor()}
+
+                  {/* --- START: NEW STANDALONE PAGE UI --- */}
+                  <div className="mt-6 pt-6 border-t">
+                    <h4 className="text-md font-medium text-gray-800 mb-2">
+                      Standalone Pages
+                    </h4>
+                    <p className="text-sm text-gray-500 mb-3">
+                      These pages won't appear in the main navbar but can be
+                      linked to from buttons or other elements.
+                    </p>
+                    {!isAddingStandalonePage ? (
+                      <button
+                        onClick={() => setIsAddingStandalonePage(true)}
+                        className="w-full flex items-center justify-center text-sm text-green-600 hover:text-green-800 p-2 border-dashed border-2 rounded-md"
+                      >
+                        <PlusCircle size={16} className="mr-2" /> Create
+                        Standalone Page
+                      </button>
+                    ) : (
+                      <div className="mt-3 p-3 border rounded-md bg-gray-100">
+                        <input
+                          type="text"
+                          value={newStandalonePageTitle}
+                          onChange={(e) =>
+                            setNewStandalonePageTitle(e.target.value)
+                          }
+                          placeholder="New page title"
+                          className="block w-full border-gray-300 rounded-md shadow-sm p-2 text-sm"
+                        />
+                        <div className="flex items-center justify-end space-x-2 mt-2">
+                          <button
+                            onClick={() => setIsAddingStandalonePage(false)}
+                            className="p-2 text-gray-500 hover:bg-gray-200 rounded-full"
+                          >
+                            <X size={16} />
+                          </button>
+                          <button
+                            onClick={handleCreateStandalone}
+                            className="p-2 text-green-600 hover:bg-green-100 rounded-full"
+                          >
+                            <Save size={16} />
+                          </button>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                  {/* --- END: NEW STANDALONE PAGE UI --- */}
+                </>
+              )}
               {selectionType === "navbar_item" && renderNavbarItemEditor()}
             </>
           ) : (
