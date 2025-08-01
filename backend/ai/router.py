@@ -3,7 +3,7 @@ import os, json
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel
 from openai import OpenAI, OpenAIError
-from typing import Dict, Any, Optional
+from typing import Dict, Any, List, Optional
 import re
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
@@ -245,87 +245,31 @@ async def generate_ai_section(body: GenerateRequest):
   
   
   #region refining element
-# class CssGenRequest(BaseModel):
-#     prompt: str
-#     html_context: str
-#     unique_class_name: str # <-- ADD THIS
-#     old_css: Optional[str] = None
 
-
-# CSS_GEN_SYSTEM_PROMPT = """
-# You are a CSS code generator. Your only job is to write exactly one, valid CSS rule scoped to the unique class.
-
-# You will receive:
-# - A **user prompt** (e.g. “make on-hover spin” / “remove the spin animation”)
-# - The **HTML context** so you can pick the right selector or pseudo-selector
-# - A **unique class name** to scope your rule
-# - The **existing CSS** (if any) already applied to this element
-
-# Your task:
-# 1. **Interpret** the user's prompt.
-# 2. **Compare** against the existing CSS when provided:
-#    - If the prompt adds or changes a style, output the new rule.
-#    - If the prompt removes a style, output a rule that resets that property (e.g. `animation: none;`).
-# 3. **Write a single CSS rule** that starts with the unique class name.
-# 4. **Return only the raw CSS code**, no Markdown or explanation.
-
-# Example:
-# - Prompt: "make the card glow on hover"  
-# - HTML Context: `<div class="card unique-class-123">...</div>`  
-# - Unique Class Name: `.unique-class-123`  
-# - Response:  
-# .unique-class-123.card:hover { box-shadow: 0 0 15px 5px rgba(138, 43, 226, 0.7); }
-# """.strip()
-
-
-# @router.post("/generate-element-css")
-# async def generate_element_css(body: CssGenRequest):
-#   try:
-#       user_content = (
-#           f"EXISTING_CSS:\n```css\n{body.old_css or ''}\n```\n\n"
-#           f"PROMPT: \"{body.prompt}\"\n\n"
-#           f"HTML CONTEXT:\n```{body.html_context}```\n\n"
-#           f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
-#       )
-
-#       resp = openai.chat.completions.create(
-#           model="gpt-4o",
-#           messages=[
-#               {"role": "system", "content": CSS_GEN_SYSTEM_PROMPT},
-#               {"role": "user",   "content": user_content},
-#           ],
-#           temperature=0.2
-#       )
-
-#       css_snippet = (
-#           resp.choices[0].message.content
-#           .strip()
-#           .replace("```css", "")
-#           .replace("```", "")
-#       )
-#   except (OpenAIError, json.JSONDecodeError) as e:
-#       raise HTTPException(500, f"CSS generation failed: {e}")
-
-#   return {"css": css_snippet}
 # class RefineRequest(BaseModel):
 #     prompt: str
-#     full_template: str         # the current aiTemplate (HTML + <style>)
-#     unique_class_name: str     # for scoping, if AI needs it
+#     full_template: str         # may contain <style>…</style>, HTML, <script>…</script>
+#     unique_class_name: str
+
 
 # REFINE_SYSTEM_PROMPT = """
-# You are a combined HTML & CSS editor.  
+# You are a combined HTML, CSS, and JavaScript editor.
 # You will receive:
-# - A **user prompt** describing exactly what to change (“swap the expand icon to a minus sign”, “remove the spin animation”, “make the text gradient”, etc.).
-# - The **full existing template**, which contains `<style>…</style>` followed by the HTML snippet.
-# - The **unique class name** used for scoping.
+#   • A **user prompt** describing exactly what they want (structure, style, or behavior).
+#   • The **full existing template**, which may include:
+#     - A `<style>` block
+#     - The HTML markup
+#     - `<script>` tags with JavaScript interactivity
 
-# Your job is to produce a single, complete updated snippet that:
-# 1. Implements everything the user asked (structure, icons, classes, animations, styles).
-# 2. Keeps any unrelated parts of the original template intact.
-# 3. Returns the full `<style>` block (if you need to add/edit CSS) plus the updated HTML.
+# Your job is to return a single, complete updated snippet that:
+# 1. Implements everything the user asked (e.g. “hide all answers by default and make each question expandable”).
+# 2. Preserves unrelated parts of the original (don’t break other buttons, don’t drop other scripts).
+# 3. Modifies or adds **both** CSS and JS as needed.
+# 4. Returns the full `<style>…</style>`, the updated HTML, and any `<script>…</script>`.
 
-# **Return ONLY the updated snippet** (no explanations, no Markdown fences).
+# **Return ONLY the updated snippet**, no Markdown fences or explanations.
 # """.strip()
+
 
 # @router.post("/refine-element")
 # async def refine_element(body: RefineRequest):
@@ -343,59 +287,71 @@ async def generate_ai_section(body: GenerateRequest):
 #             ],
 #             temperature=0.25
 #         )
-#         updated = resp.choices[0].message.content.strip()
+#         raw = resp.choices[0].message.content.strip()
+#         clean = re.sub(r"^```[^\n]*\n", "", raw)    
+#         clean = re.sub(r"\n```$", "", clean)    
 #     except (OpenAIError, json.JSONDecodeError) as e:
 #         raise HTTPException(500, f"Refine-element failed: {e}")
 
-#     return {"template": updated}
+#     return {"template": clean}
+
 class RefineRequest(BaseModel):
     prompt: str
-    full_template: str         # may contain <style>…</style>, HTML, <script>…</script>
+    full_template: str
     unique_class_name: str
 
+class RefineResponse(BaseModel):
+    template: str
+    script: Optional[str]
+
 REFINE_SYSTEM_PROMPT = """
-You are a combined HTML, CSS and JavaScript editor.
+You are a combined HTML, CSS, and JavaScript editor.
 You will receive:
-  • A **user prompt** describing exactly what they want (structure, style or behavior).
-  • The **full existing template**, which may include:
-      - A `<style>` block
-      - HTML markup
-      - `<script>` tags with JS interactivity
-  • The **unique class name** used for scoping CSS/JS if needed.
+  • A user prompt describing exactly what they want.
+  • The full existing template, which may include:
+    - A <style> block
+    - HTML markup
+    - <script> tags
+  • A unique class name for scoping.
 
-Your job is to return a single, complete updated snippet that:
-1. Implements everything the user asked (swap icons, add/remove animations, change event handlers, etc.).
-2. Keeps unrelated parts of the original intact.
-3. Returns any modified or new `<style>` and `<script>` blocks alongside the updated HTML.
-4. Uses the given unique class if you need to scope CSS or select elements in JS.
-
-**Return ONLY the updated snippet**, no explanations, no Markdown fences.
+Return ONLY the updated snippet—any <style>…</style>, HTML, and <script>…</script>.
 """.strip()
 
-@router.post("/refine-element")
+@router.post("/refine-element", response_model=RefineResponse)
 async def refine_element(body: RefineRequest):
     try:
+        # assemble the user prompt
         user_content = (
             f"PROMPT: \"{body.prompt}\"\n\n"
             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
         )
+
+        # call OpenAI
         resp = openai.chat.completions.create(
             model="gpt-4o",
             messages=[
-                {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
-                {"role": "user",    "content": user_content},
+                {"role": "system", "content": REFINE_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_content},
             ],
-            temperature=0.25
+            temperature=0.2,
         )
-        raw = resp.choices[0].message.content.strip()
-        clean = re.sub(r"^```[^\n]*\n", "", raw)    
-        clean = re.sub(r"\n```$", "", clean)    
-    except (OpenAIError, json.JSONDecodeError) as e:
+        raw = resp.choices[0].message.content
+
+        # 1) strip any ```html fences
+        cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
+        cleaned = re.sub(r"\n?```$", "", cleaned)
+
+        # 2) extract <script> blocks
+        script_re   = r"<script[\s\S]*?</script>"
+        scripts     = re.findall(script_re, cleaned)
+        template_only = re.sub(script_re, "", cleaned).strip()
+        script_only   = "\n".join(scripts) if scripts else None
+
+    except (OpenAIError, re.error) as e:
         raise HTTPException(500, f"Refine-element failed: {e}")
 
-    return {"template": clean}
-
+    return RefineResponse(template=template_only, script=script_only)
 
   #endregion
   

@@ -10,7 +10,7 @@ export interface AiElementPayload {
   aiTemplate: string;
   properties: Record<string, any>;
   editableProps: EditableProp[];
-  script?: string;
+  script?: string; // ← add this
 }
 export interface AnimationProps {
   type: "fade-in" | "slide-up" | "bounce" | "pulse";
