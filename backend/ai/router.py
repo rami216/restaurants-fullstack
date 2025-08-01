@@ -1,7 +1,7 @@
 # app/api/ai_element.py
 import os, json
 from fastapi import APIRouter, HTTPException
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from typing import Dict, Any, List, Optional
 import re
@@ -206,22 +206,50 @@ class GenerateRequest(BaseModel):
     prompt: str
 
 @router.post("/generate-ai-element")
+# async def generate_ai_element(body: GenerateRequest):
+#     try:
+#         resp = openai.chat.completions.create(
+#             model="gpt-4.1-mini",
+#             response_format={ "type": "json_object" },
+#             messages=[
+#                 {"role": "system", "content": SYSTEM_PROMPT},
+#                 {"role": "user",   "content": body.prompt},
+#             ],
+#             temperature=0.2, # <-- LOWER THIS VALUE
+#             max_tokens=4095,
+#         )
+#         content = resp.choices[0].message.content
+#         payload = json.loads(content)
+#     except (OpenAIError, json.JSONDecodeError) as e:
+#         raise HTTPException(500, f"Generation failed: {e}")
+#     return payload
 async def generate_ai_element(body: GenerateRequest):
     try:
         resp = openai.chat.completions.create(
-            model="gpt-4.1-mini",
-            response_format={ "type": "json_object" },
+            model="gpt-4o-mini", # Swapped to a more recent model name
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
-            temperature=0.2, # <-- LOWER THIS VALUE
+            temperature=0.2,
             max_tokens=4095,
         )
         content = resp.choices[0].message.content
         payload = json.loads(content)
-    except (OpenAIError, json.JSONDecodeError) as e:
+
+        # ✨ --- ADDED: Clean the script field --- ✨
+        if "script" in payload and isinstance(payload["script"], str):
+            # Search for content inside a <script> tag
+            match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+            if match:
+                # If found, replace the value with the extracted raw JS
+                payload["script"] = match.group(1).strip()
+        # ✨ --- End of cleaning logic --- ✨
+
+    except (OpenAIError, json.JSONDecodeError, KeyError) as e:
         raise HTTPException(500, f"Generation failed: {e}")
+
     return payload
 
 @router.post("/generate-ai-section")
@@ -294,64 +322,294 @@ async def generate_ai_section(body: GenerateRequest):
 #         raise HTTPException(500, f"Refine-element failed: {e}")
 
 #     return {"template": clean}
+# second approach 
+# class RefineRequest(BaseModel):
+#     prompt: str
+#     full_template: str
+#     unique_class_name: str
 
+# class RefineResponse(BaseModel):
+#     template: str
+#     script: Optional[str]
+
+# REFINE_SYSTEM_PROMPT = """
+# You are a combined HTML, CSS, and JavaScript editor.
+# You will receive:
+#   • A user prompt describing exactly what they want.
+#   • The full existing template, which may include:
+#     - A <style> block
+#     - HTML markup
+#     - <script> tags
+#   • A unique class name for scoping.
+
+# Return ONLY the updated snippet—any <style>…</style>, HTML, and <script>…</script>.
+# """.strip()
+
+# @router.post("/refine-element", response_model=RefineResponse)
+# async def refine_element(body: RefineRequest):
+#     try:
+#         # assemble the user prompt
+#         user_content = (
+#             f"PROMPT: \"{body.prompt}\"\n\n"
+#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
+#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+#         )
+
+#         # call OpenAI
+#         resp = openai.chat.completions.create(
+#             model="gpt-4o",
+#             messages=[
+#                 {"role": "system", "content": REFINE_SYSTEM_PROMPT},
+#                 {"role": "user",   "content": user_content},
+#             ],
+#             temperature=0.2,
+#         )
+#         raw = resp.choices[0].message.content
+
+#         # 1) strip any ```html fences
+#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
+#         cleaned = re.sub(r"\n?```$", "", cleaned)
+
+#         # 2) extract <script> blocks
+#         script_re   = r"<script[\s\S]*?</script>"
+#         scripts     = re.findall(script_re, cleaned)
+#         template_only = re.sub(script_re, "", cleaned).strip()
+#         script_only   = "\n".join(scripts) if scripts else None
+
+#     except (OpenAIError, re.error) as e:
+#         raise HTTPException(500, f"Refine-element failed: {e}")
+
+#     return RefineResponse(template=template_only, script=script_only)
+
+# third approach
+# class RefineRequest(BaseModel):
+#     prompt: str
+#     full_template: str
+#     unique_class_name: str
+#     properties: Dict[str, Any] = Field(default_factory=dict)
+#     editableProps: List[Dict[str, Any]] = Field(default_factory=list)
+
+# class RefineResponse(BaseModel):
+#     template: str          # HTML + <style> only
+#     script: Optional[str]  # JS only
+#     properties: Dict[str, Any]
+#     editableProps: List[Dict[str, Any]]
+
+# REFINE_SYSTEM_PROMPT = """
+# You are a combined HTML, CSS, and JavaScript editor.
+# You will receive:
+#   • A user prompt describing exactly what they want.
+#   • The full existing template (HTML + <style> + possibly <script> tags).
+#   • A unique class name for scoping.
+
+# Return ONLY the updated snippet—any <style>…</style>, HTML—and return any
+# <script>…</script> blocks separately. Do not wrap your answer in Markdown.
+# """.strip()
+
+# @router.post("/refine-element", response_model=RefineResponse)
+# async def refine_element(body: RefineRequest):
+#     try:
+#         # 1) Build the Chat prompt
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
+#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+#         )
+
+#         # 2) Call the LLM
+#         resp = openai.chat.completions.create(
+#             model="gpt-4o-mini",  # or "gpt-4o"
+#             messages=[
+#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
+#                 {"role": "user",    "content": user_content},
+#             ],
+#             temperature=0.2,
+#         )
+#         raw = resp.choices[0].message.content
+
+#         # 3) Strip any triple-backtick fences
+#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
+#         cleaned = re.sub(r"\n?```$", "", cleaned)
+
+#         # 4) Pull out script content and remove the tags from the template
+#         # Regex to find the full script blocks
+#         full_script_re = r"<script[\s\S]*?</script>"
+        
+#         # Regex to capture only the content *inside* the script tags
+#         script_content_re = r"<script.*?>([\s\S]*?)</script>"
+
+#         # Find and join only the JS content from the capturing group
+#         script_contents = re.findall(script_content_re, cleaned)
+#         script_only = "\n".join(c.strip() for c in script_contents).strip() or None
+
+#         # Remove the full script blocks to create the template
+#         template_only = re.sub(full_script_re, "", cleaned).strip()
+
+#     except (OpenAIError, re.error) as e:
+#         raise HTTPException(500, f"Refine-element failed: {e}")
+
+#     # 5) Echo back properties/editableProps unchanged
+#     return RefineResponse(
+#         template=template_only,
+#         script=script_only,
+#         properties=body.properties,
+#         editableProps=body.editableProps,
+#     )
+
+# forth approach
+
+# class RefineRequest(BaseModel):
+#     prompt: str
+#     full_template: str
+#     unique_class_name: str
+#     properties: Dict[str, Any] = Field(default_factory=dict)
+#     editableProps: List[Dict[str, Any]] = Field(default_factory=list)
+
+# class RefineResponse(BaseModel):
+#     template: str          # HTML + <style> only
+#     script: Optional[str]  # JS only
+#     properties: Dict[str, Any]
+#     editableProps: List[Dict[str, Any]]
+
+# REFINE_SYSTEM_PROMPT = """
+# You are a combined HTML, CSS, and JavaScript editor.
+# You will receive:
+#   • A user prompt describing exactly what they want.
+#   • The full existing template (HTML + <style> + possibly <script> tags).
+#   • A unique class name for scoping.
+
+# Return ONLY the updated snippet—any <style>…</style>, HTML—and return any
+# <script>…</script> blocks separately. Do not wrap your answer in Markdown.
+# """.strip()
+
+# @router.post("/refine-element", response_model=RefineResponse)
+# async def refine_element(body: RefineRequest):
+#     try:
+#         # 1) Build the Chat prompt
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
+#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+#         )
+
+#         # 2) Call the LLM
+#         resp = openai.chat.completions.create(
+#             model="gpt-4o-mini",  # or "gpt-4o"
+#             messages=[
+#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
+#                 {"role": "user",    "content": user_content},
+#             ],
+#             temperature=0.2,
+#         )
+#         raw = resp.choices[0].message.content
+
+#         # 3) Strip any triple-backtick fences
+#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
+#         cleaned = re.sub(r"\n?```$", "", cleaned)
+
+#         # 4) Pull out script content and remove tags from the template
+#         # Regex to find the full script blocks for removal
+#         full_script_re = r"<script[\s\S]*?</script>"
+        
+#         # Regex to capture only the content *inside* the script tags
+#         script_content_re = r"<script.*?>([\s\S]*?)</script>"
+
+#         # Find and join only the JS content from the capturing group
+#         script_contents = re.findall(script_content_re, cleaned)
+#         script_only = "\n".join(c.strip() for c in script_contents).strip() or None
+
+#         # Remove the full script blocks to create the template
+#         template_only = re.sub(full_script_re, "", cleaned).strip()
+
+#     except (OpenAIError, re.error) as e:
+#         raise HTTPException(500, f"Refine-element failed: {e}")
+
+#     # 5) Echo back properties/editableProps unchanged
+#     return RefineResponse(
+#         template=template_only,
+#         script=script_only,
+#         properties=body.properties,
+#         editableProps=body.editableProps,
+#     )
+
+# fifth approach
 class RefineRequest(BaseModel):
     prompt: str
     full_template: str
     unique_class_name: str
+    properties: Dict[str, Any] = Field(default_factory=dict)
+    editableProps: List[Dict[str, Any]] = Field(default_factory=list)
 
 class RefineResponse(BaseModel):
-    template: str
-    script: Optional[str]
+    template: str          # HTML + <style> only
+    script: Optional[str]  # JS only
+    properties: Dict[str, Any]
+    editableProps: List[Dict[str, Any]]
 
+# --- UPGRADED PROMPT FOR COMPLEX ANIMATIONS AND STYLES ---
 REFINE_SYSTEM_PROMPT = """
-You are a combined HTML, CSS, and JavaScript editor.
-You will receive:
-  • A user prompt describing exactly what they want.
-  • The full existing template, which may include:
-    - A <style> block
-    - HTML markup
-    - <script> tags
-  • A unique class name for scoping.
+You are an expert HTML, CSS, and JavaScript editor. Your task is to modify an existing HTML snippet based on a user's request.
 
-Return ONLY the updated snippet—any <style>…</style>, HTML, and <script>…</script>.
+Return ONLY the updated snippet. The HTML, <style>, and <script> should all be in a single block.
+
+**CRITICAL RULES FOR COMPLEX ANIMATIONS (e.g., "animate each letter"):**
+
+1.  **HTML Restructuring is Required**: To animate individual letters or words, you **MUST** first restructure the HTML. You need to wrap each character or word in its own `<span>` tag.
+    * **Example:** `<h3>Hello</h3>` MUST become `<h3><span class="char">H</span><span class="char">e</span><span class="char">l</span><span class="char">l</span><span class="char">o</span></h3>`.
+
+2.  **Write Corresponding CSS**: You **MUST** write the necessary CSS, including `@keyframes`, to animate the new `<span>` elements. Use a staggered `animation-delay` on the `<span>` tags to make the animation look professional.
+
+3.  **Keep Everything In Sync**: The HTML structure, CSS animations, and any necessary JavaScript **MUST** work together perfectly. Do not write CSS for classes that don't exist in your new HTML.
+
+4.  **Preserve Existing Mustache Tokens**: Do not remove `{{...}}` tokens from the template. If the user asks to change a color or text that is already a token, you should not modify the template.
+
+You will receive a user prompt, the existing template, and a unique class name for scoping your CSS rules.
 """.strip()
 
 @router.post("/refine-element", response_model=RefineResponse)
 async def refine_element(body: RefineRequest):
     try:
-        # assemble the user prompt
+        # 1) Build the Chat prompt
         user_content = (
-            f"PROMPT: \"{body.prompt}\"\n\n"
+            f'PROMPT: "{body.prompt}"\n\n'
             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
         )
 
-        # call OpenAI
+        # 2) Call the LLM
         resp = openai.chat.completions.create(
-            model="gpt-4o",
+            model="gpt-4o",  # Using a more powerful model is recommended for complex tasks
             messages=[
-                {"role": "system", "content": REFINE_SYSTEM_PROMPT},
-                {"role": "user",   "content": user_content},
+                {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
+                {"role": "user",    "content": user_content},
             ],
             temperature=0.2,
         )
         raw = resp.choices[0].message.content
 
-        # 1) strip any ```html fences
+        # 3) Strip any triple-backtick fences
         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
         cleaned = re.sub(r"\n?```$", "", cleaned)
 
-        # 2) extract <script> blocks
-        script_re   = r"<script[\s\S]*?</script>"
-        scripts     = re.findall(script_re, cleaned)
-        template_only = re.sub(script_re, "", cleaned).strip()
-        script_only   = "\n".join(scripts) if scripts else None
+        # 4) Pull out script content and remove tags from the template
+        full_script_re = r"<script[\s\S]*?</script>"
+        script_content_re = r"<script.*?>([\s\S]*?)</script>"
+
+        script_contents = re.findall(script_content_re, cleaned)
+        script_only = "\n".join(c.strip() for c in script_contents).strip() or None
+
+        template_only = re.sub(full_script_re, "", cleaned).strip()
 
     except (OpenAIError, re.error) as e:
         raise HTTPException(500, f"Refine-element failed: {e}")
 
-    return RefineResponse(template=template_only, script=script_only)
+    # 5) Echo back properties/editableProps unchanged
+    return RefineResponse(
+        template=template_only,
+        script=script_only,
+        properties=body.properties,
+        editableProps=body.editableProps,
+    )
 
   #endregion
   
