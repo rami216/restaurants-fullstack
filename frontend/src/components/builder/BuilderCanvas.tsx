@@ -62,29 +62,131 @@ const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
   );
 };
 
-// AI Element Runner (fixed for re-render & script)
-const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
-  element,
-}) => {
+// const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
+//   element,
+// }) => {
+//   const { aiPayload } = element;
+//   const containerRef = useRef<HTMLDivElement>(null);
+
+//   useLayoutEffect(() => {
+//     if (!aiPayload || !containerRef.current) return;
+
+//     // Render the Mustache template into container
+//     containerRef.current.innerHTML = Mustache.render(
+//       aiPayload.aiTemplate,
+//       aiPayload.properties
+//     );
+
+//     // Execute attached script if provided
+//     if (aiPayload.script) {
+//       try {
+//         const fn = new Function("container", aiPayload.script);
+//         fn(containerRef.current);
+//       } catch (err) {
+//         console.error("Error running AI script:", err);
+//       }
+//     }
+//   }, [
+//     aiPayload?.aiTemplate,
+//     aiPayload?.script,
+//     JSON.stringify(aiPayload?.properties),
+//   ]);
+
+//   return <div ref={containerRef} />;
+// };
+
+interface AiElementRunnerProps {
+  element: BuilderElement;
+}
+
+// const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
+//   const { aiPayload } = element;
+//   const containerRef = useRef<HTMLDivElement>(null);
+
+//   useLayoutEffect(() => {
+//     if (!aiPayload || !containerRef.current) return;
+
+//     // 1) Strip out any <script>…</script> from the HTML/CSS
+//     const htmlOnly = aiPayload.aiTemplate.replace(
+//       /<script[\s\S]*?<\/script>/g,
+//       ""
+//     );
+
+//     // 2) Render Mustache (with error fallback)
+//     let rendered: string;
+//     try {
+//       rendered = Mustache.render(htmlOnly, aiPayload.properties);
+//     } catch (mErr) {
+//       console.error("Mustache.render failed, falling back to raw HTML:", mErr);
+//       rendered = htmlOnly;
+//     }
+//     containerRef.current.innerHTML = rendered;
+
+//     // 3) Execute attached JS if provided (strip wrapper tags first)
+//     if (aiPayload.script) {
+//       const jsBody = aiPayload.script
+//         .replace(/^\s*<script[^>]*>/, "")
+//         .replace(/<\/script>\s*$/, "");
+//       try {
+//         const fn = new Function("container", jsBody);
+//         fn(containerRef.current);
+//       } catch (jsErr) {
+//         console.error("Error running AI script:", jsErr);
+//       }
+//     }
+//   }, [
+//     aiPayload?.aiTemplate,
+//     aiPayload?.script,
+//     JSON.stringify(aiPayload?.properties),
+//   ]);
+
+//   return <div ref={containerRef} />;
+// };
+
+const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
   const { aiPayload } = element;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!aiPayload || !containerRef.current) return;
 
-    // Render the Mustache template into container
-    containerRef.current.innerHTML = Mustache.render(
-      aiPayload.aiTemplate,
-      aiPayload.properties
+    // 1) Strip out any <script>…</script> from the HTML/CSS
+    let htmlOnly = aiPayload.aiTemplate.replace(
+      /<script[\s\S]*?<\/script>/g,
+      ""
     );
 
-    // Execute attached script if provided
+    // 2) Convert Handlebars-style loops and {{this}} into Mustache syntax
+    const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
+    loopMatches.forEach(([fullMatch, arrKey]) => {
+      // turn "{{#each items}}" → "{{#items}}"
+      htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
+      // turn the first "{{/each}}" after this into "{{/items}}"
+      htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
+    });
+    // replace any "{{this}}" with Mustache's "{{.}}"
+    htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+
+    // 3) Render the template with Mustache, fallback on error
+    let rendered: string;
+    try {
+      rendered = Mustache.render(htmlOnly, aiPayload.properties);
+    } catch (mErr) {
+      console.error("Mustache.render failed, falling back to raw HTML:", mErr);
+      rendered = htmlOnly;
+    }
+    containerRef.current.innerHTML = rendered;
+
+    // 4) If there's JS, strip wrapper tags and execute it
     if (aiPayload.script) {
+      const jsBody = aiPayload.script
+        .replace(/^\s*<script[^>]*>/, "")
+        .replace(/<\/script>\s*$/, "");
       try {
-        const fn = new Function("container", aiPayload.script);
+        const fn = new Function("container", jsBody);
         fn(containerRef.current);
-      } catch (err) {
-        console.error("Error running AI script:", err);
+      } catch (jsErr) {
+        console.error("Error running AI script:", jsErr);
       }
     }
   }, [
@@ -339,9 +441,20 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       //     <AiElementRunner key={element.aiPayload?.id} element={element} />
       //   );
       // }
-      case "AI":
-        return wrap(<AiElementRunner element={element} />);
+      case "AI": {
+        // The problem is that the AiElementRunner component doesn't have a key
+        // that changes when the content is refined.
 
+        // FIX: Add a unique 'key' prop to AiElementRunner.
+        // We use the ID from the aiPayload, which should be unique for each generation.
+        // This forces React to create a fresh component after every refinement.
+        return wrap(
+          <AiElementRunner
+            key={element.aiPayload?.id || element.element_id}
+            element={element}
+          />
+        );
+      }
       default: {
         return wrap(
           <div className="border p-2 bg-gray-300 text-black rounded">
