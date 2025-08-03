@@ -23,87 +23,115 @@ import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 
-// const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
-//   const containerRef = useRef<HTMLDivElement>(null);
+// const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
+//   element,
+// }) => {
 //   const { aiPayload } = element;
+//   const containerRef = useRef<HTMLDivElement>(null);
 
-//   useEffect(() => {
-//     const container = containerRef.current;
-//     // We only need the effect to run the script.
-//     // The HTML is now handled by the main return statement.
-//     if (container && aiPayload?.script) {
+//   useLayoutEffect(() => {
+//     if (!aiPayload || !containerRef.current) return;
+
+//     // render HTML
+//     containerRef.current.innerHTML = Mustache.render(
+//       aiPayload.aiTemplate,
+//       aiPayload.properties
+//     );
+
+//     // execute script
+//     if (aiPayload.script) {
 //       try {
-//         const scriptFunction = new Function("container", aiPayload.script);
-//         scriptFunction(container);
-//       } catch (error) {
-//         console.error("Error executing AI-generated script:", error);
+//         const fn = new Function("container", aiPayload.script);
+//         fn(containerRef.current);
+//       } catch (e) {
+//         console.error("AI script error:", e);
 //       }
 //     }
-//   }, [element.element_id, aiPayload]); // Re-run when the element itself changes
+//   }, [
+//     aiPayload?.aiTemplate,
+//     aiPayload?.script,
+//     JSON.stringify(aiPayload?.properties),
+//   ]);
 
 //   if (!aiPayload) {
 //     return <div>AI Element Data Missing</div>;
 //   }
 
-//   // THE FIX: The HTML is now always rendered here, outside of the effect.
-//   const { aiTemplate, properties: aiProps } = aiPayload;
-//   const html = Mustache.render(aiTemplate, aiProps);
-
-//   return (
-//     <div
-//       ref={containerRef}
-//       className="w-full max-w-full overflow-x-hidden"
-//       dangerouslySetInnerHTML={{ __html: html }}
-//     />
-//   );
-// };
-// --- Add this component inside PublicCanvas.tsx ---
-// const AiElementRunner: React.FC<{ element: ElementType }> = ({ element }) => {
-//   const containerRef = useRef<HTMLDivElement>(null);
-//   const { aiPayload } = element;
-
-//   useEffect(() => {
-//     if (containerRef.current && aiPayload?.script) {
-//       try {
-//         const scriptFunction = new Function("container", aiPayload.script);
-//         scriptFunction(containerRef.current);
-//       } catch (error) {
-//         console.error("Error executing AI-generated script:", error);
-//       }
-//     }
-//   }, [aiPayload]); // Re-run if the payload changes
-
-//   if (!aiPayload) {
-//     return <div>AI Element Data Missing</div>;
+//   // safety: template must be string
+//   if (typeof aiPayload.aiTemplate !== "string") {
+//     console.error("Invalid aiTemplate:", aiPayload.aiTemplate);
+//     return (
+//       <div className="p-4 bg-red-100 text-red-700 border border-red-400 rounded">
+//         Error: AI template is corrupted.
+//       </div>
+//     );
 //   }
 
-//   const { aiTemplate, properties: aiProps } = aiPayload;
-//   const html = Mustache.render(aiTemplate, aiProps);
-
-//   return <div ref={containerRef} dangerouslySetInnerHTML={{ __html: html }} />;
+//   return <div ref={containerRef} className="w-full overflow-hidden" />;
 // };
-const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
-  element,
-}) => {
+interface AiElementRunnerProps {
+  element: BuilderElement;
+}
+const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
   const { aiPayload } = element;
   const containerRef = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!aiPayload || !containerRef.current) return;
 
-    // render HTML
-    containerRef.current.innerHTML = Mustache.render(
-      aiPayload.aiTemplate,
-      aiPayload.properties
+    // --- THIS IS THE FIX ---
+    // Get the backend URL and create a safe copy of the properties
+    const BACKEND_URL = api.defaults.baseURL || "";
+    const processedProps = { ...aiPayload.properties };
+
+    // Define common keys that might contain image URLs
+    const imageUrlKeys = ["src", "image_url", "backgroundImage"];
+
+    // Loop through the properties and fix any relative image paths
+    for (const key in processedProps) {
+      if (imageUrlKeys.includes(key)) {
+        const value = processedProps[key];
+        if (typeof value === "string" && value.startsWith("/")) {
+          processedProps[key] = `${BACKEND_URL}${value}`;
+        }
+      }
+    }
+    // --- END OF FIX ---
+
+    // 1) Strip out any <script>…</script> from the HTML/CSS
+    let htmlOnly = aiPayload.aiTemplate.replace(
+      /<script[\s\S]*?<\/script>/g,
+      ""
     );
 
-    // execute script
+    // 2) (Your Handlebars conversion logic is good, keep it)
+    const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
+    loopMatches.forEach(([fullMatch, arrKey]) => {
+      htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
+      htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
+    });
+    htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+
+    // 3) Render the template with the PROCESSED properties
+    let rendered: string;
+    try {
+      rendered = Mustache.render(htmlOnly, processedProps); // Use the fixed props
+    } catch (mErr) {
+      console.error("Mustache.render failed, falling back to raw HTML:", mErr);
+      rendered = htmlOnly;
+    }
+    containerRef.current.innerHTML = rendered;
+
+    // 4) Execute JS if provided
     if (aiPayload.script) {
+      const jsBody = aiPayload.script
+        .replace(/^\s*<script[^>]*>/, "")
+        .replace(/<\/script>\s*$/, "");
       try {
-        const fn = new Function("container", aiPayload.script);
+        const fn = new Function("container", jsBody);
         fn(containerRef.current);
-      } catch (e) {
-        console.error("AI script error:", e);
+      } catch (jsErr) {
+        console.error("Error running AI script:", jsErr);
       }
     }
   }, [
@@ -112,23 +140,8 @@ const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
     JSON.stringify(aiPayload?.properties),
   ]);
 
-  if (!aiPayload) {
-    return <div>AI Element Data Missing</div>;
-  }
-
-  // safety: template must be string
-  if (typeof aiPayload.aiTemplate !== "string") {
-    console.error("Invalid aiTemplate:", aiPayload.aiTemplate);
-    return (
-      <div className="p-4 bg-red-100 text-red-700 border border-red-400 rounded">
-        Error: AI template is corrupted.
-      </div>
-    );
-  }
-
-  return <div ref={containerRef} className="w-full overflow-hidden" />;
+  return <div ref={containerRef} />;
 };
-
 const Accordion = ({
   items,
   style,
@@ -563,122 +576,365 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     );
   };
 
+  // function renderElement(element: ElementType) {
+  //   const props = element.properties || {};
+  //   const style = props.style || {};
+  //   const BACKEND = api.defaults.baseURL || "";
+
+  //   // pull out any motion settings (falls back to no‑ops)
+  //   const { initial, animate, transition } = getMotionConfig(props.animation);
+  //   const effectiveType = props.originalType || element.element_type;
+  //   switch (element.element_type) {
+  //     // case "TEXT":
+  //     //   return (
+  //     //     <motion.div
+  //     //       style={style}
+  //     //       initial={initial}
+  //     //       animate={animate}
+  //     //       transition={transition}
+  //     //     >
+  //     //       {props.content}
+  //     //     </motion.div>
+  //     //   );
+  //     case "TEXT":
+  //       const contentHTML = { __html: props.content || "" };
+  //       return (
+  //         <motion.div
+  //           style={style}
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //           dangerouslySetInnerHTML={contentHTML}
+  //         />
+  //       );
+  //     case "BUTTON": {
+  //       const tgt = websiteData.pages.find(
+  //         (p) => p.slug === props.action_value
+  //       );
+  //       return (
+  //         <motion.button
+  //           style={style}
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //           onClick={() => {
+  //             if (tgt) {
+  //               setActiveCategory(null);
+  //               setCurrentPage(tgt);
+  //               router.push(`/${websiteData.subdomain}${tgt.slug}`);
+  //             }
+  //           }}
+  //         >
+  //           {props.text}
+  //         </motion.button>
+  //       );
+  //     }
+
+  //     case "IMAGE":
+  //       return (
+  //         <motion.img
+  //           src={
+  //             props.src
+  //               ? `${api.defaults.baseURL}${props.src}`
+  //               : "https://placehold.co/600x400"
+  //           }
+  //           alt={props.alt}
+  //           style={style}
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //         />
+  //       );
+
+  //     case "LIST":
+  //       return (
+  //         <motion.ul
+  //           style={style}
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //         >
+  //           {(props.items || []).map((it: string, i: number) => (
+  //             <li key={i}>{it}</li>
+  //           ))}
+  //         </motion.ul>
+  //       );
+
+  //     case "DROPDOWN":
+  //       return (
+  //         <motion.select
+  //           style={style}
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //         >
+  //           {(props.options || []).map((o: any, i: number) => (
+  //             <option key={i} value={o.action_value}>
+  //               {o.text}
+  //             </option>
+  //           ))}
+  //         </motion.select>
+  //       );
+
+  //     case "MENU_ITEM": {
+  //       // --- FIX #1: Check against the correct database ID ---
+  //       const isExpanded = expandedMenuItemId === element.properties.item_id;
+
+  //       // --- FIX #2: Look up extras using the correct database ID ---
+  //       const itemExtras = extras[element.properties.item_id] || [];
+
+  //       return (
+  //         <div>
+  //           <motion.div
+  //             className="border rounded-lg p-4 bg-white shadow cursor-pointer"
+  //             style={style}
+  //             initial={initial}
+  //             animate={animate}
+  //             transition={transition}
+  //             onClick={() => handleMenuItemClick(element.properties.item_id)}
+  //           >
+  //             {props.image_url && (
+  //               <img
+  //                 src={`${BACKEND}${props.image_url}`}
+  //                 alt={props.item_name}
+  //                 className="w-full object-cover rounded-md mb-4"
+  //               />
+  //             )}
+  //             <h4 className="font-bold text-gray-600 text-lg">
+  //               {props.item_name}
+  //             </h4>
+  //             <p className="text-sm text-gray-600 my-2">{props.description}</p>
+  //             <p className="font-semibold text-gray-600 text-right">
+  //               ${props.base_price?.toFixed(2)}
+  //             </p>
+  //           </motion.div>
+
+  //           {/* This conditional block for extras will now work correctly */}
+  //           {isExpanded && (
+  //             <div className="border border-t-0 rounded-b-lg p-4 bg-gray-50 -mt-2">
+  //               <h5 className="font-bold mb-2 text-gray-700">Add Extras:</h5>
+  //               {isLoadingExtras ? (
+  //                 <p className="text-sm text-gray-500">Loading...</p>
+  //               ) : itemExtras.length > 0 ? (
+  //                 <div className="space-y-2">
+  //                   {itemExtras.map((extra) => (
+  //                     <div
+  //                       key={extra.extra_id}
+  //                       className="flex justify-between items-center text-sm"
+  //                     >
+  //                       <span className="font-semibold text-gray-800">
+  //                         {extra.name}
+  //                       </span>
+  //                       <span className="font-semibold text-gray-800">
+  //                         + ${extra.price.toFixed(2)}
+  //                       </span>
+  //                     </div>
+  //                   ))}
+  //                 </div>
+  //               ) : (
+  //                 <p className="text-sm text-gray-500">
+  //                   No extras available for this item.
+  //                 </p>
+  //               )}
+  //             </div>
+  //           )}
+  //         </div>
+  //       );
+  //     }
+  //     case "CATEGORY": {
+  //       // This case now handles BOTH standard Categories and AI-refined Categories
+  //       const nameStyle = props.nameStyle || {};
+  //       const hasHover = Object.keys(style).some((k) =>
+  //         k.startsWith("--hover-")
+  //       );
+
+  //       return (
+  //         <motion.div
+  //           className={`cursor-pointer transition ${
+  //             hasHover ? "has-hover-effect" : ""
+  //           }`}
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //           onClick={() => setActiveCategory(props.id)} // Your specific onClick logic
+  //         >
+  //           {element.element_type === "AI" ? (
+  //             // If it's an AI element, render its template
+  //             <AiElementRunner element={element} />
+  //           ) : (
+  //             // Otherwise, render the standard JSX
+  //             <div className="rounded-lg overflow-hidden shadow">
+  //               {props.image_url && (
+  //                 <img
+  //                   src={`${BACKEND}${props.image_url}`}
+  //                   alt={props.name}
+  //                   className="w-full h-40 object-cover"
+  //                 />
+  //               )}
+  //               <div className="p-4 bg-white">
+  //                 <h4 className="font-bold text-lg" style={nameStyle}>
+  //                   {props.name}
+  //                 </h4>
+  //               </div>
+  //             </div>
+  //           )}
+  //         </motion.div>
+  //       );
+  //     }
+
+  //     case "ACCORDION":
+  //       return <Accordion items={props.items || []} style={style} />;
+
+  //     case "FORM":
+  //       return (
+  //         <motion.form
+  //           style={style}
+  //           className="space-y-4"
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //           onSubmit={(e) => e.preventDefault()}
+  //         >
+  //           <h3 className="font-bold">{props.title}</h3>
+  //           {(props.fields || []).map((f: FormField) => (
+  //             <div key={f.id}>
+  //               <label>{f.label}</label>
+  //               <input
+  //                 placeholder={f.placeholder}
+  //                 className="border p-2 w-full"
+  //               />
+  //             </div>
+  //           ))}
+  //           <button type="submit">{props.submitButton?.text}</button>
+  //         </motion.form>
+  //       );
+
+  //     case "MAP":
+  //       return <iframe src={props.src} style={style} />;
+  //     case "AI": {
+  //       // 1. Safely get properties
+  //       const props = element.properties || {};
+
+  //       // 2. Safely get animation config
+  //       const { initial, animate, transition } = getMotionConfig(
+  //         props.animation
+  //       );
+
+  //       // 3. NEW: Universal Click Logic
+  //       let isClickable = false;
+  //       let clickAction = () => {}; // Default to an empty function
+
+  //       // Check for our specific actionType system (from converted Categories/Buttons)
+  //       if (props.actionType === "SET_CATEGORY" && props.actionValue) {
+  //         isClickable = true;
+  //         clickAction = () => setActiveCategory(props.actionValue);
+  //       } else if (props.actionType === "PAGE_NAV" && props.actionValue) {
+  //         const targetPage = websiteData.pages.find(
+  //           (p) => p.slug === props.actionValue
+  //         );
+  //         if (targetPage) {
+  //           isClickable = true;
+  //           clickAction = () => {
+  //             setActiveCategory(null);
+  //             setCurrentPage(targetPage);
+  //             router.push(`/${websiteData.subdomain}${targetPage.slug}`);
+  //           };
+  //         }
+  //       }
+  //       // Fallback to check for the generic linkEnabled system (from other AI refinements)
+  //       else if (props.linkEnabled && props.action_value) {
+  //         const targetPage = websiteData.pages.find(
+  //           (p) => p.slug === props.action_value
+  //         );
+  //         if (targetPage) {
+  //           isClickable = true;
+  //           clickAction = () => {
+  //             setActiveCategory(null);
+  //             setCurrentPage(targetPage);
+  //             router.push(`/${websiteData.subdomain}${targetPage.slug}`);
+  //           };
+  //         }
+  //       }
+
+  //       return (
+  //         <motion.div
+  //           initial={initial}
+  //           animate={animate}
+  //           transition={transition}
+  //           className={`${
+  //             isClickable ? "cursor-pointer" : ""
+  //           } w-full max-w-full`}
+  //           key={element.element_id}
+  //           onClick={clickAction} // Use the determined click action
+  //         >
+  //           <AiElementRunner key={element.aiPayload?.id} element={element} />
+  //         </motion.div>
+  //       );
+  //     }
+  //     default:
+  //       return <div>Unknown element</div>;
+  //   }
+  // }
   function renderElement(element: ElementType) {
     const props = element.properties || {};
     const style = props.style || {};
+    const { initial, animate, transition } = getMotionConfig(props.animation);
     const BACKEND = api.defaults.baseURL || "";
 
-    // pull out any motion settings (falls back to no‑ops)
-    const { initial, animate, transition } = getMotionConfig(props.animation);
+    // Determine the element's true purpose for functional logic
+    const effectiveType = props.originalType || element.element_type;
 
-    switch (element.element_type) {
-      // case "TEXT":
-      //   return (
-      //     <motion.div
-      //       style={style}
-      //       initial={initial}
-      //       animate={animate}
-      //       transition={transition}
-      //     >
-      //       {props.content}
-      //     </motion.div>
-      //   );
-      case "TEXT":
-        const contentHTML = { __html: props.content || "" };
-        return (
-          <motion.div
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-            dangerouslySetInnerHTML={contentHTML}
-          />
-        );
-      case "BUTTON": {
-        const tgt = websiteData.pages.find(
-          (p) => p.slug === props.action_value
-        );
-        return (
-          <motion.button
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-            onClick={() => {
-              if (tgt) {
-                setActiveCategory(null);
-                setCurrentPage(tgt);
-                router.push(`/${websiteData.subdomain}${tgt.slug}`);
-              }
-            }}
-          >
-            {props.text}
-          </motion.button>
-        );
-      }
+    // --- RENDER LOGIC USING if/else if ---
 
-      case "IMAGE":
-        return (
-          <motion.img
-            src={
-              props.src
-                ? `${api.defaults.baseURL}${props.src}`
-                : "https://placehold.co/600x400"
-            }
-            alt={props.alt}
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-          />
-        );
+    if (effectiveType === "CATEGORY") {
+      const nameStyle = props.nameStyle || {};
+      const hasHover = Object.keys(style).some((k) => k.startsWith("--hover-"));
 
-      case "LIST":
-        return (
-          <motion.ul
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-          >
-            {(props.items || []).map((it: string, i: number) => (
-              <li key={i}>{it}</li>
-            ))}
-          </motion.ul>
-        );
+      return (
+        <motion.div
+          className={`cursor-pointer transition ${
+            hasHover ? "has-hover-effect" : ""
+          }`}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+          onClick={() => setActiveCategory(props.id)} // Your specific onClick logic
+        >
+          {element.element_type === "AI" ? (
+            <AiElementRunner element={element} />
+          ) : (
+            <div className="rounded-lg overflow-hidden shadow">
+              {props.image_url && (
+                <img
+                  src={`${BACKEND}${props.image_url}`}
+                  alt={props.name}
+                  className="w-full h-40 object-cover"
+                />
+              )}
+              <div className="p-4 bg-white">
+                <h4 className="font-bold text-lg" style={nameStyle}>
+                  {props.name}
+                </h4>
+              </div>
+            </div>
+          )}
+        </motion.div>
+      );
+    } else if (effectiveType === "MENU_ITEM") {
+      const isExpanded = expandedMenuItemId === element.properties.item_id;
+      const itemExtras = extras[element.properties.item_id] || [];
 
-      case "DROPDOWN":
-        return (
-          <motion.select
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-          >
-            {(props.options || []).map((o: any, i: number) => (
-              <option key={i} value={o.action_value}>
-                {o.text}
-              </option>
-            ))}
-          </motion.select>
-        );
-
-      case "MENU_ITEM": {
-        // --- FIX #1: Check against the correct database ID ---
-        const isExpanded = expandedMenuItemId === element.properties.item_id;
-
-        // --- FIX #2: Look up extras using the correct database ID ---
-        const itemExtras = extras[element.properties.item_id] || [];
-
-        return (
-          <div>
+      return (
+        <div onClick={() => handleMenuItemClick(element.properties.item_id)}>
+          {element.element_type === "AI" ? (
+            <AiElementRunner element={element} />
+          ) : (
             <motion.div
               className="border rounded-lg p-4 bg-white shadow cursor-pointer"
               style={style}
               initial={initial}
               animate={animate}
               transition={transition}
-              onClick={() => handleMenuItemClick(element.properties.item_id)}
             >
               {props.image_url && (
                 <img
@@ -695,168 +951,163 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 ${props.base_price?.toFixed(2)}
               </p>
             </motion.div>
+          )}
 
-            {/* This conditional block for extras will now work correctly */}
-            {isExpanded && (
-              <div className="border border-t-0 rounded-b-lg p-4 bg-gray-50 -mt-2">
-                <h5 className="font-bold mb-2 text-gray-700">Add Extras:</h5>
-                {isLoadingExtras ? (
-                  <p className="text-sm text-gray-500">Loading...</p>
-                ) : itemExtras.length > 0 ? (
-                  <div className="space-y-2">
-                    {itemExtras.map((extra) => (
-                      <div
-                        key={extra.extra_id}
-                        className="flex justify-between items-center text-sm"
-                      >
-                        <span className="font-semibold text-gray-800">
-                          {extra.name}
-                        </span>
-                        <span className="font-semibold text-gray-800">
-                          + ${extra.price.toFixed(2)}
-                        </span>
-                      </div>
-                    ))}
-                  </div>
-                ) : (
-                  <p className="text-sm text-gray-500">
-                    No extras available for this item.
-                  </p>
-                )}
-              </div>
-            )}
-          </div>
-        );
-      }
-      case "CATEGORY": {
-        const nameStyle = props.nameStyle || {};
-
-        // Check if any hover styles exist
-        const hasHover = Object.keys(style).some((k) =>
-          k.startsWith("--hover-")
-        );
-
-        return (
-          <motion.div
-            className={`cursor-pointer rounded-lg overflow-hidden shadow transition ${
-              hasHover ? "has-hover-effect" : ""
-            }`}
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-            onClick={() => setActiveCategory(props.id)}
-          >
-            {props.image_url && (
-              <img
-                src={`${BACKEND}${props.image_url}`}
-                alt={props.name}
-                className="w-full h-40 object-cover"
-              />
-            )}
-            <div className="p-4 bg-white">
-              <h4 className="font-bold text-lg" style={nameStyle}>
-                {props.name}
-              </h4>
+          {isExpanded && (
+            <div className="border border-t-0 rounded-b-lg p-4 bg-gray-50 -mt-2">
+              <h5 className="font-bold mb-2 text-gray-700">Add Extras:</h5>
+              {isLoadingExtras ? (
+                <p className="text-sm text-gray-500">Loading...</p>
+              ) : itemExtras.length > 0 ? (
+                <div className="space-y-2">
+                  {itemExtras.map((extra) => (
+                    <div
+                      key={extra.extra_id}
+                      className="flex justify-between items-center text-sm"
+                    >
+                      <span className="font-semibold text-gray-800">
+                        {extra.name}
+                      </span>
+                      <span className="font-semibold text-gray-800">
+                        + ${extra.price.toFixed(2)}
+                      </span>
+                    </div>
+                  ))}
+                </div>
+              ) : (
+                <p className="text-sm text-gray-500">
+                  No extras available for this item.
+                </p>
+              )}
             </div>
-          </motion.div>
-        );
-      }
-
-      case "ACCORDION":
-        return <Accordion items={props.items || []} style={style} />;
-
-      case "FORM":
-        return (
-          <motion.form
-            style={style}
-            className="space-y-4"
-            initial={initial}
-            animate={animate}
-            transition={transition}
-            onSubmit={(e) => e.preventDefault()}
-          >
-            <h3 className="font-bold">{props.title}</h3>
-            {(props.fields || []).map((f: FormField) => (
-              <div key={f.id}>
-                <label>{f.label}</label>
-                <input
-                  placeholder={f.placeholder}
-                  className="border p-2 w-full"
-                />
-              </div>
+          )}
+        </div>
+      );
+    } else if (element.element_type === "AI") {
+      // Fallback for GENERIC AI elements that don't have a special function
+      return (
+        <AiElementRunner
+          key={element.aiPayload?.id || element.element_id}
+          element={element}
+        />
+      );
+    } else if (effectiveType === "TEXT") {
+      const contentHTML = { __html: props.content || "" };
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+          dangerouslySetInnerHTML={contentHTML}
+        />
+      );
+    } else if (effectiveType === "IMAGE") {
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <img
+            src={
+              props.src
+                ? `${BACKEND}${props.src}`
+                : "https://placehold.co/600x400"
+            }
+            alt={props.alt || "placeholder"}
+            style={{ width: "100%", height: "auto" }}
+          />
+        </motion.div>
+      );
+    } else if (effectiveType === "BUTTON") {
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <button>{props.text || "Button"}</button>
+        </motion.div>
+      );
+    } else if (effectiveType === "LIST") {
+      return (
+        <motion.ul
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          {(props.items || []).map((item: string, i: number) => (
+            <li key={i}>{item}</li>
+          ))}
+        </motion.ul>
+      );
+    } else if (effectiveType === "ACCORDION") {
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <Accordion items={props.items || []} style={style} />
+        </motion.div>
+      );
+    } else if (effectiveType === "MAP") {
+      return (
+        <motion.div
+          className="relative"
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <div className="absolute inset-0 z-10 cursor-pointer" />
+          <iframe
+            src={props.src}
+            style={{
+              width: "100%",
+              height: "100%",
+              border: "0",
+              pointerEvents: "none",
+            }}
+            allowFullScreen={false}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            title="Google Map"
+          />
+        </motion.div>
+      );
+    } else if (effectiveType === "DROPDOWN") {
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <select className="border border-gray-300 rounded p-2">
+            {props.label && <option disabled>{props.label}</option>}
+            {(props.options || []).map((opt: any, i: number) => (
+              <option key={i} value={opt.action_value}>
+                {opt.text}
+              </option>
             ))}
-            <button type="submit">{props.submitButton?.text}</button>
-          </motion.form>
-        );
-
-      case "MAP":
-        return <iframe src={props.src} style={style} />;
-      case "AI": {
-        // 1. Safely get properties
-        const props = element.properties || {};
-
-        // 2. Safely get animation config
-        const { initial, animate, transition } = getMotionConfig(
-          props.animation
-        );
-
-        // 3. NEW: Universal Click Logic
-        let isClickable = false;
-        let clickAction = () => {}; // Default to an empty function
-
-        // Check for our specific actionType system (from converted Categories/Buttons)
-        if (props.actionType === "SET_CATEGORY" && props.actionValue) {
-          isClickable = true;
-          clickAction = () => setActiveCategory(props.actionValue);
-        } else if (props.actionType === "PAGE_NAV" && props.actionValue) {
-          const targetPage = websiteData.pages.find(
-            (p) => p.slug === props.actionValue
-          );
-          if (targetPage) {
-            isClickable = true;
-            clickAction = () => {
-              setActiveCategory(null);
-              setCurrentPage(targetPage);
-              router.push(`/${websiteData.subdomain}${targetPage.slug}`);
-            };
-          }
-        }
-        // Fallback to check for the generic linkEnabled system (from other AI refinements)
-        else if (props.linkEnabled && props.action_value) {
-          const targetPage = websiteData.pages.find(
-            (p) => p.slug === props.action_value
-          );
-          if (targetPage) {
-            isClickable = true;
-            clickAction = () => {
-              setActiveCategory(null);
-              setCurrentPage(targetPage);
-              router.push(`/${websiteData.subdomain}${targetPage.slug}`);
-            };
-          }
-        }
-
-        return (
-          <motion.div
-            initial={initial}
-            animate={animate}
-            transition={transition}
-            className={`${
-              isClickable ? "cursor-pointer" : ""
-            } w-full max-w-full`}
-            key={element.element_id}
-            onClick={clickAction} // Use the determined click action
-          >
-            <AiElementRunner key={element.aiPayload?.id} element={element} />
-          </motion.div>
-        );
-      }
-      default:
-        return <div>Unknown element</div>;
+          </select>
+        </motion.div>
+      );
+    } else {
+      // Default fallback for any truly unknown element
+      return (
+        <div className="border p-2 bg-gray-300 text-black rounded">
+          Unknown Element: {effectiveType}
+        </div>
+      );
     }
   }
-
   if (!currentPage) return <div className="p-8">Page not found</div>;
 
   return (

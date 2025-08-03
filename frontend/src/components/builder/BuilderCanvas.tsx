@@ -62,39 +62,6 @@ const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
   );
 };
 
-// const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
-//   element,
-// }) => {
-//   const { aiPayload } = element;
-//   const containerRef = useRef<HTMLDivElement>(null);
-
-//   useLayoutEffect(() => {
-//     if (!aiPayload || !containerRef.current) return;
-
-//     // Render the Mustache template into container
-//     containerRef.current.innerHTML = Mustache.render(
-//       aiPayload.aiTemplate,
-//       aiPayload.properties
-//     );
-
-//     // Execute attached script if provided
-//     if (aiPayload.script) {
-//       try {
-//         const fn = new Function("container", aiPayload.script);
-//         fn(containerRef.current);
-//       } catch (err) {
-//         console.error("Error running AI script:", err);
-//       }
-//     }
-//   }, [
-//     aiPayload?.aiTemplate,
-//     aiPayload?.script,
-//     JSON.stringify(aiPayload?.properties),
-//   ]);
-
-//   return <div ref={containerRef} />;
-// };
-
 interface AiElementRunnerProps {
   element: BuilderElement;
 }
@@ -107,12 +74,23 @@ interface AiElementRunnerProps {
 //     if (!aiPayload || !containerRef.current) return;
 
 //     // 1) Strip out any <script>…</script> from the HTML/CSS
-//     const htmlOnly = aiPayload.aiTemplate.replace(
+//     let htmlOnly = aiPayload.aiTemplate.replace(
 //       /<script[\s\S]*?<\/script>/g,
 //       ""
 //     );
 
-//     // 2) Render Mustache (with error fallback)
+//     // 2) Convert Handlebars-style loops and {{this}} into Mustache syntax
+//     const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
+//     loopMatches.forEach(([fullMatch, arrKey]) => {
+//       // turn "{{#each items}}" → "{{#items}}"
+//       htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
+//       // turn the first "{{/each}}" after this into "{{/items}}"
+//       htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
+//     });
+//     // replace any "{{this}}" with Mustache's "{{.}}"
+//     htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+
+//     // 3) Render the template with Mustache, fallback on error
 //     let rendered: string;
 //     try {
 //       rendered = Mustache.render(htmlOnly, aiPayload.properties);
@@ -122,7 +100,7 @@ interface AiElementRunnerProps {
 //     }
 //     containerRef.current.innerHTML = rendered;
 
-//     // 3) Execute attached JS if provided (strip wrapper tags first)
+//     // 4) If there's JS, strip wrapper tags and execute it
 //     if (aiPayload.script) {
 //       const jsBody = aiPayload.script
 //         .replace(/^\s*<script[^>]*>/, "")
@@ -142,7 +120,6 @@ interface AiElementRunnerProps {
 
 //   return <div ref={containerRef} />;
 // };
-
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
   const { aiPayload } = element;
   const containerRef = useRef<HTMLDivElement>(null);
@@ -150,34 +127,50 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
   useLayoutEffect(() => {
     if (!aiPayload || !containerRef.current) return;
 
+    // --- THIS IS THE FIX ---
+    // Get the backend URL and create a safe copy of the properties
+    const BACKEND_URL = api.defaults.baseURL || "";
+    const processedProps = { ...aiPayload.properties };
+
+    // Define common keys that might contain image URLs
+    const imageUrlKeys = ["src", "image_url", "backgroundImage"];
+
+    // Loop through the properties and fix any relative image paths
+    for (const key in processedProps) {
+      if (imageUrlKeys.includes(key)) {
+        const value = processedProps[key];
+        if (typeof value === "string" && value.startsWith("/")) {
+          processedProps[key] = `${BACKEND_URL}${value}`;
+        }
+      }
+    }
+    // --- END OF FIX ---
+
     // 1) Strip out any <script>…</script> from the HTML/CSS
     let htmlOnly = aiPayload.aiTemplate.replace(
       /<script[\s\S]*?<\/script>/g,
       ""
     );
 
-    // 2) Convert Handlebars-style loops and {{this}} into Mustache syntax
+    // 2) (Your Handlebars conversion logic is good, keep it)
     const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
     loopMatches.forEach(([fullMatch, arrKey]) => {
-      // turn "{{#each items}}" → "{{#items}}"
       htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
-      // turn the first "{{/each}}" after this into "{{/items}}"
       htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
     });
-    // replace any "{{this}}" with Mustache's "{{.}}"
     htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
 
-    // 3) Render the template with Mustache, fallback on error
+    // 3) Render the template with the PROCESSED properties
     let rendered: string;
     try {
-      rendered = Mustache.render(htmlOnly, aiPayload.properties);
+      rendered = Mustache.render(htmlOnly, processedProps); // Use the fixed props
     } catch (mErr) {
       console.error("Mustache.render failed, falling back to raw HTML:", mErr);
       rendered = htmlOnly;
     }
     containerRef.current.innerHTML = rendered;
 
-    // 4) If there's JS, strip wrapper tags and execute it
+    // 4) Execute JS if provided
     if (aiPayload.script) {
       const jsBody = aiPayload.script
         .replace(/^\s*<script[^>]*>/, "")
@@ -197,7 +190,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
 
   return <div ref={containerRef} />;
 };
-
 interface BuilderCanvasProps {
   page: Page | undefined;
   navbar: Navbar | null;

@@ -791,14 +791,12 @@ const CreateWebsitePage = () => {
         }</button>`;
         break;
       case "CATEGORY":
-        const catImgUrl = props.image_url
-          ? `${api.defaults.baseURL}${props.image_url}`
-          : "";
+        // --- FIX: Send only the relative path to the AI ---
         htmlOnly = `<div class="card" style="max-width:${
           props.style?.maxWidth ?? "320px"
         }; text-align:${props.style?.textAlign ?? "center"}; border:${
           props.style?.border ?? "none"
-        };"><img src="${catImgUrl}" alt="${
+        };"><img src="${props.image_url || ""}" alt="${
           props.name
         }" style="width:100%;height:160px;object-fit:cover;" /><div style="padding:1rem;"><h4 style="color:${
           props.nameStyle?.color ?? "inherit"
@@ -837,13 +835,11 @@ const CreateWebsitePage = () => {
         htmlOnly = `<select style="border: 1px solid #ccc; padding: 8px; border-radius: 4px;">${labelOption}${options}</select>`;
         break;
       case "MENU_ITEM":
-        const menuItemImgUrl = props.image_url
-          ? `${api.defaults.baseURL}${props.image_url}`
-          : "";
+        // --- FIX: Send only the relative path to the AI ---
         const price = props.base_price?.toFixed(2) || "0.00";
         htmlOnly = `<div class="menu-item-card" style="border: 1px solid #eee; padding: 1rem; text-align: center;">${
           props.image_url
-            ? `<img src="${menuItemImgUrl}" alt="${props.item_name}" style="width:100%; height:150px; object-fit:cover;" />`
+            ? `<img src="${props.image_url}" alt="${props.item_name}" style="width:100%; height:150px; object-fit:cover;" />`
             : ""
         }<h4>${props.item_name || "Menu Item"}</h4><p>${
           props.description || ""
@@ -974,29 +970,33 @@ const CreateWebsitePage = () => {
         }
       );
 
-      // --- THIS IS THE FIX ---
       // Safely merge the original properties with the AI's response.
-      // This preserves any keys the AI might have accidentally forgotten (like image_url).
       const finalProperties = {
         ...currentState.properties,
         ...responsePayload.properties,
+
+        // --- THIS IS THE FIX ---
+        // Use the existing originalType if it's there; otherwise, set it for the first time.
+        originalType:
+          currentState.properties.originalType || currentElement.element_type,
       };
 
       const finalAiPayload: AiElementPayload = {
         id: `ai_payload_${Date.now()}`,
         aiTemplate: responsePayload.aiTemplate,
         script: responsePayload.script,
-        properties: finalProperties, // Use the safely merged properties
+        properties: finalProperties,
         editableProps: originalEditableProps,
       };
 
       const refinedElement: Element = {
         ...currentElement,
         element_type: "AI",
-        properties: finalAiPayload.properties, // Also use the merged properties here
+        properties: finalAiPayload.properties,
         aiPayload: finalAiPayload,
       };
 
+      // (The state update logic below is correct and remains the same)
       const updatedSections = activePage.sections.map((section) => ({
         ...section,
         subsections: section.subsections.map((sub) => ({
