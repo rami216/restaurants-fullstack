@@ -16,6 +16,7 @@ import {
   AccordionItem,
   Location,
   MenuItem,
+  Extra,
 } from "./Properties";
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
@@ -247,6 +248,39 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   const [currentPage, setCurrentPage] = useState<Page | undefined>(initialPage);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
+  const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
+    null
+  );
+  const [extras, setExtras] = useState<Record<string, Extra[]>>({});
+  const [isLoadingExtras, setIsLoadingExtras] = useState(false);
+  const handleMenuItemClick = async (menuItemId: string) => {
+    // If the clicked item is already open, close it.
+    if (expandedMenuItemId === menuItemId) {
+      setExpandedMenuItemId(null);
+      return;
+    }
+
+    setIsLoadingExtras(true);
+    setExpandedMenuItemId(menuItemId);
+
+    try {
+      // Check if we've already fetched extras for this item
+      if (!extras[menuItemId]) {
+        const response = await api.get<Extra[]>(
+          `/menu-item-extras/extras-for-item/${menuItemId}`
+        );
+        setExtras((prevExtras) => ({
+          ...prevExtras,
+          [menuItemId]: response.data,
+        }));
+      }
+    } catch (error) {
+      console.error("Failed to fetch extras:", error);
+      // Handle error, maybe show a toast notification
+    } finally {
+      setIsLoadingExtras(false);
+    }
+  };
   useEffect(() => {
     setCurrentPage(initialPage);
   }, [initialPage]);
@@ -629,30 +663,71 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           </motion.select>
         );
 
-      case "MENU_ITEM":
-        return (
-          <motion.div
-            className="border rounded-lg p-4 bg-white shadow"
-            style={style}
-            initial={initial}
-            animate={animate}
-            transition={transition}
-          >
-            {props.image_url && (
-              <img
-                src={`${BACKEND}${props.image_url}`}
-                alt={props.item_name}
-                className="w-full object-cover rounded-md mb-4"
-              />
-            )}
-            <h4 className="font-bold text-lg">{props.item_name}</h4>
-            <p className="text-sm text-gray-600 my-2">{props.description}</p>
-            <p className="font-semibold text-right">
-              ${props.base_price.toFixed(2)}
-            </p>
-          </motion.div>
-        );
+      case "MENU_ITEM": {
+        // --- FIX #1: Check against the correct database ID ---
+        const isExpanded = expandedMenuItemId === element.properties.item_id;
 
+        // --- FIX #2: Look up extras using the correct database ID ---
+        const itemExtras = extras[element.properties.item_id] || [];
+
+        return (
+          <div>
+            <motion.div
+              className="border rounded-lg p-4 bg-white shadow cursor-pointer"
+              style={style}
+              initial={initial}
+              animate={animate}
+              transition={transition}
+              onClick={() => handleMenuItemClick(element.properties.item_id)}
+            >
+              {props.image_url && (
+                <img
+                  src={`${BACKEND}${props.image_url}`}
+                  alt={props.item_name}
+                  className="w-full object-cover rounded-md mb-4"
+                />
+              )}
+              <h4 className="font-bold text-gray-600 text-lg">
+                {props.item_name}
+              </h4>
+              <p className="text-sm text-gray-600 my-2">{props.description}</p>
+              <p className="font-semibold text-gray-600 text-right">
+                ${props.base_price?.toFixed(2)}
+              </p>
+            </motion.div>
+
+            {/* This conditional block for extras will now work correctly */}
+            {isExpanded && (
+              <div className="border border-t-0 rounded-b-lg p-4 bg-gray-50 -mt-2">
+                <h5 className="font-bold mb-2 text-gray-700">Add Extras:</h5>
+                {isLoadingExtras ? (
+                  <p className="text-sm text-gray-500">Loading...</p>
+                ) : itemExtras.length > 0 ? (
+                  <div className="space-y-2">
+                    {itemExtras.map((extra) => (
+                      <div
+                        key={extra.extra_id}
+                        className="flex justify-between items-center text-sm"
+                      >
+                        <span className="font-semibold text-gray-800">
+                          {extra.name}
+                        </span>
+                        <span className="font-semibold text-gray-800">
+                          + ${extra.price.toFixed(2)}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <p className="text-sm text-gray-500">
+                    No extras available for this item.
+                  </p>
+                )}
+              </div>
+            )}
+          </div>
+        );
+      }
       case "CATEGORY": {
         const nameStyle = props.nameStyle || {};
 

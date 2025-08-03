@@ -533,106 +533,167 @@ async def generate_ai_section(body: GenerateRequest):
 #     )
 
 # fifth approach
-class RefineRequest(BaseModel):
-    prompt: str
-    full_template: str
-    unique_class_name: str
-    properties: Dict[str, Any] = Field(default_factory=dict)
-    editableProps: List[Dict[str, Any]] = Field(default_factory=list)
+# class RefineRequest(BaseModel):
+#     prompt: str
+#     full_template: str
+#     unique_class_name: str
+#     properties: Dict[str, Any] = Field(default_factory=dict)
+#     editableProps: List[Dict[str, Any]] = Field(default_factory=list)
 
-class RefineResponse(BaseModel):
-    template: str          # HTML + <style> only
-    script: Optional[str]  # JS only
-    properties: Dict[str, Any]
-    editableProps: List[Dict[str, Any]]
+# class RefineResponse(BaseModel):
+#     template: str          # HTML + <style> only
+#     script: Optional[str]  # JS only
+#     properties: Dict[str, Any]
+#     editableProps: List[Dict[str, Any]]
 
-# --- UPGRADED PROMPT FOR COMPLEX ANIMATIONS AND STYLES ---
+
 # REFINE_SYSTEM_PROMPT = """
 # You are an expert HTML, CSS, and JavaScript editor. Your task is to modify an existing HTML snippet based on a user's request.
 
 # Return ONLY the updated snippet. The HTML, <style>, and <script> should all be in a single block.
 
-# **CRITICAL RULES FOR COMPLEX ANIMATIONS (e.g., "animate each letter"):**
+# **CRITICAL RULES:**
 
-# 1.  **HTML Restructuring is Required**: To animate individual letters or words, you **MUST** first restructure the HTML. You need to wrap each character or word in its own `<span>` tag.
+# 1.  **HTML Restructuring for Animations**: To animate individual letters or words, you **MUST** first restructure the HTML by wrapping each character in its own `<span>` tag.
 #     * **Example:** `<h3>Hello</h3>` MUST become `<h3><span class="char">H</span><span class="char">e</span><span class="char">l</span><span class="char">l</span><span class="char">o</span></h3>`.
 
-# 2.  **Write Corresponding CSS**: You **MUST** write the necessary CSS, including `@keyframes`, to animate the new `<span>` elements. Use a staggered `animation-delay` on the `<span>` tags to make the animation look professional.
+# 2.  **Write Corresponding CSS**: You **MUST** write the necessary CSS, including `@keyframes` and staggered `animation-delay`, to animate the new `<span>` elements.
 
-# 3.  **Keep Everything In Sync**: The HTML structure, CSS animations, and any necessary JavaScript **MUST** work together perfectly. Do not write CSS for classes that don't exist in your new HTML.
+# 3.  **Keep Everything In Sync**: The HTML structure, CSS animations, and any necessary JavaScript **MUST** work together perfectly.
 
-# 4.  **Preserve Existing Mustache Tokens**: Do not remove `{{...}}` tokens from the template. If the user asks to change a color or text that is already a token, you should not modify the template.
+# 4.  **Preserve Existing Mustache Tokens**: Do not remove `{{...}}` tokens from the template if the user is only asking to change a color or font size that is already a variable.
+
+# 5.  **Editing Text Inside a Variable (NEW RULE)**: If a user asks to add formatting to text that is currently a `{{variable}}` (e.g., making a word bold), you **MUST** replace the variable with the new, static rich text. This "bakes" the text into the template.
+#     * **Example Template Contains:** `<h2>{{pageTitle}}</h2>`
+#     * **User Asks:** "make the word Title bold in 'My Title'"
+#     * **Your Response Should Contain:** `<h2>My <b>Title</b></h2>` (The `{{pageTitle}}` token is replaced).
 
 # You will receive a user prompt, the existing template, and a unique class name for scoping your CSS rules.
 # """.strip()
-REFINE_SYSTEM_PROMPT = """
-You are an expert HTML, CSS, and JavaScript editor. Your task is to modify an existing HTML snippet based on a user's request.
 
-Return ONLY the updated snippet. The HTML, <style>, and <script> should all be in a single block.
+# @router.post("/refine-element", response_model=RefineResponse)
+# async def refine_element(body: RefineRequest):
+#     try:
+#         # 1) Build the Chat prompt
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
+#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+#         )
+
+#         # 2) Call the LLM
+#         resp = openai.chat.completions.create(
+#             model="gpt-4o",  # Using a more powerful model is recommended for complex tasks
+#             messages=[
+#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
+#                 {"role": "user",    "content": user_content},
+#             ],
+#             temperature=0.2,
+#         )
+#         raw = resp.choices[0].message.content
+
+#         # 3) Strip any triple-backtick fences
+#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
+#         cleaned = re.sub(r"\n?```$", "", cleaned)
+
+#         # 4) Pull out script content and remove tags from the template
+#         full_script_re = r"<script[\s\S]*?</script>"
+#         script_content_re = r"<script.*?>([\s\S]*?)</script>"
+
+#         script_contents = re.findall(script_content_re, cleaned)
+#         script_only = "\n".join(c.strip() for c in script_contents).strip() or None
+
+#         template_only = re.sub(full_script_re, "", cleaned).strip()
+
+#     except (OpenAIError, re.error) as e:
+#         raise HTTPException(500, f"Refine-element failed: {e}")
+
+#     # 5) Echo back properties/editableProps unchanged
+#     return RefineResponse(
+#         template=template_only,
+#         script=script_only,
+#         properties=body.properties,
+#         editableProps=body.editableProps,
+#     )
+
+#sixth approach
+
+class RefineStateRequest(BaseModel):
+    prompt: str
+    currentState: Dict[str, Any]
+
+# REFINE_MASTER_PROMPT = """
+# You are an expert front-end component editor. Your job is to modify a component's entire state based on a user's request.
+# You will receive the user's prompt and a JSON object containing the component's current state: `aiTemplate`, `properties`, `editableProps`, and `script`.
+
+# Your output MUST be a single, complete, valid JSON object with the fully updated state.
+
+# **CRITICAL RULES:**
+
+# 1.  **Generate Editable Fields (IMPORTANT NEW RULE)**: If you receive a component where the `editableProps` array is empty, you **MUST** generate a suitable `editableProps` array based on the keys found in the `properties` object. For example, if you see a `properties.content` key, create an editableProp for 'Content' with type 'textarea'. If you see a `properties.style.color`, create an editableProp for 'Color' with type 'color'.
+
+# 2.  **Preserve Data**: Your highest priority is to preserve existing data. When a user asks to change a color or font, you should modify the value in the `properties` object, NOT hardcode it into the `aiTemplate`.
+
+# 3.  **Structural Changes**: If the request requires changing the HTML structure (e.g., "add a new item," "animate letters"), you MUST modify the `aiTemplate`.
+
+# 4.  **Sync New Elements**: When you add new HTML that needs editable text, you MUST add corresponding entries to both the `properties` and `editableProps` objects.
+
+# 5.  **JavaScript Changes**: If the request involves changing interactivity or animation, you MUST modify the code in the `script` key. Do NOT wrap it in `<script>` tags.
+
+# 6.  **Final Output**: Return the complete, updated JSON object containing the final `aiTemplate`, `properties`, `editableProps`, and `script`.
+# """.strip()
+REFINE_MASTER_PROMPT = """
+You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
+You will receive the user's prompt and a JSON object containing the component's current state.
+
+Your output MUST be a single, complete, valid JSON object with the fully updated state.
 
 **CRITICAL RULES:**
 
-1.  **HTML Restructuring for Animations**: To animate individual letters or words, you **MUST** first restructure the HTML by wrapping each character in its own `<span>` tag.
-    * **Example:** `<h3>Hello</h3>` MUST become `<h3><span class="char">H</span><span class="char">e</span><span class="char">l</span><span class="char">l</span><span class="char">o</span></h3>`.
+1.  **Repair Hardcoded Text (IMPORTANT)**: If you receive a component where the `aiTemplate` contains user-facing text, but the `properties` and `editableProps` for that text are missing, you **MUST** fix it. Extract the hardcoded text, replace it with a `{{mustache}}` variable in the `aiTemplate`, and add the corresponding entries to `properties` and `editableProps`.
 
-2.  **Write Corresponding CSS**: You **MUST** write the necessary CSS, including `@keyframes` and staggered `animation-delay`, to animate the new `<span>` elements.
+    * **Example of a BROKEN input you must fix:**
+    * `aiTemplate`: "<h3>Welcome to Beirut!</h3>"
+    * `properties`: {}
+    * `editableProps`: []
+    * **Your FIXED output should be:**
+    * `aiTemplate`: "<h3>{{headline}}</h3>"
+    * `properties`: { "headline": "Welcome to Beirut!" }
+    * `editableProps`: [{ "key": "headline", "label": "Headline", "type": "text" }]
 
-3.  **Keep Everything In Sync**: The HTML structure, CSS animations, and any necessary JavaScript **MUST** work together perfectly.
+2.  **Preserve Existing Data**: If the `editableProps` array is NOT empty, your highest priority is to preserve it. Do not add or remove props unless the user asks. When changing a color or font, modify the value in the `properties` object, NOT by hardcoding it.
 
-4.  **Preserve Existing Mustache Tokens**: Do not remove `{{...}}` tokens from the template if the user is only asking to change a color or font size that is already a variable.
+3.  **Apply User's Prompt**: After repairing the component (if necessary), apply the user's requested change to the now-correct component state.
 
-5.  **Editing Text Inside a Variable (NEW RULE)**: If a user asks to add formatting to text that is currently a `{{variable}}` (e.g., making a word bold), you **MUST** replace the variable with the new, static rich text. This "bakes" the text into the template.
-    * **Example Template Contains:** `<h2>{{pageTitle}}</h2>`
-    * **User Asks:** "make the word Title bold in 'My Title'"
-    * **Your Response Should Contain:** `<h2>My <b>Title</b></h2>` (The `{{pageTitle}}` token is replaced).
-
-You will receive a user prompt, the existing template, and a unique class name for scoping your CSS rules.
+4.  **Final Output**: Return the complete, updated JSON object.
 """.strip()
 
-@router.post("/refine-element", response_model=RefineResponse)
-async def refine_element(body: RefineRequest):
+
+@router.post("/refine-element", response_model=Dict[str, Any])
+async def refine_element(body: RefineStateRequest):
     try:
-        # 1) Build the Chat prompt
         user_content = (
-            f'PROMPT: "{body.prompt}"\n\n'
-            f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
-            f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
+            f"USER_PROMPT: \"{body.prompt}\"\n\n"
+            f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
         )
 
-        # 2) Call the LLM
         resp = openai.chat.completions.create(
-            model="gpt-4o",  # Using a more powerful model is recommended for complex tasks
+            model="gpt-4o",
+            response_format={"type": "json_object"},
             messages=[
-                {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
-                {"role": "user",    "content": user_content},
+                {"role": "system", "content": REFINE_MASTER_PROMPT},
+                {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
         )
-        raw = resp.choices[0].message.content
 
-        # 3) Strip any triple-backtick fences
-        cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
-        cleaned = re.sub(r"\n?```$", "", cleaned)
+        content = resp.choices[0].message.content
+        payload = json.loads(content)
+        return payload
 
-        # 4) Pull out script content and remove tags from the template
-        full_script_re = r"<script[\s\S]*?</script>"
-        script_content_re = r"<script.*?>([\s\S]*?)</script>"
-
-        script_contents = re.findall(script_content_re, cleaned)
-        script_only = "\n".join(c.strip() for c in script_contents).strip() or None
-
-        template_only = re.sub(full_script_re, "", cleaned).strip()
-
-    except (OpenAIError, re.error) as e:
+    except (OpenAIError, json.JSONDecodeError, KeyError) as e:
         raise HTTPException(500, f"Refine-element failed: {e}")
 
-    # 5) Echo back properties/editableProps unchanged
-    return RefineResponse(
-        template=template_only,
-        script=script_only,
-        properties=body.properties,
-        editableProps=body.editableProps,
-    )
 
   #endregion
   
@@ -732,6 +793,68 @@ The value of "sections" must be an array of section objects.
 
 **OUTPUT:** A valid JSON object containing only the "sections" array.
 """.strip()
+# PAGE_SYSTEM_PROMPT = """
+# You are an expert website designer. Your task is to generate the JSON for a complete webpage layout based on a user's prompt. You will be given a list of standard components and a special, powerful "AI" component.
+
+# You MUST return a JSON object with a single top-level key: "sections".
+
+# ---
+# ### **CORE JSON STRUCTURE RULES**
+
+# 1.  **Structure:** The JSON must follow the `sections` -> `subsections` -> `elements` hierarchy.
+# 2.  **Styling:** All CSS styles MUST be in a nested `"style"` object, and all CSS property keys MUST be in camelCase format (e.g., `backgroundColor`).
+# 3.  **Component Choice:** You should **prefer to use the standard element types** listed below for simple content like text, buttons, and images. They are reliable. Use the powerful `"AI"` element type **only when you need to create a custom, interactive, or visually unique component** that is not on the standard list.
+
+# ---
+# ### **AVAILABLE ELEMENT TYPES**
+
+# You **MUST ONLY** use the `element_type` values from the list below. Do not invent new types.
+
+# **--- STANDARD COMPONENTS (USE THESE FIRST) ---**
+
+# **1. `TEXT` Element:** For headings and paragraphs.
+#    - **JSON Structure:** `{ "element_type": "TEXT", "properties": { "content": "HTML content here", "style": { ... } } }`
+
+# **2. `BUTTON` Element:** For clickable calls to action.
+#    - **JSON Structure:** `{ "element_type": "BUTTON", "properties": { "text": "Button Text", "style": { ... } } }`
+
+# **3. `IMAGE` Element:** For displaying images. Use professional placeholders from Pexels or Unsplash.
+#    - **JSON Structure:** `{ "element_type": "IMAGE", "properties": { "src": "image_url", "alt": "description", "style": { ... } } }`
+
+# **4. `LIST` Element:** For simple bulleted lists.
+#    - **JSON Structure:** `{ "element_type": "LIST", "properties": { "items": ["Item 1", "Item 2"] } }`
+
+# **--- ADVANCED COMPONENT (USE FOR CUSTOM/COOL STUFF) ---**
+
+# **5. `AI` Element:** Use this for anything custom, interactive, or visually complex (e.g., testimonial sliders, animated counters, unique cards with hover effects).
+#    - When you use `element_type: "AI"`, you must generate a complete `aiPayload` object.
+#    - **CRITICAL RULE:** The `aiPayload` MUST make all text and styles fully editable using `{{mustache}}` tokens, `properties`, and `editableProps`.
+#    - **JSON Structure & Example:**
+#      ```json
+#      {
+#        "element_type": "AI",
+#        "properties": {},
+#        "aiPayload": {
+#          "aiTemplate": "<div class=\\"custom-card\\"><style>.custom-card { background: {{bgColor}}; padding: 1rem; }</style><h3>{{title}}</h3></div>",
+#          "script": null,
+#          "properties": { "title": "My Custom Card", "bgColor": "#EEE" },
+#          "editableProps": [
+#            { "key": "title", "label": "Title", "type": "text" },
+#            { "key": "bgColor", "label": "Background", "type": "color" }
+#          ]
+#        }
+#      }
+#      ```
+
+# ---
+# **INPUT:** A user's prompt for a webpage.
+
+# **OUTPUT:** A valid JSON object containing the "sections" array, using a smart mix of the valid standard and AI elements defined above.
+# """.strip()
+
+
+
+
 @router.post("/generate-ai-page")
 async def generate_ai_page(body: GenerateRequest):
     try:
@@ -742,7 +865,7 @@ async def generate_ai_page(body: GenerateRequest):
                 {"role": "system", "content": PAGE_SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
-            temperature=0.8,
+            temperature=0.4,
             max_tokens=4096,
         )
         payload = json.loads(resp.choices[0].message.content)

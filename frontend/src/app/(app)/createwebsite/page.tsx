@@ -18,6 +18,7 @@ import {
   Section,
   AiElementPayload,
   EditableProp,
+  AccordionItem,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 import { v4 as uuidv4 } from "uuid";
@@ -724,7 +725,217 @@ const CreateWebsitePage = () => {
   //     throw err;
   //   }
   // };
+  function getEditablePropsForType(elementType: string): EditableProp[] {
+    switch (elementType) {
+      case "TEXT":
+        return [
+          { key: "content", label: "Content", type: "textarea" },
+          { key: "style.color", label: "Text Color", type: "color" },
+          { key: "style.fontSize", label: "Font Size", type: "text" },
+        ];
+      case "IMAGE":
+        return [
+          { key: "src", label: "Image Source", type: "text" },
+          { key: "alt", label: "Alt Text", type: "text" },
+        ];
+      case "BUTTON":
+        return [
+          { key: "text", label: "Button Text", type: "text" },
+          { key: "style.backgroundColor", label: "Background", type: "color" },
+          { key: "style.color", label: "Text Color", type: "color" },
+        ];
+      case "MENU_ITEM":
+        return [
+          { key: "item_name", label: "Item Name", type: "text" },
+          { key: "description", label: "Description", type: "textarea" },
+          { key: "base_price", label: "Price", type: "number" },
+          { key: "image_url", label: "Image URL", type: "text" },
+        ];
+      // Add other cases for LIST, ACCORDION, etc. if they have editable fields
+      default:
+        return [];
+    }
+  }
 
+  // HELPER 2: Builds a simple HTML representation for standard elements.
+  function buildHtmlForElement(
+    element: Element,
+    uniqueClassName: string
+  ): string {
+    const props = element.properties || {};
+    let htmlOnly = "";
+
+    switch (element.element_type) {
+      case "TEXT":
+        htmlOnly = `<div style="color:${
+          props.style?.color ?? "inherit"
+        }; font-size:${props.style?.fontSize ?? "1rem"};">${
+          props.content ?? ""
+        }</div>`;
+        break;
+      case "IMAGE":
+        const imgUrl = props.src ? `${api.defaults.baseURL}${props.src}` : "";
+        htmlOnly = `<img src="${imgUrl}" alt="${
+          props.alt ?? ""
+        }" style="width:${props.style?.width ?? "100%"}; height:${
+          props.style?.height ?? "auto"
+        }; object-fit:cover;" />`;
+        break;
+      case "BUTTON":
+        htmlOnly = `<button style="background-color:${
+          props.style?.backgroundColor ?? "blue"
+        }; color:${props.style?.color ?? "white"}; padding:${
+          props.style?.padding ?? "10px 20px"
+        }; border:none; border-radius:${props.style?.borderRadius ?? "5px"};">${
+          props.text ?? "Button"
+        }</button>`;
+        break;
+      case "CATEGORY":
+        const catImgUrl = props.image_url
+          ? `${api.defaults.baseURL}${props.image_url}`
+          : "";
+        htmlOnly = `<div class="card" style="max-width:${
+          props.style?.maxWidth ?? "320px"
+        }; text-align:${props.style?.textAlign ?? "center"}; border:${
+          props.style?.border ?? "none"
+        };"><img src="${catImgUrl}" alt="${
+          props.name
+        }" style="width:100%;height:160px;object-fit:cover;" /><div style="padding:1rem;"><h4 style="color:${
+          props.nameStyle?.color ?? "inherit"
+        }; font-weight:${props.nameStyle?.fontWeight ?? "bold"};">${
+          props.name
+        }</h4></div></div>`;
+        break;
+      case "LIST":
+        const listItems = (props.items || [])
+          .map((item: string) => `<li>${item}</li>`)
+          .join("");
+        htmlOnly = `<ul style="list-style-position: inside; padding-left: 20px;">${listItems}</ul>`;
+        break;
+      case "ACCORDION":
+        const accordionItems = (props.items || [])
+          .map(
+            (item: AccordionItem) =>
+              `<div style="border: 1px solid #ddd; margin-bottom: 5px;"><h3 style="margin:0; padding: 10px; background-color: #f7f7f7;">${item.question}</h3><div style="padding: 10px;">${item.answer}</div></div>`
+          )
+          .join("");
+        htmlOnly = `<div>${accordionItems}</div>`;
+        break;
+      case "MAP":
+        htmlOnly = `<iframe src="${props.src}" style="width:100%; height:300px; border:0;" allowfullscreen="" loading="lazy"></iframe>`;
+        break;
+      case "DROPDOWN":
+        const labelOption = props.label
+          ? `<option disabled>${props.label}</option>`
+          : "";
+        const options = (props.options || [])
+          .map(
+            (opt: any) =>
+              `<option value="${opt.action_value}">${opt.text}</option>`
+          )
+          .join("");
+        htmlOnly = `<select style="border: 1px solid #ccc; padding: 8px; border-radius: 4px;">${labelOption}${options}</select>`;
+        break;
+      case "MENU_ITEM":
+        const menuItemImgUrl = props.image_url
+          ? `${api.defaults.baseURL}${props.image_url}`
+          : "";
+        const price = props.base_price?.toFixed(2) || "0.00";
+        htmlOnly = `<div class="menu-item-card" style="border: 1px solid #eee; padding: 1rem; text-align: center;">${
+          props.image_url
+            ? `<img src="${menuItemImgUrl}" alt="${props.item_name}" style="width:100%; height:150px; object-fit:cover;" />`
+            : ""
+        }<h4>${props.item_name || "Menu Item"}</h4><p>${
+          props.description || ""
+        }</p><p style="font-weight: bold;">$${price}</p></div>`;
+        break;
+      default:
+        htmlOnly = `<div></div>`;
+    }
+    return `<style></style>\n<div class="${uniqueClassName}">${htmlOnly}</div>`;
+  }
+
+  // The final, complete function
+  // const handleRefineElement = async (prompt: string) => {
+  //   if (!selectedItem || selection.type !== "element" || !activePage) return;
+
+  //   try {
+  //     const currentElement = JSON.parse(
+  //       JSON.stringify(selectedItem)
+  //     ) as Element;
+
+  //     // 1. Prepare the component's state to send to the AI
+  //     let currentState: AiElementPayload;
+  //     // Determine if the element has a valid set of editable props to start with
+  //     const hasExistingEditableProps =
+  //       (currentElement.aiPayload?.editableProps?.length ?? 0) > 0;
+
+  //     if (currentElement.element_type === "AI" && currentElement.aiPayload) {
+  //       currentState = currentElement.aiPayload;
+  //     } else {
+  //       // For standard elements, build the initial state using helpers
+  //       currentState = {
+  //         id: `ai_payload_new_${Date.now()}`,
+  //         aiTemplate: buildHtmlForElement(
+  //           currentElement,
+  //           `ai-element-${currentElement.element_id.split("-")[0]}`
+  //         ),
+  //         script: undefined,
+  //         properties: currentElement.properties,
+  //         editableProps: getEditablePropsForType(currentElement.element_type),
+  //       };
+  //     }
+
+  //     // 2. Call the smart backend endpoint
+  //     const { data: responsePayload } = await api.post<AiElementPayload>(
+  //       "/ai/refine-element",
+  //       {
+  //         prompt,
+  //         currentState: currentState,
+  //       }
+  //     );
+
+  //     // 3. Intelligently construct the final payload
+  //     const finalAiPayload: AiElementPayload = {
+  //       id: `ai_payload_${Date.now()}`,
+  //       aiTemplate: responsePayload.aiTemplate,
+  //       script: responsePayload.script,
+  //       properties: responsePayload.properties,
+
+  //       // *** THE FINAL FIX ***
+  //       // If the component already had good editable props (like the accordion), keep them.
+  //       // If it was a broken component (like the text element with no props), accept the AI's repair.
+  //       editableProps: hasExistingEditableProps
+  //         ? currentState.editableProps
+  //         : responsePayload.editableProps,
+  //     };
+
+  //     // 4. Create the final, updated element
+  //     const refinedElement: Element = {
+  //       ...currentElement,
+  //       element_type: "AI",
+  //       properties: finalAiPayload.properties,
+  //       aiPayload: finalAiPayload,
+  //     };
+
+  //     // 5. Update the page state
+  //     const updatedSections = activePage.sections.map((section) => ({
+  //       ...section,
+  //       subsections: section.subsections.map((sub) => ({
+  //         ...sub,
+  //         elements: sub.elements.map((el) =>
+  //           el.element_id === currentElement.element_id ? refinedElement : el
+  //         ),
+  //       })),
+  //     }));
+
+  //     updateWebsiteData({ ...activePage, sections: updatedSections });
+  //     setSelection({ type: "element", id: refinedElement.element_id });
+  //   } catch (err) {
+  //     console.error("AI element refinement failed:", err);
+  //     alert("AI element refinement failed.");
+  //   }
+  // };
   const handleRefineElement = async (prompt: string) => {
     if (!selectedItem || selection.type !== "element" || !activePage) return;
 
@@ -732,122 +943,60 @@ const CreateWebsitePage = () => {
       const currentElement = JSON.parse(
         JSON.stringify(selectedItem)
       ) as Element;
-      const uniqueClassName = `ai-element-${
-        currentElement.element_id.split("-")[0]
-      }`;
-      let refinedElement: Element;
 
-      // --- NEW HYBRID LOGIC ---
-      // Check if the element is a functional AI component (i.e., it has a script)
-      if (
-        currentElement.element_type === "AI" &&
-        currentElement.aiPayload?.script
-      ) {
-        // --- PATH 1: For Functional Components (e.g., Accordions) ---
-        // We must preserve the dynamic structure and script.
+      let currentState: AiElementPayload;
+      let originalEditableProps: EditableProp[];
 
-        const { data } = await api.post<RefineResponse>("/ai/refine-element", {
-          prompt,
-          full_template: currentElement.aiPayload.aiTemplate, // Send the original template
-          unique_class_name: `.${uniqueClassName}`,
-        });
-
-        // Rebuild the payload, preserving original properties but updating the template/script
-        refinedElement = {
-          ...currentElement,
-          aiPayload: {
-            ...currentElement.aiPayload,
-            id: `ai_payload_${Date.now()}`,
-            aiTemplate: data.template, // Use the new template from AI
-            script: data.script ?? currentElement.aiPayload.script, // Use new script, fallback to old
-          },
-        };
+      if (currentElement.element_type === "AI" && currentElement.aiPayload) {
+        currentState = currentElement.aiPayload;
+        originalEditableProps = currentElement.aiPayload.editableProps;
       } else {
-        // --- PATH 2: For Static Elements (Text, Images) or Scriptless AI Elements ---
-        // We "bake" the element into static HTML to make it editable.
-
-        let htmlToSend = "";
-        if (currentElement.element_type === "AI" && currentElement.aiPayload) {
-          // Render the scriptless AI element with Mustache
-          htmlToSend = Mustache.render(
-            currentElement.aiPayload.aiTemplate,
-            currentElement.aiPayload.properties
-          );
-        } else {
-          // Build HTML for standard elements
-          const props = currentElement.properties || {};
-          let htmlOnly = "";
-          switch (currentElement.element_type) {
-            case "TEXT":
-              htmlOnly = `<div style="color:${
-                props.style?.color ?? "inherit"
-              }; font-size:${props.style?.fontSize ?? "1rem"};">${
-                props.content ?? ""
-              }</div>`;
-              break;
-            case "IMAGE":
-              const url = props.src
-                ? `${api.defaults.baseURL}${props.src}`
-                : "";
-              htmlOnly = `<img src="${url}" alt="${
-                props.alt ?? ""
-              }" style="width:${props.style?.width ?? "100%"}; height:${
-                props.style?.height ?? "auto"
-              }; object-fit:cover;" />`;
-              break;
-            case "BUTTON":
-              htmlOnly = `<button style="background-color:${
-                props.style?.backgroundColor ?? "blue"
-              }; color:${props.style?.color ?? "white"}; padding:${
-                props.style?.padding ?? "10px 20px"
-              }; border:none; border-radius:${
-                props.style?.borderRadius ?? "5px"
-              };">${props.text ?? "Button"}</button>`;
-              break;
-            case "CATEGORY":
-              const imageUrl = props.image_url
-                ? `${api.defaults.baseURL}${props.image_url}`
-                : "";
-              htmlOnly = `<div class="card" style="max-width:${
-                props.style?.maxWidth ?? "320px"
-              }; text-align:${props.style?.textAlign ?? "center"}; border:${
-                props.style?.border ?? "none"
-              };"><img src="${imageUrl}" alt="${
-                props.name
-              }" style="width:100%;height:160px;object-fit:cover;" /><div style="padding:1rem;"><h4 style="color:${
-                props.nameStyle?.color ?? "inherit"
-              }; font-weight:${props.nameStyle?.fontWeight ?? "bold"};">${
-                props.name
-              }</h4></div></div>`;
-              break;
-            default:
-              htmlOnly = `<div></div>`;
-          }
-          htmlToSend = `<style></style>\n<div class="${uniqueClassName}">${htmlOnly}</div>`;
-        }
-
-        const { data } = await api.post<RefineResponse>("/ai/refine-element", {
-          prompt,
-          full_template: htmlToSend,
-          unique_class_name: `.${uniqueClassName}`,
-        });
-
-        // Create a new AI element with the "baked" static content
-        refinedElement = {
-          ...currentElement,
-          element_type: "AI",
-          properties: {},
-          aiPayload: {
-            id: `ai_payload_${Date.now()}`,
-            aiTemplate: data.template,
-            script: data.script,
-            properties: {},
-            editableProps: [],
-          },
+        originalEditableProps = getEditablePropsForType(
+          currentElement.element_type
+        );
+        currentState = {
+          id: `ai_payload_new_${Date.now()}`,
+          aiTemplate: buildHtmlForElement(
+            currentElement,
+            `ai-element-${currentElement.element_id.split("-")[0]}`
+          ),
+          script: undefined,
+          properties: currentElement.properties,
+          editableProps: originalEditableProps,
         };
       }
 
-      // --- Universal state update logic ---
+      const { data: responsePayload } = await api.post<AiElementPayload>(
+        "/ai/refine-element",
+        {
+          prompt,
+          currentState: currentState,
+        }
+      );
+
+      // --- THIS IS THE FIX ---
+      // Safely merge the original properties with the AI's response.
+      // This preserves any keys the AI might have accidentally forgotten (like image_url).
+      const finalProperties = {
+        ...currentState.properties,
+        ...responsePayload.properties,
+      };
+
+      const finalAiPayload: AiElementPayload = {
+        id: `ai_payload_${Date.now()}`,
+        aiTemplate: responsePayload.aiTemplate,
+        script: responsePayload.script,
+        properties: finalProperties, // Use the safely merged properties
+        editableProps: originalEditableProps,
+      };
+
+      const refinedElement: Element = {
+        ...currentElement,
+        element_type: "AI",
+        properties: finalAiPayload.properties, // Also use the merged properties here
+        aiPayload: finalAiPayload,
+      };
+
       const updatedSections = activePage.sections.map((section) => ({
         ...section,
         subsections: section.subsections.map((sub) => ({

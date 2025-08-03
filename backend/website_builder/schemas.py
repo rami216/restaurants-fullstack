@@ -1,6 +1,6 @@
 # website_builder/schemas.py
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from uuid import UUID
 import datetime
@@ -8,6 +8,10 @@ import datetime
 def to_camel(s: str) -> str:
     parts = s.split("_")
     return parts[0] + "".join(p.title() for p in parts[1:])
+
+# --- Core Flexible Property Schemas ---
+
+
 
 
 class EditableProp(BaseModel):
@@ -18,19 +22,18 @@ class EditableProp(BaseModel):
 class AiElementPayload(BaseModel):
     aiTemplate: str
     properties: Dict[str, Any]
-    editableProps: List[EditableProp]
-    script: Optional[str] = None # Add this line
+    editableProps: List[Dict[str, Any]]
+    script: Optional[str] = None
     
-class ElementProperties(BaseModel):
-    class Config:
-        extra = "allow"
+# class ElementProperties(BaseModel):
+#     class Config:
+#         extra = "allow"
 
 # --- Element Schemas ---
 class ElementBase(BaseModel):
     element_type: str
     position: int
-    properties: ElementProperties # <-- CHANGE THIS
-
+    properties: Dict[str, Any]
 class ElementCreate(ElementBase):
     subsection_id: UUID
     # THE FIX: Add aiPayload field, aliased from snake_case
@@ -38,9 +41,10 @@ class ElementCreate(ElementBase):
 
 class ElementUpdate(BaseModel):
     position: Optional[int] = None
-    properties: Optional[Any] = None
-    element_type: Optional[str] = None  # <-- ADD THIS LINE
+    properties: Optional[Dict[str, Any]] = None # Use simple Dict
+    element_type: Optional[str] = None
     ai_payload: Optional[AiElementPayload] = Field(None, alias="aiPayload")
+
 
 class ElementResponse(ElementBase):
     element_id: UUID

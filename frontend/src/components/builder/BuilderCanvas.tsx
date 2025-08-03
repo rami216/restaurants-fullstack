@@ -599,7 +599,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                   gap: properties.gap,
                 }}
               >
-                {section.subsections.map((sub) => {
+                {/* {section.subsections.map((sub) => {
                   const subsectionStyle: React.CSSProperties = {
                     display: sub.properties.display || "flex",
                     gap: sub.properties.gap || "1rem",
@@ -664,8 +664,78 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                       )}
                     </motion.div>
                   );
-                })}
+                })} */}
+                {section.subsections.map((sub) => {
+                  // --- FIX: Provide a default empty object for properties if it's missing ---
+                  const subProps = sub.properties || {};
 
+                  const subsectionStyle: React.CSSProperties = {
+                    // Safely access properties from subProps
+                    display: subProps.display || "flex",
+                    gap: subProps.gap || "1rem",
+                    ...(subProps.style || {}),
+                  };
+
+                  if (subProps.display === "grid") {
+                    subsectionStyle.gridTemplateColumns =
+                      subProps.gridTemplateColumns || "repeat(2, 1fr)";
+                  } else {
+                    subsectionStyle.flexDirection =
+                      subProps.flexDirection || "column";
+                    subsectionStyle.justifyContent =
+                      subProps.justifyContent || "flex-start";
+                    subsectionStyle.alignItems =
+                      subProps.alignItems || "stretch";
+                  }
+
+                  const { initial, animate, transition } = getMotionConfig(
+                    subProps.animation // Also use subProps here
+                  );
+
+                  return (
+                    <motion.div
+                      key={sub.subsection_id}
+                      initial={initial}
+                      animate={animate}
+                      transition={transition}
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        onSelect({ type: "subsection", id: sub.subsection_id });
+                      }}
+                      className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
+                        selection.type === "subsection" &&
+                        selection.id === sub.subsection_id
+                          ? "border-green-500"
+                          : "border-dashed border-gray-400"
+                      }`}
+                      style={subsectionStyle}
+                    >
+                      {sub.elements.map((el) => (
+                        <div
+                          key={el.element_id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onSelect({ type: "element", id: el.element_id });
+                          }}
+                          className={`p-2 rounded transition-all ${
+                            selection.type === "element" &&
+                            selection.id === el.element_id
+                              ? "ring-2 ring-offset-2 ring-pink-500"
+                              : ""
+                          }`}
+                        >
+                          {renderElement(el)}
+                        </div>
+                      ))}
+
+                      {sub.elements.length === 0 && (
+                        <div className="text-gray-400 self-center mx-auto">
+                          Add elements here
+                        </div>
+                      )}
+                    </motion.div>
+                  );
+                })}
                 <button
                   onClick={(e) => {
                     e.stopPropagation();

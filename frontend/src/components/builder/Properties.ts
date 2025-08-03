@@ -1,16 +1,40 @@
 // frontend/src/components/builder/Properties.ts
+// New, strongly-typed interface for element properties
+export interface ElementProperties {
+  // Standard Element Props
+  content?: string;
+  src?: string;
+  alt?: string;
+  text?: string;
+  items?: any[];
+  options?: any[];
+  label?: string;
+  image_url?: string;
+  item_name?: string;
+  description?: string;
+  base_price?: number;
+  name?: string;
+
+  // Nested Style Objects
+  style?: React.CSSProperties; // Use React's built-in type for flexibility
+  nameStyle?: React.CSSProperties;
+
+  // Allows any other string-keyed property
+  [key: string]: any;
+}
 
 export interface EditableProp {
   key: string;
   label: string;
-  type: "text" | "number" | "color";
+  type: "text" | "number" | "color" | "textarea"; // Added textarea
 }
+
 export interface AiElementPayload {
-  id: string; // <-- ADD THIS LINE
+  id: string;
   aiTemplate: string;
   properties: Record<string, any>;
-  editableProps: EditableProp[];
-  script?: string; // ← add this
+  editableProps: any[]; // Reverted to 'any[]'
+  script?: string;
 }
 export interface AnimationProps {
   type: "fade-in" | "slide-up" | "bounce" | "pulse";
@@ -23,8 +47,7 @@ export interface Element {
   element_id: string;
   element_type: string;
   position: number;
-  properties: any;
-  // editableProps?: EditableProp[];
+  properties: any; // Reverted to 'any' for maximum flexibility
   aiPayload?: AiElementPayload;
 }
 
@@ -135,4 +158,11 @@ export interface PublicWebsiteData {
   pages: Page[];
   subdomain: string;
   locations: Location[];
+}
+
+export interface Extra {
+  extra_id: string;
+  name: string;
+  price: number;
+  description?: string;
 }
