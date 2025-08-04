@@ -133,6 +133,10 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
     - Use `container.querySelector('.your-class')` to find and manipulate elements.
     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+    
+     - ### **IMPORTANT JAVASCRIPT SYNTAX RULE:** - If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
+    - **Correct:** `const myFunc = () => { /* logic */ };`
+    - **Incorrect:** `function myFunc() { /* logic */ };`
 4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
