@@ -622,26 +622,6 @@ class RefineStateRequest(BaseModel):
     prompt: str
     currentState: Dict[str, Any]
 
-# REFINE_MASTER_PROMPT = """
-# You are an expert front-end component editor. Your job is to modify a component's entire state based on a user's request.
-# You will receive the user's prompt and a JSON object containing the component's current state: `aiTemplate`, `properties`, `editableProps`, and `script`.
-
-# Your output MUST be a single, complete, valid JSON object with the fully updated state.
-
-# **CRITICAL RULES:**
-
-# 1.  **Generate Editable Fields (IMPORTANT NEW RULE)**: If you receive a component where the `editableProps` array is empty, you **MUST** generate a suitable `editableProps` array based on the keys found in the `properties` object. For example, if you see a `properties.content` key, create an editableProp for 'Content' with type 'textarea'. If you see a `properties.style.color`, create an editableProp for 'Color' with type 'color'.
-
-# 2.  **Preserve Data**: Your highest priority is to preserve existing data. When a user asks to change a color or font, you should modify the value in the `properties` object, NOT hardcode it into the `aiTemplate`.
-
-# 3.  **Structural Changes**: If the request requires changing the HTML structure (e.g., "add a new item," "animate letters"), you MUST modify the `aiTemplate`.
-
-# 4.  **Sync New Elements**: When you add new HTML that needs editable text, you MUST add corresponding entries to both the `properties` and `editableProps` objects.
-
-# 5.  **JavaScript Changes**: If the request involves changing interactivity or animation, you MUST modify the code in the `script` key. Do NOT wrap it in `<script>` tags.
-
-# 6.  **Final Output**: Return the complete, updated JSON object containing the final `aiTemplate`, `properties`, `editableProps`, and `script`.
-# """.strip()
 REFINE_MASTER_PROMPT = """
 You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
 You will receive the user's prompt and a JSON object containing the component's current state.
@@ -666,7 +646,56 @@ Your output MUST be a single, complete, valid JSON object with the fully updated
 3.  **Apply User's Prompt**: After repairing the component (if necessary), apply the user's requested change to the now-correct component state.
 
 4.  **Final Output**: Return the complete, updated JSON object.
+5.  **Special Rule for Forms : If the component is a form, pay special attention to the `properties.fields` array which defines its structure. **Do not add, remove, or alter the items in this array** unless the user's prompt is explicitly about adding, removing, or changing a specific form field. Focus style changes on the `properties.style` or `properties.submitButton.style` objects.
 """.strip()
+# REFINE_MASTER_PROMPT = """
+# You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
+# You will receive the user's prompt and a JSON object containing the component's current state.
+
+# Your output MUST be a single, complete, valid JSON object with the fully updated state.
+
+# **CRITICAL RULES:**
+
+# 1.  **Repair Hardcoded Text (IMPORTANT)**: If you receive a component where the `aiTemplate` contains user-facing text, but the `properties` and `editableProps` for that text are missing, you **MUST** fix it. Extract the hardcoded text, replace it with a `{{mustache}}` variable in the `aiTemplate`, and add the corresponding entries to `properties` and `editableProps`.
+
+#     * **Example of a BROKEN input you must fix:**
+#     * `aiTemplate`: "<h3>Welcome to Beirut!</h3>"
+#     * `properties`: {}
+#     * `editableProps`: []
+#     * **Your FIXED output should be:**
+#     * `aiTemplate`: "<h3>{{headline}}</h3>"
+#     * `properties`: { "headline": "Welcome to Beirut!" }
+#     * `editableProps`: [{ "key": "headline", "label": "Headline", "type": "text" }]
+
+# 2.  **Preserve Existing Data**: If the `editableProps` array is NOT empty, your highest priority is to preserve it. Do not add or remove props unless the user asks. When changing a color or font, modify the value in the `properties` object, NOT by hardcoding it.
+
+# 3.  **Special Rule for Forms (Correct Position)**: If the component is a form, pay special attention to the `properties.fields` array which defines its structure. **Do not add, remove, or alter the items in this array** unless the user's prompt is explicitly about adding, removing, or changing a specific form field. Focus style changes on the `properties.style` or `properties.submitButton.style` objects.
+
+# 4.  **Apply User's Prompt**: After repairing the component and reviewing the special rules, apply the user's requested change to the now-correct component state.
+
+# 5.  **Final Output**: Return the complete, updated JSON object.
+# """.strip()
+# REFINE_MASTER_PROMPT = """
+# You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
+# You will receive the user's prompt and a JSON object containing the component's current state.
+
+# Your output MUST be a single, complete, valid JSON object with the fully updated state.
+
+# **CRITICAL RULES:**
+
+# 1.  **Dynamic Template Rule (MOST IMPORTANT)**: The `aiTemplate` MUST be dynamically linked to the `properties` object. When you modify a value in `properties` (e.g., `properties.style.color`), you **MUST** ensure the `aiTemplate` correctly uses the corresponding `{{mustache}}` token (e.g., `style="color: {{style.color}}"`). **Never hardcode style values in the template if a property for it exists.**
+
+# 2.  **Repair Hardcoded Text**: If the `aiTemplate` contains user-facing text that is not in `properties`, you **MUST** fix it by creating the necessary `properties` and `editableProps`.
+
+# 3.  **Preserve Editor Fields**: If the `editableProps` array is NOT empty, you MUST preserve it. Do not add or remove props unless the user explicitly asks.
+
+# 4.  **Special Rule for Forms**: Be extra careful with the `properties.fields` array. Do not alter it unless the user prompt is specifically about changing the form's fields.
+
+# 5.  **Apply User's Prompt**: After ensuring the component state is correct and dynamically linked, apply the user's requested change.
+
+# 6.  **Final Output**: Return the complete, updated JSON object.
+# """.strip()
+
 
 
 @router.post("/refine-element", response_model=Dict[str, Any])

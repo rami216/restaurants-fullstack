@@ -10,7 +10,7 @@ from typing import List
 from database import get_db
 from auth.auth_handler import get_current_active_user
 from models import User, RestaurantOwner,Location
-from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem
+from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission
 from . import schemas
 
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
@@ -397,3 +397,28 @@ async def create_page_standalone(
     await db.refresh(new_page)
     
     return new_page
+
+
+
+#region formsubmission
+
+@router.post("/form-submissions", response_model=schemas.FormSubmissionResponse, status_code=status.HTTP_201_CREATED)
+async def create_form_submission(
+    payload: schemas.FormSubmissionCreate,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Receives and saves a new form submission from a public website.
+    """
+    # Verify the website exists
+    website = await db.get(Website, payload.website_id)
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+
+    new_submission = FormSubmission(**payload.model_dump())
+    db.add(new_submission)
+    await db.commit()
+    await db.refresh(new_submission)
+    return new_submission
+
+#endregion formsubmission

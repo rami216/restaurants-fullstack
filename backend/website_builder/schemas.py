@@ -171,3 +171,23 @@ class PublicWebsiteResponse(WebsiteResponse):
 
     class Config(WebsiteResponse.Config):
         pass
+    
+    
+#region form
+class FormSubmissionBase(BaseModel):
+    website_id: UUID
+    form_element_id: UUID
+    submission_data: Dict[str, Any]
+
+class FormSubmissionCreate(FormSubmissionBase):
+    pass
+
+class FormSubmissionResponse(FormSubmissionBase):
+    submission_id: UUID
+    created_at: datetime.datetime
+
+    class Config:
+        from_attributes = True
+
+
+#endregion form

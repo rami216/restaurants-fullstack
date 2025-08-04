@@ -19,6 +19,8 @@ import {
   AiElementPayload,
   EditableProp,
   AccordionItem,
+  PublicOptionGroup,
+  FormField,
 } from "@/components/builder/Properties";
 import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 import { v4 as uuidv4 } from "uuid";
@@ -751,6 +753,26 @@ const CreateWebsitePage = () => {
           { key: "base_price", label: "Price", type: "number" },
           { key: "image_url", label: "Image URL", type: "text" },
         ];
+      case "FORM":
+        return [
+          { key: "title", label: "Form Title", type: "text" },
+          { key: "submitButton.text", label: "Button Text", type: "text" },
+          {
+            key: "style.backgroundColor",
+            label: "Form Background",
+            type: "color",
+          },
+          {
+            key: "submitButton.style.backgroundColor",
+            label: "Button Background",
+            type: "color",
+          },
+          {
+            key: "submitButton.style.color",
+            label: "Button Text Color",
+            type: "color",
+          },
+        ];
       // Add other cases for LIST, ACCORDION, etc. if they have editable fields
       default:
         return [];
@@ -810,6 +832,37 @@ const CreateWebsitePage = () => {
           .join("");
         htmlOnly = `<ul style="list-style-position: inside; padding-left: 20px;">${listItems}</ul>`;
         break;
+      case "FORM": {
+        const formFields = (props.fields || [])
+          .map(
+            (field: FormField) =>
+              `<div style="margin-bottom: 1rem;">
+                   <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">${field.label}</label>
+                   <input type="text" name="${field.label}" placeholder="${field.placeholder}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;" />
+                 </div>`
+          )
+          .join("");
+
+        const buttonText = props.submitButton?.text || "Submit";
+        // Create a string of button styles to avoid issues with objects in templates
+        const buttonStyle = props.submitButton?.style || {};
+        const buttonStyleString = `background-color: ${
+          buttonStyle.backgroundColor || "#333"
+        }; color: ${
+          buttonStyle.color || "white"
+        }; padding: 10px 20px; border: none; border-radius: 5px; cursor: pointer;`;
+
+        htmlOnly = `<div style="padding: 1.5rem; border: 1px solid #eee; border-radius: 8px;">
+            <h3 style="font-size: 1.5rem; font-weight: bold; margin-bottom: 1rem;">${
+              props.title || "Form Title"
+            }</h3>
+            <form>
+              ${formFields}
+              <button type="submit" style="${buttonStyleString}">${buttonText}</button>
+            </form>
+          </div>`;
+        break;
+      }
       case "ACCORDION":
         const accordionItems = (props.items || [])
           .map(
@@ -820,7 +873,13 @@ const CreateWebsitePage = () => {
         htmlOnly = `<div>${accordionItems}</div>`;
         break;
       case "MAP":
-        htmlOnly = `<iframe src="${props.src}" style="width:100%; height:300px; border:0;" allowfullscreen="" loading="lazy"></iframe>`;
+        // --- THIS IS THE FIX ---
+        // Include the relative container and absolute overlay div
+        // to ensure the map is not interactive in the builder.
+        htmlOnly = `<div class="relative" style="width:100%; height:300px;">
+            <div class="absolute inset-0 z-10 cursor-pointer"></div>
+            <iframe src="${props.src}" style="width:100%; height:100%; border:0; pointer-events: none;" allowfullscreen="" loading="lazy"></iframe>
+          </div>`;
         break;
       case "DROPDOWN":
         const labelOption = props.label
@@ -852,86 +911,7 @@ const CreateWebsitePage = () => {
   }
 
   // The final, complete function
-  // const handleRefineElement = async (prompt: string) => {
-  //   if (!selectedItem || selection.type !== "element" || !activePage) return;
 
-  //   try {
-  //     const currentElement = JSON.parse(
-  //       JSON.stringify(selectedItem)
-  //     ) as Element;
-
-  //     // 1. Prepare the component's state to send to the AI
-  //     let currentState: AiElementPayload;
-  //     // Determine if the element has a valid set of editable props to start with
-  //     const hasExistingEditableProps =
-  //       (currentElement.aiPayload?.editableProps?.length ?? 0) > 0;
-
-  //     if (currentElement.element_type === "AI" && currentElement.aiPayload) {
-  //       currentState = currentElement.aiPayload;
-  //     } else {
-  //       // For standard elements, build the initial state using helpers
-  //       currentState = {
-  //         id: `ai_payload_new_${Date.now()}`,
-  //         aiTemplate: buildHtmlForElement(
-  //           currentElement,
-  //           `ai-element-${currentElement.element_id.split("-")[0]}`
-  //         ),
-  //         script: undefined,
-  //         properties: currentElement.properties,
-  //         editableProps: getEditablePropsForType(currentElement.element_type),
-  //       };
-  //     }
-
-  //     // 2. Call the smart backend endpoint
-  //     const { data: responsePayload } = await api.post<AiElementPayload>(
-  //       "/ai/refine-element",
-  //       {
-  //         prompt,
-  //         currentState: currentState,
-  //       }
-  //     );
-
-  //     // 3. Intelligently construct the final payload
-  //     const finalAiPayload: AiElementPayload = {
-  //       id: `ai_payload_${Date.now()}`,
-  //       aiTemplate: responsePayload.aiTemplate,
-  //       script: responsePayload.script,
-  //       properties: responsePayload.properties,
-
-  //       // *** THE FINAL FIX ***
-  //       // If the component already had good editable props (like the accordion), keep them.
-  //       // If it was a broken component (like the text element with no props), accept the AI's repair.
-  //       editableProps: hasExistingEditableProps
-  //         ? currentState.editableProps
-  //         : responsePayload.editableProps,
-  //     };
-
-  //     // 4. Create the final, updated element
-  //     const refinedElement: Element = {
-  //       ...currentElement,
-  //       element_type: "AI",
-  //       properties: finalAiPayload.properties,
-  //       aiPayload: finalAiPayload,
-  //     };
-
-  //     // 5. Update the page state
-  //     const updatedSections = activePage.sections.map((section) => ({
-  //       ...section,
-  //       subsections: section.subsections.map((sub) => ({
-  //         ...sub,
-  //         elements: sub.elements.map((el) =>
-  //           el.element_id === currentElement.element_id ? refinedElement : el
-  //         ),
-  //       })),
-  //     }));
-
-  //     updateWebsiteData({ ...activePage, sections: updatedSections });
-  //     setSelection({ type: "element", id: refinedElement.element_id });
-  //   } catch (err) {
-  //     console.error("AI element refinement failed:", err);
-  //     alert("AI element refinement failed.");
-  //   }
-  // };
   const handleRefineElement = async (prompt: string) => {
     if (!selectedItem || selection.type !== "element" || !activePage) return;
 

@@ -101,3 +101,29 @@ class NavbarItem(Base):
 
     # Relationships
     navbar = relationship("Navbar", back_populates="items")
+
+#region forms
+class FormSubmission(Base):
+    __tablename__ = "form_submissions"
+
+    submission_id = Column(
+        UUID(as_uuid=True),
+        primary_key=True,
+        server_default=text("gen_random_uuid()"),
+    )
+    # Foreign key to know which website the submission belongs to
+    website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id"), nullable=False)
+    
+    # The ID of the specific form element that was submitted
+    form_element_id = Column(UUID(as_uuid=True), nullable=False)
+    
+    # A flexible JSON column to store the actual form data (e.g., {"Name": "John", "Email": "..."})
+    submission_data = Column(JSON, nullable=False)
+
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+    # Relationship to the Website model (optional but good practice)
+    website = relationship("Website")
+
+
+#endregion forms

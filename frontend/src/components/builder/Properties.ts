@@ -166,3 +166,23 @@ export interface Extra {
   price: number;
   description?: string;
 }
+export interface PublicOptionChoice {
+  choice_id: string;
+  name: string;
+  price_adjustment: number;
+}
+
+export interface PublicOptionGroup {
+  group_id: string;
+  group_name: string;
+  min_choices?: number;
+  max_choices?: number;
+  is_required: boolean;
+  choices: PublicOptionChoice[];
+}
+
+
+
+
+
+

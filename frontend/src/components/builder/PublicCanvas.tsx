@@ -17,11 +17,13 @@ import {
   Location,
   MenuItem,
   Extra,
+  PublicOptionGroup,
 } from "./Properties";
 import api from "@/lib/axios";
 import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
+import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 
 // const AiElementRunner: React.FC<{ element: BuilderElement }> = ({
 //   element,
@@ -265,35 +267,43 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     null
   );
   const [extras, setExtras] = useState<Record<string, Extra[]>>({});
-  const [isLoadingExtras, setIsLoadingExtras] = useState(false);
+  const [options, setOptions] = useState<Record<string, PublicOptionGroup[]>>(
+    {}
+  );
+
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false); // A single loading state
   const handleMenuItemClick = async (menuItemId: string) => {
-    // If the clicked item is already open, close it.
     if (expandedMenuItemId === menuItemId) {
       setExpandedMenuItemId(null);
       return;
     }
 
-    setIsLoadingExtras(true);
+    setIsLoadingDetails(true);
     setExpandedMenuItemId(menuItemId);
 
     try {
-      // Check if we've already fetched extras for this item
-      if (!extras[menuItemId]) {
-        const response = await api.get<Extra[]>(
-          `/menu-item-extras/extras-for-item/${menuItemId}`
-        );
-        setExtras((prevExtras) => ({
-          ...prevExtras,
-          [menuItemId]: response.data,
-        }));
-      }
+      // Use Promise.all to fetch extras and options concurrently
+      const [extrasResponse, optionsResponse] = await Promise.all([
+        // Only fetch if we don't have the data already
+        extras[menuItemId]
+          ? Promise.resolve({ data: extras[menuItemId] })
+          : api.get<Extra[]>(`/menu-item-extras/extras-for-item/${menuItemId}`),
+        options[menuItemId]
+          ? Promise.resolve({ data: options[menuItemId] })
+          : api.get<PublicOptionGroup[]>(
+              `/menu-item-options/options-for-item/${menuItemId}`
+            ),
+      ]);
+      console.log("OPTIONS API RESPONSE:", optionsResponse.data);
+      setExtras((prev) => ({ ...prev, [menuItemId]: extrasResponse.data }));
+      setOptions((prev) => ({ ...prev, [menuItemId]: optionsResponse.data }));
     } catch (error) {
-      console.error("Failed to fetch extras:", error);
-      // Handle error, maybe show a toast notification
+      console.error("Failed to fetch item details:", error);
     } finally {
-      setIsLoadingExtras(false);
+      setIsLoadingDetails(false);
     }
   };
+
   useEffect(() => {
     setCurrentPage(initialPage);
   }, [initialPage]);
@@ -923,6 +933,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     } else if (effectiveType === "MENU_ITEM") {
       const isExpanded = expandedMenuItemId === element.properties.item_id;
       const itemExtras = extras[element.properties.item_id] || [];
+      const itemOptions = options[element.properties.item_id] || [];
 
       return (
         <div onClick={() => handleMenuItemClick(element.properties.item_id)}>
@@ -954,29 +965,72 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           )}
 
           {isExpanded && (
-            <div className="border border-t-0 rounded-b-lg p-4 bg-gray-50 -mt-2">
-              <h5 className="font-bold mb-2 text-gray-700">Add Extras:</h5>
-              {isLoadingExtras ? (
-                <p className="text-sm text-gray-500">Loading...</p>
-              ) : itemExtras.length > 0 ? (
-                <div className="space-y-2">
-                  {itemExtras.map((extra) => (
-                    <div
-                      key={extra.extra_id}
-                      className="flex justify-between items-center text-sm"
-                    >
-                      <span className="font-semibold text-gray-800">
-                        {extra.name}
-                      </span>
-                      <span className="font-semibold text-gray-800">
-                        + ${extra.price.toFixed(2)}
-                      </span>
+            <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 dark:bg-slate-800 -mt-2 space-y-4">
+              {isLoadingDetails ? (
+                <p className="text-sm text-slate-500">Loading details...</p>
+              ) : itemExtras.length > 0 || itemOptions.length > 0 ? (
+                <>
+                  {/* --- Section for Extras --- */}
+                  {itemExtras.length > 0 && (
+                    <div>
+                      <h5 className="font-semibold mb-2 text-slate-800 dark:text-slate-200">
+                        Add Extras:
+                      </h5>
+                      <div className="flow-root">
+                        <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                          {itemExtras.map((extra) => (
+                            <li
+                              key={extra.extra_id}
+                              className="py-2 flex justify-between items-center text-sm"
+                            >
+                              <span className="text-slate-700 dark:text-slate-300">
+                                {extra.name}
+                              </span>
+                              <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                + ${extra.price.toFixed(2)}
+                              </span>
+                            </li>
+                          ))}
+                        </ul>
+                      </div>
                     </div>
-                  ))}
-                </div>
+                  )}
+
+                  {/* --- Section for Options --- */}
+                  {itemOptions.length > 0 && (
+                    <div className="space-y-4">
+                      {itemOptions.map((group) => (
+                        <div key={group.group_id}>
+                          <h5 className="font-semibold text-slate-800 dark:text-slate-200">
+                            {group.group_name}
+                          </h5>
+                          <div className="flow-root mt-2">
+                            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
+                              {group.choices.map((choice) => (
+                                <li
+                                  key={choice.choice_id}
+                                  className="py-2 flex justify-between items-center text-sm"
+                                >
+                                  <span className="text-slate-700 dark:text-slate-300">
+                                    {choice.name}
+                                  </span>
+                                  {choice.price_adjustment > 0 && (
+                                    <span className="font-semibold text-slate-900 dark:text-slate-100">
+                                      + ${choice.price_adjustment.toFixed(2)}
+                                    </span>
+                                  )}
+                                </li>
+                              ))}
+                            </ul>
+                          </div>
+                        </div>
+                      ))}
+                    </div>
+                  )}
+                </>
               ) : (
-                <p className="text-sm text-gray-500">
-                  No extras available for this item.
+                <p className="text-sm text-slate-500">
+                  No extras or options available for this item.
                 </p>
               )}
             </div>
@@ -1099,6 +1153,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           </select>
         </motion.div>
       );
+    } else if (effectiveType === "FORM") {
+      return <FormRenderer element={element} websiteData={websiteData} />;
     } else {
       // Default fallback for any truly unknown element
       return (

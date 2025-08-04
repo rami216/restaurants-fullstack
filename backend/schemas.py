@@ -1,6 +1,6 @@
 # schemas.py
 from pydantic import BaseModel, EmailStr,Field
-from typing import Optional
+from typing import List, Optional
 from uuid import UUID
 import datetime
 from enum import Enum
@@ -282,3 +282,25 @@ class TopUpRequest(BaseModel):
     # The amount the user wants to add, in dollars.
     # We use Field(gt=0) to ensure the amount is positive.
     amount: float = Field(..., gt=0, description="The amount to add in dollars.")
+
+
+#region publicoptiongroupds
+class PublicOptionChoiceResponse(BaseModel):
+    choice_id: UUID
+    name: str
+    price_adjustment: float
+
+    class Config:
+        from_attributes = True
+
+class PublicOptionGroupResponse(BaseModel):
+    group_id: UUID
+    group_name: str
+    min_choices: Optional[int] = 0
+    max_choices: Optional[int] = 1
+    is_required: bool
+    choices: List[PublicOptionChoiceResponse] = []
+
+    class Config:
+        from_attributes = True
+#endregion publicoptiongroupds

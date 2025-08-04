@@ -8,8 +8,9 @@ from typing import List
 
 from database import get_db
 from models import MenuItemOption, MenuItem, OptionGroup, User
-from schemas import MenuItemOptionCreate, MenuItemOptionResponse
+from schemas import MenuItemOptionCreate, MenuItemOptionResponse,PublicOptionChoiceResponse,PublicOptionGroupResponse
 from auth.auth_handler import get_current_active_user
+from sqlalchemy.orm import selectinload # <-- Make sure to import selectinload
 
 router = APIRouter(prefix="/menu-item-options", tags=["Menu Item Options"])
 
@@ -77,3 +78,26 @@ async def unlink_menu_item_from_option_group(
     await db.delete(link_to_delete)
     await db.commit()
     return None
+
+
+@router.get("/options-for-item/{menu_item_id}", response_model=List[PublicOptionGroupResponse])
+async def get_options_for_menu_item(
+    menu_item_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Gets all option groups (and their choices) that are linked to a specific menu item.
+    """
+    result = await db.execute(
+        select(MenuItem)
+        .options(
+            selectinload(MenuItem.option_groups).selectinload(OptionGroup.choices)
+        )
+        .where(MenuItem.item_id == menu_item_id)
+    )
+    menu_item = result.scalars().first()
+
+    if not menu_item:
+        raise HTTPException(status_code=404, detail="Menu item not found")
+
+    return menu_item.option_groups
