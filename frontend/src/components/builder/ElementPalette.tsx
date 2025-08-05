@@ -158,27 +158,78 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
 
   const [aiPrompt, setAiPrompt] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
+  // const handleGenerateAi = async () => {
+  //   if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
+  //   setLoadingAi(true);
+  //   try {
+  //     const { data } = await api.post("/ai/generate-ai-element", {
+  //       prompt: aiPrompt,
+  //     });
+
+  //     // build the new element *with* its aiPayload
+  //     const aiEl: ElementType = {
+  //       element_id: `ai_${Date.now()}`,
+  //       element_type: "AI",
+  //       position: 999,
+  //       properties: {}, // or `{}` if you have no static props
+  //       aiPayload: {
+  //         ...data,
+  //         id: `ai_payload_${Date.now()}`, // Add the unique ID here
+  //       },
+  //     };
+
+  //     // inject it (a one‑off rather than using handleAddElement)
+  //     if (!selectedSubsectionId || !activePage) return;
+  //     const updatedPage = {
+  //       ...activePage,
+  //       sections: activePage.sections.map((sec) => ({
+  //         ...sec,
+  //         subsections: sec.subsections.map((sub) =>
+  //           sub.subsection_id === selectedSubsectionId
+  //             ? { ...sub, elements: [...sub.elements, aiEl] }
+  //             : sub
+  //         ),
+  //       })),
+  //     };
+  //     onUpdate(updatedPage);
+  //     setAiPrompt("");
+  //   } catch (err) {
+  //     console.error(err);
+  //     alert("AI generation failed");
+  //   } finally {
+  //     setLoadingAi(false);
+  //   }
+  // };
+
+  // end for ai generated element
   const handleGenerateAi = async () => {
     if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setLoadingAi(true);
     try {
+      // --- FIX 1: Generate a unique ID and class name BEFORE the API call ---
+      const newElementId = `ai_${Date.now()}`;
+      // Create a short, unique class name from the ID
+      const uniqueClassName = `ai-element-${newElementId.substring(3, 10)}`;
+
+      // --- FIX 2: Send the unique_class_name in the request body ---
       const { data } = await api.post("/ai/generate-ai-element", {
         prompt: aiPrompt,
+        unique_class_name: uniqueClassName, // Pass the class name (without a dot)
       });
 
-      // build the new element *with* its aiPayload
+      // Use the pre-generated ID for the new element
       const aiEl: ElementType = {
-        element_id: `ai_${Date.now()}`,
+        element_id: newElementId,
         element_type: "AI",
         position: 999,
-        properties: {}, // or `{}` if you have no static props
+        properties: {},
         aiPayload: {
           ...data,
-          id: `ai_payload_${Date.now()}`, // Add the unique ID here
+          id: `ai_payload_${Date.now()}`,
         },
       };
 
-      // inject it (a one‑off rather than using handleAddElement)
+      // The rest of your state update logic is correct
       if (!selectedSubsectionId || !activePage) return;
       const updatedPage = {
         ...activePage,
@@ -201,7 +252,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
     }
   };
 
-  // end for ai generated element
   useEffect(() => {
     const fetchMenuItems = async () => {
       if (selectedLocationId) {

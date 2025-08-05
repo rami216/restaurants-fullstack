@@ -55,38 +55,6 @@ Your output MUST be a valid JSON object containing a single key: "subsections".
 
 
 
-# TEST_SYSTEM_PROMPT_previous = """
-# You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
-
-# Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
-
-# **CRITICAL RULES FOR YOUR OUTPUT:**
-# 1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
-# 2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
-# 3.  **Interactivity (`script` key):** Provide a JavaScript string that adds event listeners. The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
-# 4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
-#     -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
-#     -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
-#     -   Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
-#     -   For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
-
-# **INPUT:** A user's prompt.
-# **OUTPUT:** A valid JSON object.
-
-# **Example Prompt:** "an accordion with two items"
-# **Example Output:**
-# {
-#   "aiTemplate": "<div class=\\"ai-container\\"><style>...</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
-#   "properties": { "title1": "Question 1", "content1": "Answer 1.", "title2": "Question 2", "content2": "Answer 2." },
-#   "editableProps": [
-#     { "key": "title1", "label": "Title 1", "type": "text" },
-#     { "key": "content1", "label": "Content 1", "type": "text" },
-#     { "key": "title2", "label": "Title 2", "type": "text" },
-#     { "key": "content2", "label": "Content 2", "type": "text" }
-#   ],
-#   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
-# }
-# """.strip()
 TEST_SYSTEM_PROMPT = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
@@ -118,6 +86,63 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   ],
   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
 }
+""".strip()
+
+NEW_SYSTEM_PROMPT = """
+You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**1.  HTML Structure:**
+    - The HTML must be wrapped in a single container `<div>`.
+    - This container will have the unique class name you are given applied to it.
+
+**2.  Styling:**
+    -   All CSS must be in a single `<style>` tag.
+    -   Use mustache tokens `{{...}}` for all editable style values.
+    -   **CRITICAL SCOPING SUB-RULE:** You will be given a `unique_class_name`. **Every single CSS rule** you write **MUST** be prefixed with this class name to prevent styles from leaking.
+        -   **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        -   **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        -   **Incorrect:** `:root { ... }`
+
+**3.  Interactivity (`script` key):**
+    - Provide a JavaScript string that adds event listeners to the HTML.
+    - The script will be executed inside a function that receives `container` as an argument.
+    - Use `container.querySelector('.your-class')` to find and manipulate elements.
+    - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+    - **IMPORTANT JAVASCRIPT SYNTAX RULE:** If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
+      - **Correct:** `const myFunc = () => { /* logic */ };`
+      - **Incorrect:** `function myFunc() { /* logic */ };`
+
+**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    -   Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    -   For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A valid JSON object.
+
+**Example Prompt:** "an accordion with two items"
+**Example `unique_class_name`:** `.ai-accordion-12345`
+**Example Output:**
+{
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345 .accordion-item { border-bottom: 1px solid {{borderColor}}; }</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
+  "properties": { "title1": "Question 1", "content1": "Answer 1.", "title2": "Question 2", "content2": "Answer 2.", "borderColor": "#dddddd" },
+  "editableProps": [
+    { "key": "title1", "label": "Title 1", "type": "text" },
+    { "key": "content1", "label": "Content 1", "type": "text" },
+    { "key": "title2", "label": "Title 2", "type": "text" },
+    { "key": "content2", "label": "Content 2", "type": "text" },
+    { "key": "borderColor", "label": "Border Color", "type": "color" }
+  ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
+}
+
 """.strip()
 
 SYSTEM_PROMPT = """
@@ -206,56 +231,79 @@ Your output MUST be a valid JSON object containing TWO top-level keys: "properti
 
 #endregion
 
+#region generateelement
 class GenerateRequest(BaseModel):
     prompt: str
 
-@router.post("/generate-ai-element")
+# @router.post("/generate-ai-element")
 # async def generate_ai_element(body: GenerateRequest):
 #     try:
 #         resp = openai.chat.completions.create(
-#             model="gpt-4.1-mini",
-#             response_format={ "type": "json_object" },
+#             model="gpt-4o-mini", # Swapped to a more recent model name
+#             response_format={"type": "json_object"},
 #             messages=[
 #                 {"role": "system", "content": SYSTEM_PROMPT},
 #                 {"role": "user",   "content": body.prompt},
 #             ],
-#             temperature=0.2, # <-- LOWER THIS VALUE
+#             temperature=0.2,
 #             max_tokens=4095,
 #         )
 #         content = resp.choices[0].message.content
 #         payload = json.loads(content)
-#     except (OpenAIError, json.JSONDecodeError) as e:
+
+#         # ✨ --- ADDED: Clean the script field --- ✨
+#         if "script" in payload and isinstance(payload["script"], str):
+#             # Search for content inside a <script> tag
+#             match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if match:
+#                 # If found, replace the value with the extracted raw JS
+#                 payload["script"] = match.group(1).strip()
+#         # ✨ --- End of cleaning logic --- ✨
+
+#     except (OpenAIError, json.JSONDecodeError, KeyError) as e:
 #         raise HTTPException(500, f"Generation failed: {e}")
+
 #     return payload
-async def generate_ai_element(body: GenerateRequest):
+
+class GenerateRequestForElement(BaseModel):
+    prompt: str
+    unique_class_name: str
+    
+@router.post("/generate-ai-element")
+async def generate_ai_element(body: GenerateRequestForElement):
     try:
+        # --- Includes the unique_class_name for the AI ---
+        user_content = (
+            f'PROMPT: "{body.prompt}"\n\n'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+        )
+
         resp = openai.chat.completions.create(
-            model="gpt-4o-mini", # Swapped to a more recent model name
-            response_format={"type": "json_object"},
+            model="gpt-4o",
+            response_format={ "type": "json_object" },
             messages=[
-                {"role": "system", "content": SYSTEM_PROMPT},
-                {"role": "user",   "content": body.prompt},
+                {"role": "system", "content": NEW_SYSTEM_PROMPT},
+                {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
-            max_tokens=4095,
+            max_tokens=4096,
         )
         content = resp.choices[0].message.content
         payload = json.loads(content)
 
-        # ✨ --- ADDED: Clean the script field --- ✨
-        if "script" in payload and isinstance(payload["script"], str):
-            # Search for content inside a <script> tag
+        # --- Includes the script cleaning safety check ---
+        if "script" in payload and isinstance(payload.get("script"), str):
             match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
             if match:
-                # If found, replace the value with the extracted raw JS
                 payload["script"] = match.group(1).strip()
-        # ✨ --- End of cleaning logic --- ✨
-
+        
     except (OpenAIError, json.JSONDecodeError, KeyError) as e:
-        raise HTTPException(500, f"Generation failed: {e}")
+        raise HTTPException(500, f"Page generation failed: {e}")
 
     return payload
 
+
+#endregion generateelement
 @router.post("/generate-ai-section")
 async def generate_ai_section(body: GenerateRequest):
     try:

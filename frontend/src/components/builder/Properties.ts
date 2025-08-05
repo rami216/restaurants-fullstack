@@ -180,9 +180,3 @@ export interface PublicOptionGroup {
   is_required: boolean;
   choices: PublicOptionChoice[];
 }
-
-
-
-
-
-
