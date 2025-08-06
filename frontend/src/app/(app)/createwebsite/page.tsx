@@ -912,6 +912,88 @@ const CreateWebsitePage = () => {
 
   // The final, complete function
 
+  // const handleRefineElement = async (prompt: string) => {
+  //   if (!selectedItem || selection.type !== "element" || !activePage) return;
+
+  //   try {
+  //     const currentElement = JSON.parse(
+  //       JSON.stringify(selectedItem)
+  //     ) as Element;
+
+  //     let currentState: AiElementPayload;
+  //     let originalEditableProps: EditableProp[];
+
+  //     if (currentElement.element_type === "AI" && currentElement.aiPayload) {
+  //       currentState = currentElement.aiPayload;
+  //       originalEditableProps = currentElement.aiPayload.editableProps;
+  //     } else {
+  //       originalEditableProps = getEditablePropsForType(
+  //         currentElement.element_type
+  //       );
+  //       currentState = {
+  //         id: `ai_payload_new_${Date.now()}`,
+  //         aiTemplate: buildHtmlForElement(
+  //           currentElement,
+  //           `ai-element-${currentElement.element_id.split("-")[0]}`
+  //         ),
+  //         script: undefined,
+  //         properties: currentElement.properties,
+  //         editableProps: originalEditableProps,
+  //       };
+  //     }
+
+  //     const { data: responsePayload } = await api.post<AiElementPayload>(
+  //       "/ai/refine-element",
+  //       {
+  //         prompt,
+  //         currentState: currentState,
+  //       }
+  //     );
+
+  //     // Safely merge the original properties with the AI's response.
+  //     const finalProperties = {
+  //       ...currentState.properties,
+  //       ...responsePayload.properties,
+
+  //       // --- THIS IS THE FIX ---
+  //       // Use the existing originalType if it's there; otherwise, set it for the first time.
+  //       originalType:
+  //         currentState.properties.originalType || currentElement.element_type,
+  //     };
+
+  //     const finalAiPayload: AiElementPayload = {
+  //       id: `ai_payload_${Date.now()}`,
+  //       aiTemplate: responsePayload.aiTemplate,
+  //       script: responsePayload.script,
+  //       properties: finalProperties,
+  //       editableProps: originalEditableProps,
+  //     };
+
+  //     const refinedElement: Element = {
+  //       ...currentElement,
+  //       element_type: "AI",
+  //       properties: finalAiPayload.properties,
+  //       aiPayload: finalAiPayload,
+  //     };
+
+  //     // (The state update logic below is correct and remains the same)
+  //     const updatedSections = activePage.sections.map((section) => ({
+  //       ...section,
+  //       subsections: section.subsections.map((sub) => ({
+  //         ...sub,
+  //         elements: sub.elements.map((el) =>
+  //           el.element_id === currentElement.element_id ? refinedElement : el
+  //         ),
+  //       })),
+  //     }));
+
+  //     updateWebsiteData({ ...activePage, sections: updatedSections });
+  //     setSelection({ type: "element", id: refinedElement.element_id });
+  //   } catch (err) {
+  //     console.error("AI element refinement failed:", err);
+  //     alert("AI element refinement failed.");
+  //   }
+  // };
   const handleRefineElement = async (prompt: string) => {
     if (!selectedItem || selection.type !== "element" || !activePage) return;
 

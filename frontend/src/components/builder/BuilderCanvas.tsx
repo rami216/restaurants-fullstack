@@ -266,12 +266,206 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
     onUpdate({ ...page, sections: updatedSections });
   };
 
+  // function renderElement(element: ElementType) {
+  //   const props = element.properties || {};
+  //   const style = props.style || {};
+  //   const BACKEND_URL = api.defaults.baseURL || "";
+  //   const { initial, animate, transition } = getMotionConfig(props.animation);
+
+  //   const wrap = (children: React.ReactNode) => (
+  //     <motion.div
+  //       style={style}
+  //       initial={initial}
+  //       animate={animate}
+  //       transition={transition}
+  //     >
+  //       {children}
+  //     </motion.div>
+  //   );
+
+  //   switch (element.element_type) {
+  //     case "FORM": {
+  //       const buttonStyle = props.submitButton?.style || {};
+  //       const labelStyle = props.labelStyle || {};
+  //       return wrap(
+  //         <div className="border rounded-lg" style={style}>
+  //           <h3 className="text-2xl font-bold mb-4 text-gray-800">
+  //             {props.title || "Form Title"}
+  //           </h3>
+  //           <form className="space-y-4" onSubmit={(e) => e.preventDefault()}>
+  //             {(props.fields || []).map((field: FormField) => (
+  //               <div key={field.id}>
+  //                 <label
+  //                   className="block text-sm font-medium mb-1"
+  //                   style={labelStyle}
+  //                 >
+  //                   {field.label}
+  //                 </label>
+  //                 <input
+  //                   type="text"
+  //                   placeholder={field.placeholder}
+  //                   className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+  //                 />
+  //               </div>
+  //             ))}
+  //             <button type="submit" style={buttonStyle}>
+  //               {props.submitButton?.text || "Submit"}
+  //             </button>
+  //           </form>
+  //         </div>
+  //       );
+  //     }
+  //     case "TEXT": {
+  //       const contentHTML = { __html: props.content || "" };
+  //       return wrap(<div dangerouslySetInnerHTML={contentHTML} />);
+  //     }
+  //     case "BUTTON": {
+  //       return wrap(<button style={style}>{props.text || "Button"}</button>);
+  //     }
+  //     case "IMAGE": {
+  //       return wrap(
+  //         <img
+  //           src={
+  //             props.src
+  //               ? `${api.defaults.baseURL}${props.src}`
+  //               : // Fallback to the original placeholder if src is empty
+  //                 "https://placehold.co/600x400"
+  //           }
+  //           alt={props.alt || "placeholder"}
+  //           style={style}
+  //         />
+  //       );
+  //     }
+  //     case "LIST": {
+  //       return wrap(
+  //         <ul style={style}>
+  //           {" "}
+  //           {(props.items || []).map((item: string, i: number) => (
+  //             <li key={i}>{item}</li>
+  //           ))}{" "}
+  //         </ul>
+  //       );
+  //     }
+  //     case "DROPDOWN": {
+  //       return wrap(
+  //         <select className="border border-gray-300 rounded p-2">
+  //           {" "}
+  //           {props.label && <option disabled>{props.label}</option>}{" "}
+  //           {(props.options || []).map((opt: any, i: number) => (
+  //             <option key={i} value={opt.action_value}>
+  //               {opt.text}
+  //             </option>
+  //           ))}{" "}
+  //         </select>
+  //       );
+  //     }
+  //     case "MENU_ITEM": {
+  //       return wrap(
+  //         <div className="border rounded-lg p-4 bg-white shadow" style={style}>
+  //           {props.image_url && (
+  //             <img
+  //               src={`${BACKEND_URL}${props.image_url}`}
+  //               alt={props.item_name}
+  //               className="w-full object-cover rounded-md mb-4"
+  //               onError={(e) => (e.currentTarget.style.display = "none")}
+  //             />
+  //           )}
+  //           <h4 className="font-bold text-lg text-gray-800">
+  //             {props.item_name || "Menu Item"}
+  //           </h4>
+  //           <p className="text-sm text-gray-600 my-2">
+  //             {props.description || "No description available."}
+  //           </p>
+  //           <p className="font-semibold text-right text-gray-800">
+  //             ${props.base_price?.toFixed(2) || "0.00"}
+  //           </p>
+  //         </div>
+  //       );
+  //     }
+  //     case "CATEGORY": {
+  //       const hasHover = Object.keys(style).some((k) =>
+  //         k.startsWith("--hover-")
+  //       );
+  //       return wrap(
+  //         <div
+  //           className={`rounded-lg overflow-hidden bg-white shadow-md cursor-pointer ${
+  //             hasHover ? "has-hover-effect" : ""
+  //           }`}
+  //           style={style}
+  //         >
+  //           {props.image_url && (
+  //             <img
+  //               src={`${BACKEND_URL}${props.image_url}`}
+  //               alt={props.name}
+  //               className="w-full h-40 object-cover"
+  //               onError={(e) => (e.currentTarget.style.display = "none")}
+  //             />
+  //           )}
+  //           <div className="p-4">
+  //             <h4
+  //               className="font-bold text-xl text-gray-800"
+  //               style={props.nameStyle}
+  //             >
+  //               {props.name || "Category Name"}
+  //             </h4>
+  //           </div>
+  //         </div>
+  //       );
+  //     }
+  //     case "ACCORDION": {
+  //       return wrap(<Accordion items={props.items || []} style={style} />);
+  //     }
+  //     case "MAP": {
+  //       return wrap(
+  //         <div className="relative">
+  //           <div className="absolute inset-0 z-10 cursor-pointer" />
+  //           <iframe
+  //             src={props.src}
+  //             style={{ ...style, pointerEvents: "none" }}
+  //             allowFullScreen={false}
+  //             loading="lazy"
+  //             referrerPolicy="no-referrer-when-downgrade"
+  //             title="Google Map"
+  //           />
+  //         </div>
+  //       );
+  //     }
+  //     // case "AI": {
+  //     //   // Return the AiElementRunner directly, without the wrap()
+  //     //   return (
+  //     //     <AiElementRunner key={element.aiPayload?.id} element={element} />
+  //     //   );
+  //     // }
+  //     case "AI": {
+  //       // The problem is that the AiElementRunner component doesn't have a key
+  //       // that changes when the content is refined.
+
+  //       // FIX: Add a unique 'key' prop to AiElementRunner.
+  //       // We use the ID from the aiPayload, which should be unique for each generation.
+  //       // This forces React to create a fresh component after every refinement.
+  //       return wrap(
+  //         <AiElementRunner
+  //           key={element.aiPayload?.id || element.element_id}
+  //           element={element}
+  //         />
+  //       );
+  //     }
+  //     default: {
+  //       return wrap(
+  //         <div className="border p-2 bg-gray-300 text-black rounded">
+  //           Unknown Element
+  //         </div>
+  //       );
+  //     }
+  //   }
+  // }
   function renderElement(element: ElementType) {
     const props = element.properties || {};
     const style = props.style || {};
     const BACKEND_URL = api.defaults.baseURL || "";
     const { initial, animate, transition } = getMotionConfig(props.animation);
 
+    // This wrap function is specific to BuilderCanvas
     const wrap = (children: React.ReactNode) => (
       <motion.div
         style={style}
@@ -283,8 +477,74 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       </motion.div>
     );
 
-    switch (element.element_type) {
-      case "FORM": {
+    // Determine the element's true purpose for rendering
+    const effectiveType = props.originalType || element.element_type;
+
+    // --- RENDER LOGIC USING if/else if ---
+
+    if (effectiveType === "CATEGORY") {
+      if (element.element_type === "AI") {
+        return wrap(<AiElementRunner element={element} />);
+      } else {
+        const hasHover = Object.keys(style).some((k) =>
+          k.startsWith("--hover-")
+        );
+        return wrap(
+          <div
+            className={`rounded-lg overflow-hidden bg-white shadow-md cursor-pointer ${
+              hasHover ? "has-hover-effect" : ""
+            }`}
+            style={style}
+          >
+            {props.image_url && (
+              <img
+                src={`${BACKEND_URL}${props.image_url}`}
+                alt={props.name}
+                className="w-full h-40 object-cover"
+                onError={(e) => (e.currentTarget.style.display = "none")}
+              />
+            )}
+            <div className="p-4">
+              <h4
+                className="font-bold text-xl text-gray-800"
+                style={props.nameStyle}
+              >
+                {props.name || "Category Name"}
+              </h4>
+            </div>
+          </div>
+        );
+      }
+    } else if (effectiveType === "MENU_ITEM") {
+      if (element.element_type === "AI") {
+        return wrap(<AiElementRunner element={element} />);
+      } else {
+        return wrap(
+          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
+            {props.image_url && (
+              <img
+                src={`${BACKEND_URL}${props.image_url}`}
+                alt={props.item_name}
+                className="w-full object-cover rounded-md mb-4"
+                onError={(e) => (e.currentTarget.style.display = "none")}
+              />
+            )}
+            <h4 className="font-bold text-lg text-gray-800">
+              {props.item_name || "Menu Item"}
+            </h4>
+            <p className="text-sm text-gray-600 my-2">
+              {props.description || "No description available."}
+            </p>
+            <p className="font-semibold text-right text-gray-800">
+              ${props.base_price?.toFixed(2) || "0.00"}
+            </p>
+          </div>
+        );
+      }
+    } else if (effectiveType === "FORM") {
+      if (element.element_type === "AI") {
+        return wrap(<AiElementRunner element={element} />);
+      } else {
         const buttonStyle = props.submitButton?.style || {};
         const labelStyle = props.labelStyle || {};
         return wrap(
@@ -315,145 +575,77 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
       }
-      case "TEXT": {
-        const contentHTML = { __html: props.content || "" };
-        return wrap(<div dangerouslySetInnerHTML={contentHTML} />);
-      }
-      case "BUTTON": {
-        return wrap(<button style={style}>{props.text || "Button"}</button>);
-      }
-      case "IMAGE": {
-        return wrap(
-          <img
-            src={
-              props.src
-                ? `${api.defaults.baseURL}${props.src}`
-                : // Fallback to the original placeholder if src is empty
-                  "https://placehold.co/600x400"
-            }
-            alt={props.alt || "placeholder"}
-            style={style}
-          />
-        );
-      }
-      case "LIST": {
-        return wrap(
-          <ul style={style}>
-            {" "}
-            {(props.items || []).map((item: string, i: number) => (
-              <li key={i}>{item}</li>
-            ))}{" "}
-          </ul>
-        );
-      }
-      case "DROPDOWN": {
-        return wrap(
-          <select className="border border-gray-300 rounded p-2">
-            {" "}
-            {props.label && <option disabled>{props.label}</option>}{" "}
-            {(props.options || []).map((opt: any, i: number) => (
-              <option key={i} value={opt.action_value}>
-                {opt.text}
-              </option>
-            ))}{" "}
-          </select>
-        );
-      }
-      case "MENU_ITEM": {
-        return wrap(
-          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
-            {props.image_url && (
-              <img
-                src={`${BACKEND_URL}${props.image_url}`}
-                alt={props.item_name}
-                className="w-full object-cover rounded-md mb-4"
-                onError={(e) => (e.currentTarget.style.display = "none")}
-              />
-            )}
-            <h4 className="font-bold text-lg text-gray-800">
-              {props.item_name || "Menu Item"}
-            </h4>
-            <p className="text-sm text-gray-600 my-2">
-              {props.description || "No description available."}
-            </p>
-            <p className="font-semibold text-right text-gray-800">
-              ${props.base_price?.toFixed(2) || "0.00"}
-            </p>
-          </div>
-        );
-      }
-      case "CATEGORY": {
-        const hasHover = Object.keys(style).some((k) =>
-          k.startsWith("--hover-")
-        );
-        return wrap(
-          <div
-            className={`rounded-lg overflow-hidden bg-white shadow-md cursor-pointer ${
-              hasHover ? "has-hover-effect" : ""
-            }`}
-            style={style}
-          >
-            {props.image_url && (
-              <img
-                src={`${BACKEND_URL}${props.image_url}`}
-                alt={props.name}
-                className="w-full h-40 object-cover"
-                onError={(e) => (e.currentTarget.style.display = "none")}
-              />
-            )}
-            <div className="p-4">
-              <h4 className="font-bold text-xl" style={props.nameStyle}>
-                {props.name || "Category Name"}
-              </h4>
-            </div>
-          </div>
-        );
-      }
-      case "ACCORDION": {
-        return wrap(<Accordion items={props.items || []} style={style} />);
-      }
-      case "MAP": {
-        return wrap(
-          <div className="relative">
-            <div className="absolute inset-0 z-10 cursor-pointer" />
-            <iframe
-              src={props.src}
-              style={{ ...style, pointerEvents: "none" }}
-              allowFullScreen={false}
-              loading="lazy"
-              referrerPolicy="no-referrer-when-downgrade"
-              title="Google Map"
-            />
-          </div>
-        );
-      }
-      // case "AI": {
-      //   // Return the AiElementRunner directly, without the wrap()
-      //   return (
-      //     <AiElementRunner key={element.aiPayload?.id} element={element} />
-      //   );
-      // }
-      case "AI": {
-        // The problem is that the AiElementRunner component doesn't have a key
-        // that changes when the content is refined.
+    }
 
-        // FIX: Add a unique 'key' prop to AiElementRunner.
-        // We use the ID from the aiPayload, which should be unique for each generation.
-        // This forces React to create a fresh component after every refinement.
-        return wrap(
-          <AiElementRunner
-            key={element.aiPayload?.id || element.element_id}
-            element={element}
+    // Fallback for any other AI element that doesn't have a special type
+    else if (element.element_type === "AI") {
+      return wrap(
+        <AiElementRunner
+          key={element.aiPayload?.id || element.element_id}
+          element={element}
+        />
+      );
+    }
+
+    // --- The rest of your standard element renderers ---
+    else if (effectiveType === "TEXT") {
+      const contentHTML = { __html: props.content || "" };
+      return wrap(<div dangerouslySetInnerHTML={contentHTML} />);
+    } else if (effectiveType === "IMAGE") {
+      return wrap(
+        <img
+          src={
+            props.src
+              ? `${api.defaults.baseURL}${props.src}`
+              : "https://placehold.co/600x400"
+          }
+          alt={props.alt || "placeholder"}
+          style={style}
+        />
+      );
+    } else if (effectiveType === "BUTTON") {
+      return wrap(<button style={style}>{props.text || "Button"}</button>);
+    } else if (effectiveType === "LIST") {
+      return wrap(
+        <ul style={style}>
+          {(props.items || []).map((item: string, i: number) => (
+            <li key={i}>{item}</li>
+          ))}
+        </ul>
+      );
+    } else if (effectiveType === "ACCORDION") {
+      return wrap(<Accordion items={props.items || []} style={style} />);
+    } else if (effectiveType === "MAP") {
+      return wrap(
+        <div className="relative">
+          <div className="absolute inset-0 z-10 cursor-pointer" />
+          <iframe
+            src={props.src}
+            style={{ ...style, pointerEvents: "none" }}
+            allowFullScreen={false}
+            loading="lazy"
+            referrerPolicy="no-referrer-when-downgrade"
+            title="Google Map"
           />
-        );
-      }
-      default: {
-        return wrap(
-          <div className="border p-2 bg-gray-300 text-black rounded">
-            Unknown Element
-          </div>
-        );
-      }
+        </div>
+      );
+    } else if (effectiveType === "DROPDOWN") {
+      return wrap(
+        <select className="border border-gray-300 rounded p-2">
+          {props.label && <option disabled>{props.label}</option>}
+          {(props.options || []).map((opt: any, i: number) => (
+            <option key={i} value={opt.action_value}>
+              {opt.text}
+            </option>
+          ))}
+        </select>
+      );
+    } else {
+      return wrap(
+        <div className="border p-2 bg-gray-300 text-black rounded">
+          Unknown Element
+        </div>
+      );
     }
   }
 

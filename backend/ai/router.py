@@ -700,53 +700,7 @@ Your output MUST be a single, complete, valid JSON object with the fully updated
 4.  **Final Output**: Return the complete, updated JSON object.
 5.  **Special Rule for Forms : If the component is a form, pay special attention to the `properties.fields` array which defines its structure. **Do not add, remove, or alter the items in this array** unless the user's prompt is explicitly about adding, removing, or changing a specific form field. Focus style changes on the `properties.style` or `properties.submitButton.style` objects.
 """.strip()
-# REFINE_MASTER_PROMPT = """
-# You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
-# You will receive the user's prompt and a JSON object containing the component's current state.
 
-# Your output MUST be a single, complete, valid JSON object with the fully updated state.
-
-# **CRITICAL RULES:**
-
-# 1.  **Repair Hardcoded Text (IMPORTANT)**: If you receive a component where the `aiTemplate` contains user-facing text, but the `properties` and `editableProps` for that text are missing, you **MUST** fix it. Extract the hardcoded text, replace it with a `{{mustache}}` variable in the `aiTemplate`, and add the corresponding entries to `properties` and `editableProps`.
-
-#     * **Example of a BROKEN input you must fix:**
-#     * `aiTemplate`: "<h3>Welcome to Beirut!</h3>"
-#     * `properties`: {}
-#     * `editableProps`: []
-#     * **Your FIXED output should be:**
-#     * `aiTemplate`: "<h3>{{headline}}</h3>"
-#     * `properties`: { "headline": "Welcome to Beirut!" }
-#     * `editableProps`: [{ "key": "headline", "label": "Headline", "type": "text" }]
-
-# 2.  **Preserve Existing Data**: If the `editableProps` array is NOT empty, your highest priority is to preserve it. Do not add or remove props unless the user asks. When changing a color or font, modify the value in the `properties` object, NOT by hardcoding it.
-
-# 3.  **Special Rule for Forms (Correct Position)**: If the component is a form, pay special attention to the `properties.fields` array which defines its structure. **Do not add, remove, or alter the items in this array** unless the user's prompt is explicitly about adding, removing, or changing a specific form field. Focus style changes on the `properties.style` or `properties.submitButton.style` objects.
-
-# 4.  **Apply User's Prompt**: After repairing the component and reviewing the special rules, apply the user's requested change to the now-correct component state.
-
-# 5.  **Final Output**: Return the complete, updated JSON object.
-# """.strip()
-# REFINE_MASTER_PROMPT = """
-# You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
-# You will receive the user's prompt and a JSON object containing the component's current state.
-
-# Your output MUST be a single, complete, valid JSON object with the fully updated state.
-
-# **CRITICAL RULES:**
-
-# 1.  **Dynamic Template Rule (MOST IMPORTANT)**: The `aiTemplate` MUST be dynamically linked to the `properties` object. When you modify a value in `properties` (e.g., `properties.style.color`), you **MUST** ensure the `aiTemplate` correctly uses the corresponding `{{mustache}}` token (e.g., `style="color: {{style.color}}"`). **Never hardcode style values in the template if a property for it exists.**
-
-# 2.  **Repair Hardcoded Text**: If the `aiTemplate` contains user-facing text that is not in `properties`, you **MUST** fix it by creating the necessary `properties` and `editableProps`.
-
-# 3.  **Preserve Editor Fields**: If the `editableProps` array is NOT empty, you MUST preserve it. Do not add or remove props unless the user explicitly asks.
-
-# 4.  **Special Rule for Forms**: Be extra careful with the `properties.fields` array. Do not alter it unless the user prompt is specifically about changing the form's fields.
-
-# 5.  **Apply User's Prompt**: After ensuring the component state is correct and dynamically linked, apply the user's requested change.
-
-# 6.  **Final Output**: Return the complete, updated JSON object.
-# """.strip()
 
 
 
