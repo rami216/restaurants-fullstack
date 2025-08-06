@@ -547,6 +547,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       } else {
         const buttonStyle = props.submitButton?.style || {};
         const labelStyle = props.labelStyle || {};
+        const inputStyle = props.inputStyle || {};
         return wrap(
           <div className="border rounded-lg" style={style}>
             <h3 className="text-2xl font-bold mb-4 text-gray-800">
@@ -564,6 +565,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                   <input
                     type="text"
                     placeholder={field.placeholder}
+                    style={inputStyle}
                     className="w-full border border-gray-300 rounded-md shadow-sm p-2"
                   />
                 </div>

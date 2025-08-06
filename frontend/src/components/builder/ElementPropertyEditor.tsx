@@ -1702,6 +1702,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     // Send the pristine, updated copy to the main state.
     updateItem(updatedElement);
   };
+  //region form input text style
+  const handleInputStyleChange = (key: string, value: string) => {
+    const newInputStyle = {
+      ...(selectedItem.properties.inputStyle || {}),
+      [key]: value,
+    };
+    handlePropertyChange("inputStyle", newInputStyle);
+  };
 
   const renderElementEditor = () => {
     const toggleStyle = (
@@ -2394,6 +2402,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     placeholder="e.g., 100%, 500px"
                   />
                 </div>
+
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Background Color
@@ -2425,6 +2434,23 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
                   />
                 </div>
+                {/* --- ADD THIS BLOCK --- */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Input Text Color
+                  </label>
+                  <input
+                    type="color"
+                    value={
+                      selectedItem.properties.inputStyle?.color || "#000000"
+                    }
+                    onChange={(e) =>
+                      handleInputStyleChange("color", e.target.value)
+                    }
+                    className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+                  />
+                </div>
+                {/* --- END OF NEW BLOCK --- */}
               </div>
             </div>
 
