@@ -422,3 +422,51 @@ async def create_form_submission(
     return new_submission
 
 #endregion formsubmission
+
+
+@router.post("/ensure-auth-pages/{website_id}")
+async def ensure_auth_pages(
+    website_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    # Ownership check (reuse your helper if you like)
+    result = await db.execute(
+        select(Website)
+        .options(selectinload(Website.navbar).selectinload(Navbar.items),
+                 selectinload(Website.pages))
+        .join(RestaurantOwner)
+        .where(Website.website_id == website_id, RestaurantOwner.user_id == current_user.id)
+    )
+    website = result.scalars().first()
+    if not website:
+        raise HTTPException(404, "Website not found or no permission")
+
+    # Ensure navbar
+    if not website.navbar:
+        navbar = Navbar(website_id=website.website_id, properties={})
+        db.add(navbar)
+        await db.flush()  # get id
+        await db.refresh(navbar)
+        website.navbar = navbar
+
+    # Helper to upsert a page + nav item
+    async def upsert_page_and_nav(title: str, slug: str):
+        page = next((p for p in website.pages if p.slug == slug), None)
+        if not page:
+            page = Page(website_id=website.website_id, title=title, slug=slug)
+            db.add(page)
+            await db.flush()
+        # navbar item
+        nav = website.navbar
+        has_item = any(i.link_url == slug for i in nav.items)
+        if not has_item:
+            position = (max([i.position for i in nav.items], default=0) + 1)
+            db.add(NavbarItem(navbar_id=nav.navbar_id, text=title, link_url=slug, position=position))
+
+    await upsert_page_and_nav("Login", "/login")
+    await upsert_page_and_nav("Register", "/register")
+    await db.commit()
+
+    # Return updated navbar + pages
+    return {"ok": True}

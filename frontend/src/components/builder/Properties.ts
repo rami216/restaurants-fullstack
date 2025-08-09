@@ -18,7 +18,7 @@ export interface ElementProperties {
   // Nested Style Objects
   style?: React.CSSProperties; // Use React's built-in type for flexibility
   nameStyle?: React.CSSProperties;
-
+  visibility?: VisibilityRule;
   // Allows any other string-keyed property
   [key: string]: any;
 }
@@ -65,6 +65,7 @@ export interface Subsection {
     /** ← this must be here: */
     animation?: AnimationProps;
     style?: React.CSSProperties; // <-- ADD THIS
+    visibility?: VisibilityRule;
   };
   elements: Element[];
 }
@@ -83,6 +84,7 @@ export interface Section {
     alignItems?: "flex-start" | "center" | "flex-end";
     gap?: string;
     style?: React.CSSProperties; // <-- OPTIONAL BUT RECOMMENDED
+    visibility?: VisibilityRule;
   };
   subsections: Subsection[];
 }
@@ -92,6 +94,11 @@ export interface Page {
   title: string;
   slug: string;
   sections: Section[];
+  visibility?: {
+    requiresAuth?: boolean;
+    requiresAnonymous?: boolean;
+    roles?: string[];
+  };
 }
 
 export interface WebsiteData {
@@ -180,3 +187,12 @@ export interface PublicOptionGroup {
   is_required: boolean;
   choices: PublicOptionChoice[];
 }
+
+export type VisibilityRule = {
+  /** If true, only logged-in site members can see it */
+  requiresAuth?: boolean;
+  /** If true, only logged-out visitors can see it */
+  requiresAnonymous?: boolean;
+  /** Optional role restriction (applies only when logged in) */
+  roles?: string[];
+};

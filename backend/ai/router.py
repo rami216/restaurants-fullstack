@@ -1,5 +1,5 @@
-# app/api/ai_element.py
-import os, json
+#backend/ai/router/.py
+import os, json, re, traceback
 from fastapi import APIRouter, HTTPException
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
@@ -145,46 +145,146 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 """.strip()
 
-SYSTEM_PROMPT = """
+ELEMENT_GENERATOR_PROMPT_FROM_GPT5 = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
 Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
 
-**CRITICAL RULES FOR YOUR OUTPUT:**
-1.  **HTML Structure:** The HTML must be wrapped in a single container `<div>`. Use unique class names for elements that need interactivity.
-2.  **Styling:** All CSS must be in a single `<style>` tag. Use mustache tokens `{{...}}` for all editable values (colors, sizes, etc.).
-3.  **Interactivity (`script` key):**
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**1.  HTML Structure:**
+    - The HTML must be wrapped in a single container `<div>`.
+    - This container will have the unique class name you are given applied to it.
+
+**2.  Styling:**
+    - All CSS must be in a single `<style>` tag.
+    - Use mustache tokens `{{...}}` for all editable style values.
+    - **You MUST expose editables for the following visual controls (when relevant to the element):**
+        - **Colors:** global/background color, text color, link color, hover/active/focus color accents, border color.
+        - **Borders:** border width, border style, border radius (outer), and (if applicable) inner section radii.
+        - **Spacing:** padding and/or gap for containers and key sections (titles/headers vs content/body).
+        - **Typography:** font size(s) for titles and content, font weight(s), line-height, text alignment.
+        - **Effects & Motion:** box-shadow (at least one), transition speed/easing used by hover/focus/expand effects.
+    - If the element has **distinct sections** (e.g., title/header vs. content/body), provide **separate tokens** for their backgrounds and text colors and, where useful, their padding and radii (e.g., `titleBgColor`, `titleTextColor`, `contentBgColor`, `contentTextColor`, `titlePadding`, `contentPadding`, `titleRadius`, `contentRadius`).
+    - **CRITICAL SCOPING SUB-RULE:** You will be given a `unique_class_name`. **Every single CSS rule** you write **MUST** be prefixed with this class name to prevent styles from leaking.
+        - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `:root { ... }`
+    - CSS must be concise and scoped, but visually polished by default.
+
+**3.  Interactivity (`script` key):**
     - Provide a JavaScript string that adds event listeners to the HTML.
-    - The script will be executed inside a function that receives the container element as an argument, like `function(container) { ... }`.
+    - The script will be executed inside a function that receives `container` as an argument.
     - Use `container.querySelector('.your-class')` to find and manipulate elements.
     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
-    
-     - ### **IMPORTANT JAVASCRIPT SYNTAX RULE:** - If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
-    - **Correct:** `const myFunc = () => { /* logic */ };`
-    - **Incorrect:** `function myFunc() { /* logic */ };`
-4.  **JSON Sync & Editable Content (MOST IMPORTANT RULE):**
-    -   You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
-    -   **NO user-facing text should be hardcoded in the `aiTemplate`**.
-    -   Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
-    -   For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+    - **IMPORTANT JAVASCRIPT SYNTAX RULE:** If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
+      - **Correct:** `const myFunc = () => { /* logic */ };`
+      - **Incorrect:** `function myFunc() { /* logic */ };`
 
-**INPUT:** A user's prompt.
+**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    - **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
 
 **Example Prompt:** "an accordion with two items"
+**Example `unique_class_name`:** `.ai-accordion-12345`
 **Example Output:**
 {
-  "aiTemplate": "<div class=\\"ai-container\\"><style>...</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
-  "properties": { "title1": "Question 1", "content1": "Answer 1.", "title2": "Question 2", "content2": "Answer 2." },
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345{background:{{bgColor}};color:{{textColor}}}.ai-accordion-12345 .accordion-item{border-bottom:1px solid {{borderColor}};padding:{{itemPadding}}}.ai-accordion-12345 .accordion-title{background:{{titleBgColor}};color:{{titleTextColor}};padding:{{titlePadding}};border-radius:{{titleRadius}};font-size:{{titleFontSize}};font-weight:{{titleFontWeight}};text-align:{{titleAlign}};transition:{{transitionSpeed}}}.ai-accordion-12345 .accordion-content{background:{{contentBgColor}};color:{{contentTextColor}};padding:{{contentPadding}};border-radius:{{contentRadius}};font-size:{{contentFontSize}};line-height:{{contentLineHeight}};box-shadow:{{boxShadow}};transition:{{transitionSpeed}}}</style><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title1}}</h3><div class=\\"accordion-content\\"><p>{{content1}}</p></div></div><div class=\\"accordion-item\\"><h3 class=\\"accordion-title\\">{{title2}}</h3><div class=\\"accordion-content\\"><p>{{content2}}</p></div></div></div>",
+  "properties": {
+    "title1":"Question 1","content1":"Answer 1.","title2":"Question 2","content2":"Answer 2.",
+    "bgColor":"#ffffff","textColor":"#111111","borderColor":"#e2e8f0",
+    "itemPadding":"12px",
+    "titleBgColor":"#f7f7f9","titleTextColor":"#0f172a","titlePadding":"12px 14px","titleRadius":"8px","titleFontSize":"16px","titleFontWeight":"600","titleAlign":"left",
+    "contentBgColor":"#ffffff","contentTextColor":"#334155","contentPadding":"12px 14px","contentRadius":"8px","contentFontSize":"14px","contentLineHeight":"1.6",
+    "boxShadow":"0 4px 14px rgba(0,0,0,0.08)","transitionSpeed":"all 200ms ease"
+  },
   "editableProps": [
-    { "key": "title1", "label": "Title 1", "type": "text" },
-    { "key": "content1", "label": "Content 1", "type": "text" },
-    { "key": "title2", "label": "Title 2", "type": "text" },
-    { "key": "content2", "label": "Content 2", "type": "text" }
+    { "key":"title1","label":"Title 1","type":"text" },
+    { "key":"content1","label":"Content 1","type":"text" },
+    { "key":"title2","label":"Title 2","type":"text" },
+    { "key":"content2","label":"Content 2","type":"text" },
+
+    { "key":"bgColor","label":"Global Background","type":"color" },
+    { "key":"textColor","label":"Global Text Color","type":"color" },
+    { "key":"borderColor","label":"Border Color","type":"color" },
+
+    { "key":"itemPadding","label":"Item Padding","type":"text" },
+
+    { "key":"titleBgColor","label":"Title Background","type":"color" },
+    { "key":"titleTextColor","label":"Title Text Color","type":"color" },
+    { "key":"titlePadding","label":"Title Padding","type":"text" },
+    { "key":"titleRadius","label":"Title Border Radius","type":"text" },
+    { "key":"titleFontSize","label":"Title Font Size","type":"text" },
+    { "key":"titleFontWeight","label":"Title Font Weight","type":"text" },
+    { "key":"titleAlign","label":"Title Text Align","type":"text" },
+
+    { "key":"contentBgColor","label":"Content Background","type":"color" },
+    { "key":"contentTextColor","label":"Content Text Color","type":"color" },
+    { "key":"contentPadding","label":"Content Padding","type":"text" },
+    { "key":"contentRadius","label":"Content Border Radius","type":"text" },
+    { "key":"contentFontSize","label":"Content Font Size","type":"text" },
+    { "key":"contentLineHeight","label":"Content Line Height","type":"text" },
+
+    { "key":"boxShadow","label":"Box Shadow","type":"text" },
+    { "key":"transitionSpeed","label":"Transition Speed","type":"text" }
   ],
   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(title => { title.addEventListener('click', () => { const content = title.nextElementSibling; if (content.style.maxHeight) { content.style.maxHeight = null; } else { content.style.maxHeight = content.scrollHeight + 'px'; } }); });"
 }
+
 """.strip()
+NEW_ELEMENT_GENERATOR_PROMPT_FROM_GPT5 = """
+You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**1.  HTML Structure:**
+    - The HTML must be wrapped in a single container `<div>`.
+    - This container will have the unique class name you are given applied to it.
+
+**2.  Styling:**
+    - All CSS must be in a single `<style>` tag.
+    - Use mustache tokens `{{...}}` for all editable style values.
+    - **You MUST expose editables for ALL visual controls** (colors, borders, spacing, typography, effects, motion) for every element you create — whether it is a UI component, a game, an animation, or any other type of element.
+    - If the element has distinct sections (e.g., title/header vs. content/body), provide **separate tokens** for their backgrounds, text colors, paddings, and radii.
+    - **CRITICAL SCOPING RULE:** Every single CSS rule you write MUST be prefixed with the given unique class name to prevent styles from leaking.
+    - CSS must be concise, scoped, and visually polished.
+
+**3.  Interactivity (`script` key):**
+    - Provide a JavaScript string that adds event listeners and logic for all interactions.
+    - The script will be executed inside a function that receives `container` as an argument.
+    - Use `container.querySelector(...)` or `container.querySelectorAll(...)` for selections.
+    - **DO NOT** wrap code in `<script>` tags — only provide raw JavaScript.
+    - Use arrow functions or function expressions, NOT function declarations.
+
+**4.  Editable Content & Properties:**
+    - **EVERY user-facing text or style value must use a mustache token** (e.g., `{{buttonText}}`, `{{bgColor}}`).
+    - For every token, you MUST:
+        1. Provide a default value in `properties`.
+        2. Add an entry in `editableProps` with key, label, and type.
+    - This applies to ALL elements, including games, animations, and UI widgets.
+
+**5.  SPECIAL RULES FOR GAMES OR COMPLEX INTERACTIVE ELEMENTS:**
+    - If the prompt requests a game or other interactive experience, create a **fully functional, playable, and self-contained** version.
+    - Implement all required mechanics in JavaScript — no placeholders or incomplete logic.
+    - Include clear visual feedback for user actions (e.g., collisions, score updates, win/loss states).
+    - Expose gameplay-related parameters as editable tokens (speed, difficulty, object size, spawn rate, lives, etc.) in addition to normal style editables.
+    - All visuals and gameplay logic must be scoped to the container class.
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A valid JSON object as described.
+""".strip()
+
 
 #region test section prompt
 TEST_SECTION_SYSTEM_PROMPT = """
@@ -268,11 +368,11 @@ class GenerateRequest(BaseModel):
 class GenerateRequestForElement(BaseModel):
     prompt: str
     unique_class_name: str
-    
+
 @router.post("/generate-ai-element")
 async def generate_ai_element(body: GenerateRequestForElement):
     try:
-        # --- Includes the unique_class_name for the AI ---
+        # Build the user content exactly like before
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
@@ -280,50 +380,111 @@ async def generate_ai_element(body: GenerateRequestForElement):
 
         resp = openai.chat.completions.create(
             model="gpt-4o",
-            response_format={ "type": "json_object" },
+            response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_SYSTEM_PROMPT},
+                {"role": "system", "content": ELEMENT_GENERATOR_PROMPT_FROM_GPT5},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
             max_tokens=4096,
         )
+
         content = resp.choices[0].message.content
         payload = json.loads(content)
 
-        # --- Includes the script cleaning safety check ---
+        # Clean any <script>…</script> wrapper inside the "script" field
         if "script" in payload and isinstance(payload.get("script"), str):
             match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
             if match:
                 payload["script"] = match.group(1).strip()
-        
-    except (OpenAIError, json.JSONDecodeError, KeyError) as e:
+
+        return payload
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
         raise HTTPException(500, f"Page generation failed: {e}")
 
-    return payload
+#region gpt5 
+# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60)  # set timeout on the client
+# MODEL = "gpt-5-nano"
+# def _strip_script_wrapper(payload: dict) -> dict:
+#     """If payload['script'] contains a <script>...</script> wrapper, remove it and keep only the inner JS."""
+#     if "script" in payload and isinstance(payload.get("script"), str):
+#         match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#         if match:
+#             payload["script"] = match.group(1).strip()
+#     return payload
 
+# def _extract_json_loose(s: str) -> dict:
+#     """
+#     Fallback extractor when the model returns plain text:
+#     - strips ```json fences
+#     - pulls the LAST {...} block
+#     - json.loads it
+#     """
+#     s = (s or "").strip()
+#     if not s:
+#         raise ValueError("Model returned empty text.")
+#     if s.startswith("```"):
+#         s = re.sub(r"^```(?:json)?\s*", "", s)
+#         s = re.sub(r"\s*```$", "", s)
+#     if not s.lstrip().startswith("{"):
+#         m = re.search(r"\{[\s\S]*\}\s*$", s)
+#         if not m:
+#             raise ValueError("No JSON object found in model output.")
+#         s = m.group(0)
+#     return json.loads(s)
 
-#endregion generateelement
-@router.post("/generate-ai-section")
-async def generate_ai_section(body: GenerateRequest):
-    try:
-        resp = openai.chat.completions.create(
-            model="gpt-4o",
-            response_format={ "type": "json_object" },
-            messages=[
-                {"role": "system", "content": TEST_SECTION_SYSTEM_PROMPT},
-                {"role": "user",   "content": body.prompt},
-            ],
-            temperature=0.8, # Higher temperature for more creative layouts
-            max_tokens=4096,
-        )
-        content = resp.choices[0].message.content
-        payload = json.loads(content)
-    except (OpenAIError, json.JSONDecodeError) as e:
-        raise HTTPException(500, f"Generation failed: {e}")
-    return payload
-  
-  
+# def _assemble_text(resp) -> str:
+#     """Prefer assembling from parts, then fall back to resp.output_text."""
+#     parts = []
+#     for item in (getattr(resp, "output", None) or []):
+#         for c in (getattr(item, "content", None) or []):
+#             if getattr(c, "type", "") == "output_text":
+#                 t = getattr(c, "text", "") or ""
+#                 if t.strip():
+#                     parts.append(t)
+#     text = ("".join(parts) or (getattr(resp, "output_text", None) or "")).strip()
+#     return text
+
+# @router.post("/generate-ai-element")
+# async def generate_ai_element(body: GenerateRequestForElement):
+#     try:
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f'UNIQUE_CLASS_NAME: .{body.unique_class_name}'
+#         )
+
+#         # GPT-5 reasoning-style call: no temperature, no max tokens
+#         resp = client.responses.create(
+#             model=MODEL,
+#             instructions=ELEMENT_GENERATOR_PROMPT_FROM_GPT5 +
+#                 "\n\nReturn ONLY a single valid JSON object. No explanations or markdown.",
+#             input=user_content,
+#             max_output_tokens=16000
+            
+#         )
+
+#         text = _assemble_text(resp)
+#         if not text:
+#             # Dump once for debugging, then bail with a clear error
+#             try:
+#                 print("[GPT5 RAW RESPONSE]", resp.model_dump_json(indent=2)[:8000], flush=True)
+#             except Exception:
+#                 print("[GPT5 RAW RESPONSE - no dump]", str(resp)[:1000], flush=True)
+#             raise ValueError("Empty response text from model.")
+
+#         payload = _extract_json_loose(text)
+#         payload = _strip_script_wrapper(payload)
+#         return payload
+
+#     except Exception as e:
+#         import traceback
+#         traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"Page generation failed: {e}")
+      
+#endregion gpt5
   #region refining element
 
 # class RefineRequest(BaseModel):
