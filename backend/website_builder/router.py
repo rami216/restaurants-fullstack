@@ -86,7 +86,7 @@ async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(
     if not website.navbar: 
         raise HTTPException(status_code=404, detail="Navbar not found.")
     
-    new_page = Page(title=page_data.title, slug=page_data.slug, website_id=page_data.website_id)
+    new_page = Page(title=page_data.title, slug=page_data.slug, website_id=page_data.website_id,properties=page_data.properties or {} )
     db.add(new_page)
     
     # This line is now safe because website.navbar.items is pre-loaded
@@ -390,7 +390,8 @@ async def create_page_standalone(
     new_page = Page(
         title=page_data.title,
         slug=page_data.slug,
-        website_id=page_data.website_id
+        website_id=page_data.website_id,
+        properties=page_data.properties or {}
     )
     db.add(new_page)
     await db.commit()
@@ -470,3 +471,35 @@ async def ensure_auth_pages(
 
     # Return updated navbar + pages
     return {"ok": True}
+
+
+#region updatepage
+@router.put("/pages/{page_id}", response_model=schemas.PageResponse)
+async def update_page(
+    page_id: UUID,
+    payload: schemas.PageUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    # Ensure ownership
+    result = await db.execute(
+        select(Page)
+        .join(Website)
+        .join(RestaurantOwner)
+        .where(Page.page_id == page_id, RestaurantOwner.user_id == current_user.id)
+    )
+    db_page = result.scalars().first()
+    if not db_page:
+        raise HTTPException(status_code=404, detail="Page not found or no permission")
+
+    data = payload.model_dump(exclude_unset=True)
+    for k, v in data.items():
+        setattr(db_page, k, v)
+        if k == "properties":
+            flag_modified(db_page, "properties")
+
+    await db.commit()
+    return db_page
+
+
+#endregion updatepage

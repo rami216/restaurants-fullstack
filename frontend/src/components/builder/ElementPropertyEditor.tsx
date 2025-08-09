@@ -33,6 +33,7 @@ import {
   ArrowDown, // <-- ADD THIS
 } from "lucide-react";
 import Mustache from "mustache";
+import VisibilityEditor from "./VisibilityEditor";
 
 interface PropertyEditorProps {
   isExpanded: boolean;
@@ -701,337 +702,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     updateItem({ ...selectedItem, properties: newProperties });
   };
 
-  // const handleDelete = () => {
-  //   if (!confirm(`Are you sure you want to delete this ${selectionType}?`))
-  //     return;
-  //   let updatedSections = activePage.sections;
-
-  //   if (selectionType === "section") {
-  //     updatedSections = activePage.sections.filter(
-  //       (s) => s.section_id !== selectedItem.section_id
-  //     );
-  //   } else if (selectionType === "subsection") {
-  //     updatedSections = activePage.sections.map((s) => ({
-  //       ...s,
-  //       subsections: s.subsections.filter(
-  //         (sub) => sub.subsection_id !== selectedItem.subsection_id
-  //       ),
-  //     }));
-  //   } else if (selectionType === "element") {
-  //     updatedSections = activePage.sections.map((s) => ({
-  //       ...s,
-  //       subsections: s.subsections.map((sub) => ({
-  //         ...sub,
-  //         elements: sub.elements.filter(
-  //           (el) => el.element_id !== selectedItem.element_id
-  //         ),
-  //       })),
-  //     }));
-  //   }
-
-  //   onUpdate({ ...activePage, sections: updatedSections });
-  //   onDelete();
-  // };
-  // const handleLocalImageSelect = (
-  //   event: React.ChangeEvent<HTMLInputElement>
-  // ) => {
-  //   const file = event.target.files?.[0];
-  //   if (!file) return;
-  //   const localUrl = URL.createObjectURL(file);
-  //   handlePropertyChange("src", localUrl);
-  // };
-  // --- THIS IS THE UPDATED SECTION EDITOR ---
-  // const renderSectionEditor = () => (
-  //   <div className="space-y-4">
-  //     {/* --- NEW: Background Image Uploader --- */}
-  //     {/* --- START: NEW AI SECTION GENERATOR UI --- */}
-  //     <div>
-  //       <h4 className="text-md font-medium text-gray-800 mb-2">
-  //         Generate Layout with AI
-  //       </h4>
-  //       <div className="p-3 border rounded-md bg-gray-50">
-  //         <textarea
-  //           rows={4}
-  //           className="w-full border rounded p-2 text-sm"
-  //           placeholder="Describe the layout you want, e.g., 'a two-column section with an image and a call-to-action button'."
-  //           value={sectionAiPrompt}
-  //           onChange={(e) => setSectionAiPrompt(e.target.value)}
-  //         />
-  //         <button
-  //           onClick={handleGenerateSectionClick}
-  //           disabled={isGeneratingSection || !sectionAiPrompt.trim()}
-  //           className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
-  //         >
-  //           {isGeneratingSection ? "Generating..." : "Generate Section Layout"}
-  //         </button>
-  //       </div>
-  //     </div>
-  //     <hr />
-  //     {/* --- END: NEW AI SECTION GENERATOR UI --- */}
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Background Image
-  //       </label>
-  //       <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
-  //         {selectedItem.properties.backgroundImage ? (
-  //           <div className="text-center">
-  //             <img
-  //               src={`${api.defaults.baseURL}${selectedItem.properties.backgroundImage}`}
-  //               alt="Background Preview"
-  //               className="max-h-32 w-full object-cover mx-auto rounded-md"
-  //             />
-  //             <button
-  //               onClick={() => handlePropertyChange("backgroundImage", "")}
-  //               className="mt-2 text-xs text-red-600 hover:text-red-800"
-  //             >
-  //               Remove Image
-  //             </button>
-  //           </div>
-  //         ) : (
-  //           <div className="text-center py-4">
-  //             <input
-  //               type="file"
-  //               id="bg-image-upload"
-  //               className="hidden"
-  //               accept="image/png, image/jpeg, image/webp, image/gif"
-  //               onChange={handleImageUpload}
-  //               disabled={isUploading}
-  //             />
-  //             <label
-  //               htmlFor="bg-image-upload"
-  //               className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
-  //                 isUploading ? "opacity-50 cursor-not-allowed" : ""
-  //               }`}
-  //             >
-  //               {isUploading ? "Uploading..." : "Upload an image"}
-  //             </label>
-  //             <p className="text-xs text-gray-500 mt-1">PNG, JPG, WEBP, GIF</p>
-  //           </div>
-  //         )}
-  //       </div>
-  //     </div>
-
-  //     {/* Other section properties */}
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Layout Direction (for subsections)
-  //       </label>
-  //       <select
-  //         value={selectedItem.properties.flexDirection || "row"}
-  //         onChange={(e) =>
-  //           handlePropertyChange("flexDirection", e.target.value)
-  //         }
-  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //       >
-  //         <option value="row">Horizontal (Columns)</option>
-  //         <option value="column">Vertical (Rows)</option>
-  //       </select>
-  //     </div>
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Justify Subsections
-  //       </label>
-  //       <select
-  //         value={selectedItem.properties.justifyContent || "flex-start"}
-  //         onChange={(e) =>
-  //           handlePropertyChange("justifyContent", e.target.value)
-  //         }
-  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //       >
-  //         <option value="flex-start">Start</option>
-  //         <option value="center">Center</option>
-  //         <option value="flex-end">End</option>
-  //         <option value="space-between">Space Between</option>
-  //       </select>
-  //     </div>
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Gap Between Subsections
-  //       </label>
-  //       <input
-  //         type="text"
-  //         value={selectedItem.properties.gap || "1rem"}
-  //         onChange={(e) => handlePropertyChange("gap", e.target.value)}
-  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //         placeholder="e.g., 1rem, 16px"
-  //       />
-  //     </div>
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Padding
-  //       </label>
-  //       <input
-  //         type="text"
-  //         value={selectedItem.properties.padding || "2rem"}
-  //         onChange={(e) => handlePropertyChange("padding", e.target.value)}
-  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //       />
-  //     </div>
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Background Color
-  //       </label>
-  //       <input
-  //         type="color"
-  //         value={selectedItem.properties.backgroundColor || "#ffffff"}
-  //         onChange={(e) =>
-  //           handlePropertyChange("backgroundColor", e.target.value)
-  //         }
-  //         className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-  //       />
-  //     </div>
-  //   </div>
-  // );
-  // const renderSectionEditor = () => {
-  //   const properties = selectedItem.properties || {};
-
-  //   return (
-  //     <div className="space-y-4">
-  //       {/* --- AI SECTION GENERATOR UI --- */}
-  //       <div>
-  //         <h4 className="text-md font-medium text-gray-800 mb-2">
-  //           Generate Layout with AI
-  //         </h4>
-  //         <div className="p-3 border rounded-md bg-gray-50">
-  //           <textarea
-  //             rows={4}
-  //             className="w-full border rounded p-2 text-sm"
-  //             placeholder="Describe the layout you want..."
-  //             value={sectionAiPrompt}
-  //             onChange={(e) => setSectionAiPrompt(e.target.value)}
-  //           />
-  //           <button
-  //             onClick={handleGenerateSectionClick}
-  //             disabled={isGeneratingSection || !sectionAiPrompt.trim()}
-  //             className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
-  //           >
-  //             {isGeneratingSection
-  //               ? "Generating..."
-  //               : "Generate Section Layout"}
-  //           </button>
-  //         </div>
-  //       </div>
-  //       <hr />
-
-  //       {/* --- Background Image Uploader --- */}
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Background Image
-  //         </label>
-  //         <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
-  //           {/* Use the safe 'properties' object here */}
-  //           {properties.backgroundImage ? (
-  //             <div className="text-center">
-  //               <img
-  //                 src={`${api.defaults.baseURL}${properties.backgroundImage}`}
-  //                 alt="Background Preview"
-  //                 className="max-h-32 w-full object-cover mx-auto rounded-md"
-  //               />
-  //               <button
-  //                 onClick={() => handlePropertyChange("backgroundImage", "")}
-  //                 className="mt-2 text-xs text-red-600 hover:text-red-800"
-  //               >
-  //                 Remove Image
-  //               </button>
-  //             </div>
-  //           ) : (
-  //             <div className="text-center py-4">
-  //               <input
-  //                 type="file"
-  //                 id="bg-image-upload"
-  //                 className="hidden"
-  //                 accept="image/png, image/jpeg, image/webp, image/gif"
-  //                 onChange={handleImageUpload}
-  //                 disabled={isUploading}
-  //               />
-  //               <label
-  //                 htmlFor="bg-image-upload"
-  //                 className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
-  //                   isUploading ? "opacity-50 cursor-not-allowed" : ""
-  //                 }`}
-  //               >
-  //                 {isUploading ? "Uploading..." : "Upload an image"}
-  //               </label>
-  //               <p className="text-xs text-gray-500 mt-1">
-  //                 PNG, JPG, WEBP, GIF
-  //               </p>
-  //             </div>
-  //           )}
-  //         </div>
-  //       </div>
-
-  //       {/* Other section properties --- all now using the safe 'properties' object */}
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Layout Direction (for subsections)
-  //         </label>
-  //         <select
-  //           value={properties.flexDirection || "row"}
-  //           onChange={(e) =>
-  //             handlePropertyChange("flexDirection", e.target.value)
-  //           }
-  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //         >
-  //           <option value="row">Horizontal (Columns)</option>
-  //           <option value="column">Vertical (Rows)</option>
-  //         </select>
-  //       </div>
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Justify Subsections
-  //         </label>
-  //         <select
-  //           value={properties.justifyContent || "flex-start"}
-  //           onChange={(e) =>
-  //             handlePropertyChange("justifyContent", e.target.value)
-  //           }
-  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //         >
-  //           <option value="flex-start">Start</option>
-  //           <option value="center">Center</option>
-  //           <option value="flex-end">End</option>
-  //           <option value="space-between">Space Between</option>
-  //         </select>
-  //       </div>
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Gap Between Subsections
-  //         </label>
-  //         <input
-  //           type="text"
-  //           value={properties.gap || "1rem"}
-  //           onChange={(e) => handlePropertyChange("gap", e.target.value)}
-  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //           placeholder="e.g., 1rem, 16px"
-  //         />
-  //       </div>
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Padding
-  //         </label>
-  //         <input
-  //           type="text"
-  //           value={properties.padding || "2rem"}
-  //           onChange={(e) => handlePropertyChange("padding", e.target.value)}
-  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //         />
-  //       </div>
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Background Color
-  //         </label>
-  //         <input
-  //           type="color"
-  //           value={properties.backgroundColor || "#ffffff"}
-  //           onChange={(e) =>
-  //             handlePropertyChange("backgroundColor", e.target.value)
-  //           }
-  //           className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-  //         />
-  //       </div>
-  //     </div>
-  //   );
-  // };
   const renderSectionEditor = () => {
     // Create safe objects for properties and the nested style object
     const properties = selectedItem.properties || {};
@@ -1213,200 +883,19 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
           />
         </div>
+        <VisibilityEditor
+          value={selectedItem.properties}
+          onChange={(next) => updateItem({ ...selectedItem, properties: next })}
+          onBecameProtected={async () => {
+            await api.post(
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`
+            );
+          }}
+        />
       </div>
     );
   };
-  //hello
-  // const renderSubsectionEditor = () => (
-  //   <div className="space-y-4">
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Element Layout
-  //       </label>
-  //       <select
-  //         value={selectedItem.properties.display || "flex"}
-  //         onChange={(e) => {
-  //           const newDisplay = e.target.value;
-  //           handlePropertyChange("display", newDisplay);
-  //           // Set default grid properties when switching if they don't exist
-  //           if (newDisplay === "grid" && !selectedItem.properties.gridColumns) {
-  //             const newProps = {
-  //               ...selectedItem.properties,
-  //               display: "grid",
-  //               gridColumns: 2,
-  //               gridTemplateColumns: "repeat(2, 1fr)",
-  //             };
-  //             updateItem({ ...selectedItem, properties: newProps });
-  //           }
-  //         }}
-  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //       >
-  //         <option value="flex">Flexbox (Vertical/Horizontal)</option>
-  //         <option value="grid">Grid</option>
-  //       </select>
-  //     </div>
 
-  //     {/* Conditional UI for Grid Layout */}
-  //     {selectedItem.properties.display === "grid" && (
-  //       <div>
-  //         <label className="block text-sm font-medium text-gray-700">
-  //           Number of Columns
-  //         </label>
-  //         <input
-  //           type="number"
-  //           min="1"
-  //           value={selectedItem.properties.gridColumns || ""}
-  //           onChange={(e) => {
-  //             const rawValue = e.target.value;
-  //             // Update the property that holds the input's value. This allows typing.
-  //             handlePropertyChange("gridColumns", rawValue);
-
-  //             const columns = parseInt(rawValue, 10);
-  //             // Only update the functional CSS property if the value is a valid, positive number.
-  //             if (!isNaN(columns) && columns > 0) {
-  //               handlePropertyChange(
-  //                 "gridTemplateColumns",
-  //                 `repeat(${columns}, 1fr)`
-  //               );
-  //             }
-  //           }}
-  //           className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //         />
-  //       </div>
-  //     )}
-
-  //     {/* Conditional UI for Flexbox Layout */}
-  //     {(!selectedItem.properties.display ||
-  //       selectedItem.properties.display === "flex") && (
-  //       <>
-  //         <div>
-  //           <label className="block text-sm font-medium text-gray-700">
-  //             Flex Direction
-  //           </label>
-  //           <select
-  //             value={selectedItem.properties.flexDirection || "column"}
-  //             onChange={(e) =>
-  //               handlePropertyChange("flexDirection", e.target.value)
-  //             }
-  //             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //           >
-  //             <option value="column">Vertical</option>
-  //             <option value="row">Horizontal</option>
-  //           </select>
-  //         </div>
-  //         <div>
-  //           <label className="block text-sm font-medium text-gray-700">
-  //             Justify Elements
-  //           </label>
-  //           <select
-  //             value={selectedItem.properties.justifyContent || "flex-start"}
-  //             onChange={(e) =>
-  //               handlePropertyChange("justifyContent", e.target.value)
-  //             }
-  //             className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //           >
-  //             <option value="flex-start">Start</option>
-  //             <option value="center">Center</option>
-  //             <option value="flex-end">End</option>
-  //             <option value="space-between">Space Between</option>
-  //           </select>
-  //         </div>
-  //       </>
-  //     )}
-
-  //     {/* Common Properties */}
-  //     <div>
-  //       <label className="block text-sm font-medium text-gray-700">
-  //         Gap Between Elements
-  //       </label>
-  //       <input
-  //         type="text"
-  //         value={selectedItem.properties.gap || "1rem"}
-  //         onChange={(e) => handlePropertyChange("gap", e.target.value)}
-  //         className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //         placeholder="e.g., 1rem, 16px"
-  //       />
-  //     </div>
-  //     {/* ────────── ANIMATION PANEL ────────── */}
-  //     <div>
-  //       <h4 className="text-md font-medium text-gray-800 mb-2">Animation</h4>
-  //       <div className="space-y-3">
-  //         {/* Type */}
-  //         <div>
-  //           <label className="block text-sm font-medium text-gray-700">
-  //             Type
-  //           </label>
-  //           <select
-  //             value={selectedItem.properties.animation?.type || ""}
-  //             onChange={(e) =>
-  //               handleAnimationChange(
-  //                 "type",
-  //                 e.target.value as AnimationProps["type"]
-  //               )
-  //             }
-  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-  //           >
-  //             <option value="">None</option>
-  //             <option value="fade-in">Fade In</option>
-  //             <option value="slide-up">Slide Up</option>
-  //             <option value="bounce">Bounce</option>
-  //             <option value="pulse">Pulse</option>
-  //           </select>
-  //         </div>
-
-  //         {/* Delay */}
-  //         <div>
-  //           <label className="block text-sm font-medium text-gray-700">
-  //             Delay (s)
-  //           </label>
-  //           <input
-  //             type="number"
-  //             min={0}
-  //             step={0.1}
-  //             value={selectedItem.properties.animation?.delay ?? 0}
-  //             onChange={(e) =>
-  //               handleAnimationChange("delay", parseFloat(e.target.value))
-  //             }
-  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-  //           />
-  //         </div>
-
-  //         {/* Duration */}
-  //         <div>
-  //           <label className="block text-sm font-medium text-gray-700">
-  //             Duration (s)
-  //           </label>
-  //           <input
-  //             type="number"
-  //             min={0}
-  //             step={0.1}
-  //             value={selectedItem.properties.animation?.duration ?? 0.3}
-  //             onChange={(e) =>
-  //               handleAnimationChange("duration", parseFloat(e.target.value))
-  //             }
-  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-  //           />
-  //         </div>
-
-  //         {/* Repeat */}
-  //         <div>
-  //           <label className="block text-sm font-medium text-gray-700">
-  //             Repeat count
-  //           </label>
-  //           <input
-  //             type="number"
-  //             min={0}
-  //             value={selectedItem.properties.animation?.repeat ?? 0}
-  //             onChange={(e) =>
-  //               handleAnimationChange("repeat", parseInt(e.target.value, 10))
-  //             }
-  //             className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
-  //           />
-  //         </div>
-  //       </div>
-  //     </div>
-  //   </div>
-  // );
   const renderSubsectionEditor = () => {
     // Safely get properties and the nested style object at the top
     const properties = selectedItem.properties || {};
@@ -1643,6 +1132,15 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             )}
           </div>
         </div>
+        <VisibilityEditor
+          value={selectedItem.properties}
+          onChange={(next) => updateItem({ ...selectedItem, properties: next })}
+          onBecameProtected={async () => {
+            await api.post(
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`
+            );
+          }}
+        />
       </div>
     );
   };
@@ -1661,6 +1159,212 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       labelStyle: { ...selectedItem.properties.labelStyle, [key]: value },
     };
     updateItem({ ...selectedItem, properties: newProperties });
+  };
+  const renderAuthFormEditor = (kind: "LOGIN_FORM" | "REGISTER_FORM") => {
+    const props = selectedItem.properties || {};
+    const fields = props.fields || [];
+
+    const updateField = (
+      idx: number,
+      key: "label" | "name" | "placeholder" | "type",
+      value: string
+    ) => {
+      const next = [...fields];
+      next[idx] = { ...next[idx], [key]: value };
+      handlePropertyChange("fields", next);
+    };
+
+    const addField = () => {
+      handlePropertyChange("fields", [
+        ...fields,
+        {
+          id: `${kind.toLowerCase()}_${Date.now()}`,
+          label: "New field",
+          name: "custom",
+          placeholder: "",
+          type: "text",
+        },
+      ]);
+    };
+
+    const removeField = (idx: number) => {
+      handlePropertyChange(
+        "fields",
+        fields.filter((_: any, i: number) => i !== idx)
+      );
+    };
+
+    const updateBtn = (k: string, v: any) =>
+      handlePropertyChange("submitButton", {
+        ...(props.submitButton || {}),
+        [k]: v,
+      });
+
+    const updateBtnStyle = (k: string, v: any) =>
+      handlePropertyChange("submitButton", {
+        ...(props.submitButton || {}),
+        style: { ...((props.submitButton || {}).style || {}), [k]: v },
+      });
+
+    return (
+      <div className="space-y-6">
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Title
+          </label>
+          <input
+            type="text"
+            value={props.title || ""}
+            onChange={(e) => handlePropertyChange("title", e.target.value)}
+            className="mt-1 w-full border rounded p-2"
+          />
+        </div>
+
+        <hr />
+
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">Fields</h4>
+          <div className="space-y-3">
+            {fields.map((f: any, i: number) => (
+              <div
+                key={f.id}
+                className="p-3 border rounded bg-gray-50 space-y-2"
+              >
+                <div className="grid grid-cols-2 gap-2">
+                  <input
+                    className="border rounded p-2"
+                    placeholder="Label"
+                    value={f.label}
+                    onChange={(e) => updateField(i, "label", e.target.value)}
+                  />
+                  <input
+                    className="border rounded p-2"
+                    placeholder="name (payload key)"
+                    value={f.name}
+                    onChange={(e) => updateField(i, "name", e.target.value)}
+                  />
+                  <input
+                    className="border rounded p-2 col-span-2"
+                    placeholder="Placeholder"
+                    value={f.placeholder}
+                    onChange={(e) =>
+                      updateField(i, "placeholder", e.target.value)
+                    }
+                  />
+                  <select
+                    className="border rounded p-2"
+                    value={f.type || "text"}
+                    onChange={(e) => updateField(i, "type", e.target.value)}
+                  >
+                    <option value="text">text</option>
+                    <option value="email">email</option>
+                    <option value="password">password</option>
+                  </select>
+                  <button
+                    onClick={() => removeField(i)}
+                    className="border rounded p-2 text-red-600"
+                  >
+                    Remove
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+          <button
+            onClick={addField}
+            className="mt-2 w-full border-dashed border-2 rounded p-2"
+          >
+            + Add Field
+          </button>
+        </div>
+
+        <hr />
+
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Form Styles
+          </h4>
+          <div className="grid grid-cols-2 gap-3">
+            <input
+              className="border rounded p-2 col-span-2"
+              placeholder="Width (e.g., 100%, 420px)"
+              value={props.style?.width || "100%"}
+              onChange={(e) => handleStyleChange("width", e.target.value)}
+            />
+            <input
+              className="border rounded p-2 col-span-2"
+              placeholder="Padding (e.g., 2rem)"
+              value={props.style?.padding || "2rem"}
+              onChange={(e) => handleStyleChange("padding", e.target.value)}
+            />
+            <input
+              type="color"
+              className="h-10 border rounded"
+              value={props.style?.backgroundColor || "#f9fafb"}
+              onChange={(e) =>
+                handleStyleChange("backgroundColor", e.target.value)
+              }
+            />
+            <input
+              type="color"
+              className="h-10 border rounded"
+              value={props.labelStyle?.color || "#374151"}
+              onChange={(e) => handleLabelStyleChange("color", e.target.value)}
+            />
+          </div>
+        </div>
+
+        <hr />
+
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Submit Button
+          </h4>
+          <label className="block text-sm font-medium text-gray-700">
+            Text
+          </label>
+          <input
+            className="w-full border rounded p-2 mb-3"
+            value={
+              props.submitButton?.text ||
+              (kind === "LOGIN_FORM" ? "Login" : "Register")
+            }
+            onChange={(e) => updateBtn("text", e.target.value)}
+          />
+          <div className="grid grid-cols-3 gap-3">
+            <input
+              type="color"
+              className="h-10 border rounded"
+              value={
+                props.submitButton?.style?.backgroundColor ||
+                (kind === "LOGIN_FORM" ? "#111827" : "#2563eb")
+              }
+              onChange={(e) =>
+                updateBtnStyle("backgroundColor", e.target.value)
+              }
+            />
+            <input
+              type="color"
+              className="h-10 border rounded"
+              value={props.submitButton?.style?.color || "#ffffff"}
+              onChange={(e) => updateBtnStyle("color", e.target.value)}
+            />
+            <input
+              className="border rounded p-2"
+              placeholder="Width"
+              value={props.submitButton?.style?.width || "100%"}
+              onChange={(e) => updateBtnStyle("width", e.target.value)}
+            />
+          </div>
+        </div>
+
+        {/* Visibility panel reuse */}
+        <VisibilityEditor
+          value={selectedItem.properties}
+          onChange={(next) => updateItem({ ...selectedItem, properties: next })}
+        />
+      </div>
+    );
   };
 
   // inside your component, alongside handlePropertyChange:
@@ -1712,28 +1416,34 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   const renderElementEditor = () => {
+    // small helpers local to this editor
     const toggleStyle = (
       styleKey: string,
       onValue: string,
       offValue: string
     ) => {
       const currentVal = selectedItem.properties.style?.[styleKey];
-      const newVal = currentVal === onValue ? offValue : onValue;
-      handleStyleChange(styleKey, newVal);
+      handleStyleChange(styleKey, currentVal === onValue ? offValue : onValue);
     };
+
     const toggleNameStyle = (
       styleKey: string,
       onValue: string,
       offValue: string
     ) => {
       const currentVal = selectedItem.properties.nameStyle?.[styleKey];
-      const newVal = currentVal === onValue ? offValue : onValue;
-      handleNameStyleChange(styleKey, newVal);
+      handleNameStyleChange(
+        styleKey,
+        currentVal === onValue ? offValue : onValue
+      );
     };
+
+    let editorBody: React.ReactNode = null;
+
     switch (selectedItem.element_type) {
-      case "TEXT":
+      case "TEXT": {
         const style = selectedItem.properties.style || {};
-        return (
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -1748,7 +1458,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 rows={3}
               />
             </div>
-            {/* --- NEW TEXT STYLE CONTROLS --- */}
+
+            {/* Text style */}
             <div>
               <label className="block text-sm font-medium text-gray-700 mb-1">
                 Styles
@@ -1788,6 +1499,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 </button>
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Font Size
@@ -1799,6 +1511,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
               />
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Color
@@ -1810,13 +1523,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
               />
             </div>
-            {/* ────────── ANIMATION PANEL ────────── */}
+
+            {/* Animation */}
             <div>
               <h4 className="text-md font-medium text-gray-800 mb-2">
                 Animation
               </h4>
               <div className="space-y-3">
-                {/* Type */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Type
@@ -1835,7 +1548,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     <option value="pulse">Pulse</option>
                   </select>
                 </div>
-                {/* Delay */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Delay (s)
@@ -1851,7 +1563,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
                   />
                 </div>
-                {/* Duration */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Duration (s)
@@ -1870,7 +1581,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
                   />
                 </div>
-                {/* Repeat */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Repeat count
@@ -1892,47 +1602,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-        return (
-          <div className="space-y-4">
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Content
-              </label>
-              <textarea
-                value={selectedItem.properties.content || ""}
-                onChange={(e) =>
-                  handlePropertyChange("content", e.target.value)
-                }
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-                rows={3}
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Font Size
-              </label>
-              <input
-                type="text"
-                value={selectedItem.properties.style?.fontSize || "1rem"}
-                onChange={(e) => handleStyleChange("fontSize", e.target.value)}
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-              />
-            </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Color
-              </label>
-              <input
-                type="color"
-                value={selectedItem.properties.style?.color || "#000000"}
-                onChange={(e) => handleStyleChange("color", e.target.value)}
-                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-              />
-            </div>
-          </div>
-        );
-      case "BUTTON":
-        return (
+        break;
+      }
+
+      case "BUTTON": {
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -1966,8 +1640,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 ))}
               </select>
             </div>
+
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">Styling</h4>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Background Color
@@ -2046,9 +1722,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      // --- NEW EDITOR FOR LIST ---
-      case "LIST":
-        return (
+        break;
+      }
+
+      case "LIST": {
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2065,34 +1743,33 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      // --- NEW EDITOR FOR DROPDOWN ---
-      case "DROPDOWN":
+        break;
+      }
+
+      case "DROPDOWN": {
         const handleOptionChange = (
           index: number,
           key: "text" | "action_value",
           value: string
         ) => {
-          const newOptions = [...selectedItem.properties.options];
+          const newOptions = [...(selectedItem.properties.options || [])];
           newOptions[index] = { ...newOptions[index], [key]: value };
           handlePropertyChange("options", newOptions);
         };
-
         const addDropdownOption = () => {
-          const newOptions = [
+          handlePropertyChange("options", [
             ...(selectedItem.properties.options || []),
             { text: "New Option", action_value: "#" },
-          ];
-          handlePropertyChange("options", newOptions);
+          ]);
         };
-
         const removeDropdownOption = (index: number) => {
-          const newOptions = selectedItem.properties.options.filter(
+          const newOptions = (selectedItem.properties.options || []).filter(
             (_: any, i: number) => i !== index
           );
           handlePropertyChange("options", newOptions);
         };
 
-        return (
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2105,6 +1782,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
               />
             </div>
+
             <div className="space-y-2">
               <label className="block text-sm font-medium text-gray-700">
                 Options
@@ -2157,8 +1835,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      case "IMAGE":
-        return (
+        break;
+      }
+
+      case "IMAGE": {
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2200,6 +1881,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
               />
             </div>
+
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">Styling</h4>
             <div>
@@ -2228,9 +1910,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      case "CATEGORY":
+        break;
+      }
+
+      case "CATEGORY": {
         const nameStyle = selectedItem.properties.nameStyle || {};
-        return (
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2243,6 +1928,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
               />
             </div>
+
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">
               Name Styling
@@ -2290,6 +1976,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 </button>
               </div>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Font Family
@@ -2307,6 +1994,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 <option value="cursive">Cursive</option>
               </select>
             </div>
+
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Text Color
@@ -2320,56 +2008,54 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      case "FORM":
+        break;
+      }
+
+      case "FORM": {
         const handleFieldChange = (
           index: number,
           key: "label" | "placeholder",
           value: string
         ) => {
-          const newFields = [...selectedItem.properties.fields];
+          const newFields = [...(selectedItem.properties.fields || [])];
           newFields[index] = { ...newFields[index], [key]: value };
           handlePropertyChange("fields", newFields);
         };
-
         const addField = () => {
-          const newFields = [
+          handlePropertyChange("fields", [
             ...(selectedItem.properties.fields || []),
             {
               id: `field_${Date.now()}`,
               label: "New Field",
               placeholder: "Enter value",
             },
-          ];
-          handlePropertyChange("fields", newFields);
+          ]);
         };
-
         const removeField = (index: number) => {
-          const newFields = selectedItem.properties.fields.filter(
-            (_: any, i: number) => i !== index
+          handlePropertyChange(
+            "fields",
+            (selectedItem.properties.fields || []).filter(
+              (_: any, i: number) => i !== index
+            )
           );
-          handlePropertyChange("fields", newFields);
         };
-
         const handleButtonPropChange = (key: string, value: string) => {
           const newButtonProps = {
-            ...selectedItem.properties.submitButton,
+            ...(selectedItem.properties.submitButton || {}),
             [key]: value,
           };
           handlePropertyChange("submitButton", newButtonProps);
         };
-
         const handleButtonStyleChange = (key: string, value: string) => {
+          const sb = selectedItem.properties.submitButton || {};
           const newButtonProps = {
-            ...selectedItem.properties.submitButton,
-            style: {
-              ...selectedItem.properties.submitButton.style,
-              [key]: value,
-            },
+            ...sb,
+            style: { ...(sb.style || {}), [key]: value },
           };
           handlePropertyChange("submitButton", newButtonProps);
         };
 
-        return (
+        editorBody = (
           <div className="space-y-6">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2402,7 +2088,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     placeholder="e.g., 100%, 500px"
                   />
                 </div>
-
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Background Color
@@ -2434,7 +2119,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
                   />
                 </div>
-                {/* --- ADD THIS BLOCK --- */}
                 <div>
                   <label className="block text-sm font-medium text-gray-700">
                     Input Text Color
@@ -2450,7 +2134,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
                   />
                 </div>
-                {/* --- END OF NEW BLOCK --- */}
               </div>
             </div>
 
@@ -2585,37 +2268,39 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      case "ACCORDION":
+        break;
+      }
+
+      case "ACCORDION": {
         const handleAccordionChange = (
           index: number,
           key: "question" | "answer",
           value: string
         ) => {
-          const newItems = [...selectedItem.properties.items];
-          newItems[index] = { ...newItems[index], [key]: value };
-          handlePropertyChange("items", newItems);
+          const next = [...(selectedItem.properties.items || [])];
+          next[index] = { ...next[index], [key]: value };
+          handlePropertyChange("items", next);
         };
-
         const addAccordionItem = () => {
-          const newItems = [
+          handlePropertyChange("items", [
             ...(selectedItem.properties.items || []),
             {
               id: `accordion_${Date.now()}`,
               question: "New Question",
               answer: "New Answer",
             },
-          ];
-          handlePropertyChange("items", newItems);
+          ]);
         };
-
         const removeAccordionItem = (index: number) => {
-          const newItems = selectedItem.properties.items.filter(
-            (_: any, i: number) => i !== index
+          handlePropertyChange(
+            "items",
+            (selectedItem.properties.items || []).filter(
+              (_: any, i: number) => i !== index
+            )
           );
-          handlePropertyChange("items", newItems);
         };
 
-        return (
+        editorBody = (
           <div className="space-y-6">
             <div>
               <h4 className="text-md font-medium text-gray-800 mb-2">
@@ -2672,7 +2357,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 <PlusCircle size={16} className="mr-2" /> Add Item
               </button>
             </div>
+
             <hr />
+
             <div>
               <h4 className="text-md font-medium text-gray-800 mb-2">
                 Styling
@@ -2725,12 +2412,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      case "MAP":
+        break;
+      }
+
+      case "MAP": {
         const handleMapUrlChange = (newUrl: string) => {
           const API_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
-
-          // The check has been removed.
-
           let embedUrl = newUrl;
           if (newUrl.includes("/maps/place/")) {
             const place = newUrl.split("/place/")[1].split("/")[0];
@@ -2739,11 +2426,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             const query = newUrl.split("?q=")[1];
             embedUrl = `https://www.google.com/maps/embed/v1/place?key=${API_KEY}&q=${query}`;
           }
-
           handlePropertyChange("src", embedUrl);
         };
 
-        return (
+        editorBody = (
           <div className="space-y-4">
             <div>
               <label className="block text-sm font-medium text-gray-700">
@@ -2761,6 +2447,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 link here.
               </p>
             </div>
+
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">Styling</h4>
             <div>
@@ -2777,36 +2464,24 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         );
-      /*** inside switch(selectedItem.element_type) { ***/
+        break;
+      }
+
       case "AI": {
-        // 1) Safely destructure the payload
         const payload = selectedItem.aiPayload || {};
         const aiProps = payload.properties || {};
-
-        // 2) THE FIX: Explicitly check if editableProps is an array. If not, use an empty array.
         const editableProps = Array.isArray(payload.editableProps)
           ? payload.editableProps
           : [];
-
-        // 3) Helper to update a single AI property
-        const handleAiPropChange = (key: string, value: any) => {
-          const newAiPayload = {
-            ...payload, // Use the safe payload object
-            properties: {
-              ...aiProps,
-              [key]: value,
-            },
-          };
+        const handleAiPropLocalChange = (key: string, value: any) => {
           updateItem({
             ...selectedItem,
-            aiPayload: newAiPayload,
+            aiPayload: { ...payload, properties: { ...aiProps, [key]: value } },
           });
         };
 
-        // 4) Render the controls
-        return (
+        editorBody = (
           <div className="space-y-4">
-            {/* This map call is now safe */}
             {editableProps.map((field: any) => (
               <div key={field.key}>
                 <label className="block text-sm font-medium text-gray-700 mb-1">
@@ -2818,7 +2493,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     type="number"
                     value={aiProps[field.key]}
                     onChange={(e) =>
-                      handleAiPropChange(field.key, +e.currentTarget.value)
+                      handleAiPropLocalChange(field.key, +e.currentTarget.value)
                     }
                     className="w-full border p-2 rounded"
                   />
@@ -2829,7 +2504,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     type="text"
                     value={aiProps[field.key]}
                     onChange={(e) =>
-                      handleAiPropChange(field.key, e.currentTarget.value)
+                      handleAiPropLocalChange(field.key, e.currentTarget.value)
                     }
                     className="w-full border p-2 rounded"
                   />
@@ -2840,13 +2515,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     type="color"
                     value={aiProps[field.key]}
                     onChange={(e) =>
-                      handleAiPropChange(field.key, e.currentTarget.value)
+                      handleAiPropLocalChange(field.key, e.currentTarget.value)
                     }
                     className="w-full h-10 p-1 rounded border"
                   />
                 )}
               </div>
             ))}
+
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">
               Interactivity
@@ -2892,11 +2568,34 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             )}
           </div>
         );
+        break;
       }
+      case "LOGIN_FORM":
+        return renderAuthFormEditor("LOGIN_FORM");
+      case "REGISTER_FORM":
+        return renderAuthFormEditor("REGISTER_FORM");
 
-      default:
-        return <p>No editor for this element.</p>;
+      default: {
+        editorBody = <p>No editor for this element.</p>;
+      }
     }
+
+    // Always append the Visibility editor
+    return (
+      <>
+        {editorBody}
+        <hr className="my-4" />
+        <VisibilityEditor
+          value={selectedItem.properties}
+          onChange={(next) => updateItem({ ...selectedItem, properties: next })}
+          onBecameProtected={async () => {
+            await api.post(
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`
+            );
+          }}
+        />
+      </>
+    );
   };
 
   return (

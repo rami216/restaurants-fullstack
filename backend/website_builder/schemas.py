@@ -11,7 +11,10 @@ def to_camel(s: str) -> str:
 
 # --- Core Flexible Property Schemas ---
 
-
+class Visibility(BaseModel):
+    requiresAuth: Optional[bool] = None
+    requiresAnonymous: Optional[bool] = None
+    roles: Optional[List[str]] = None
 
 
 class EditableProp(BaseModel):
@@ -98,6 +101,7 @@ class SectionResponse(SectionBase):
 class PageBase(BaseModel):
     title: str
     slug: str
+    properties: Optional[Dict[str, Any]] = None  
 
 class PageCreate(PageBase):
     website_id: UUID
@@ -105,6 +109,7 @@ class PageCreate(PageBase):
 class PageUpdate(BaseModel):
     title: Optional[str] = None
     slug: Optional[str] = None
+    properties: Optional[Dict[str, Any]] = None
 
 class PageResponse(PageBase):
     page_id: UUID

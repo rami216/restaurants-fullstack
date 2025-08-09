@@ -139,6 +139,101 @@ const availableElements = [
       },
     },
   },
+  {
+    type: "LOGIN_FORM",
+    name: "Login Form",
+    defaultProps: {
+      title: "Sign in to your account",
+      fields: [
+        {
+          id: `login_email_${Date.now()}`,
+          label: "Email",
+          name: "email",
+          placeholder: "you@example.com",
+          type: "email",
+        },
+        {
+          id: `login_pass_${Date.now() + 1}`,
+          label: "Password",
+          name: "password",
+          placeholder: "••••••••",
+          type: "password",
+        },
+      ],
+      submitButton: {
+        text: "Login",
+        style: {
+          backgroundColor: "#111827",
+          color: "#ffffff",
+          padding: "0.75rem 1.25rem",
+          border: "none",
+          borderRadius: "8px",
+          width: "100%",
+        },
+      },
+      successRedirect: "", // leave empty to use http://localhost:3000/<subdomain>
+      style: {
+        backgroundColor: "#f9fafb",
+        padding: "2rem",
+        borderRadius: "10px",
+        width: "100%",
+        maxWidth: "420px",
+      },
+      labelStyle: { color: "#374151" },
+      inputStyle: { color: "#111827" },
+    },
+  },
+  {
+    type: "REGISTER_FORM",
+    name: "Register Form",
+    defaultProps: {
+      title: "Create your account",
+      fields: [
+        {
+          id: `reg_name_${Date.now()}`,
+          label: "Full name",
+          name: "full_name",
+          placeholder: "Jane Doe",
+          type: "text",
+        },
+        {
+          id: `reg_email_${Date.now() + 1}`,
+          label: "Email",
+          name: "email",
+          placeholder: "you@example.com",
+          type: "email",
+        },
+        {
+          id: `reg_pass_${Date.now() + 2}`,
+          label: "Password",
+          name: "password",
+          placeholder: "••••••••",
+          type: "password",
+        },
+      ],
+      submitButton: {
+        text: "Register",
+        style: {
+          backgroundColor: "#2563eb",
+          color: "#ffffff",
+          padding: "0.75rem 1.25rem",
+          border: "none",
+          borderRadius: "8px",
+          width: "100%",
+        },
+      },
+      successRedirect: "",
+      style: {
+        backgroundColor: "#f9fafb",
+        padding: "2rem",
+        borderRadius: "10px",
+        width: "100%",
+        maxWidth: "420px",
+      },
+      labelStyle: { color: "#374151" },
+      inputStyle: { color: "#111827" },
+    },
+  },
 ];
 
 const ElementPalette: React.FC<ElementPaletteProps> = ({

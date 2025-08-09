@@ -3,6 +3,7 @@
 import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
+import AuthFormElement from "@/components/shared/AuthFormElement";
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
@@ -304,46 +305,294 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       setIsLoadingDetails(false);
     }
   };
+  const [isLoggedIn, setIsLoggedIn] = useState(false);
+  const [role, setRole] = useState<string | undefined>(undefined);
 
   useEffect(() => {
     setCurrentPage(initialPage);
   }, [initialPage]);
+
   // always render navbar
-  const NavBar = () => (
-    <nav style={websiteData.navbar!.properties}>
-      <div className="flex items-center justify-between px-6 py-3 shadow-sm">
-        <div className="font-bold text-xl">Your Logo</div>
-        <div className="flex space-x-4">
-          {websiteData.navbar!.items.map((ni: NavbarItem) => {
-            const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
-            if (!tgt) return null;
-            return (
-              <a
-                key={ni.item_id}
-                href={ni.link_url}
-                onClick={(e) => {
-                  e.preventDefault();
-                  setActiveCategory(null);
-                  router.push(`/${websiteData.subdomain}${tgt.slug}`);
-                }}
-                style={websiteData.navbar!.properties.itemStyle}
-                className="text-sm font-medium hover:underline"
-              >
-                {ni.text}
-              </a>
-            );
-          })}
+  // const NavBar = () => (
+  //   <nav style={websiteData.navbar!.properties}>
+  //     <div className="flex items-center justify-between px-6 py-3 shadow-sm">
+  //       <div className="font-bold text-xl">Your Logo</div>
+  //       <div className="flex space-x-4">
+  //         {websiteData.navbar!.items.map((ni: NavbarItem) => {
+  //           const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
+  //           if (!tgt) return null;
+  //           return (
+  //             <a
+  //               key={ni.item_id}
+  //               href={ni.link_url}
+  //               onClick={(e) => {
+  //                 e.preventDefault();
+  //                 setActiveCategory(null);
+  //                 router.push(`/${websiteData.subdomain}${tgt.slug}`);
+  //               }}
+  //               style={websiteData.navbar!.properties.itemStyle}
+  //               className="text-sm font-medium hover:underline"
+  //             >
+  //               {ni.text}
+  //             </a>
+  //           );
+  //         })}
+  //       </div>
+  //     </div>
+  //   </nav>
+  // );
+  const NavBar = () => {
+    const subdomain = websiteData.subdomain || "";
+    const base = `/${subdomain}`;
+
+    // safe read for CSR
+    const isLoggedIn =
+      typeof window !== "undefined" &&
+      !!localStorage.getItem(`siteToken:${subdomain}`);
+
+    const logout = () => {
+      if (typeof window !== "undefined") {
+        localStorage.removeItem(`siteToken:${subdomain}`);
+        window.location.assign(`${base}/login`);
+      }
+    };
+
+    // Filter/augment items for auth
+    const items = websiteData.navbar!.items.filter((ni: NavbarItem) => {
+      const url = (ni.link_url || "").toLowerCase();
+      if (isLoggedIn && (url === "/login" || url === "/register")) return false; // hide when logged in
+      return true;
+    });
+
+    // If logged in and there's no explicit logout item, add one
+    const hasLogout = items.some(
+      (ni: NavbarItem) => (ni.link_url || "").toLowerCase() === "/logout"
+    );
+    const finalItems: NavbarItem[] =
+      isLoggedIn && !hasLogout
+        ? [
+            ...items,
+            {
+              item_id: "auto_logout",
+              text: "Logout",
+              link_url: "/logout",
+            } as any,
+          ]
+        : items;
+
+    return (
+      <nav style={websiteData.navbar!.properties}>
+        <div className="flex items-center justify-between px-6 py-3 shadow-sm">
+          <div className="font-bold text-xl">Your Logo</div>
+          <div className="flex space-x-4">
+            {finalItems.map((ni: NavbarItem) => {
+              const url = (ni.link_url || "").toLowerCase();
+
+              // special action for logout
+              if (url === "/logout") {
+                return (
+                  <button
+                    key={ni.item_id}
+                    onClick={logout}
+                    style={websiteData.navbar!.properties.itemStyle}
+                    className="text-sm font-medium hover:underline"
+                  >
+                    {ni.text || "Logout"}
+                  </button>
+                );
+              }
+
+              // normal page links (use your slug->page lookup + router push)
+              const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
+              if (!tgt) return null;
+
+              return (
+                <a
+                  key={ni.item_id}
+                  href={ni.link_url}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveCategory(null);
+                    router.push(`${base}${tgt.slug}`);
+                  }}
+                  style={websiteData.navbar!.properties.itemStyle}
+                  className="text-sm font-medium hover:underline"
+                >
+                  {ni.text}
+                </a>
+              );
+            })}
+          </div>
         </div>
-      </div>
-    </nav>
-  );
+      </nav>
+    );
+  };
 
   // show category drill-down in place of the page content
+  // const MainContent = () => {
+  //   if (activeCategory) {
+  //     return (
+  //       <>
+  //         {/* category selector */}
+  //         <div className="p-4">
+  //           <button
+  //             onClick={() => setActiveCategory(null)}
+  //             className="text-blue-600 underline mb-4"
+  //           >
+  //             ← Back to "{currentPage?.title}"
+  //           </button>
+  //         </div>
+  //         <CategoryMenuInCanvas
+  //           locations={websiteData.locations}
+  //           categoryId={activeCategory}
+  //         />
+  //       </>
+  //     );
+  //   }
+
+  //   return (
+  //     <div className="space-y-0">
+  //       {currentPage?.sections.map((sec: SectionType) => {
+  //         // 1. Safely get the section's properties, defaulting to an empty object
+  //         const properties = sec.properties || {};
+
+  //         // 2. Separate styles for the outer container (background, padding)
+  //         const containerStyle: React.CSSProperties = {
+  //           backgroundColor: properties.backgroundColor,
+  //           backgroundImage: properties.backgroundImage,
+  //           padding: properties.padding,
+  //           ...(properties.style || {}), // Merge AI styles, which can override the above
+  //         };
+
+  //         // 3. Separate styles for the inner layout container (flexbox, gap)
+  //         const layoutStyle: React.CSSProperties = {
+  //           display: "flex",
+  //           flexDirection: properties.flexDirection,
+  //           justifyContent: properties.justifyContent,
+  //           alignItems: properties.alignItems,
+  //           gap: properties.gap,
+  //         };
+
+  //         // 4. Handle special formatting for manually uploaded background images
+  //         if (
+  //           containerStyle.backgroundImage &&
+  //           !containerStyle.backgroundImage.includes("gradient") // <-- THE ONLY CHANGE IS HERE
+  //         ) {
+  //           containerStyle.backgroundImage = `url(${api.defaults.baseURL}${containerStyle.backgroundImage})`;
+  //           containerStyle.backgroundSize = "cover";
+  //           containerStyle.backgroundPosition = "center";
+  //         }
+
+  //         return (
+  //           // The outer div gets the container styles
+  //           <div key={sec.section_id} style={containerStyle}>
+  //             {/* The inner div gets the layout styles, arranging the subsections */}
+  //             <div
+  //               className="w-full overflow-x-hidden flex flex-wrap"
+  //               style={layoutStyle}
+  //             >
+  //               {sec.subsections.map((sub) => {
+  //                 // Safely get subsection properties
+  //                 const subProperties = sub.properties || {};
+  //                 const { animation, style, ...subLayoutParams } =
+  //                   subProperties;
+  //                 const { initial, animate, transition } =
+  //                   getMotionConfig(animation);
+
+  //                 // Combine subsection layout and AI styles
+  //                 const subsectionStyle = {
+  //                   ...subLayoutParams,
+  //                   ...(style || {}),
+  //                 };
+
+  //                 return (
+  //                   <motion.div
+  //                     className="max-w-full"
+  //                     key={sub.subsection_id}
+  //                     style={subsectionStyle}
+  //                     initial={initial}
+  //                     animate={animate}
+  //                     transition={transition}
+  //                   >
+  //                     {sub.elements.map((el) => {
+  //                       try {
+  //                         return (
+  //                           <div key={el.element_id}>{renderElement(el)}</div>
+  //                         );
+  //                       } catch (error) {
+  //                         console.error("Failed to render element:", el, error);
+  //                         return (
+  //                           <div
+  //                             key={el.element_id}
+  //                             className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
+  //                           >
+  //                             Error: This element could not be displayed.
+  //                           </div>
+  //                         );
+  //                       }
+  //                     })}
+  //                   </motion.div>
+  //                 );
+  //               })}
+  //             </div>
+  //           </div>
+  //         );
+  //       })}
+  //     </div>
+  //   );
+  // };
+
   const MainContent = () => {
+    const sub = websiteData?.subdomain || "";
+    const basePath = sub ? `/${sub}` : "";
+    // utilities scoped locally (not at file top)
+    const canShow = (
+      props: any,
+      auth: { isLoggedIn: boolean; role?: string }
+    ) => {
+      const v = props?.visibility || {};
+      if (v.requiresAnonymous) return !auth.isLoggedIn;
+      if (v.requiresAuth && !auth.isLoggedIn) return false;
+      if (Array.isArray(v.roles) && v.roles.length) {
+        return auth.isLoggedIn && v.roles.includes(auth.role || "");
+      }
+      return true;
+    };
+
+    const RequireLoginNotice = ({
+      loginHref = `${basePath}/login`,
+      registerHref = `${basePath}/register`,
+    }: {
+      loginHref?: string;
+      registerHref?: string;
+    }) => (
+      <div className="border rounded-lg p-4 my-4 text-sm bg-yellow-50">
+        <div className="font-medium mb-1">Requires login</div>
+        <div className="opacity-80">
+          This content is for members. Please{" "}
+          <a className="underline" href={loginHref}>
+            log in
+          </a>{" "}
+          or{" "}
+          <a className="underline" href={registerHref}>
+            create an account
+          </a>
+          .
+        </div>
+      </div>
+    );
+
+    // simplest: compute login status inline from localStorage
+    const token =
+      typeof window !== "undefined"
+        ? localStorage.getItem(`siteToken:${websiteData.subdomain}`)
+        : null;
+    const isLoggedIn = !!token;
+    const role: string | undefined = undefined;
+
     if (activeCategory) {
       return (
         <>
-          {/* category selector */}
           <div className="p-4">
             <button
               onClick={() => setActiveCategory(null)}
@@ -360,168 +609,37 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       );
     }
 
-    // Normal page sections
-    // return (
-    //   <div className="space-y-0">
-    //     {currentPage?.sections.map((sec: SectionType) => (
-    //       <div key={sec.section_id} style={sec.properties || {}}>
-    //         <div
-    //           className="w-full overflow-x-hidden"
-    //           style={{
-    //             display: "flex",
-    //             flexDirection: sec.properties.flexDirection,
-    //             justifyContent: sec.properties.justifyContent,
-    //             alignItems: sec.properties.alignItems,
-    //             gap: sec.properties.gap,
-    //           }}
-    //         >
-    //           {sec.subsections.map((sub) => {
-    //             // remove animation before spreading into style
-    //             const { animation, style, ...styleProps } = sub.properties; // <-- CHANGE IS HERE
+    // Page-level gate (uses page.properties.visibility)
+    if (!canShow(currentPage?.properties || {}, { isLoggedIn, role })) {
+      return <RequireLoginNotice />;
+    }
 
-    //             // get your motion config from that optional animation
-    //             const { initial, animate, transition } =
-    //               getMotionConfig(animation);
-
-    //             return (
-    //               <motion.div
-    //                 className="max-w-full"
-    //                 key={sub.subsection_id}
-    //                 style={{ ...styleProps, ...(style || {}) }}
-    //                 initial={initial}
-    //                 animate={animate}
-    //                 transition={transition}
-    //               >
-    //                 {sub.elements.map((el) => {
-    //                   // --- THIS IS THE FIX ---
-    //                   // We wrap the element rendering in a try-catch block.
-    //                   try {
-    //                     return (
-    //                       <div key={el.element_id}>{renderElement(el)}</div>
-    //                     );
-    //                   } catch (error) {
-    //                     console.error("Failed to render element:", el, error);
-    //                     return (
-    //                       <div
-    //                         key={el.element_id}
-    //                         className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
-    //                       >
-    //                         Error: This element could not be displayed.
-    //                       </div>
-    //                     );
-    //                   }
-    //                   // --- END OF FIX ---
-    //                 })}
-    //               </motion.div>
-    //             );
-    //           })}
-    //         </div>
-    //       </div>
-    //     ))}
-    //   </div>
-    // );
-    // return (
-    //   <div className="space-y-0">
-    //     {currentPage?.sections.map((sec: SectionType) => {
-    //       // 1. Create a safe properties object for the section
-    //       const secProperties = sec.properties || {};
-
-    //       // 2. Combine the section's manual properties with its AI-generated style object
-    //       const sectionStyle: React.CSSProperties = {
-    //         ...secProperties,
-    //         ...(secProperties.style || {}),
-    //       };
-
-    //       // 3. Keep the special handling for manually uploaded images
-    //       if (
-    //         sectionStyle.backgroundImage &&
-    //         !sectionStyle.backgroundImage.startsWith("linear-gradient") &&
-    //         !sectionStyle.backgroundImage.startsWith("radial-gradient")
-    //       ) {
-    //         sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${sectionStyle.backgroundImage})`;
-    //         sectionStyle.backgroundSize = "cover";
-    //         sectionStyle.backgroundPosition = "center";
-    //       }
-
-    //       return (
-    //         // The main section container now has all the correct styles
-    //         <div key={sec.section_id} style={sectionStyle}>
-    //           {/* This inner div is now just for structure, no style prop needed */}
-    //           <div className="w-full overflow-x-hidden flex flex-wrap">
-    //             {sec.subsections.map((sub) => {
-    //               // 4. Create a safe properties object for the subsection
-    //               const subProperties = sub.properties || {};
-    //               const { animation, style, ...layoutProps } = subProperties;
-
-    //               // 5. Get animation config
-    //               const { initial, animate, transition } =
-    //                 getMotionConfig(animation);
-
-    //               // 6. Combine subsection layout styles with its AI style object
-    //               const subsectionStyle = { ...layoutProps, ...(style || {}) };
-
-    //               return (
-    //                 <motion.div
-    //                   className="max-w-full"
-    //                   key={sub.subsection_id}
-    //                   style={subsectionStyle}
-    //                   initial={initial}
-    //                   animate={animate}
-    //                   transition={transition}
-    //                 >
-    //                   {sub.elements.map((el) => {
-    //                     try {
-    //                       return (
-    //                         <div key={el.element_id}>{renderElement(el)}</div>
-    //                       );
-    //                     } catch (error) {
-    //                       console.error("Failed to render element:", el, error);
-    //                       return (
-    //                         <div
-    //                           key={el.element_id}
-    //                           className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
-    //                         >
-    //                           Error: This element could not be displayed.
-    //                         </div>
-    //                       );
-    //                     }
-    //                   })}
-    //                 </motion.div>
-    //               );
-    //             })}
-    //           </div>
-    //         </div>
-    //       );
-    //     })}
-    //   </div>
-    // );
+    // Sections
     return (
       <div className="space-y-0">
-        {currentPage?.sections.map((sec: SectionType) => {
-          // 1. Safely get the section's properties, defaulting to an empty object
-          const properties = sec.properties || {};
+        {currentPage?.sections.map((sec) => {
+          // Section-level gate
+          if (!canShow(sec.properties || {}, { isLoggedIn, role })) {
+            return <RequireLoginNotice key={sec.section_id} />;
+          }
 
-          // 2. Separate styles for the outer container (background, padding)
+          const p = sec.properties || {};
           const containerStyle: React.CSSProperties = {
-            backgroundColor: properties.backgroundColor,
-            backgroundImage: properties.backgroundImage,
-            padding: properties.padding,
-            ...(properties.style || {}), // Merge AI styles, which can override the above
+            backgroundColor: p.backgroundColor,
+            backgroundImage: p.backgroundImage,
+            padding: p.padding,
+            ...(p.style || {}),
           };
-
-          // 3. Separate styles for the inner layout container (flexbox, gap)
           const layoutStyle: React.CSSProperties = {
             display: "flex",
-            flexDirection: properties.flexDirection,
-            justifyContent: properties.justifyContent,
-            alignItems: properties.alignItems,
-            gap: properties.gap,
+            flexDirection: p.flexDirection,
+            justifyContent: p.justifyContent,
+            alignItems: p.alignItems,
+            gap: p.gap,
           };
-
-          // 4. Handle special formatting for manually uploaded background images
           if (
             containerStyle.backgroundImage &&
-            !containerStyle.backgroundImage.includes("gradient") // <-- THE ONLY CHANGE IS HERE
+            !containerStyle.backgroundImage.includes("gradient")
           ) {
             containerStyle.backgroundImage = `url(${api.defaults.baseURL}${containerStyle.backgroundImage})`;
             containerStyle.backgroundSize = "cover";
@@ -529,24 +647,46 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           }
 
           return (
-            // The outer div gets the container styles
             <div key={sec.section_id} style={containerStyle}>
-              {/* The inner div gets the layout styles, arranging the subsections */}
               <div
                 className="w-full overflow-x-hidden flex flex-wrap"
                 style={layoutStyle}
               >
                 {sec.subsections.map((sub) => {
-                  // Safely get subsection properties
-                  const subProperties = sub.properties || {};
-                  const { animation, style, ...subLayoutParams } =
-                    subProperties;
+                  // gate
+                  if (!canShow(sub.properties || {}, { isLoggedIn, role })) {
+                    return <RequireLoginNotice key={sub.subsection_id} />;
+                  }
+
+                  const sp = sub.properties || {};
+                  // Pull out anything that is NOT a CSS style
+                  const {
+                    animation,
+                    style,
+                    visibility: _vis, // <-- strip auth visibility
+                    gridColumns, // <-- custom helper, not a CSS prop
+                    ...layoutProps // <-- only layout-relevant props remain
+                  } = sp;
+
+                  // motion config
                   const { initial, animate, transition } =
                     getMotionConfig(animation);
 
-                  // Combine subsection layout and AI styles
-                  const subsectionStyle = {
-                    ...subLayoutParams,
+                  // Build a safe style object for motion.div
+                  const subsectionStyle: React.CSSProperties = {
+                    // Allow only valid CSS-ish layout keys you actually use
+                    display: layoutProps.display || "flex",
+                    flexDirection: layoutProps.flexDirection,
+                    justifyContent: layoutProps.justifyContent,
+                    alignItems: layoutProps.alignItems,
+                    gap: layoutProps.gap,
+                    // prefer explicit grid template if provided; otherwise derive from gridColumns
+                    ...(layoutProps.gridTemplateColumns
+                      ? { gridTemplateColumns: layoutProps.gridTemplateColumns }
+                      : gridColumns
+                      ? { gridTemplateColumns: `repeat(${gridColumns}, 1fr)` }
+                      : {}),
+                    // merge custom style last
                     ...(style || {}),
                   };
 
@@ -560,12 +700,18 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                       transition={transition}
                     >
                       {sub.elements.map((el) => {
+                        // element gate
+                        if (
+                          !canShow(el.properties || {}, { isLoggedIn, role })
+                        ) {
+                          return <RequireLoginNotice key={el.element_id} />;
+                        }
                         try {
                           return (
                             <div key={el.element_id}>{renderElement(el)}</div>
                           );
-                        } catch (error) {
-                          console.error("Failed to render element:", el, error);
+                        } catch (err) {
+                          console.error("Failed to render element:", el, err);
                           return (
                             <div
                               key={el.element_id}
@@ -1152,6 +1298,40 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               </option>
             ))}
           </select>
+        </motion.div>
+      );
+    } else if (effectiveType === "LOGIN_FORM") {
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <AuthFormElement
+            kind="login"
+            props={props}
+            subdomain={websiteData?.subdomain}
+            editMode={false} // live submit
+            onSuccess={() => setIsLoggedIn?.(true)} // if you keep this state
+          />
+        </motion.div>
+      );
+    } else if (effectiveType === "REGISTER_FORM") {
+      return (
+        <motion.div
+          style={style}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+        >
+          <AuthFormElement
+            kind="register"
+            props={props}
+            subdomain={websiteData?.subdomain}
+            editMode={false} // live submit
+            onSuccess={() => setIsLoggedIn?.(true)}
+          />
         </motion.div>
       );
     } else if (effectiveType === "FORM") {

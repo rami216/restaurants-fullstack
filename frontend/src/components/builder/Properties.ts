@@ -94,10 +94,9 @@ export interface Page {
   title: string;
   slug: string;
   sections: Section[];
-  visibility?: {
-    requiresAuth?: boolean;
-    requiresAnonymous?: boolean;
-    roles?: string[];
+  properties?: {
+    visibility?: VisibilityRule; // <-- only this; no page styles
+    [key: string]: any;
   };
 }
 

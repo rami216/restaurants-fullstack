@@ -32,7 +32,7 @@ class Page(Base):
     website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id"), nullable=False)
     title = Column(String, nullable=False)
     slug = Column(String, nullable=False)
-
+    properties = Column(JSON, nullable=False, server_default=text("'{}'::jsonb"))  # <-- add this
     # Relationships
     website = relationship("Website", back_populates="pages")
     sections = relationship("Section", back_populates="page", cascade="all, delete-orphan", order_by="Section.position")
