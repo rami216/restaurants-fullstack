@@ -79,6 +79,7 @@ export default function AuthFormElement({
       // On LOGIN: store token if provided
       if (kind === "login" && data?.access_token) {
         localStorage.setItem(`siteToken:${subdomain}`, data.access_token);
+        localStorage.setItem(`siteMemberId:${subdomain}`, data.member_id);
       }
 
       onSuccess?.();

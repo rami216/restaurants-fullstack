@@ -26,6 +26,7 @@ import PropertyEditor from "@/components/builder/ElementPropertyEditor";
 import { v4 as uuidv4 } from "uuid";
 import { isEqual } from "lodash";
 import Mustache from "mustache";
+import { useRouter } from "next/navigation"; // ⬅️ add this at the top
 
 type DeletedItem = {
   type: "section" | "subsection" | "element" | "navbar_item";
@@ -33,6 +34,8 @@ type DeletedItem = {
 };
 
 const CreateWebsitePage = () => {
+  const router = useRouter(); // ⬅️ add this
+
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
   const [websiteData, setWebsiteData] = useState<WebsiteData | null>(null);
@@ -458,45 +461,6 @@ const CreateWebsitePage = () => {
     updateWebsiteData(updatedPage);
   };
   //endregion copy
-  // --- START: NEW FUNCTION TO HANDLE SECTION GENERATION ---
-  // const handleGenerateSection = async (prompt: string, sectionId: string) => {
-  //   if (!activePage) return;
-
-  //   try {
-  //     const { data } = await api.post("/ai/generate-ai-section", { prompt });
-
-  //     // The AI returns subsections. We need to assign new unique IDs to them and their elements.
-  //     const newSubsections: Subsection[] = data.subsections.map((sub: any) => ({
-  //       ...sub,
-  //       subsection_id: `subsection_${Date.now()}_${Math.random()}`,
-  //       elements: sub.elements.map((el: any) => ({
-  //         ...el,
-  //         element_id: `element_${Date.now()}_${Math.random()}`,
-  //       })),
-  //     }));
-
-  //     const updatedPage = {
-  //       ...activePage,
-  //       sections: activePage.sections.map((section) => {
-  //         if (section.section_id === sectionId) {
-  //           // Replace the subsections of the selected section
-  //           return {
-  //             ...section,
-  //             subsections: newSubsections,
-  //           };
-  //         }
-  //         return section;
-  //       }),
-  //     };
-
-  //     updateWebsiteData(updatedPage);
-  //   } catch (err) {
-  //     console.error("AI section generation failed:", err);
-  //     alert("AI section generation failed. Please check the console.");
-  //     // Re-throw to let the child component know the request failed
-  //     throw err;
-  //   }
-  // };
   const handleGenerateSection = async (prompt: string, sectionId: string) => {
     if (!activePage) return;
 
@@ -1157,6 +1121,18 @@ const CreateWebsitePage = () => {
       <div className="flex-1 flex flex-col">
         <header className="bg-gray-800 text-white p-4 flex justify-between items-center">
           <h1 className="text-xl font-bold">Website Builder</h1>
+          {websiteData?.website_id && (
+            <button
+              onClick={() =>
+                router.push(
+                  `/builder/websites/${websiteData.website_id}/payments`
+                )
+              }
+              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded"
+            >
+              Payments
+            </button>
+          )}
           {websiteData?.subdomain && (
             <a
               href={`/${websiteData.subdomain}`}

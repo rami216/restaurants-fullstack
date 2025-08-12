@@ -42,6 +42,7 @@ def verify_password(raw: str, hashed: str) -> bool:
     except Exception:
         return False
 
+
 # --- Schemas ---
 class RegisterDTO(BaseModel):
     email: EmailStr
@@ -126,7 +127,13 @@ async def login(subdomain: str, body: LoginDTO, db: AsyncSession = Depends(get_d
         raise HTTPException(401, "Invalid credentials")
 
     token = create_site_jwt(str(member.member_id), str(website.website_id), member.role)
-    return {"access_token": token, "token_type": "bearer"}
+    return {
+        "access_token": token,
+        "token_type": "bearer",
+        "member_id": str(member.member_id),
+        "email": member.email,
+        "role": member.role
+    }
 
 @router.get("/{subdomain}/me", response_model=SiteMemberPublic)
 async def me(ctx = Depends(site_member_required)):

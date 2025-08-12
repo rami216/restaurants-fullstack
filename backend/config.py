@@ -11,6 +11,11 @@ ALGORITHM = config("ALGORITHM", default="HS256")
 ACCESS_TOKEN_EXPIRE_MINUTES = config("ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, default=43200) # 30 days
 # create the engine
 engine = create_async_engine(DATABASE_URL, echo=True)
+# Base app URL for redirects
+APP_URL = config("APP_URL", default="http://localhost:3000")
+def get_app_url():
+    """Return the frontend app base URL for redirecting Stripe sessions."""
+    return APP_URL
 
 async def test():
     # open a connection

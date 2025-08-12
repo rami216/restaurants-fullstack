@@ -5,6 +5,7 @@ from sqlalchemy.sql import func, text
 from sqlalchemy.orm import relationship
 from database import Base
 from .models import Website
+
 class SiteMember(Base):
     __tablename__ = "site_members"
 

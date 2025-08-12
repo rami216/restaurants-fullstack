@@ -76,6 +76,30 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onRefineElement,
   onCreateStandalonePage,
 }) => {
+  const [products, setProducts] = React.useState<
+    { product_id: string; name: string }[]
+  >([]);
+
+  React.useEffect(() => {
+    const run = async () => {
+      if (!websiteData?.website_id) return;
+      try {
+        const { data } = await api.get(
+          `/users-stripe-account/builder/websites/${websiteData.website_id}/products`
+        );
+        setProducts(
+          (data || []).map((p: any) => ({
+            product_id: p.product_id,
+            name: p.name,
+          }))
+        );
+      } catch (e) {
+        console.warn("Failed to load products for interactivity", e);
+      }
+    };
+    run();
+  }, [websiteData?.website_id]);
+
   // --- START: ADD STATE FOR SECTION AI ---
   const [sectionAiPrompt, setSectionAiPrompt] = useState("");
   const [isGeneratingSection, setIsGeneratingSection] = useState(false);
@@ -601,6 +625,37 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         </div>
+        {/* ✅ --- START: NEW PAGE VISIBILITY SECTION --- ✅ */}
+        {activePage && (
+          <>
+            <hr />
+            <div className="mt-4">
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Page Visibility ({activePage.title})
+              </h4>
+              <p className="text-xs text-gray-500 mb-3">
+                Control who can see the entire "{activePage.title}" page.
+              </p>
+              <VisibilityEditor
+                value={activePage.properties}
+                onChange={(nextProperties) => {
+                  const updatedActivePage = {
+                    ...activePage,
+                    properties: nextProperties,
+                  };
+                  onUpdate(updatedActivePage);
+                }}
+                onBecameProtected={async () => {
+                  await api.post(
+                    `/builder/ensure-auth-pages/${websiteData!.website_id}`
+                  );
+                }}
+                products={products}
+              />
+            </div>
+          </>
+        )}
+        {/* ✅ --- END: NEW PAGE VISIBILITY SECTION --- ✅ */}
       </div>
     );
   };
@@ -891,6 +946,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               `/builder/ensure-auth-pages/${websiteData!.website_id}`
             );
           }}
+          products={products}
         />
       </div>
     );
@@ -1140,6 +1196,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               `/builder/ensure-auth-pages/${websiteData!.website_id}`
             );
           }}
+          products={products}
         />
       </div>
     );
@@ -1416,6 +1473,19 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
 
   const renderElementEditor = () => {
+    const inter = selectedItem.properties?.interactivity || {};
+    const action: "none" | "link" | "purchase" = inter.action || "none";
+    const productId = inter.product_id || "";
+    const linkHref = inter.href || "";
+
+    const setInter = (next: any) => {
+      const nextProps = {
+        ...(selectedItem.properties || {}),
+        interactivity: next,
+      };
+      updateItem({ ...selectedItem, properties: nextProps });
+    };
+
     // small helpers local to this editor
     const toggleStyle = (
       styleKey: string,
@@ -2527,20 +2597,96 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <h4 className="text-md font-medium text-gray-800 pt-2">
               Interactivity
             </h4>
-            <div>
-              <label className="flex items-center space-x-2 cursor-pointer">
-                <input
-                  type="checkbox"
-                  checked={selectedItem.properties.linkEnabled || false}
-                  onChange={(e) =>
-                    handlePropertyChange("linkEnabled", e.target.checked)
-                  }
-                  className="form-checkbox h-5 w-5 text-blue-600"
-                />
-                <span className="text-sm font-medium text-gray-700">
-                  Enable Link on Click
-                </span>
-              </label>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium">Action</label>
+                <select
+                  className="border rounded p-2 w-full"
+                  value={action}
+                  onChange={(e) => {
+                    const a = e.target.value as "none" | "link" | "purchase";
+                    let newInteractivity;
+                    if (a === "link") {
+                      newInteractivity = {
+                        action: "link",
+                        href: linkHref || "",
+                      };
+                    } else if (a === "purchase") {
+                      newInteractivity = {
+                        action: "purchase",
+                        product_id: productId || "",
+                      };
+                    } else {
+                      newInteractivity = { action: "none" };
+                    }
+                    // ✅ Use the main property change handler
+                    handlePropertyChange("interactivity", newInteractivity);
+                  }}
+                >
+                  <option value="none">No action</option>
+                  <option value="link">Go to page</option>
+                  <option value="purchase">Purchase product</option>
+                </select>
+              </div>
+
+              {action === "link" && (
+                <div>
+                  <label className="block text-sm font-medium">Page</label>
+                  <select
+                    className="border rounded p-2 w-full"
+                    value={linkHref}
+                    onChange={(e) =>
+                      // ✅ Use the main property change handler
+                      handlePropertyChange("interactivity", {
+                        action: "link",
+                        href: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="" disabled>
+                      -- Select a Page --
+                    </option>
+                    {websiteData?.pages.map((page: Page) => (
+                      <option key={page.page_id} value={page.slug}>
+                        {page.title}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    Clicking this element will navigate to the selected page.
+                  </p>
+                </div>
+              )}
+
+              {action === "purchase" && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">
+                    Product
+                  </label>
+                  <select
+                    className="border rounded p-2 w-full"
+                    value={productId}
+                    onChange={(e) =>
+                      // ✅ Use the main property change handler
+                      handlePropertyChange("interactivity", {
+                        action: "purchase",
+                        product_id: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Select a product…</option>
+                    {products.map((p) => (
+                      <option key={p.product_id} value={p.product_id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This element will start a Stripe checkout for the selected
+                    product.
+                  </p>
+                </div>
+              )}
             </div>
 
             {selectedItem.properties.linkEnabled && (
@@ -2593,6 +2739,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               `/builder/ensure-auth-pages/${websiteData!.website_id}`
             );
           }}
+          products={products}
         />
       </>
     );
