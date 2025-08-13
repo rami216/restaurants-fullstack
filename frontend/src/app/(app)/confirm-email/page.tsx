@@ -1,11 +1,12 @@
 "use client";
 
-import { useState, useEffect } from "react";
+import { Suspense } from "react";
+import { useState } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
 import api from "@/lib/axios";
 
-export default function ConfirmEmailPage() {
-  const searchParams = useSearchParams();
+function ConfirmEmailInner() {
+  const searchParams = useSearchParams(); // ✅ now inside Suspense
   const router = useRouter();
 
   const email = searchParams.get("email") || "";
@@ -17,23 +18,16 @@ export default function ConfirmEmailPage() {
   const handleConfirm = async () => {
     setLoading(true);
     try {
-      await api.post("/auth/confirm", {
-        email,
-        code,
-      });
-
+      await api.post("/auth/confirm", { email, code });
       setSuccess(true);
       router.push("/login");
     } catch (err: any) {
       let message = "Failed to confirm email";
-
       if (err.response?.data?.detail) {
         message = err.response.data.detail;
       } else if (Array.isArray(err.response?.data)) {
-        // FastAPI validation error response
         message = err.response.data.map((e: any) => e.msg).join(", ");
       }
-
       setError(message);
     } finally {
       setLoading(false);
@@ -80,5 +74,14 @@ export default function ConfirmEmailPage() {
         )}
       </div>
     </div>
+  );
+}
+
+export default function ConfirmEmailPage() {
+  // ✅ wrap the inner component in Suspense
+  return (
+    <Suspense fallback={<div />}>
+      <ConfirmEmailInner />
+    </Suspense>
   );
 }
