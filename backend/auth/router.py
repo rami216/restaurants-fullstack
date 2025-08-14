@@ -147,8 +147,8 @@ async def login(
             key="access_token",
             value=token,
             httponly=True,
-            secure=False,
-            samesite="lax",
+            secure=True,            # <= important
+            samesite="none",        # <= important
             max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
     )
 
@@ -156,7 +156,12 @@ async def login(
 
 @router.post("/logout")
 async def logout(response: Response):
-    response.delete_cookie("access_token")
+    response.delete_cookie(
+        key="access_token",
+        path="/",
+        samesite="none",
+        secure=True,
+    )
     return {"msg": "Logged out"}
 
 @router.get("/me", response_model=UserResponse)
