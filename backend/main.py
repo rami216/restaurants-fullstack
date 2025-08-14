@@ -1,9 +1,15 @@
 # main.py
-from dotenv import load_dotenv
-load_dotenv()
-
+import os
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.staticfiles import StaticFiles
+
+# If you want to keep .env loading locally:
+try:
+    from dotenv import load_dotenv  # requires python-dotenv in requirements
+    load_dotenv()
+except Exception:
+    pass
 
 from database import init_db
 from auth.router import router as auth_router
@@ -12,33 +18,36 @@ from locations.router import router as locations_router
 from menu_items.router import router as menus_router
 from extras.router import router as extras_router
 from menu_item_extras.router import router as menu_item_extrasRouter
-from option_groups.router import router  as options_grounpRouter
+from option_groups.router import router as options_grounpRouter
 from option_choices.router import router as optionschoices
 from menu_item_options.router import router as menuitemoptions
 from schedules.router import router as schedulesrouter
 from payments.router import router as paymentRouter
 from website_builder.router import router as websiteBuilderRouter
-from uploads.router import router as uploads_router # Import the new router
-from fastapi.staticfiles import StaticFiles # Import StaticFiles
+from uploads.router import router as uploads_router
 from ai.router import router as ai_router
 from website_builder.site_auth_router import router as site_auth_router
 from website_builder.site_member_payments.router import router as site_member_payments_router
 
-app = FastAPI()
+origins_env = os.getenv("FRONTEND_ORIGIN", "")
+ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 
-origins = [
-    "http://localhost:3000",
-]
+app = FastAPI()
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=origins,
+    allow_origins=ALLOWED_ORIGINS or ["http://localhost:3000"],
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.mount("/static", StaticFiles(directory="static"), name="static")
 
+
+# ---- Static files (keep only if the folder exists in the container)
+if os.path.isdir("static"):
+    app.mount("/static", StaticFiles(directory="static"), name="static")
+
+# ---- Routers
 app.include_router(auth_router)
 app.include_router(restaurants_router)
 app.include_router(locations_router)
@@ -55,6 +64,11 @@ app.include_router(uploads_router)
 app.include_router(ai_router)
 app.include_router(site_auth_router)
 app.include_router(site_member_payments_router)
+
+# ---- Health check
+@app.get("/health")
+def health():
+    return {"ok": True}
 
 @app.on_event("startup")
 async def on_startup():
