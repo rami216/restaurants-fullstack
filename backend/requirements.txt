@@ -16,3 +16,4 @@ google-auth==2.36.0
 google-auth-oauthlib==1.2.1
 requests==2.32.3
 python-dotenv==1.0.1
+email-validator
