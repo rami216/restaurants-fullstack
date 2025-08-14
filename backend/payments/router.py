@@ -20,7 +20,7 @@ RECURRING_PRICE_ID = "price_1RjNRrJ436yrzjfSAATBGkqe"
 
 stripe.api_key = STRIPE_SECRET_KEY
 router = APIRouter(prefix="/payments", tags=["Payments"])
-YOUR_DOMAIN = "http://localhost:3000"
+YOUR_DOMAIN = "https://www.zygoflow.com"
 
 @router.post("/create-subscription-checkout", response_model=CheckoutSessionResponse)
 async def create_subscription_checkout(
