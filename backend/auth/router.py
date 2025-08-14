@@ -149,6 +149,7 @@ async def login(
             httponly=True,
             secure=True,            # <= important
             samesite="none",        # <= important
+            path="/",
             max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
     )
 
@@ -161,7 +162,7 @@ async def logout(response: Response):
         path="/",
         samesite="none",
         secure=True,
-    )
+)
     return {"msg": "Logged out"}
 
 @router.get("/me", response_model=UserResponse)
