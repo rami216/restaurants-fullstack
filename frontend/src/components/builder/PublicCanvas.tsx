@@ -4,6 +4,7 @@ import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
+import { resolveImageSrc } from "@/lib/imageUrl";
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
@@ -40,19 +41,15 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
     // Get the backend URL and create a safe copy of the properties
     const BACKEND_URL = api.defaults.baseURL || "";
     const processedProps = { ...aiPayload.properties };
-
-    // Define common keys that might contain image URLs
     const imageUrlKeys = ["src", "image_url", "backgroundImage"];
 
     // Loop through the properties and fix any relative image paths
-    for (const key in processedProps) {
-      if (imageUrlKeys.includes(key)) {
-        const value = processedProps[key];
-        if (typeof value === "string" && value.startsWith("/")) {
-          processedProps[key] = `${BACKEND_URL}${value}`;
-        }
+    for (const key of imageUrlKeys) {
+      if (processedProps[key]) {
+        processedProps[key] = resolveImageSrc(processedProps[key]);
       }
     }
+
     // --- END OF FIX ---
 
     // 1) Strip out any <script>…</script> from the HTML/CSS
@@ -575,197 +572,42 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       </nav>
     );
   };
+  // keep units predictable for offsets
+  const withUnit = (v: any) => (typeof v === "number" ? `${v}px` : v);
 
-  // const MainContent = () => {
-  //   const sub = websiteData?.subdomain || "";
-  //   const basePath = sub ? `/${sub}` : "";
-  //   // utilities scoped locally (not at file top)
-  //   const canShow = (
-  //     props: any,
-  //     auth: { isLoggedIn: boolean; role?: string }
-  //   ) => {
-  //     const v = props?.visibility || {};
-  //     if (v.requiresAnonymous) return !auth.isLoggedIn;
-  //     if (v.requiresAuth && !auth.isLoggedIn) return false;
-  //     if (Array.isArray(v.roles) && v.roles.length) {
-  //       return auth.isLoggedIn && v.roles.includes(auth.role || "");
-  //     }
-  //     return true;
-  //   };
+  const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
+    const base: React.CSSProperties =
+      subProps.display === "grid"
+        ? {
+            display: "grid",
+            gap: subProps.gap ?? "1rem",
+            gridTemplateColumns:
+              subProps.gridTemplateColumns ??
+              `repeat(${subProps.gridColumns ?? 2}, 1fr)`,
+          }
+        : {
+            display: "flex",
+            gap: subProps.gap ?? "1rem",
+            flexDirection: subProps.flexDirection ?? "column",
+            justifyContent: subProps.justifyContent ?? "flex-start",
+            alignItems: subProps.alignItems ?? "stretch",
+          };
 
-  //   const RequireLoginNotice = ({
-  //     loginHref = `${basePath}/login`,
-  //     registerHref = `${basePath}/register`,
-  //   }: {
-  //     loginHref?: string;
-  //     registerHref?: string;
-  //   }) => (
-  //     <div className="border rounded-lg p-4 my-4 text-sm bg-yellow-50">
-  //       <div className="font-medium mb-1">Requires login</div>
-  //       <div className="opacity-80">
-  //         This content is for members. Please{" "}
-  //         <a className="underline" href={loginHref}>
-  //           log in
-  //         </a>{" "}
-  //         or{" "}
-  //         <a className="underline" href={registerHref}>
-  //           create an account
-  //         </a>
-  //         .
-  //       </div>
-  //     </div>
-  //   );
+    const user: React.CSSProperties = { ...(subProps.style || {}) };
 
-  //   // simplest: compute login status inline from localStorage
-  //   // const token =
-  //   //   typeof window !== "undefined"
-  //   //     ? localStorage.getItem(`siteToken:${websiteData.subdomain}`)
-  //   //     : null;
-  //   // const isLoggedIn = !!token;
-  //   // const role: string | undefined = undefined;
+    // normalize offsets if provided
+    if (user.top !== undefined) user.top = withUnit(user.top);
+    if (user.left !== undefined) user.left = withUnit(user.left);
+    if (user.right !== undefined) user.right = withUnit(user.right);
+    if (user.bottom !== undefined) user.bottom = withUnit(user.bottom);
 
-  //   if (activeCategory) {
-  //     return (
-  //       <>
-  //         <div className="p-4">
-  //           <button
-  //             onClick={() => setActiveCategory(null)}
-  //             className="text-blue-600 underline mb-4"
-  //           >
-  //             ← Back to "{currentPage?.title}"
-  //           </button>
-  //         </div>
-  //         <CategoryMenuInCanvas
-  //           locations={websiteData.locations}
-  //           categoryId={activeCategory}
-  //         />
-  //       </>
-  //     );
-  //   }
+    const merged = { ...base, ...user };
 
-  //   // Page-level gate (uses page.properties.visibility)
-  //   if (!canShow(currentPage?.properties || {}, { isLoggedIn, role })) {
-  //     return <RequireLoginNotice />;
-  //   }
+    // avoid clipping relative offsets
+    if (merged.overflow === undefined) merged.overflow = "visible";
 
-  //   // Sections
-  //   return (
-  //     <div className="space-y-0">
-  //       {currentPage?.sections.map((sec) => {
-  //         // Section-level gate
-  //         if (!canShow(sec.properties || {}, { isLoggedIn, role })) {
-  //           return <RequireLoginNotice key={sec.section_id} />;
-  //         }
-
-  //         const p = sec.properties || {};
-  //         const containerStyle: React.CSSProperties = {
-  //           backgroundColor: p.backgroundColor,
-  //           backgroundImage: p.backgroundImage,
-  //           padding: p.padding,
-  //           ...(p.style || {}),
-  //         };
-  //         const layoutStyle: React.CSSProperties = {
-  //           display: "flex",
-  //           flexDirection: p.flexDirection,
-  //           justifyContent: p.justifyContent,
-  //           alignItems: p.alignItems,
-  //           gap: p.gap,
-  //         };
-  //         if (
-  //           containerStyle.backgroundImage &&
-  //           !containerStyle.backgroundImage.includes("gradient")
-  //         ) {
-  //           containerStyle.backgroundImage = `url(${api.defaults.baseURL}${containerStyle.backgroundImage})`;
-  //           containerStyle.backgroundSize = "cover";
-  //           containerStyle.backgroundPosition = "center";
-  //         }
-
-  //         return (
-  //           <div key={sec.section_id} style={containerStyle}>
-  //             <div
-  //               className="w-full overflow-x-hidden flex flex-wrap"
-  //               style={layoutStyle}
-  //             >
-  //               {sec.subsections.map((sub) => {
-  //                 // gate
-  //                 if (!canShow(sub.properties || {}, { isLoggedIn, role })) {
-  //                   return <RequireLoginNotice key={sub.subsection_id} />;
-  //                 }
-
-  //                 const sp = sub.properties || {};
-  //                 // Pull out anything that is NOT a CSS style
-  //                 const {
-  //                   animation,
-  //                   style,
-  //                   visibility: _vis, // <-- strip auth visibility
-  //                   gridColumns, // <-- custom helper, not a CSS prop
-  //                   ...layoutProps // <-- only layout-relevant props remain
-  //                 } = sp;
-
-  //                 // motion config
-  //                 const { initial, animate, transition } =
-  //                   getMotionConfig(animation);
-
-  //                 // Build a safe style object for motion.div
-  //                 const subsectionStyle: React.CSSProperties = {
-  //                   // Allow only valid CSS-ish layout keys you actually use
-  //                   display: layoutProps.display || "flex",
-  //                   flexDirection: layoutProps.flexDirection,
-  //                   justifyContent: layoutProps.justifyContent,
-  //                   alignItems: layoutProps.alignItems,
-  //                   gap: layoutProps.gap,
-  //                   // prefer explicit grid template if provided; otherwise derive from gridColumns
-  //                   ...(layoutProps.gridTemplateColumns
-  //                     ? { gridTemplateColumns: layoutProps.gridTemplateColumns }
-  //                     : gridColumns
-  //                     ? { gridTemplateColumns: `repeat(${gridColumns}, 1fr)` }
-  //                     : {}),
-  //                   // merge custom style last
-  //                   ...(style || {}),
-  //                 };
-
-  //                 return (
-  //                   <motion.div
-  //                     className="max-w-full"
-  //                     key={sub.subsection_id}
-  //                     style={subsectionStyle}
-  //                     initial={initial}
-  //                     animate={animate}
-  //                     transition={transition}
-  //                   >
-  //                     {sub.elements.map((el) => {
-  //                       // element gate
-  //                       if (
-  //                         !canShow(el.properties || {}, { isLoggedIn, role })
-  //                       ) {
-  //                         return <RequireLoginNotice key={el.element_id} />;
-  //                       }
-  //                       try {
-  //                         return (
-  //                           <div key={el.element_id}>{renderElement(el)}</div>
-  //                         );
-  //                       } catch (err) {
-  //                         console.error("Failed to render element:", el, err);
-  //                         return (
-  //                           <div
-  //                             key={el.element_id}
-  //                             className="p-4 bg-red-100 text-red-700 border border-red-400 rounded"
-  //                           >
-  //                             Error: This element could not be displayed.
-  //                           </div>
-  //                         );
-  //                       }
-  //                     })}
-  //                   </motion.div>
-  //                 );
-  //               })}
-  //             </div>
-  //           </div>
-  //         );
-  //       })}
-  //     </div>
-  //   );
-  // };
+    return merged;
+  };
 
   const MainContent = () => {
     // This component now relies on the `isLoggedIn` and `role` states from the parent `PublicCanvas` component.
@@ -805,9 +647,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             };
             if (
               containerStyle.backgroundImage &&
-              !containerStyle.backgroundImage.includes("gradient")
+              !String(containerStyle.backgroundImage).includes("gradient")
             ) {
-              containerStyle.backgroundImage = `url(${api.defaults.baseURL}${containerStyle.backgroundImage})`;
+              containerStyle.backgroundImage = resolveImageSrc(
+                containerStyle.backgroundImage
+              );
               containerStyle.backgroundSize = "cover";
               containerStyle.backgroundPosition = "center";
             }
@@ -816,7 +660,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               <GatedContent key={sec.section_id} elementProps={sec.properties}>
                 <div style={containerStyle}>
                   <div
-                    className="w-full overflow-x-hidden flex flex-wrap"
+                    className="w-full flex flex-wrap"
                     style={{
                       display: p.display || "flex",
                       flexDirection: p.flexDirection,
@@ -826,29 +670,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                     }}
                   >
                     {sec.subsections.map((sub) => {
-                      const sp = sub.properties || {};
-                      const { animation, style, gridColumns, ...layoutProps } =
-                        sp;
-                      const { initial, animate, transition } =
-                        getMotionConfig(animation);
-                      const subsectionStyle: React.CSSProperties = {
-                        display: layoutProps.display || "flex",
-                        flexDirection: layoutProps.flexDirection,
-                        justifyContent: layoutProps.justifyContent,
-                        alignItems: layoutProps.alignItems,
-                        gap: layoutProps.gap,
-                        ...(layoutProps.gridTemplateColumns
-                          ? {
-                              gridTemplateColumns:
-                                layoutProps.gridTemplateColumns,
-                            }
-                          : gridColumns
-                          ? {
-                              gridTemplateColumns: `repeat(${gridColumns}, 1fr)`,
-                            }
-                          : {}),
-                        ...(style || {}),
-                      };
+                      const subProps = sub.properties || {};
+                      const { initial, animate, transition } = getMotionConfig(
+                        subProps.animation
+                      );
+                      const subsectionStyle = buildSubsectionStyle(subProps);
 
                       return (
                         <GatedContent
@@ -856,7 +682,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                           elementProps={sub.properties}
                         >
                           <motion.div
-                            className="max-w-full"
+                            // className="max-w-full"
                             style={subsectionStyle}
                             initial={initial}
                             animate={animate}
@@ -916,13 +742,13 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             <div className="rounded-lg overflow-hidden shadow">
               {props.image_url && (
                 <img
-                  src={`${BACKEND}${props.image_url}`}
+                  src={resolveImageSrc(props.image_url)}
                   alt={props.name}
                   className="w-full h-40 object-cover"
                 />
               )}
               <div className="p-4 bg-white">
-                <h4 className="font-bold text-lg" style={nameStyle}>
+                <h4 className="font-bold text-lg text-black" style={nameStyle}>
                   {props.name}
                 </h4>
               </div>
@@ -949,7 +775,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             >
               {props.image_url && (
                 <img
-                  src={`${BACKEND}${props.image_url}`}
+                  src={resolveImageSrc(props.image_url)}
                   alt={props.item_name}
                   className="w-full object-cover rounded-md mb-4"
                 />
@@ -1072,7 +898,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           <img
             src={
               props.src
-                ? `${BACKEND}${props.src}`
+                ? resolveImageSrc(props.src)
                 : "https://placehold.co/600x400"
             }
             alt={props.alt || "placeholder"}

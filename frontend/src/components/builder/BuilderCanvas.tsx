@@ -19,7 +19,7 @@ import { motion } from "framer-motion";
 import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
-
+import { resolveImageSrc } from "@/lib/imageUrl";
 // Standard Accordion
 const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
   items,
@@ -62,93 +62,36 @@ const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
     </div>
   );
 };
+const normalizeBackground = (bg?: string) => {
+  if (!bg) return undefined;
+  // if we already have url(...), extract inner and pass through resolver
+  if (bg.startsWith("url(")) {
+    const inner = bg.replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+    return `url(${resolveImageSrc(inner)})`;
+  }
+  // plain path or absolute url
+  return `url(${resolveImageSrc(bg)})`;
+};
 
 interface AiElementRunnerProps {
   element: BuilderElement;
 }
 
-// const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
-//   const { aiPayload } = element;
-//   const containerRef = useRef<HTMLDivElement>(null);
-
-//   useLayoutEffect(() => {
-//     if (!aiPayload || !containerRef.current) return;
-
-//     // 1) Strip out any <script>…</script> from the HTML/CSS
-//     let htmlOnly = aiPayload.aiTemplate.replace(
-//       /<script[\s\S]*?<\/script>/g,
-//       ""
-//     );
-
-//     // 2) Convert Handlebars-style loops and {{this}} into Mustache syntax
-//     const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
-//     loopMatches.forEach(([fullMatch, arrKey]) => {
-//       // turn "{{#each items}}" → "{{#items}}"
-//       htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
-//       // turn the first "{{/each}}" after this into "{{/items}}"
-//       htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
-//     });
-//     // replace any "{{this}}" with Mustache's "{{.}}"
-//     htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
-
-//     // 3) Render the template with Mustache, fallback on error
-//     let rendered: string;
-//     try {
-//       rendered = Mustache.render(htmlOnly, aiPayload.properties);
-//     } catch (mErr) {
-//       console.error("Mustache.render failed, falling back to raw HTML:", mErr);
-//       rendered = htmlOnly;
-//     }
-//     containerRef.current.innerHTML = rendered;
-
-//     // 4) If there's JS, strip wrapper tags and execute it
-//     if (aiPayload.script) {
-//       const jsBody = aiPayload.script
-//         .replace(/^\s*<script[^>]*>/, "")
-//         .replace(/<\/script>\s*$/, "");
-//       try {
-//         const fn = new Function("container", jsBody);
-//         fn(containerRef.current);
-//       } catch (jsErr) {
-//         console.error("Error running AI script:", jsErr);
-//       }
-//     }
-//   }, [
-//     aiPayload?.aiTemplate,
-//     aiPayload?.script,
-//     JSON.stringify(aiPayload?.properties),
-//   ]);
-
-//   return <div ref={containerRef} />;
-// };
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
   const { aiPayload } = element;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    if (!aiPayload || !containerRef.current) return;
+    if (!aiPayload || !ref.current) return;
 
-    // --- THIS IS THE FIX ---
-    // Get the backend URL and create a safe copy of the properties
-    const BACKEND_URL = api.defaults.baseURL || "";
-    const processedProps = { ...aiPayload.properties };
+    if (!aiPayload || !ref.current) return;
 
-    // Define common keys that might contain image URLs
-    const imageUrlKeys = ["src", "image_url", "backgroundImage"];
-
-    // Loop through the properties and fix any relative image paths
-    for (const key in processedProps) {
-      if (imageUrlKeys.includes(key)) {
-        const value = processedProps[key];
-        if (typeof value === "string" && value.startsWith("/")) {
-          processedProps[key] = `${BACKEND_URL}${value}`;
-        }
-      }
+    const processed = { ...(aiPayload.properties || {}) };
+    for (const key of ["src", "image_url", "backgroundImage"]) {
+      if (processed[key]) processed[key] = resolveImageSrc(processed[key]);
     }
-    // --- END OF FIX ---
 
-    // 1) Strip out any <script>…</script> from the HTML/CSS
-    let htmlOnly = aiPayload.aiTemplate.replace(
+    let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
       ""
     );
@@ -164,12 +107,11 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
     // 3) Render the template with the PROCESSED properties
     let rendered: string;
     try {
-      rendered = Mustache.render(htmlOnly, processedProps); // Use the fixed props
-    } catch (mErr) {
-      console.error("Mustache.render failed, falling back to raw HTML:", mErr);
+      rendered = Mustache.render(htmlOnly, processed);
+    } catch {
       rendered = htmlOnly;
     }
-    containerRef.current.innerHTML = rendered;
+    ref.current.innerHTML = rendered;
 
     // 4) Execute JS if provided
     if (aiPayload.script) {
@@ -178,7 +120,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
         .replace(/<\/script>\s*$/, "");
       try {
         const fn = new Function("container", jsBody);
-        fn(containerRef.current);
+        fn(ref.current);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
@@ -189,7 +131,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
     JSON.stringify(aiPayload?.properties),
   ]);
 
-  return <div ref={containerRef} />;
+  return <div ref={ref} />;
 };
 interface BuilderCanvasProps {
   page: Page | undefined;
@@ -306,10 +248,13 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           >
             {props.image_url && (
               <img
-                src={`${BACKEND_URL}${props.image_url}`}
+                src={resolveImageSrc(props.image_url)}
                 alt={props.name}
                 className="w-full h-40 object-cover"
-                onError={(e) => (e.currentTarget.style.display = "none")}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src =
+                    "https://placehold.co/60x60/fecaca/991b1b?text=Error";
+                }}
               />
             )}
             <div className="p-4">
@@ -331,12 +276,16 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           <div className="border rounded-lg p-4 bg-white shadow" style={style}>
             {props.image_url && (
               <img
-                src={`${BACKEND_URL}${props.image_url}`}
+                src={resolveImageSrc(props.image_url)}
                 alt={props.item_name}
                 className="w-full object-cover rounded-md mb-4"
-                onError={(e) => (e.currentTarget.style.display = "none")}
+                onError={(e) => {
+                  (e.currentTarget as HTMLImageElement).src =
+                    "https://placehold.co/60x60/fecaca/991b1b?text=Error";
+                }}
               />
             )}
+
             <h4 className="font-bold text-lg text-gray-800">
               {props.item_name || "Menu Item"}
             </h4>
@@ -406,11 +355,15 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         <img
           src={
             props.src
-              ? `${api.defaults.baseURL}${props.src}`
+              ? resolveImageSrc(props.src)
               : "https://placehold.co/600x400"
           }
           alt={props.alt || "placeholder"}
-          style={style}
+          style={{ width: "100%", height: "auto" }}
+          onError={(e) => {
+            (e.currentTarget as HTMLImageElement).src =
+              "https://placehold.co/600x400/fecaca/991b1b?text=Error";
+          }}
         />
       );
     } else if (effectiveType === "BUTTON") {
@@ -618,72 +571,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                   gap: properties.gap,
                 }}
               >
-                {/* {section.subsections.map((sub) => {
-                  const subsectionStyle: React.CSSProperties = {
-                    display: sub.properties.display || "flex",
-                    gap: sub.properties.gap || "1rem",
-                    ...(sub.properties.style || {}),
-                  };
-                  if (sub.properties.display === "grid") {
-                    subsectionStyle.gridTemplateColumns =
-                      sub.properties.gridTemplateColumns || "repeat(2, 1fr)";
-                  } else {
-                    subsectionStyle.flexDirection =
-                      sub.properties.flexDirection || "column";
-                    subsectionStyle.justifyContent =
-                      sub.properties.justifyContent || "flex-start";
-                    subsectionStyle.alignItems =
-                      sub.properties.alignItems || "stretch";
-                  }
-
-                  const { initial, animate, transition } = getMotionConfig(
-                    sub.properties.animation
-                  );
-
-                  return (
-                    <motion.div
-                      key={sub.subsection_id}
-                      initial={initial}
-                      animate={animate}
-                      transition={transition}
-                      onClick={(e) => {
-                        e.stopPropagation();
-                        onSelect({ type: "subsection", id: sub.subsection_id });
-                      }}
-                      className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
-                        selection.type === "subsection" &&
-                        selection.id === sub.subsection_id
-                          ? "border-green-500"
-                          : "border-dashed border-gray-400"
-                      }`}
-                      style={subsectionStyle}
-                    >
-                      {sub.elements.map((el) => (
-                        <div
-                          key={el.element_id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onSelect({ type: "element", id: el.element_id });
-                          }}
-                          className={`p-2 rounded transition-all ${
-                            selection.type === "element" &&
-                            selection.id === el.element_id
-                              ? "ring-2 ring-offset-2 ring-pink-500"
-                              : ""
-                          }`}
-                        >
-                          {renderElement(el)}
-                        </div>
-                      ))}
-
-                      {sub.elements.length === 0 && (
-                        <div className="text-gray-400 self-center mx-auto">
-                          Add elements here
-                        </div>
-                      )}
-                    </motion.div>
-                  );
-                })} */}
                 {section.subsections.map((sub) => {
                   // --- FIX: Provide a default empty object for properties if it's missing ---
                   const subProps = sub.properties || {};

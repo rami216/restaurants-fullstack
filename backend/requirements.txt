@@ -8,3 +8,4 @@ PyJWT
 python-decouple
 python-multipart
 asyncpg
+supabase

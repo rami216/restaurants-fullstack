@@ -34,6 +34,7 @@ import {
 } from "lucide-react";
 import Mustache from "mustache";
 import VisibilityEditor from "./VisibilityEditor";
+import { resolveImageSrc } from "@/lib/imageUrl";
 
 interface PropertyEditorProps {
   isExpanded: boolean;
@@ -110,6 +111,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   // 2. Add state and a handler for the new UI
   const [isAddingStandalonePage, setIsAddingStandalonePage] = useState(false);
   const [newStandalonePageTitle, setNewStandalonePageTitle] = useState("");
+  const [localPreview, setLocalPreview] = React.useState<
+    Record<string, string>
+  >({});
 
   const handleCreateStandalone = () => {
     if (newStandalonePageTitle.trim()) {
@@ -216,10 +220,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
   const handleImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
-    propertyName: string // e.g., 'backgroundImage', 'src', or 'image_url'
+    propertyName: string // 'backgroundImage' | 'src' | 'image_url' | ...
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
+
+    // show local preview immediately
+    const objUrl = URL.createObjectURL(file);
+    setLocalPreview((prev) => ({ ...prev, [propertyName]: objUrl }));
 
     setIsUploading(true);
     const formData = new FormData();
@@ -229,23 +237,28 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       const response = await api.post("/uploads/image", formData, {
         headers: { "Content-Type": "multipart/form-data" },
       });
-      // image_url from your backend is a relative path like '/static/images/...'
-      const { image_url } = response.data;
 
-      // THE FIX: We need to handle CSS backgrounds and image sources differently.
-      if (propertyName === "backgroundImage") {
-        // Background images are a CSS property and go in the 'style' object with the url() wrapper.
-        handleStyleChange(propertyName, `url(${image_url})`);
-      } else {
-        // `src` (for <img> tags) and `image_url` (for Category) are direct properties.
-        // They should NOT be in the style object and should NOT have the url() wrapper.
-        handlePropertyChange(propertyName, image_url);
-      }
+      // backend returns a relative path like "/storage/v1/object/public/...."
+      const { image_url } = response.data;
+      if (!image_url) throw new Error("No image_url returned from upload.");
+
+      // ✅ IMPORTANT: store the raw relative path on the element properties (not url(...))
+      // (your renderers will call resolveImageSrc() to produce the full src)
+      handlePropertyChange(propertyName, image_url);
     } catch (error) {
       console.error("Image upload failed:", error);
       alert("Image upload failed. Please check the console for details.");
+      // if upload failed, drop the preview
+      setLocalPreview((prev) => {
+        const next = { ...prev };
+        delete next[propertyName];
+        return next;
+      });
     } finally {
       setIsUploading(false);
+      // optional: let the preview remain until the state re-renders with the saved value,
+      // then you can revoke it later if you want:
+      // URL.revokeObjectURL(objUrl);
     }
   };
   const handleCreatePage = () => {
@@ -255,167 +268,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       setIsAddingPage(false);
     }
   };
-  // const renderNavbarEditor = () => {
-  //   if (!websiteData?.navbar) return null;
-
-  //   const navProps = websiteData.navbar.properties || {};
-  //   const itemStyle = navProps.itemStyle || {};
-
-  //   return (
-  //     <div className="space-y-6">
-  //       {/* Section for managing pages and links */}
-  //       <div>
-  //         <h4 className="text-md font-medium text-gray-800 mb-2">
-  //           Pages & Links
-  //         </h4>
-  //         <div className="space-y-2">
-  //           {websiteData.pages.map((page: Page) => (
-  //             <div key={page.page_id} className="p-2 border rounded bg-gray-50">
-  //               {page.title}
-  //             </div>
-  //           ))}
-  //         </div>
-  //         {!isAddingPage ? (
-  //           <button
-  //             onClick={() => setIsAddingPage(true)}
-  //             className="mt-3 w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
-  //           >
-  //             <PlusCircle size={16} className="mr-2" /> Add New Page
-  //           </button>
-  //         ) : (
-  //           <div className="mt-3 p-3 border rounded-md bg-gray-100">
-  //             <input
-  //               type="text"
-  //               value={newPageTitle}
-  //               onChange={(e) => setNewPageTitle(e.target.value)}
-  //               placeholder="New page title"
-  //               className="block w-full border-gray-300 rounded-md shadow-sm p-2 text-sm"
-  //             />
-  //             <div className="flex items-center justify-end space-x-2 mt-2">
-  //               <button
-  //                 onClick={() => setIsAddingPage(false)}
-  //                 className="p-2 text-gray-500 hover:bg-gray-200 rounded-full"
-  //               >
-  //                 <X size={16} />
-  //               </button>
-  //               <button
-  //                 onClick={handleCreatePage}
-  //                 className="p-2 text-green-600 hover:bg-green-100 rounded-full"
-  //               >
-  //                 <Save size={16} />
-  //               </button>
-  //             </div>
-  //           </div>
-  //         )}
-  //       </div>
-
-  //       <hr />
-
-  //       {/* Section for styling the navbar container */}
-  //       <div>
-  //         <h4 className="text-md font-medium text-gray-800 mb-2">
-  //           Navbar Styling
-  //         </h4>
-  //         <div className="space-y-4">
-  //           <div>
-  //             <label className="block text-sm font-medium text-gray-700">
-  //               Background Color
-  //             </label>
-  //             <input
-  //               type="color"
-  //               value={navProps.backgroundColor || "#ffffff"}
-  //               onChange={(e) =>
-  //                 handleNavbarPropertyChange("backgroundColor", e.target.value)
-  //               }
-  //               className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-  //             />
-  //           </div>
-  //         </div>
-  //       </div>
-
-  //       <hr />
-
-  //       {/* Section for styling the navigation links */}
-  //       <div>
-  //         <h4 className="text-md font-medium text-gray-800 mb-2">
-  //           Link Styling
-  //         </h4>
-  //         <div className="space-y-4">
-  //           <div>
-  //             <label className="block text-sm font-medium text-gray-700 mb-1">
-  //               Text Style
-  //             </label>
-  //             <div className="flex items-center space-x-2">
-  //               <button
-  //                 onClick={() =>
-  //                   toggleNavbarStyle("fontWeight", "bold", "normal")
-  //                 }
-  //                 className={`p-2 rounded ${
-  //                   itemStyle.fontWeight === "bold"
-  //                     ? "bg-blue-500 text-white"
-  //                     : "bg-gray-200"
-  //                 }`}
-  //               >
-  //                 <Bold size={16} />
-  //               </button>
-  //               <button
-  //                 onClick={() =>
-  //                   toggleNavbarStyle("fontStyle", "italic", "normal")
-  //                 }
-  //                 className={`p-2 rounded ${
-  //                   itemStyle.fontStyle === "italic"
-  //                     ? "bg-blue-500 text-white"
-  //                     : "bg-gray-200"
-  //                 }`}
-  //               >
-  //                 <Italic size={16} />
-  //               </button>
-  //               <button
-  //                 onClick={() =>
-  //                   toggleNavbarStyle("textDecoration", "underline", "none")
-  //                 }
-  //                 className={`p-2 rounded ${
-  //                   itemStyle.textDecoration === "underline"
-  //                     ? "bg-blue-500 text-white"
-  //                     : "bg-gray-200"
-  //                 }`}
-  //               >
-  //                 <Underline size={16} />
-  //               </button>
-  //             </div>
-  //           </div>
-  //           <div>
-  //             <label className="block text-sm font-medium text-gray-700">
-  //               Font Size
-  //             </label>
-  //             <input
-  //               type="text"
-  //               value={itemStyle.fontSize || "1rem"}
-  //               onChange={(e) =>
-  //                 handleNavbarStyleChange("fontSize", e.target.value)
-  //               }
-  //               className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-  //               placeholder="e.g., 16px, 1.2rem"
-  //             />
-  //           </div>
-  //           <div>
-  //             <label className="block text-sm font-medium text-gray-700">
-  //               Text Color
-  //             </label>
-  //             <input
-  //               type="color"
-  //               value={itemStyle.color || "#000000"}
-  //               onChange={(e) =>
-  //                 handleNavbarStyleChange("color", e.target.value)
-  //               }
-  //               className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
-  //             />
-  //           </div>
-  //         </div>
-  //       </div>
-  //     </div>
-  //   );
-  // };
   const renderNavbarEditor = () => {
     if (!websiteData?.navbar) return null;
 
@@ -823,12 +675,23 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             {properties.backgroundImage ? (
               <div className="text-center">
                 <img
-                  src={`${api.defaults.baseURL}${properties.backgroundImage}`}
+                  src={
+                    localPreview.backgroundImage
+                      ? localPreview.backgroundImage
+                      : resolveImageSrc(properties.backgroundImage)
+                  }
                   alt="Background Preview"
                   className="max-h-32 w-full object-cover mx-auto rounded-md"
                 />
                 <button
-                  onClick={() => handlePropertyChange("backgroundImage", "")}
+                  onClick={() => {
+                    handlePropertyChange("backgroundImage", "");
+                    setLocalPreview((prev) => {
+                      const next = { ...prev };
+                      delete next.backgroundImage;
+                      return next;
+                    });
+                  }}
                   className="mt-2 text-xs text-red-600 hover:text-red-800"
                 >
                   Remove Image
@@ -1424,28 +1287,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     );
   };
 
-  // inside your component, alongside handlePropertyChange:
-  // const handleAiPropChange = (key: string, value: any) => {
-  //   if (!selectedItem.aiPayload) return;
-
-  //   // 1. Create the new properties object
-  //   const newAiProps = {
-  //     ...(selectedItem.aiPayload.properties || {}),
-  //     [key]: value,
-  //   };
-
-  //   // 2. Update the aiPayload, but ONLY change the properties.
-  //   //    NEVER change the aiTemplate here.
-  //   const updated = {
-  //     ...selectedItem,
-  //     aiPayload: {
-  //       ...selectedItem.aiPayload,
-  //       properties: newAiProps, // Only update the data, not the template
-  //     },
-  //   };
-
-  //   updateItem(updated);
-  // };
   const handleAiPropChange = (key: string, value: any) => {
     if (!selectedItem || !selectedItem.aiPayload) return;
 
@@ -1917,9 +1758,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               </label>
               <img
                 src={
-                  selectedItem.properties.src
-                    ? `${api.defaults.baseURL}${selectedItem.properties.src}`
-                    : "https://placehold.co/600x400"
+                  localPreview.src
+                    ? localPreview.src
+                    : resolveImageSrc(selectedItem.properties.src)
                 }
                 alt="preview"
                 className="mt-1 w-full rounded-md border bg-gray-100"

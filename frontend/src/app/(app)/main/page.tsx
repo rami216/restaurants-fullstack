@@ -25,6 +25,45 @@ const BACKEND_URL = "http://127.0.0.1:8000";
 
 const MainPage = () => {
   // --- STATE MANAGEMENT ---
+  const [pendingFiles, setPendingFiles] = useState<Record<number, File | null>>(
+    {}
+  );
+  // helper to resolve image URL for display
+  const resolveImageSrc = (val: string | null | undefined) => {
+    if (!val) return "https://placehold.co/60x60/e2e8f0/a0aec0?text=No+Image";
+    if (
+      val.startsWith("blob:") ||
+      val.startsWith("data:") ||
+      val.startsWith("http")
+    )
+      return val;
+
+    const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
+    if (!base) return "https://placehold.co/60x60/fecaca/991b1b?text=Bad+URL";
+
+    if (val.startsWith("/storage/")) return `${base}${val}`;
+    return `${base}/storage/v1/object/public/menu_item_images/${val}`;
+  };
+  const handlePickFile = (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file || uploadingImageIndex === null) return;
+
+    setPendingFiles((prev) => ({ ...prev, [uploadingImageIndex]: file }));
+
+    setSelectedData((prev) => {
+      const rows = [...prev];
+      rows[uploadingImageIndex] = {
+        ...rows[uploadingImageIndex],
+        image_url: URL.createObjectURL(file), // local preview
+        __preview: true,
+      };
+      return rows;
+    });
+
+    setUploadingImageIndex(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
+  };
+
   const [loading, setLoading] = useState(true);
   const [hasRestaurant, setHasRestaurant] = useState<boolean | null>(null);
   const [hasBrand, setHasBrand] = useState<boolean | null>(null);
@@ -353,6 +392,95 @@ const MainPage = () => {
       console.error(`Error fetching data for ${tableName}:`, error);
     }
   };
+  // const handleSaveChanges = async () => {
+
+  //   const config = tableConfigs[selectedTable];
+  //   if (!config) return;
+
+  //   const getTypedPayload = (row: any, fields: typeof config.fields) => {
+  //     const typedRow: { [key: string]: any } = {};
+  //     for (const field of fields) {
+  //       const rawValue = row[field.key];
+  //       if (rawValue === null || rawValue === undefined || rawValue === "") {
+  //         if (field.dataType === "boolean") typedRow[field.key] = false;
+  //         else typedRow[field.key] = null;
+  //         continue;
+  //       }
+  //       switch (field.dataType) {
+  //         case "number":
+  //           const num = parseFloat(rawValue);
+  //           typedRow[field.key] = isNaN(num) ? null : num;
+  //           break;
+  //         case "boolean":
+  //           typedRow[field.key] = String(rawValue).toLowerCase() === "true";
+  //           break;
+  //         default:
+  //           typedRow[field.key] = rawValue;
+  //           break;
+  //       }
+  //     }
+  //     return typedRow;
+  //   };
+
+  //   for (const row of selectedData) {
+  //     try {
+  //       const primaryKeyField = config.primaryKey;
+  //       const isExisting = row[primaryKeyField];
+  //       const processedRow = getTypedPayload(row, config.fields);
+
+  //       if (isExisting) {
+  //         if (!config.updateApi) continue;
+  //         const apiUrl = config.updateApi.replace(
+  //           /\${(.*?)}/g,
+  //           (_, key) => row[key]
+  //         );
+  //         await api.put(apiUrl, processedRow);
+  //       } else {
+  //         if (!config.createApi) continue;
+  //         const payload: any = { ...processedRow };
+
+  //         // THE FIX: Always use the currently selected location ID from the state.
+  //         if (
+  //           [
+  //             "menu_items",
+  //             "extras",
+  //             "option_groups",
+  //             "option_choices",
+  //             "schedules",
+  //           ].includes(selectedTable)
+  //         ) {
+  //           payload.location_id = selectedLocationId;
+  //         }
+  //         if (selectedTable === "categories") {
+  //           payload.restaurant_id = restaurantId;
+  //         }
+
+  //         // Final check to ensure we have a location_id before sending
+  //         if (
+  //           payload.location_id === null &&
+  //           [
+  //             "menu_items",
+  //             "extras",
+  //             "option_groups",
+  //             "option_choices",
+  //             "schedules",
+  //           ].includes(selectedTable)
+  //         ) {
+  //           alert("Error: No location selected. Cannot create new item.");
+  //           return;
+  //         }
+
+  //         await api.post(config.createApi, payload);
+  //       }
+  //     } catch (error) {
+  //       console.error("Error saving row:", error);
+  //       alert(`Failed to save changes. Please check the console for details.`);
+  //       return;
+  //     }
+  //   }
+  //   alert("Changes saved!");
+  //   await handleTableClick(selectedTable);
+  // };
   const handleSaveChanges = async () => {
     const config = tableConfigs[selectedTable];
     if (!config) return;
@@ -362,44 +490,80 @@ const MainPage = () => {
       for (const field of fields) {
         const rawValue = row[field.key];
         if (rawValue === null || rawValue === undefined || rawValue === "") {
-          if (field.dataType === "boolean") typedRow[field.key] = false;
-          else typedRow[field.key] = null;
+          typedRow[field.key] = field.dataType === "boolean" ? false : null;
           continue;
         }
         switch (field.dataType) {
-          case "number":
+          case "number": {
             const num = parseFloat(rawValue);
             typedRow[field.key] = isNaN(num) ? null : num;
             break;
+          }
           case "boolean":
             typedRow[field.key] = String(rawValue).toLowerCase() === "true";
             break;
           default:
             typedRow[field.key] = rawValue;
-            break;
         }
       }
       return typedRow;
     };
 
-    for (const row of selectedData) {
+    // Work on a copy so we can clear previews after success
+    let updatedRows = [...selectedData];
+
+    for (let index = 0; index < selectedData.length; index++) {
+      const row = selectedData[index];
+
       try {
         const primaryKeyField = config.primaryKey;
         const isExisting = row[primaryKeyField];
         const processedRow = getTypedPayload(row, config.fields);
 
+        // 1) If a local file is pending for this row, upload it first
+        const pending = pendingFiles?.[index];
+        if (pending) {
+          const fd = new FormData();
+          fd.append("file", pending as File);
+
+          const uploadRes = await api.post("/uploads/image", fd, {
+            headers: { "Content-Type": "multipart/form-data" },
+          });
+
+          const imageUrl = uploadRes.data?.image_url; // should be full public URL (or a /storage path)
+          if (!imageUrl)
+            throw new Error("Upload succeeded but no image_url returned.");
+
+          processedRow.image_url = imageUrl;
+
+          // reflect it locally & drop any preview marker
+          updatedRows[index] = {
+            ...updatedRows[index],
+            image_url: imageUrl,
+          };
+          delete (updatedRows[index] as any).__preview;
+
+          // clear pending file for this row
+          setPendingFiles((prev) => {
+            const next = { ...prev };
+            delete next[index];
+            return next;
+          });
+        }
+
+        // 2) Upsert the row
         if (isExisting) {
           if (!config.updateApi) continue;
           const apiUrl = config.updateApi.replace(
             /\${(.*?)}/g,
-            (_, key) => row[key]
+            (_: any, key: string) => row[key] ?? ""
           );
           await api.put(apiUrl, processedRow);
         } else {
           if (!config.createApi) continue;
           const payload: any = { ...processedRow };
 
-          // THE FIX: Always use the currently selected location ID from the state.
+          // attach foreign keys based on table
           if (
             [
               "menu_items",
@@ -415,7 +579,6 @@ const MainPage = () => {
             payload.restaurant_id = restaurantId;
           }
 
-          // Final check to ensure we have a location_id before sending
           if (
             payload.location_id === null &&
             [
@@ -434,13 +597,18 @@ const MainPage = () => {
         }
       } catch (error) {
         console.error("Error saving row:", error);
-        alert(`Failed to save changes. Please check the console for details.`);
-        return;
+        alert("Failed to save changes. See console for details.");
+        return; // stop on first error (same behavior as before)
       }
     }
+
+    // 3) Commit updated rows (previews cleared, URLs set)
+    setSelectedData(updatedRows);
+
     alert("Changes saved!");
     await handleTableClick(selectedTable);
   };
+
   const handleDeleteRow = async (item: any) => {
     const config = tableConfigs[selectedTable];
     if (!config?.deleteApi) return;
@@ -460,36 +628,57 @@ const MainPage = () => {
 
   // --- NEW IMAGE UPLOAD HANDLER ---
   // --- NEW IMAGE UPLOAD HANDLER ---
-  const handleImageUpload = async (
-    event: React.ChangeEvent<HTMLInputElement>
-  ) => {
+  // const handleImageUpload = async (
+  //   event: React.ChangeEvent<HTMLInputElement>
+  // ) => {
+  //   const file = event.target.files?.[0];
+  //   if (!file || uploadingImageIndex === null) return;
+
+  //   const formData = new FormData();
+  //   formData.append("file", file);
+
+  //   try {
+  //     const response = await api.post("/uploads/image", formData, {
+  //       headers: { "Content-Type": "multipart/form-data" },
+  //     });
+
+  //     const imageUrl = response.data.image_url;
+  //     const newData = [...selectedData];
+  //     newData[uploadingImageIndex] = {
+  //       ...newData[uploadingImageIndex],
+  //       image_url: imageUrl,
+  //     };
+  //     setSelectedData(newData);
+  //   } catch (error) {
+  //     console.error("Image upload failed:", error);
+  //     alert("Image upload failed. Please try again.");
+  //   } finally {
+  //     setUploadingImageIndex(null);
+  //     if (fileInputRef.current) {
+  //       fileInputRef.current.value = "";
+  //     }
+  //   }
+  // };
+  const handleImageUpload = (event: React.ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
     if (!file || uploadingImageIndex === null) return;
 
-    const formData = new FormData();
-    formData.append("file", file);
+    // store the file to upload later on Save
+    setPendingFiles((prev) => ({ ...prev, [uploadingImageIndex]: file }));
 
-    try {
-      const response = await api.post("/uploads/image", formData, {
-        headers: { "Content-Type": "multipart/form-data" },
-      });
-
-      const imageUrl = response.data.image_url;
-      const newData = [...selectedData];
-      newData[uploadingImageIndex] = {
-        ...newData[uploadingImageIndex],
-        image_url: imageUrl,
+    // show a local preview immediately
+    const previewUrl = URL.createObjectURL(file);
+    setSelectedData((prev) => {
+      const next = [...prev];
+      next[uploadingImageIndex!] = {
+        ...next[uploadingImageIndex!],
+        _previewUrl: previewUrl, // transient preview field
       };
-      setSelectedData(newData);
-    } catch (error) {
-      console.error("Image upload failed:", error);
-      alert("Image upload failed. Please try again.");
-    } finally {
-      setUploadingImageIndex(null);
-      if (fileInputRef.current) {
-        fileInputRef.current.value = "";
-      }
-    }
+      return next;
+    });
+
+    setUploadingImageIndex(null);
+    if (fileInputRef.current) fileInputRef.current.value = "";
   };
 
   // --- RENDER ---
@@ -813,23 +1002,21 @@ const MainPage = () => {
                               <div className="flex items-center space-x-2">
                                 <img
                                   src={
-                                    item[field.key]
-                                      ? `${BACKEND_URL}${item[field.key]}`
-                                      : "https://placehold.co/60x60/e2e8f0/a0aec0?text=No+Image"
+                                    pendingFiles[index]
+                                      ? URL.createObjectURL(pendingFiles[index]) // local preview
+                                      : resolveImageSrc(item[field.key])
                                   }
-                                  alt={
-                                    item.name || item.item_name || "Item image"
-                                  }
+                                  alt="Menu item"
                                   className="w-16 h-16 object-cover rounded"
                                   onError={(e) => {
-                                    e.currentTarget.src =
+                                    (e.currentTarget as HTMLImageElement).src =
                                       "https://placehold.co/60x60/fecaca/991b1b?text=Error";
                                   }}
                                 />
                                 <button
                                   onClick={() => {
                                     setUploadingImageIndex(index);
-                                    fileInputRef.current?.click();
+                                    fileInputRef.current?.click(); // just open picker, no upload yet
                                   }}
                                   className="bg-gray-200 text-gray-700 px-3 py-1 rounded text-sm hover:bg-gray-300"
                                 >
@@ -886,7 +1073,7 @@ const MainPage = () => {
         ref={fileInputRef}
         accept="image/*"
         style={{ display: "none" }}
-        onChange={handleImageUpload}
+        onChange={handlePickFile}
       />
     </>
   );
