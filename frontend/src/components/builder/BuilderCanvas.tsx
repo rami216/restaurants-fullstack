@@ -521,25 +521,36 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       <div className="space-y-4">
         {page.sections.map((section) => {
           const properties = section.properties || {};
-          const sectionStyle: React.CSSProperties = {
-            backgroundColor: properties.backgroundColor,
-            backgroundImage: properties.backgroundImage,
-            padding: properties.padding,
-            display: properties.display,
-            flexDirection: properties.flexDirection,
-            justifyContent: properties.justifyContent,
-            alignItems: properties.alignItems,
-            gap: properties.gap,
-            ...(properties.style || {}),
-          };
-          if (
-            properties.backgroundImage &&
-            !properties.backgroundImage.startsWith("linear-gradient")
-          ) {
-            sectionStyle.backgroundImage = `url(${api.defaults.baseURL}${properties.backgroundImage})`;
-            sectionStyle.backgroundSize = "cover";
-            sectionStyle.backgroundPosition = "center";
+          const styleProps = properties.style || {};
+
+          // get bg from either place
+          const rawBg =
+            properties.backgroundImage ?? styleProps.backgroundImage;
+
+          // normalize (supports gradients, url(...), and raw paths)
+          let backgroundImage: string | undefined;
+          if (typeof rawBg === "string" && rawBg.trim()) {
+            backgroundImage = rawBg.startsWith("linear-gradient")
+              ? rawBg
+              : normalizeBackground(rawBg);
           }
+
+          const sectionStyle: React.CSSProperties = {
+            backgroundColor:
+              properties.backgroundColor ?? styleProps.backgroundColor,
+            padding: properties.padding ?? styleProps.padding,
+            display: properties.display ?? styleProps.display,
+            flexDirection: properties.flexDirection ?? styleProps.flexDirection,
+            justifyContent:
+              properties.justifyContent ?? styleProps.justifyContent,
+            alignItems: properties.alignItems ?? styleProps.alignItems,
+            gap: properties.gap ?? styleProps.gap,
+            ...styleProps,
+            ...(backgroundImage ? { backgroundImage } : {}),
+            ...(backgroundImage && backgroundImage.startsWith("url(")
+              ? { backgroundSize: "cover", backgroundPosition: "center" }
+              : {}),
+          };
 
           return (
             <div

@@ -28,6 +28,17 @@ import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 
+const normalizeBackground = (bg?: string) => {
+  if (!bg) return undefined;
+  // if we already have url(...), extract inner and pass through resolver
+  if (bg.startsWith("url(")) {
+    const inner = bg.replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+    return `url(${resolveImageSrc(inner)})`;
+  }
+  // plain path or absolute url
+  return `url(${resolveImageSrc(bg)})`;
+};
+
 interface AiElementRunnerProps {
   element: BuilderElement;
 }
@@ -820,12 +831,24 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             const isLast = idx === currentPage.sections.length - 1;
             // Calculate styles here, as they are needed regardless of visibility for the wrapper
             const p = sec.properties || {};
+            const styleProps = p.style || {};
+
+            // pick bg from either place
+            const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
+            let backgroundImage: string | undefined;
+            if (typeof rawBg === "string" && rawBg.trim()) {
+              backgroundImage = rawBg.startsWith("linear-gradient")
+                ? rawBg
+                : normalizeBackground(rawBg); // <- uses your resolveImageSrc under the hood
+            }
             const containerStyle: React.CSSProperties = {
-              backgroundColor: p.backgroundColor,
-              backgroundImage: p.backgroundImage,
-              padding: p.padding,
-              ...(p.style || {}),
-              // Clamp bottom spacing for the LAST section
+              backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
+              padding: p.padding ?? styleProps.padding,
+              ...(styleProps || {}),
+              ...(backgroundImage ? { backgroundImage } : {}),
+              ...(backgroundImage && backgroundImage.startsWith("url(")
+                ? { backgroundSize: "cover", backgroundPosition: "center" }
+                : {}),
               ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
             };
             if (isLast) {
