@@ -1,10 +1,17 @@
 #backend/ai/router/.py
 import os, json, re, traceback
-from fastapi import APIRouter, HTTPException
+from uuid import UUID
+from fastapi import APIRouter, HTTPException,Depends,Body
 from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from typing import Dict, Any, List, Optional
 import re
+from config import AI_DEFAULT_MODEL
+from ai.billing import track_ai_usage
+from auth.auth_handler import get_current_active_user
+from sqlalchemy.ext.asyncio import AsyncSession
+from database import get_db
+from models import User
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -334,52 +341,32 @@ Your output MUST be a valid JSON object containing TWO top-level keys: "properti
 #region generateelement
 class GenerateRequest(BaseModel):
     prompt: str
-
-# @router.post("/generate-ai-element")
-# async def generate_ai_element(body: GenerateRequest):
-#     try:
-#         resp = openai.chat.completions.create(
-#             model="gpt-4o-mini", # Swapped to a more recent model name
-#             response_format={"type": "json_object"},
-#             messages=[
-#                 {"role": "system", "content": SYSTEM_PROMPT},
-#                 {"role": "user",   "content": body.prompt},
-#             ],
-#             temperature=0.2,
-#             max_tokens=4095,
-#         )
-#         content = resp.choices[0].message.content
-#         payload = json.loads(content)
-
-#         # ✨ --- ADDED: Clean the script field --- ✨
-#         if "script" in payload and isinstance(payload["script"], str):
-#             # Search for content inside a <script> tag
-#             match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-#             if match:
-#                 # If found, replace the value with the extracted raw JS
-#                 payload["script"] = match.group(1).strip()
-#         # ✨ --- End of cleaning logic --- ✨
-
-#     except (OpenAIError, json.JSONDecodeError, KeyError) as e:
-#         raise HTTPException(500, f"Generation failed: {e}")
-
-#     return payload
+    website_id: UUID | str
+#
 
 class GenerateRequestForElement(BaseModel):
     prompt: str
     unique_class_name: str
+    website_id: UUID | str
 
 @router.post("/generate-ai-element")
-async def generate_ai_element(body: GenerateRequestForElement):
+async def generate_ai_element(
+    body: GenerateRequestForElement,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
     try:
-        # Build the user content exactly like before
+        # Guard: validate website_id exists
+        if not body.website_id:
+            raise HTTPException(400, "website_id is required")
+
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
         )
 
         resp = openai.chat.completions.create(
-            model="gpt-4o",
+            model=AI_DEFAULT_MODEL,                  # e.g. "gpt-4o"
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": ELEMENT_GENERATOR_PROMPT_FROM_GPT5},
@@ -389,21 +376,41 @@ async def generate_ai_element(body: GenerateRequestForElement):
             max_tokens=4096,
         )
 
+        # v1 SDK: usage is an object; model is on resp.model
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+
         content = resp.choices[0].message.content
         payload = json.loads(content)
 
-        # Clean any <script>…</script> wrapper inside the "script" field
-        if "script" in payload and isinstance(payload.get("script"), str):
-            match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if match:
-                payload["script"] = match.group(1).strip()
+        # strip <script> wrapper if present
+        if isinstance(payload.get("script"), str):
+            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+            if m:
+                payload["script"] = m.group(1).strip()
+
+        # Track usage (expects UUID + int user_id)
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,             # keep as UUID
+            user_id=user.id,                         # your users.id is INTEGER
+            model=model_used,
+            feature="generate_element",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"unique_class_name": body.unique_class_name},
+        )
 
         return payload
 
+    except HTTPException:
+        raise
     except Exception as e:
-        import traceback
-        traceback.print_exc()
-        raise HTTPException(500, f"Page generation failed: {e}")
+        # print full traceback to your server console so you see the real error
+        import traceback; traceback.print_exc()
+        raise HTTPException(500, f"generate-ai-element failed: {e}")
 
 #region gpt5 
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60)  # set timeout on the client
@@ -834,6 +841,7 @@ async def generate_ai_element(body: GenerateRequestForElement):
 class RefineStateRequest(BaseModel):
     prompt: str
     currentState: Dict[str, Any]
+    website_id: UUID | str
 
 REFINE_MASTER_PROMPT = """
 You are an expert front-end component editor. Your job is to modify and repair a component's state based on a user's request.
@@ -866,15 +874,23 @@ Your output MUST be a single, complete, valid JSON object with the fully updated
 
 
 @router.post("/refine-element", response_model=Dict[str, Any])
-async def refine_element(body: RefineStateRequest):
+async def refine_element(
+    body: RefineStateRequest,                     # has: prompt, currentState, website_id
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
     try:
+        # Guard: need website_id to log usage against a real website
+        if not body.website_id:
+            raise HTTPException(status_code=400, detail="website_id is required")
+
         user_content = (
-            f"USER_PROMPT: \"{body.prompt}\"\n\n"
+            f'USER_PROMPT: "{body.prompt}"\n\n'
             f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
         )
 
         resp = openai.chat.completions.create(
-            model="gpt-4o",
+            model=AI_DEFAULT_MODEL,                # same model you use elsewhere
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": REFINE_MASTER_PROMPT},
@@ -883,12 +899,42 @@ async def refine_element(body: RefineStateRequest):
             temperature=0.2,
         )
 
-        content = resp.choices[0].message.content
-        payload = json.loads(content)
+        # Extract usage & model just like in generate-ai-element
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+
+        # Parse JSON content
+        payload = json.loads(resp.choices[0].message.content)
+
+        # Optional: normalize/clean any script field, like you do elsewhere
+        if isinstance(payload.get("script"), str):
+            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+            if m:
+                payload["script"] = m.group(1).strip()
+
+        # Track usage (UUID website_id + INTEGER user.id)
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="refine_element",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"state_keys": list((body.currentState or {}).keys())[:10]},
+        )
+
         return payload
 
-    except (OpenAIError, json.JSONDecodeError, KeyError) as e:
-        raise HTTPException(500, f"Refine-element failed: {e}")
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, KeyError) as e:
+        raise HTTPException(status_code=500, detail=f"refine-element failed to parse model output: {e}")
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"refine-element failed: {e}")
 
 
   #endregion
@@ -902,6 +948,7 @@ async def refine_element(body: RefineStateRequest):
 class RefineSectionRequest(BaseModel):
     prompt: str
     section_json: Dict[str, Any]
+    website_id: UUID | str
 
 # 2. System prompt for the AI
 REFINE_SECTION_SYSTEM_PROMPT = """
@@ -917,13 +964,20 @@ Your single most important rule is to **start with the user's provided JSON and 
 
 # 3. The API endpoint function
 @router.post("/refine-ai-section")
-async def refine_ai_section(body: RefineSectionRequest):
+async def refine_ai_section(
+    body: RefineSectionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
     try:
-        user_content = f"PROMPT: \"{body.prompt}\"\n\nCURRENT SECTION JSON:\n{json.dumps(body.section_json, indent=2)}"
-        
+        user_content = (
+            f'PROMPT: "{body.prompt}"\n\n'
+            f"CURRENT SECTION JSON:\n{json.dumps(body.section_json, indent=2)}"
+        )
+
         resp = openai.chat.completions.create(
-            model="gpt-4o",
-            response_format={ "type": "json_object" },
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": REFINE_SECTION_SYSTEM_PROMPT},
                 {"role": "user",   "content": user_content},
@@ -931,10 +985,27 @@ async def refine_ai_section(body: RefineSectionRequest):
             temperature=0.5,
             max_tokens=4096,
         )
+
         payload = json.loads(resp.choices[0].message.content)
-    except (OpenAIError, json.JSONDecodeError) as e:
+
+        u = getattr(resp, "usage", None) or {}
+        await track_ai_usage(
+            db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=getattr(resp, "model", None) or AI_DEFAULT_MODEL,
+            feature="refine_section",
+            prompt_tokens=int(u.get("prompt_tokens") or 0),
+            completion_tokens=int(u.get("completion_tokens") or 0),
+            meta={"section_keys": list((body.section_json or {}).keys())[:10]},
+        )
+
+        return payload
+
+    except (json.JSONDecodeError,) as e:
         raise HTTPException(500, f"Section refinement failed: {e}")
-    return payload
+    except Exception as e:
+        raise HTTPException(500, f"Section refinement failed: {e}")
 
 # --- END: REFINE SECTION FEATURE ---
 
@@ -1052,11 +1123,15 @@ The value of "sections" must be an array of section objects.
 
 
 @router.post("/generate-ai-page")
-async def generate_ai_page(body: GenerateRequest):
+async def generate_ai_page(
+    body: GenerateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
     try:
         resp = openai.chat.completions.create(
-            model="gpt-4o",
-            response_format={ "type": "json_object" },
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": PAGE_SYSTEM_PROMPT},
                 {"role": "user",   "content": body.prompt},
@@ -1064,10 +1139,27 @@ async def generate_ai_page(body: GenerateRequest):
             temperature=0.4,
             max_tokens=4096,
         )
+
         payload = json.loads(resp.choices[0].message.content)
-    except (OpenAIError, json.JSONDecodeError) as e:
+
+        u = getattr(resp, "usage", None) or {}
+        await track_ai_usage(
+            db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=getattr(resp, "model", None) or AI_DEFAULT_MODEL,
+            feature="generate_page",
+            prompt_tokens=int(u.get("prompt_tokens") or 0),
+            completion_tokens=int(u.get("completion_tokens") or 0),
+            meta={"prompt_len": len(body.prompt or "")},
+        )
+
+        return payload
+
+    except (json.JSONDecodeError,) as e:
         raise HTTPException(500, f"Page generation failed: {e}")
-    return payload
+    except Exception as e:
+        raise HTTPException(500, f"Page generation failed: {e}")
 
 # --- END: NEW PAGE GENERATION FEATURE ---
 

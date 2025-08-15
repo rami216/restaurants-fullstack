@@ -143,17 +143,33 @@ async def login(
 
 
     # set JWT in an HttpOnly cookie
-    response.set_cookie(
-            key="access_token",
-            value=token,
-            httponly=True,
-            secure=True,            # <= important
-            samesite="none",        # <= important
-            path="/",
-            max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
+    IS_PROD = os.getenv("ENV") == "prod"  # or whatever flag you use
+
+    cookie_kwargs = dict(
+        key="access_token",
+        value=token,
+        httponly=True,
+        path="/",
+        max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
     )
 
+    if IS_PROD:
+        cookie_kwargs.update({
+            "secure": True,
+            "samesite": "none",
+            # optional if using custom domain:
+            # "domain": ".zygoflow.com",
+        })
+    else:
+        # local http://localhost:3000 <-> http://localhost:8000
+        cookie_kwargs.update({
+            "secure": False,
+            "samesite": "lax",
+        })
+
+    response.set_cookie(**cookie_kwargs)
     return {"access_token": token, "token_type": "bearer"}
+
 
 @router.post("/logout")
 async def logout(response: Response):

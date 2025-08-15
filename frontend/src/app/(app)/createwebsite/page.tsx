@@ -105,30 +105,43 @@ const CreateWebsitePage = () => {
         api.get("/restaurants/has-restaurant").catch((e) => e.response),
       ]);
 
-      if (websiteRes && websiteRes.status === 200) {
+      // 1) Website
+      if (websiteRes?.status === 200 && websiteRes.data) {
         setWebsiteData(websiteRes.data);
-        // NEW: Keep a pristine copy to compare against for finding updates
         setOriginalWebsiteData(JSON.parse(JSON.stringify(websiteRes.data)));
         if (websiteRes.data.pages?.length > 0 && !activePageId) {
           setActivePageId(websiteRes.data.pages[0].page_id);
         }
+      } else if (websiteRes?.status === 404) {
+        // Try to create one on the fly
+        console.log("[builder] No website yet — creating…");
+        const createRes = await api.post("/builder/website", {});
+        const fresh = await api.get("/builder/website");
+        setWebsiteData(fresh.data);
+        setOriginalWebsiteData(JSON.parse(JSON.stringify(fresh.data)));
+        if (fresh.data.pages?.length > 0) {
+          setActivePageId(fresh.data.pages[0].page_id);
+        }
       } else {
+        console.warn(
+          "[builder] /builder/website returned:",
+          websiteRes?.status,
+          websiteRes?.data
+        );
         setWebsiteData(null);
         setOriginalWebsiteData(null);
       }
 
-      if (locationsRes && locationsRes.status === 200) {
+      // 2) Locations
+      if (locationsRes?.status === 200) {
         setLocations(locationsRes.data);
         if (locationsRes.data.length > 0) {
           setSelectedLocationId(locationsRes.data[0].location_id);
         }
       }
 
-      if (
-        restaurantRes &&
-        restaurantRes.status === 200 &&
-        restaurantRes.data.has_restaurant
-      ) {
+      // 3) Restaurant & categories
+      if (restaurantRes?.status === 200 && restaurantRes.data?.has_restaurant) {
         const rId = restaurantRes.data.restaurant_id;
         setRestaurantId(rId);
         const categoriesRes = await api.get(`/restaurants/categories/${rId}`);
@@ -758,6 +771,7 @@ const CreateWebsitePage = () => {
         {
           prompt,
           currentState: currentState,
+          website_id: websiteData?.website_id,
         }
       );
 
@@ -810,7 +824,10 @@ const CreateWebsitePage = () => {
     if (!activePage || !prompt.trim()) return;
 
     try {
-      const { data } = await api.post("/ai/generate-ai-page", { prompt });
+      const { data } = await api.post("/ai/generate-ai-page", {
+        prompt,
+        website_id: websiteData?.website_id,
+      });
 
       // Ensure data.sections is an array before mapping
       const sectionsFromAI = data.sections || [];
@@ -881,41 +898,88 @@ const CreateWebsitePage = () => {
           selectedLocationId={selectedLocationId}
           onLocationChange={setSelectedLocationId}
           categories={categories}
+          websiteId={websiteData.website_id} // <-- add this line
         />
       </aside>
       <div className="flex-1 flex flex-col">
-        <header className="bg-gray-800 text-white p-4 flex justify-between items-center">
-          <h1 className="text-xl font-bold">Website Builder</h1>
-          {websiteData?.website_id && (
+        <header className="bg-gray-800 text-white p-4 flex items-center justify-between gap-4">
+          <div className="flex items-center gap-4">
+            <h1 className="text-xl font-bold">Website Builder</h1>
+
+            {/* Credits badge */}
+            {websiteData && (
+              <div className="flex items-center gap-3 bg-white/10 rounded-md px-3 py-2">
+                {(() => {
+                  const limitUsd = Number(websiteData.ai_spend_limit_usd ?? 0);
+                  const spentUsd = Number(websiteData.monthly_spend_usd ?? 0);
+
+                  const totalCredits = Math.round(limitUsd * 1000);
+                  const usedCredits = Math.min(
+                    totalCredits,
+                    Math.round(spentUsd * 1000)
+                  );
+                  const remaining = Math.max(0, totalCredits - usedCredits);
+
+                  const pct =
+                    totalCredits > 0
+                      ? Math.round((usedCredits / totalCredits) * 100)
+                      : 0;
+
+                  return (
+                    <div className="flex items-center gap-3">
+                      <div className="text-sm font-medium">
+                        Credits:{" "}
+                        <span className="font-semibold">{remaining}</span> /{" "}
+                        {totalCredits}
+                      </div>
+                      <div className="w-40 h-2 bg-white/20 rounded">
+                        <div
+                          className="h-2 bg-green-400 rounded"
+                          style={{ width: `${pct}%` }}
+                          title={`${pct}% used`}
+                        />
+                      </div>
+                    </div>
+                  );
+                })()}
+              </div>
+            )}
+          </div>
+
+          {/* Right-side actions */}
+          <div className="flex items-center gap-2">
+            {websiteData?.website_id && (
+              <button
+                onClick={() =>
+                  router.push(
+                    `/builder/websites/${websiteData.website_id}/payments`
+                  )
+                }
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded"
+              >
+                Payments
+              </button>
+            )}
+            {websiteData?.subdomain && (
+              <a
+                href={`/${websiteData.subdomain}`}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
+              >
+                Preview
+              </a>
+            )}
             <button
-              onClick={() =>
-                router.push(
-                  `/builder/websites/${websiteData.website_id}/payments`
-                )
-              }
-              className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded"
+              onClick={handleSaveChangesToDB}
+              disabled={isSaving}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded disabled:bg-gray-400"
             >
-              Payments
+              {isSaving ? "Saving..." : "Save All Changes"}
             </button>
-          )}
-          {websiteData?.subdomain && (
-            <a
-              href={`/${websiteData.subdomain}`}
-              target="_blank" // Opens in a new tab
-              rel="noopener noreferrer"
-              className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
-            >
-              Preview
-            </a>
-          )}
-          <button
-            onClick={handleSaveChangesToDB}
-            disabled={isSaving}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded disabled:bg-gray-400"
-          >
-            {isSaving ? "Saving..." : "Save All Changes"}
-          </button>
+          </div>
         </header>
+
         <main className="flex-1 p-4 overflow-y-auto">
           <BuilderCanvas
             page={activePage}

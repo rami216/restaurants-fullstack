@@ -23,6 +23,7 @@ interface ElementPaletteProps {
   selectedLocationId: string | null;
   onLocationChange: (locationId: string) => void;
   categories: Category[];
+  websiteId: string; // <-- add this
 }
 
 const GOOGLE_MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
@@ -246,6 +247,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   selectedLocationId,
   onLocationChange,
   categories,
+  websiteId
 }) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
@@ -310,6 +312,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       const { data } = await api.post("/ai/generate-ai-element", {
         prompt: aiPrompt,
         unique_class_name: uniqueClassName, // Pass the class name (without a dot)
+        website_id: websiteId,       
       });
 
       // Use the pre-generated ID for the new element

@@ -5,6 +5,7 @@ import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
+import { FiMenu, FiX } from "react-icons/fi"; // install react-icons if not already
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
@@ -457,8 +458,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       checkVisibility();
     }, [JSON.stringify(elementProps), isLoggedIn]); // Re-run this check if the element's rules or the user's login status changes
 
-    // --- Render based on visibility status ---
-
     if (visibility === "loading") {
       return (
         <div className="p-4 text-center text-gray-400">Loading Content...</div>
@@ -486,11 +485,98 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     return <>{children}</>;
   };
 
+  // const NavBar = () => {
+  //   const subdomain = websiteData.subdomain || "";
+  //   const base = `/${subdomain}`;
+
+  //   // safe read for CSR
+  //   const isLoggedIn =
+  //     typeof window !== "undefined" &&
+  //     !!localStorage.getItem(`siteToken:${subdomain}`);
+
+  //   const logout = () => {
+  //     if (typeof window !== "undefined") {
+  //       localStorage.removeItem(`siteToken:${subdomain}`);
+  //       window.location.assign(`${base}/login`);
+  //     }
+  //   };
+
+  //   // Filter/augment items for auth
+  //   const items = websiteData.navbar!.items.filter((ni: NavbarItem) => {
+  //     const url = (ni.link_url || "").toLowerCase();
+  //     if (isLoggedIn && (url === "/login" || url === "/register")) return false; // hide when logged in
+  //     return true;
+  //   });
+
+  //   // If logged in and there's no explicit logout item, add one
+  //   const hasLogout = items.some(
+  //     (ni: NavbarItem) => (ni.link_url || "").toLowerCase() === "/logout"
+  //   );
+  //   const finalItems: NavbarItem[] =
+  //     isLoggedIn && !hasLogout
+  //       ? [
+  //           ...items,
+  //           {
+  //             item_id: "auto_logout",
+  //             text: "Logout",
+  //             link_url: "/logout",
+  //           } as any,
+  //         ]
+  //       : items;
+
+  //   return (
+  //     <nav style={websiteData.navbar!.properties}>
+  //       <div className="flex items-center justify-between px-6 py-3 shadow-sm">
+  //         <div className="font-bold text-xl">Your Logo</div>
+  //         <div className="flex space-x-4">
+  //           {finalItems.map((ni: NavbarItem) => {
+  //             const url = (ni.link_url || "").toLowerCase();
+
+  //             // special action for logout
+  //             if (url === "/logout") {
+  //               return (
+  //                 <button
+  //                   key={ni.item_id}
+  //                   onClick={logout}
+  //                   style={websiteData.navbar!.properties.itemStyle}
+  //                   className="text-sm font-medium hover:underline"
+  //                 >
+  //                   {ni.text || "Logout"}
+  //                 </button>
+  //               );
+  //             }
+
+  //             // normal page links (use your slug->page lookup + router push)
+  //             const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
+  //             if (!tgt) return null;
+
+  //             return (
+  //               <a
+  //                 key={ni.item_id}
+  //                 href={ni.link_url}
+  //                 onClick={(e) => {
+  //                   e.preventDefault();
+  //                   setActiveCategory(null);
+  //                   router.push(`${base}${tgt.slug}`);
+  //                 }}
+  //                 style={websiteData.navbar!.properties.itemStyle}
+  //                 className="text-sm font-medium hover:underline"
+  //               >
+  //                 {ni.text}
+  //               </a>
+  //             );
+  //           })}
+  //         </div>
+  //       </div>
+  //     </nav>
+  //   );
+  // };
+  // keep units predictable for offsets
   const NavBar = () => {
     const subdomain = websiteData.subdomain || "";
     const base = `/${subdomain}`;
+    const [menuOpen, setMenuOpen] = useState(false);
 
-    // safe read for CSR
     const isLoggedIn =
       typeof window !== "undefined" &&
       !!localStorage.getItem(`siteToken:${subdomain}`);
@@ -502,17 +588,16 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       }
     };
 
-    // Filter/augment items for auth
     const items = websiteData.navbar!.items.filter((ni: NavbarItem) => {
       const url = (ni.link_url || "").toLowerCase();
-      if (isLoggedIn && (url === "/login" || url === "/register")) return false; // hide when logged in
+      if (isLoggedIn && (url === "/login" || url === "/register")) return false;
       return true;
     });
 
-    // If logged in and there's no explicit logout item, add one
     const hasLogout = items.some(
       (ni: NavbarItem) => (ni.link_url || "").toLowerCase() === "/logout"
     );
+
     const finalItems: NavbarItem[] =
       isLoggedIn && !hasLogout
         ? [
@@ -526,14 +611,28 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         : items;
 
     return (
-      <nav style={websiteData.navbar!.properties}>
-        <div className="flex items-center justify-between px-6 py-3 shadow-sm">
+      <nav
+        ref={navRef}
+        style={websiteData.navbar!.properties}
+        className="shadow-sm"
+      >
+        <div className="flex items-center justify-between px-4 py-3 md:px-6">
+          {/* Left: Hamburger menu (mobile) */}
+          <button
+            className="md:hidden text-2xl"
+            onClick={() => setMenuOpen(!menuOpen)}
+          >
+            {menuOpen ? <FiX /> : <FiMenu />}
+          </button>
+
+          {/* Logo */}
           <div className="font-bold text-xl">Your Logo</div>
-          <div className="flex space-x-4">
+
+          {/* Desktop Nav */}
+          <div className="hidden md:flex space-x-4">
             {finalItems.map((ni: NavbarItem) => {
               const url = (ni.link_url || "").toLowerCase();
 
-              // special action for logout
               if (url === "/logout") {
                 return (
                   <button
@@ -547,7 +646,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 );
               }
 
-              // normal page links (use your slug->page lookup + router push)
               const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
               if (!tgt) return null;
 
@@ -569,10 +667,92 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             })}
           </div>
         </div>
+
+        {/* Mobile Menu */}
+        {menuOpen && (
+          <div className="md:hidden px-4 pb-4 space-y-2 border-t">
+            {finalItems.map((ni: NavbarItem) => {
+              const url = (ni.link_url || "").toLowerCase();
+
+              if (url === "/logout") {
+                return (
+                  <button
+                    key={ni.item_id}
+                    onClick={() => {
+                      logout();
+                      setMenuOpen(false);
+                    }}
+                    className="block w-full text-left text-sm font-medium hover:underline"
+                  >
+                    {ni.text || "Logout"}
+                  </button>
+                );
+              }
+
+              const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
+              if (!tgt) return null;
+
+              return (
+                <a
+                  key={ni.item_id}
+                  href={ni.link_url}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    setActiveCategory(null);
+                    router.push(`${base}${tgt.slug}`);
+                    setMenuOpen(false);
+                  }}
+                  className="block text-sm font-medium hover:underline"
+                >
+                  {ni.text}
+                </a>
+              );
+            })}
+          </div>
+        )}
       </nav>
     );
   };
-  // keep units predictable for offsets
+  const navRef = React.useRef<HTMLElement | null>(null);
+  const lastSectionRef = React.useRef<HTMLDivElement | null>(null);
+
+  // Make the last section fill the leftover viewport height on mobile when content is short
+  useLayoutEffect(() => {
+    const applyFill = () => {
+      if (!lastSectionRef.current) return;
+
+      // reset first
+      lastSectionRef.current.style.minHeight = "";
+
+      const viewportH =
+        (window as any).visualViewport?.height || window.innerHeight;
+
+      const docH = document.documentElement.scrollHeight;
+      if (docH >= viewportH) return; // content already taller than viewport
+
+      const navH = navRef.current?.offsetHeight || 0;
+      const rect = lastSectionRef.current.getBoundingClientRect();
+
+      // Distance from top of viewport to top of last section (including page scroll)
+      const topFromViewport = rect.top;
+
+      // How much we still need to reach bottom
+      const needed = viewportH - topFromViewport;
+
+      if (needed > 0) {
+        lastSectionRef.current.style.minHeight = `${needed}px`;
+      }
+    };
+
+    applyFill();
+    window.addEventListener("resize", applyFill);
+    window.addEventListener("orientationchange", applyFill);
+    return () => {
+      window.removeEventListener("resize", applyFill);
+      window.removeEventListener("orientationchange", applyFill);
+    };
+  }, [currentPage?.slug, currentPage?.sections?.length]);
+
   const withUnit = (v: any) => (typeof v === "number" ? `${v}px` : v);
 
   const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
@@ -635,8 +815,9 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     // Wrap the entire page's content in GatedContent to check page-level visibility first.
     return (
       <GatedContent elementProps={currentPage?.properties}>
-        <div className="space-y-0">
-          {currentPage?.sections.map((sec) => {
+        <div className="space-y-0 flex-1 flex flex-col">
+          {currentPage?.sections.map((sec, idx) => {
+            const isLast = idx === currentPage.sections.length - 1;
             // Calculate styles here, as they are needed regardless of visibility for the wrapper
             const p = sec.properties || {};
             const containerStyle: React.CSSProperties = {
@@ -644,7 +825,23 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               backgroundImage: p.backgroundImage,
               padding: p.padding,
               ...(p.style || {}),
+              // Clamp bottom spacing for the LAST section
+              ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
             };
+            if (isLast) {
+              if (
+                (containerStyle as any).minHeight &&
+                String((containerStyle as any).minHeight).includes("vh")
+              ) {
+                (containerStyle as any).minHeight = "auto";
+              }
+              if (
+                (containerStyle as any).height &&
+                String((containerStyle as any).height).includes("vh")
+              ) {
+                (containerStyle as any).height = "auto";
+              }
+            }
             if (
               containerStyle.backgroundImage &&
               !String(containerStyle.backgroundImage).includes("gradient")
@@ -658,7 +855,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
             return (
               <GatedContent key={sec.section_id} elementProps={sec.properties}>
-                <div style={containerStyle}>
+                <div
+                  ref={isLast ? lastSectionRef : undefined} // ⬅️ add this
+                  style={{
+                    ...containerStyle,
+                    ...(isLast ? { flexGrow: 1 } : {}), // <-- make the last section fill the rest
+                  }}
+                  className={isLast ? "last-section" : undefined}
+                >
                   <div
                     className="w-full flex flex-wrap"
                     style={{
@@ -667,6 +871,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                       justifyContent: p.justifyContent,
                       alignItems: p.alignItems,
                       gap: p.gap,
+                      // extra safety for last wrapper:
+                      ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
                     }}
                   >
                     {sec.subsections.map((sub) => {
@@ -674,7 +880,29 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                       const { initial, animate, transition } = getMotionConfig(
                         subProps.animation
                       );
-                      const subsectionStyle = buildSubsectionStyle(subProps);
+                      const subsectionStyle = {
+                        ...buildSubsectionStyle(subProps),
+                        ...(isLast
+                          ? { marginBottom: 0, paddingBottom: 0 }
+                          : {}),
+                      };
+                      // ⬇️ NEW: also neutralize vh on LAST subsection (common on mobile)
+                      if (isLast) {
+                        if (
+                          (subsectionStyle as any).minHeight &&
+                          String((subsectionStyle as any).minHeight).includes(
+                            "vh"
+                          )
+                        ) {
+                          (subsectionStyle as any).minHeight = "auto";
+                        }
+                        if (
+                          (subsectionStyle as any).height &&
+                          String((subsectionStyle as any).height).includes("vh")
+                        ) {
+                          (subsectionStyle as any).height = "auto";
+                        }
+                      }
 
                       return (
                         <GatedContent
@@ -1041,7 +1269,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   if (!currentPage) return <div className="p-8">Page not found</div>;
 
   return (
-    <div className="bg-white min-h-screen m-0 p-0 w-full overflow-x-hidden">
+    <div className="bg-white m-0 p-0 w-full overflow-x-hidden flex flex-col min-h-[100svh]">
       <NavBar />
       <MainContent />
     </div>

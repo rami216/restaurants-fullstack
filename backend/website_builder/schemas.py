@@ -159,10 +159,16 @@ class WebsiteCreate(WebsiteBase):
 class WebsiteResponse(WebsiteBase):
     website_id: UUID
     restaurant_id: UUID
-    pages: List[FullPageResponse] = [] # Correctly uses the full page response
+    pages: List[FullPageResponse] = []
     navbar: Optional[NavbarResponse] = None
+
+    ai_spend_limit_usd: float | None = None
+    total_spend_usd: float = 0
+    monthly_spend_usd: float = 0
+
     class Config:
         from_attributes = True
+
 
 class LocationResponse(BaseModel):
     location_id: UUID

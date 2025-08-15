@@ -3,6 +3,7 @@ import asyncio
 from decouple import config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
+from decimal import Decimal
 
 # pull in your DATABASE_URL from .env
 DATABASE_URL = config("DATABASE_URL")
@@ -13,6 +14,12 @@ ACCESS_TOKEN_EXPIRE_MINUTES = config("ACCESS_TOKEN_EXPIRE_MINUTES", cast=int, de
 engine = create_async_engine(DATABASE_URL, echo=True)
 # Base app URL for redirects
 APP_URL = config("APP_URL", default="http://localhost:3000")
+
+AI_PRICE_INPUT_PER_MTOK  = Decimal(config("AI_PRICE_INPUT_PER_MTOK",  default="2.5"))
+AI_PRICE_OUTPUT_PER_MTOK = Decimal(config("AI_PRICE_OUTPUT_PER_MTOK", default="10"))
+AI_DEFAULT_MODEL = config("AI_DEFAULT_MODEL", default="gpt-4o")
+
+
 def get_app_url():
     """Return the frontend app base URL for redirecting Stripe sessions."""
     return APP_URL

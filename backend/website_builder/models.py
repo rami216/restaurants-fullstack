@@ -1,11 +1,11 @@
 # website_builder/models.py
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, JSON
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, JSON,BigInteger, Numeric,Computed
+
+from sqlalchemy.dialects.postgresql import UUID,JSONB
 from sqlalchemy.sql import func, text
 from sqlalchemy.orm import relationship
 from database import Base
-
 # This is a placeholder for the relationship you would add to your main models.py
 # You would add `website = relationship("Website", back_populates="owner", uselist=False)`
 # to your existing RestaurantOwner class.
@@ -13,17 +13,56 @@ from database import Base
 class Website(Base):
     __tablename__ = "websites"
 
-    website_id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    website_id  = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
     restaurant_id = Column(UUID(as_uuid=True), ForeignKey("restaurant_owners.restaurant_id"), nullable=False, unique=True)
-    subdomain = Column(String, unique=True, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+    subdomain   = Column(String, unique=True, nullable=True)
+    created_at  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at  = Column(DateTime(timezone=True), onupdate=func.now())
+
+    # AI usage aggregates
+    total_prompt_tokens     = Column(BigInteger, nullable=False, server_default=text("0"))
+    total_completion_tokens = Column(BigInteger, nullable=False, server_default=text("0"))
+    total_spend_usd = Column(Numeric, default=0)
+    monthly_spend_usd = Column(Numeric, default=0)
+    ai_spend_limit_usd = Column(Numeric, nullable=True)
+   
+    monthly_period_start    = Column(DateTime(timezone=True))
+    monthly_spend_limit_usd = Column(Numeric(12, 2))  # NULL means no cap
 
     # Relationships
-    # owner = relationship("RestaurantOwner", back_populates="website") # This link is defined on the RestaurantOwner model
-    pages = relationship("Page", back_populates="website", cascade="all, delete-orphan")
-    navbar = relationship("Navbar", back_populates="website", uselist=False, cascade="all, delete-orphan")
+    pages      = relationship("Page", back_populates="website", cascade="all, delete-orphan")
+    navbar     = relationship("Navbar", back_populates="website", uselist=False, cascade="all, delete-orphan")
     restaurant = relationship("RestaurantOwner", back_populates="website")
+    ai_usage_logs = relationship("AIUsageLog", back_populates="website", cascade="all, delete-orphan")
+
+    
+class AIUsageLog(Base):
+    __tablename__ = "ai_usage_logs"
+
+    id         = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id"), nullable=False, index=True)
+    user_id    = Column(Integer, ForeignKey("users.id"), nullable=True, index=True)
+
+    model      = Column(String, nullable=False)
+    feature    = Column(String, nullable=False)
+
+    prompt_tokens     = Column(BigInteger, nullable=False, server_default=text("0"))
+    completion_tokens = Column(BigInteger, nullable=False, server_default=text("0"))
+
+    input_cost_usd    = Column(Numeric(12, 6), nullable=False, server_default=text("0"))
+    output_cost_usd   = Column(Numeric(12, 6), nullable=False, server_default=text("0"))
+
+    # Match the DB "GENERATED ALWAYS AS (... ) STORED"
+    total_cost_usd    = Column(
+        Numeric(12, 6),
+        Computed("input_cost_usd + output_cost_usd", persisted=True),
+    )
+
+    meta       = Column(JSONB)
+    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    website    = relationship("Website", back_populates="ai_usage_logs")
+
 
 class Page(Base):
     __tablename__ = "pages"

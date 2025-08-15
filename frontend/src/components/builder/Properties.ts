@@ -102,9 +102,13 @@ export interface Page {
 
 export interface WebsiteData {
   website_id: string;
+  subdomain: string;
   navbar: Navbar | null;
   pages: Page[];
-  subdomain: string; // THIS LINE IS ADDED
+
+  total_spend_usd?: number; // may be undefined/null from API
+  monthly_spend_usd?: number; // "
+  ai_spend_limit_usd?: number | null; // "
 }
 
 export type Selection = {
