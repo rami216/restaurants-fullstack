@@ -529,6 +529,7 @@ const CreateWebsitePage = () => {
       const { data: refinedSection } = await api.post("/ai/refine-ai-section", {
         prompt,
         section_json: currentSection, // Use the new variable
+        website_id: websiteData?.website_id,
       });
 
       // Replace the old section with the refined one

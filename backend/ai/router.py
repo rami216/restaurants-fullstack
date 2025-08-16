@@ -970,6 +970,9 @@ async def refine_ai_section(
     user: User = Depends(get_current_active_user),
 ):
     try:
+        if not body.website_id:
+            raise HTTPException(status_code=400, detail="website_id is required")
+
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f"CURRENT SECTION JSON:\n{json.dumps(body.section_json, indent=2)}"
@@ -986,26 +989,35 @@ async def refine_ai_section(
             max_tokens=4096,
         )
 
+        # ---- parse model output
         payload = json.loads(resp.choices[0].message.content)
 
-        u = getattr(resp, "usage", None) or {}
+        # ---- usage tracking (OBJECT, not dict)
+        usage = getattr(resp, "usage", None)
+        prompt_tokens     = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used        = getattr(resp, "model", AI_DEFAULT_MODEL)
+
         await track_ai_usage(
-            db,
+            db=db,
             website_id=body.website_id,
             user_id=user.id,
-            model=getattr(resp, "model", None) or AI_DEFAULT_MODEL,
+            model=model_used,
             feature="refine_section",
-            prompt_tokens=int(u.get("prompt_tokens") or 0),
-            completion_tokens=int(u.get("completion_tokens") or 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             meta={"section_keys": list((body.section_json or {}).keys())[:10]},
         )
 
         return payload
 
     except (json.JSONDecodeError,) as e:
-        raise HTTPException(500, f"Section refinement failed: {e}")
+        raise HTTPException(status_code=500, detail=f"refine-ai-section JSON parse failed: {e}")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Section refinement failed: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"refine-ai-section failed: {e}")
 
 # --- END: REFINE SECTION FEATURE ---
 
@@ -1129,6 +1141,9 @@ async def generate_ai_page(
     user: User = Depends(get_current_active_user),
 ):
     try:
+        if not body.website_id:
+            raise HTTPException(status_code=400, detail="website_id is required")
+
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
@@ -1142,26 +1157,33 @@ async def generate_ai_page(
 
         payload = json.loads(resp.choices[0].message.content)
 
-        u = getattr(resp, "usage", None) or {}
+        usage = getattr(resp, "usage", None)
+        prompt_tokens     = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used        = getattr(resp, "model", AI_DEFAULT_MODEL)
+
         await track_ai_usage(
-            db,
+            db=db,
             website_id=body.website_id,
             user_id=user.id,
-            model=getattr(resp, "model", None) or AI_DEFAULT_MODEL,
+            model=model_used,
             feature="generate_page",
-            prompt_tokens=int(u.get("prompt_tokens") or 0),
-            completion_tokens=int(u.get("completion_tokens") or 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             meta={"prompt_len": len(body.prompt or "")},
         )
 
         return payload
 
     except (json.JSONDecodeError,) as e:
-        raise HTTPException(500, f"Page generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"generate-ai-page JSON parse failed: {e}")
+    except HTTPException:
+        raise
     except Exception as e:
-        raise HTTPException(500, f"Page generation failed: {e}")
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"generate-ai-page failed: {e}")
 
 # --- END: NEW PAGE GENERATION FEATURE ---
 
 
-#endregion pagegenerator
+#endregion pagegenerator  

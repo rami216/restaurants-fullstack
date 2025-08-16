@@ -401,73 +401,91 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     const [visibility, setVisibility] = useState<
       "loading" | "visible" | "hidden"
     >("loading");
+    const [hiddenReason, setHiddenReason] = useState<
+      "auth" | "purchase" | null
+    >(null);
+
+    // lightweight per-component cache: { `${memberId}_${productId}`: boolean }
+    const purchaseCacheRef = useRef<Record<string, boolean>>({});
 
     useEffect(() => {
       const checkVisibility = async () => {
         const v = elementProps?.visibility || {};
 
-        // 1. Standard Authentication Checks (run first)
+        // 1) anonymous-only
         if (v.requiresAnonymous && isLoggedIn) {
-          setVisibility("hidden");
-          return;
-        }
-        if (v.requiresAuth && !isLoggedIn) {
+          setHiddenReason("auth");
           setVisibility("hidden");
           return;
         }
 
-        // 2. Product Purchase Check (runs if the above checks pass)
+        // 2) requires auth
+        if (v.requiresAuth && !isLoggedIn) {
+          setHiddenReason("auth");
+          setVisibility("hidden");
+          return;
+        }
+
+        // 3) requires purchase (only runs if a product is specified)
         if (v.required_product_id) {
-          // User must be logged in to check for a purchase
+          // must be logged in and have a member id
           const memberId = localStorage.getItem(
-            `siteMemberId:${websiteData.subdomain}`
+            `siteMemberId:${websiteData?.subdomain}`
           );
-          if (!isLoggedIn || !memberId) {
+          if (!isLoggedIn || !memberId || !websiteData) {
+            setHiddenReason("auth");
             setVisibility("hidden");
             return;
           }
 
           const cacheKey = `${memberId}_${v.required_product_id}`;
-
-          // Check the cache first to avoid unnecessary API calls
-          if (purchaseStatusCache[cacheKey] !== undefined) {
-            setVisibility(purchaseStatusCache[cacheKey] ? "visible" : "hidden");
+          const cached = purchaseCacheRef.current[cacheKey];
+          if (typeof cached !== "undefined") {
+            setHiddenReason(cached ? null : "purchase");
+            setVisibility(cached ? "visible" : "hidden");
             return;
           }
 
-          // If not in cache, call the backend to verify the purchase
           try {
             const params = new URLSearchParams({
-              website_id: websiteData.website_id,
+              website_id: String(websiteData.website_id),
               member_id: memberId,
-              product_id: v.required_product_id,
+              product_id: String(v.required_product_id),
             });
 
-            const { data: has_purchase } = await api.get<boolean>(
+            const { data: hasPurchase } = await api.get<boolean>(
               `/users-stripe-account/${
                 websiteData.subdomain
               }/has-purchase?${params.toString()}`
             );
 
-            // Update the cache and set visibility
-            setPurchaseStatusCache((prev) => ({
-              ...prev,
-              [cacheKey]: has_purchase,
-            }));
-            setVisibility(has_purchase ? "visible" : "hidden");
+            purchaseCacheRef.current[cacheKey] = !!hasPurchase;
+            setHiddenReason(hasPurchase ? null : "purchase");
+            setVisibility(hasPurchase ? "visible" : "hidden");
+            return;
           } catch {
-            // If the API call fails, deny access for safety
-            setPurchaseStatusCache((prev) => ({ ...prev, [cacheKey]: false }));
+            // on failure, be safe and deny
+            purchaseCacheRef.current[cacheKey] = false;
+            setHiddenReason("purchase");
             setVisibility("hidden");
+            return;
           }
-        } else {
-          // If no purchase is required, the content is visible
-          setVisibility("visible");
         }
+
+        // 4) no special rule -> visible
+        setHiddenReason(null);
+        setVisibility("visible");
       };
 
+      // re-check when rules or login state change
       checkVisibility();
-    }, [JSON.stringify(elementProps), isLoggedIn]); // Re-run this check if the element's rules or the user's login status changes
+      // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [
+      JSON.stringify(elementProps?.visibility || {}),
+      isLoggedIn,
+      websiteData?.subdomain,
+      websiteData?.website_id,
+    ]);
 
     if (visibility === "loading") {
       return (
@@ -476,23 +494,26 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     }
 
     if (visibility === "hidden") {
-      const isContainer = elementProps?.padding || elementProps?.display;
+      // consider something a "container" (page/section) if it has layout-ish props
+      const isContainer =
+        elementProps?.padding || elementProps?.display || elementProps?.style;
       if (isContainer) {
-        // Show a "locked" message for larger elements like pages and sections
         return (
           <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
             <h4 className="font-semibold">Content Locked</h4>
-            <p className="text-sm">
-              You must purchase a specific product to view this content.
+            <p className="text-sm mt-1">
+              {hiddenReason === "auth"
+                ? "You must log in to view this content."
+                : "You must purchase a specific product to view this content."}
             </p>
           </div>
         );
       }
-      // Return nothing for smaller, inline elements
+      // for small inline elements, render nothing
       return null;
     }
 
-    // If all checks pass, render the actual content
+    // visible
     return <>{children}</>;
   };
 
@@ -832,7 +853,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             // Calculate styles here, as they are needed regardless of visibility for the wrapper
             const p = sec.properties || {};
             const styleProps = p.style || {};
-
+            
             // pick bg from either place
             const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
             let backgroundImage: string | undefined;
