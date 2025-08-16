@@ -853,7 +853,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             // Calculate styles here, as they are needed regardless of visibility for the wrapper
             const p = sec.properties || {};
             const styleProps = p.style || {};
-            
+
             // pick bg from either place
             const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
             let backgroundImage: string | undefined;
@@ -1231,16 +1231,16 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           animate={animate}
           transition={transition}
         >
-          <div className="absolute inset-0 z-10 cursor-pointer" />
+          {/* no overlay in public view */}
           <iframe
             src={props.src}
             style={{
               width: "100%",
               height: "100%",
               border: "0",
-              pointerEvents: "none",
+              pointerEvents: "auto", // allow interaction
             }}
-            allowFullScreen={false}
+            allowFullScreen
             loading="lazy"
             referrerPolicy="no-referrer-when-downgrade"
             title="Google Map"
