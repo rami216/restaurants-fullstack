@@ -1,5 +1,4 @@
 "use client";
-
 import * as React from "react";
 import api from "@/lib/axios";
 import { useRouter } from "next/navigation";
@@ -7,15 +6,15 @@ import { useRouter } from "next/navigation";
 type Field = {
   id: string;
   label?: string;
-  name: string; // sent to backend as a key in the payload
+  name: string;
   placeholder?: string;
   type?: "text" | "email" | "password";
 };
 
 export default function AuthFormElement({
-  kind, // "login" | "register"
-  props, // element.properties
-  subdomain, // websiteData.subdomain
+  kind,
+  props,
+  subdomain, // may be undefined in PublicCanvas
   editMode = false,
   onSuccess,
 }: {
@@ -26,6 +25,17 @@ export default function AuthFormElement({
   onSuccess?: () => void;
 }) {
   const router = useRouter();
+
+  // ✅ Resolve site slug from either prop OR current URL
+  const site = React.useMemo(() => {
+    if (subdomain && subdomain.trim()) return subdomain.trim();
+    if (typeof window !== "undefined") {
+      // first path segment: /my-site/..., fallback to ""
+      const seg = window.location.pathname.split("/").filter(Boolean)[0];
+      return seg || "";
+    }
+    return "";
+  }, [subdomain]);
 
   const fields: Field[] = Array.isArray(props?.fields) ? props.fields : [];
   const labelStyle = props?.labelStyle || {};
@@ -38,15 +48,6 @@ export default function AuthFormElement({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
-  // Base app URL (no trailing slash)
-  // const appBase = React.useMemo(
-  //   () =>
-  //     (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-  //       "http://localhost:3000") as string,
-  //   []
-  // );
-
-  // initialize empty values for controlled inputs
   React.useEffect(() => {
     const initial: Record<string, string> = {};
     for (const f of fields) initial[f.name] = initial[f.name] ?? "";
@@ -59,20 +60,16 @@ export default function AuthFormElement({
 
   function buildRedirect(
     kind: "login" | "register",
-    subdomain?: string,
+    siteSlug: string,
     props?: any
   ) {
-    // 1) if the element defines a successRedirect, honor it
     const sr: string | undefined = props?.successRedirect;
     if (sr && typeof sr === "string" && sr.trim()) {
-      // allow absolute URLs (http/https) OR treat as path relative to current origin
-      if (/^https?:\/\//i.test(sr)) return sr;
-      return sr.startsWith("/") ? sr : `/${sr}`;
+      if (/^https?:\/\//i.test(sr)) return sr; // absolute
+      return sr.startsWith("/") ? sr : `/${sr}`; // relative
     }
-
-    // 2) default behavior (relative paths; no hardcoded origin!)
-    if (!subdomain) return "/"; // safety fallback
-    return kind === "register" ? `/${subdomain}/login` : `/${subdomain}`;
+    if (!siteSlug) return "/"; // fallback
+    return kind === "register" ? `/${siteSlug}/login` : `/${siteSlug}`;
   }
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -83,33 +80,37 @@ export default function AuthFormElement({
     setError(null);
 
     try {
-      if (!subdomain) throw new Error("Missing subdomain for site auth.");
+      if (!site) throw new Error("Missing site slug for auth.");
 
+      // ✅ Use resolved `site`
       const url =
         kind === "login"
-          ? `/site-auth/${subdomain}/login`
-          : `/site-auth/${subdomain}/register`;
+          ? `/site-auth/${site}/login`
+          : `/site-auth/${site}/register`;
 
       const { data } = await api.post(url, form);
 
       if (kind === "login" && data?.access_token) {
-        localStorage.setItem(`siteToken:${subdomain}`, data.access_token);
-        localStorage.setItem(`siteMemberId:${subdomain}`, data.member_id);
+        localStorage.setItem(`siteToken:${site}`, data.access_token);
+        localStorage.setItem(`siteMemberId:${site}`, data.member_id);
       }
 
       onSuccess?.();
 
-      const redirect = buildRedirect(kind, subdomain, props);
+      const redirect = buildRedirect(kind, site, props);
 
-      // use relative navigation; Next will use the current origin (zygloglow.com)
       try {
-        router.push(redirect);
+        router.push(redirect); // relative to current origin (zygoflow.com)
         router.refresh?.();
       } catch {
         if (typeof window !== "undefined") window.location.assign(redirect);
       }
     } catch (err: any) {
-      setError(err?.response?.data?.detail || err?.message || "Request failed");
+      const d = err?.response?.data?.detail;
+      const msg = Array.isArray(d)
+        ? d.map((x: any) => x?.msg || "").join(", ")
+        : d;
+      setError(msg || err?.message || "Request failed");
     } finally {
       setLoading(false);
     }
@@ -120,7 +121,6 @@ export default function AuthFormElement({
       {props?.title && (
         <h3 style={{ marginBottom: "1rem", fontWeight: 600 }}>{props.title}</h3>
       )}
-
       <div style={{ display: "grid", gap: "0.75rem" }}>
         {fields.map((f) => (
           <div key={f.id}>
@@ -142,14 +142,12 @@ export default function AuthFormElement({
           </div>
         ))}
       </div>
-
       {editMode && (
         <div className="mt-3 text-xs text-gray-500">
           Preview mode: submitting won’t call the API.
         </div>
       )}
       {error && <div className="mt-3 text-sm text-red-600">{error}</div>}
-
       <button
         type={editMode ? "button" : "submit"}
         disabled={loading}
