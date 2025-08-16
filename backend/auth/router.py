@@ -127,23 +127,24 @@ async def google_login(
 
 
 
-@router.post("/login", response_model=Token)
+@router.post("/login")
 async def login(
     response: Response,
-    form_data: OAuth2PasswordRequestForm = Depends(),
-    db: AsyncSession = Depends(get_db)
+    form_data = Depends(),  # OAuth2PasswordRequestForm or your form schema
+    db: AsyncSession = Depends(get_db),
 ):
     user = await authenticate_user(db, form_data.username, form_data.password)
     if not user:
-        raise HTTPException(
-            status_code=status.HTTP_401_UNAUTHORIZED,
-            detail="Incorrect credentials"
-        )
+        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Incorrect credentials")
+
     token = create_access_token(user.email)
 
+    # -------- ENV-AWARE COOKIE SETTINGS --------
+    env_val = (os.getenv("ENV") or "").strip().lower()
+    IS_PROD = env_val == "prod"
 
-    # set JWT in an HttpOnly cookie
-    IS_PROD = os.getenv("ENV") == "prod"  # or whatever flag you use
+    # if you have a custom domain, set it via env (safer than hardcoding)
+    cookie_domain = os.getenv("COOKIE_DOMAIN")  # e.g. ".zygoflow.com"
 
     cookie_kwargs = dict(
         key="access_token",
@@ -154,20 +155,22 @@ async def login(
     )
 
     if IS_PROD:
+        # Matches your old working settings for zygoflow.com
         cookie_kwargs.update({
             "secure": True,
             "samesite": "none",
-            # optional if using custom domain:
-            # "domain": ".zygoflow.com",
         })
+        if cookie_domain:
+            cookie_kwargs["domain"] = cookie_domain
     else:
-        # local http://localhost:3000 <-> http://localhost:8000
+        # local dev: http://localhost:3000 <-> http://localhost:8000
         cookie_kwargs.update({
             "secure": False,
             "samesite": "lax",
         })
 
     response.set_cookie(**cookie_kwargs)
+
     return {"access_token": token, "token_type": "bearer"}
 
 
