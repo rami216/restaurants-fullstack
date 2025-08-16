@@ -39,12 +39,12 @@ export default function AuthFormElement({
   const [error, setError] = React.useState<string | null>(null);
 
   // Base app URL (no trailing slash)
-  const appBase = React.useMemo(
-    () =>
-      (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
-        "http://localhost:3000") as string,
-    []
-  );
+  // const appBase = React.useMemo(
+  //   () =>
+  //     (process.env.NEXT_PUBLIC_APP_URL?.replace(/\/$/, "") ||
+  //       "http://localhost:3000") as string,
+  //   []
+  // );
 
   // initialize empty values for controlled inputs
   React.useEffect(() => {
@@ -57,17 +57,33 @@ export default function AuthFormElement({
   const handleChange = (name: string, value: string) =>
     setForm((f) => ({ ...f, [name]: value }));
 
+  function buildRedirect(
+    kind: "login" | "register",
+    subdomain?: string,
+    props?: any
+  ) {
+    // 1) if the element defines a successRedirect, honor it
+    const sr: string | undefined = props?.successRedirect;
+    if (sr && typeof sr === "string" && sr.trim()) {
+      // allow absolute URLs (http/https) OR treat as path relative to current origin
+      if (/^https?:\/\//i.test(sr)) return sr;
+      return sr.startsWith("/") ? sr : `/${sr}`;
+    }
+
+    // 2) default behavior (relative paths; no hardcoded origin!)
+    if (!subdomain) return "/"; // safety fallback
+    return kind === "register" ? `/${subdomain}/login` : `/${subdomain}`;
+  }
+
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (editMode) return; // no API calls from preview
+    if (editMode) return;
 
     setLoading(true);
     setError(null);
 
     try {
-      if (!subdomain) {
-        throw new Error("Missing subdomain for site auth.");
-      }
+      if (!subdomain) throw new Error("Missing subdomain for site auth.");
 
       const url =
         kind === "login"
@@ -76,7 +92,6 @@ export default function AuthFormElement({
 
       const { data } = await api.post(url, form);
 
-      // On LOGIN: store token if provided
       if (kind === "login" && data?.access_token) {
         localStorage.setItem(`siteToken:${subdomain}`, data.access_token);
         localStorage.setItem(`siteMemberId:${subdomain}`, data.member_id);
@@ -84,12 +99,9 @@ export default function AuthFormElement({
 
       onSuccess?.();
 
-      // Redirect rules (no override):
-      const redirect =
-        kind === "register"
-          ? `${appBase}/${subdomain}/login`
-          : `${appBase}/${subdomain}`;
+      const redirect = buildRedirect(kind, subdomain, props);
 
+      // use relative navigation; Next will use the current origin (zygloglow.com)
       try {
         router.push(redirect);
         router.refresh?.();
