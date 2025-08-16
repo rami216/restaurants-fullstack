@@ -80,27 +80,38 @@ export default function AuthFormElement({
     setError(null);
 
     try {
-      if (!site) throw new Error("Missing site slug for auth.");
+      // ✅ Resolve the site slug RIGHT NOW (works on zygoflow.com and localhost)
+      const siteSlug =
+        (subdomain && subdomain.trim()) ||
+        (typeof window !== "undefined"
+          ? window.location.pathname.split("/").filter(Boolean)[0] || ""
+          : "");
 
-      // ✅ Use resolved `site`
+      if (!siteSlug) throw new Error("Missing site slug for auth.");
+
+      // ✅ Use the resolved slug for the API call
       const url =
         kind === "login"
-          ? `/site-auth/${site}/login`
-          : `/site-auth/${site}/register`;
+          ? `/site-auth/${siteSlug}/login`
+          : `/site-auth/${siteSlug}/register`;
 
       const { data } = await api.post(url, form);
 
       if (kind === "login" && data?.access_token) {
-        localStorage.setItem(`siteToken:${site}`, data.access_token);
-        localStorage.setItem(`siteMemberId:${site}`, data.member_id);
+        localStorage.setItem(`siteToken:${siteSlug}`, data.access_token);
+        localStorage.setItem(`siteMemberId:${siteSlug}`, data.member_id);
       }
 
       onSuccess?.();
 
-      const redirect = buildRedirect(kind, site, props);
+      // ✅ Build redirect from the same slug
+      let redirect = buildRedirect(kind, siteSlug, props);
+
+      // Safety: if something produced "/" but we DO have a slug, go to "/{slug}"
+      if (redirect === "/" && siteSlug) redirect = `/${siteSlug}`;
 
       try {
-        router.push(redirect); // relative to current origin (zygoflow.com)
+        router.push(redirect);
         router.refresh?.();
       } catch {
         if (typeof window !== "undefined") window.location.assign(redirect);
