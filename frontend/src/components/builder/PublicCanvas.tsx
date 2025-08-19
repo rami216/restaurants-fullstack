@@ -1028,6 +1028,33 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           )}
         </motion.div>
       );
+    } else if (effectiveType === "VIDEO") {
+      const cardStyle = props.style || {};
+      const titleStyle = props.titleStyle || {};
+      const metaStyle = props.metaStyle || {};
+      const vidStyle = props.videoStyle || {};
+
+      const src = props.src ? resolveImageSrc(props.src) : "";
+      const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
+
+      return (
+        <div
+          className="bg-white border rounded-xl shadow p-4 space-y-2"
+          style={cardStyle}
+        >
+          <div className="flex items-baseline justify-between">
+            <h4 style={titleStyle}>{props.title || "Video title"}</h4>
+            <span style={metaStyle}>{props.length || ""}</span>
+          </div>
+
+          <video
+            src={src}
+            poster={poster}
+            controls={Boolean(props.controls)}
+            style={vidStyle}
+          />
+        </div>
+      );
     } else if (effectiveType === "MENU_ITEM") {
       const isExpanded = expandedMenuItemId === element.properties.item_id;
       const itemExtras = extras[element.properties.item_id] || [];

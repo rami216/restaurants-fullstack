@@ -1,6 +1,7 @@
 # website_builder/models.py
 
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, JSON,BigInteger, Numeric,Computed
+from sqlalchemy import Boolean, Column, String, Integer, DateTime, ForeignKey, JSON,BigInteger, Numeric,Computed, UniqueConstraint
+import os
 
 from sqlalchemy.dialects.postgresql import UUID,JSONB
 from sqlalchemy.sql import func, text
@@ -9,6 +10,10 @@ from database import Base
 # This is a placeholder for the relationship you would add to your main models.py
 # You would add `website = relationship("Website", back_populates="owner", uselist=False)`
 # to your existing RestaurantOwner class.
+
+DEFAULT_AI_SPEND_LIMIT = os.getenv("AI_SPEND_LIMIT_USD", None)
+if DEFAULT_AI_SPEND_LIMIT is not None:
+    DEFAULT_AI_SPEND_LIMIT = float(DEFAULT_AI_SPEND_LIMIT)
 
 class Website(Base):
     __tablename__ = "websites"
@@ -24,7 +29,7 @@ class Website(Base):
     total_completion_tokens = Column(BigInteger, nullable=False, server_default=text("0"))
     total_spend_usd = Column(Numeric, default=0)
     monthly_spend_usd = Column(Numeric, default=0)
-    ai_spend_limit_usd = Column(Numeric, nullable=True)
+    ai_spend_limit_usd = Column(Numeric, nullable=True, default=DEFAULT_AI_SPEND_LIMIT)
    
     monthly_period_start    = Column(DateTime(timezone=True))
     monthly_spend_limit_usd = Column(Numeric(12, 2))  # NULL means no cap
@@ -166,3 +171,21 @@ class FormSubmission(Base):
 
 
 #endregion forms
+
+#region customdomains
+class CustomDomain(Base):
+    __tablename__ = "custom_domains"
+    __table_args__ = (UniqueConstraint("domain", name="uq_custom_domain_domain"),)
+
+    id          = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    website_id  = Column(UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), nullable=False, index=True)
+    domain      = Column(String, nullable=False)
+    status      = Column(String, nullable=False, server_default=text("'pending'"))
+    # render_id column has been removed.
+    last_error  = Column(String, nullable=True) # This will store the Cloudflare JSON data
+    created_at  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    verified_at = Column(DateTime(timezone=True), nullable=True)
+
+    website     = relationship("Website", backref="custom_domains")
+
+#endregion customdomains

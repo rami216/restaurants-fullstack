@@ -410,6 +410,38 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           />
         </div>
       );
+    } else if (effectiveType === "VIDEO") {
+      // Card + video (builder: keep it non-interactive to avoid accidental play)
+      const cardStyle = props.style || {};
+      const titleStyle = props.titleStyle || {};
+      const metaStyle = props.metaStyle || {};
+      const vidStyle = props.videoStyle || {};
+
+      const src = props.src ? resolveImageSrc(props.src) : "";
+      const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
+
+      return wrap(
+        <div
+          className="bg-white border rounded-xl shadow p-4 space-y-2"
+          style={cardStyle}
+        >
+          <div className="flex items-baseline justify-between">
+            <h4 style={titleStyle}>{props.title || "Video title"}</h4>
+            <span style={metaStyle}>{props.length || ""}</span>
+          </div>
+
+          <div className="relative">
+            {/* Block pointer events in the builder to keep selection easy */}
+            <div className="absolute inset-0 z-10" />
+            <video
+              src={src}
+              poster={poster}
+              controls={Boolean(props.controls)}
+              style={{ ...vidStyle, pointerEvents: "none" }}
+            />
+          </div>
+        </div>
+      );
     } else if (effectiveType === "DROPDOWN") {
       return wrap(
         <select className="border border-gray-300 rounded p-2">

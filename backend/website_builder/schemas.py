@@ -3,7 +3,9 @@
 from pydantic import BaseModel, ConfigDict, Field
 from typing import Optional, List, Dict, Any
 from uuid import UUID
-import datetime
+# import datetime
+# from datetime import datetime as d  # <-- this gives you the class, not the module
+from datetime import datetime
 
 def to_camel(s: str) -> str:
     parts = s.split("_")
@@ -165,7 +167,10 @@ class WebsiteResponse(WebsiteBase):
     ai_spend_limit_usd: float | None = None
     total_spend_usd: float = 0
     monthly_spend_usd: float = 0
-
+    
+    primary_custom_domain: Optional[str] = None
+    primary_custom_domain_status: Optional[str] = None # <-- New: More descriptive than a boolean
+    primary_custom_domain_id: Optional[UUID] = None   # <-- add this
     class Config:
         from_attributes = True
 
@@ -176,7 +181,7 @@ class LocationResponse(BaseModel):
 
     class Config:
         from_attributes = True
-        
+     
 class PublicWebsiteResponse(WebsiteResponse):
     locations: List[LocationResponse] = []
 
@@ -195,10 +200,29 @@ class FormSubmissionCreate(FormSubmissionBase):
 
 class FormSubmissionResponse(FormSubmissionBase):
     submission_id: UUID
-    created_at: datetime.datetime
+    created_at: datetime
 
     class Config:
         from_attributes = True
 
 
 #endregion form
+
+#region customdomain
+class CustomDomainCreate(BaseModel):
+    website_id: UUID
+    domain: str
+
+class CustomDomainOut(BaseModel):
+    id: UUID
+    website_id: UUID
+    domain: str
+    status: str
+    last_error: str | None = None
+    created_at: datetime
+    verified_at: datetime | None = None
+
+    class Config:
+        from_attributes = True
+
+#endregion customdomain

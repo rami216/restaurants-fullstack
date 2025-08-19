@@ -1,6 +1,7 @@
 # website_builder/router.py
 from fastapi import APIRouter, Depends, HTTPException, status
 from uuid import UUID
+from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
@@ -10,7 +11,7 @@ from typing import List
 from database import get_db
 from auth.auth_handler import get_current_active_user
 from models import User, RestaurantOwner,Location
-from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission
+from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain
 from . import schemas
 
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
@@ -28,19 +29,38 @@ async def get_website_and_check_ownership(website_id: UUID, current_user: User, 
     return website
 
 # --- Website Endpoints ---
-@router.get("/website", response_model=schemas.WebsiteResponse,response_model_by_alias=True,)
-async def get_my_website(current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
-    """Gets the current user's website with all nested data."""
+@router.get("/website", response_model=schemas.WebsiteResponse, response_model_by_alias=True)
+async def get_my_website(current_user: User = Depends(get_current_active_user),
+                         db: AsyncSession = Depends(get_db)):
     result = await db.execute(
-        select(Website).options(
+        select(Website)
+        .options(
             selectinload(Website.pages).selectinload(Page.sections).selectinload(Section.subsections).selectinload(Subsection.elements),
-            selectinload(Website.navbar).selectinload(Navbar.items)
-        ).join(RestaurantOwner).where(RestaurantOwner.user_id == current_user.id)
+            selectinload(Website.navbar).selectinload(Navbar.items),
+            selectinload(Website.custom_domains)  # <-- ensure relationship exists
+        )
+        .join(RestaurantOwner)
+        .where(RestaurantOwner.user_id == current_user.id)
     )
     website = result.scalars().first()
     if not website:
-        raise HTTPException(status_code=404, detail="No website found for this user.")
-    return website
+        raise HTTPException(404, "No website found for this user.")
+
+    # pick the primary domain (or the first if you prefer)
+    cd = (await db.execute(
+        select(CustomDomain)
+        .where(CustomDomain.website_id == website.website_id)
+        .order_by(desc(CustomDomain.created_at))
+        .limit(1)
+    )).scalars().first()
+
+    resp = schemas.WebsiteResponse.model_validate(website)
+    if cd:
+        resp.primary_custom_domain = cd.domain
+        # Note: Cloudflare's success status is "active"
+        resp.primary_custom_domain_status = cd.status # <-- New
+        resp.primary_custom_domain_id = cd.id
+    return resp
 
 # --- THIS IS THE CORRECTED ENDPOINT ---
 @router.post("/website", response_model=schemas.WebsiteResponse, status_code=status.HTTP_201_CREATED)

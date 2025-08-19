@@ -235,6 +235,30 @@ const availableElements = [
       inputStyle: { color: "#111827" },
     },
   },
+  {
+    type: "VIDEO",
+    name: "Video (card)",
+    defaultProps: {
+      title: "Sample Video",
+      length: "03:21",
+      src: "", // filled after upload in the editor
+      poster: "", // optional thumbnail
+      controls: true,
+      // card/container styles
+      style: {
+        backgroundColor: "#ffffff",
+        borderRadius: "12px",
+        padding: "1rem",
+        boxShadow: "0 1px 3px rgba(0,0,0,0.1), 0 1px 2px rgba(0,0,0,0.06)",
+        maxWidth: "640px",
+        width: "100%",
+      },
+      // editable text styles
+      titleStyle: { fontSize: "1.125rem", fontWeight: 700, color: "#111827" },
+      metaStyle: { fontSize: ".875rem", color: "#6b7280" },
+      videoStyle: { width: "100%", borderRadius: "10px" },
+    },
+  },
 ];
 
 const ElementPalette: React.FC<ElementPaletteProps> = ({
@@ -247,7 +271,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   selectedLocationId,
   onLocationChange,
   categories,
-  websiteId
+  websiteId,
 }) => {
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
@@ -312,7 +336,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       const { data } = await api.post("/ai/generate-ai-element", {
         prompt: aiPrompt,
         unique_class_name: uniqueClassName, // Pass the class name (without a dot)
-        website_id: websiteId,       
+        website_id: websiteId,
       });
 
       // Use the pre-generated ID for the new element

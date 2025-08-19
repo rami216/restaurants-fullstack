@@ -1,6 +1,7 @@
 // components/builder/PropertyEditor.tsx
 
 "use client";
+import axios from "axios";
 
 import React, { useRef, useState } from "react";
 import {
@@ -101,6 +102,26 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     run();
   }, [websiteData?.website_id]);
 
+  const posterInputRef = useRef<HTMLInputElement>(null);
+
+  const handleTitleStyleChange = (key: string, value: string) =>
+    handlePropertyChange("titleStyle", {
+      ...(selectedItem.properties.titleStyle || {}),
+      [key]: value,
+    });
+
+  const handleMetaStyleChange = (key: string, value: string) =>
+    handlePropertyChange("metaStyle", {
+      ...(selectedItem.properties.metaStyle || {}),
+      [key]: value,
+    });
+
+  const handleVideoStyleChange = (key: string, value: string) =>
+    handlePropertyChange("videoStyle", {
+      ...(selectedItem.properties.videoStyle || {}),
+      [key]: value,
+    });
+
   // --- START: ADD STATE FOR SECTION AI ---
   const [sectionAiPrompt, setSectionAiPrompt] = useState("");
   const [isGeneratingSection, setIsGeneratingSection] = useState(false);
@@ -150,6 +171,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   // --- END: ADD STATE FOR SECTION AI ---
 
   const [isUploading, setIsUploading] = useState(false);
+  const [uploadProgress, setUploadProgress] = React.useState(0);
+
   const [isAddingPage, setIsAddingPage] = useState(false);
   const [newPageTitle, setNewPageTitle] = useState("");
   // --- NEW: Function to handle the actual image file upload ---
@@ -261,6 +284,56 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       // URL.revokeObjectURL(objUrl);
     }
   };
+  const handleVideoUpload = async (
+    event: React.ChangeEvent<HTMLInputElement>,
+    propertyName: "src"
+  ) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+
+    try {
+      setIsUploading(true);
+      setUploadProgress(0);
+
+      // 1) Ask backend for a signed URL
+      const formData = new FormData();
+      formData.append("file_name", file.name);
+      formData.append("content_type", file.type || "application/octet-stream");
+
+      const { data: signed } = await api.post(
+        "/uploads/video/signed-url",
+        formData
+      );
+      const { upload_url, public_url, content_type } = signed;
+
+      // 2) Upload directly to Supabase via PUT (with progress)
+      await axios.put(upload_url, file, {
+        headers: {
+          "Content-Type":
+            content_type || file.type || "application/octet-stream",
+          "x-upsert": "true",
+        },
+        onUploadProgress: (evt) => {
+          const percent = Math.round((evt.loaded * 100) / (evt.total ?? 1));
+          setUploadProgress(percent);
+        },
+        maxBodyLength: Infinity, // allow large files
+        maxContentLength: Infinity,
+      });
+
+      // 3) Save the public URL to your element's properties
+      handlePropertyChange(propertyName, public_url);
+    } catch (err) {
+      console.error("Video upload failed:", err);
+      alert("Video upload failed. Please try again.");
+    } finally {
+      setIsUploading(false);
+      setUploadProgress(0);
+      // Also consider clearing the input so selecting the same file triggers again:
+      event.target.value = "";
+    }
+  };
+
   const handleCreatePage = () => {
     if (newPageTitle.trim()) {
       onCreatePage(newPageTitle.trim());
@@ -2557,6 +2630,218 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         );
         break;
       }
+      case "VIDEO": {
+        const props = selectedItem.properties;
+
+        editorBody = (
+          <div className="space-y-4">
+            {/* Title */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Title
+              </label>
+              <input
+                className="mt-1 block w-full border rounded-md p-2"
+                value={props.title || ""}
+                onChange={(e) => handlePropertyChange("title", e.target.value)}
+              />
+            </div>
+
+            {/* Length */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Length
+              </label>
+              <input
+                className="mt-1 block w-full border rounded-md p-2"
+                placeholder="e.g. 03:21"
+                value={props.length || ""}
+                onChange={(e) => handlePropertyChange("length", e.target.value)}
+              />
+            </div>
+
+            {/* Video preview */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Preview
+              </label>
+              <video
+                src={props.src ? resolveImageSrc(props.src) : undefined}
+                poster={
+                  props.poster ? resolveImageSrc(props.poster) : undefined
+                }
+                controls
+                style={{ width: "100%", borderRadius: "10px" }}
+              />
+            </div>
+
+            {/* Upload video */}
+            <div>
+              <input
+                type="file"
+                accept="video/*"
+                className="hidden"
+                ref={fileInputRef}
+                onChange={(e) => handleVideoUpload(e, "src")}
+              />
+              <button
+                onClick={() => fileInputRef.current?.click()}
+                className="w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
+                disabled={isUploading}
+              >
+                {isUploading ? "Uploading..." : "Upload video"}
+              </button>
+            </div>
+            {/* Progress bar */}
+            {isUploading && (
+              <div className="w-full bg-gray-200 rounded-full h-2 mt-2">
+                <div
+                  className="bg-blue-600 h-2 rounded-full transition-all"
+                  style={{ width: `${uploadProgress}%` }}
+                />
+              </div>
+            )}
+
+            {/* Poster upload (optional) – reuse your image upload helper */}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Poster
+              </label>
+              <div className="flex items-center gap-2">
+                <img
+                  src={
+                    props.poster
+                      ? resolveImageSrc(props.poster)
+                      : "https://placehold.co/160x90?text=Poster"
+                  }
+                  alt="poster"
+                  className="w-40 h-24 object-cover rounded border bg-gray-100"
+                />
+                <div>
+                  <input
+                    type="file"
+                    accept="image/*"
+                    className="hidden"
+                    ref={posterInputRef}
+                    onChange={(e) => handleImageUpload(e, "poster")}
+                  />
+                  <button
+                    onClick={() => posterInputRef.current?.click()}
+                    className="text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
+                  >
+                    Upload poster
+                  </button>
+                </div>
+              </div>
+            </div>
+
+            {/* Styles */}
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Card Style
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  className="border rounded p-2"
+                  placeholder="Background color"
+                  value={props.style?.backgroundColor || "#ffffff"}
+                  onChange={(e) =>
+                    handleStyleChange("backgroundColor", e.target.value)
+                  }
+                />
+                <input
+                  className="border rounded p-2"
+                  placeholder="Padding (e.g. 1rem)"
+                  value={props.style?.padding || "1rem"}
+                  onChange={(e) => handleStyleChange("padding", e.target.value)}
+                />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Title Style
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  className="border rounded p-2"
+                  placeholder="Font size"
+                  value={props.titleStyle?.fontSize || "1.125rem"}
+                  onChange={(e) =>
+                    handleTitleStyleChange("fontSize", e.target.value)
+                  }
+                />
+                <input
+                  type="color"
+                  className="h-10 border rounded"
+                  value={props.titleStyle?.color || "#111827"}
+                  onChange={(e) =>
+                    handleTitleStyleChange("color", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Meta Style
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  className="border rounded p-2"
+                  placeholder="Font size"
+                  value={props.metaStyle?.fontSize || ".875rem"}
+                  onChange={(e) =>
+                    handleMetaStyleChange("fontSize", e.target.value)
+                  }
+                />
+                <input
+                  type="color"
+                  className="h-10 border rounded"
+                  value={props.metaStyle?.color || "#6b7280"}
+                  onChange={(e) =>
+                    handleMetaStyleChange("color", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+
+            <div>
+              <h4 className="text-md font-medium text-gray-800 mb-2">
+                Video Style
+              </h4>
+              <div className="grid grid-cols-2 gap-3">
+                <input
+                  className="border rounded p-2"
+                  placeholder="Width (e.g. 100%)"
+                  value={props.videoStyle?.width || "100%"}
+                  onChange={(e) =>
+                    handleVideoStyleChange("width", e.target.value)
+                  }
+                />
+                <input
+                  className="border rounded p-2"
+                  placeholder="Border radius (e.g. 10px)"
+                  value={props.videoStyle?.borderRadius || "10px"}
+                  onChange={(e) =>
+                    handleVideoStyleChange("borderRadius", e.target.value)
+                  }
+                />
+              </div>
+            </div>
+
+            {/* Visibility panel reuse (as with other elements) */}
+            <VisibilityEditor
+              value={selectedItem.properties}
+              onChange={(next) =>
+                updateItem({ ...selectedItem, properties: next })
+              }
+            />
+          </div>
+        );
+        break;
+      }
+
       case "LOGIN_FORM":
         return renderAuthFormEditor("LOGIN_FORM");
       case "REGISTER_FORM":

@@ -1,4 +1,4 @@
-from fastapi import APIRouter, File, UploadFile, HTTPException, status
+from fastapi import APIRouter, File, UploadFile, HTTPException, status,Form
 from fastapi.responses import JSONResponse
 import os, mimetypes, uuid, traceback
 from supabase import create_client, Client
@@ -9,6 +9,7 @@ SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "menu_item_images")
 SUPABASE_FOLDER_PREFIX = os.getenv("SUPABASE_FOLDER_PREFIX", "").strip("/")
+SUPABASE_VIDEO_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "all_vids")
 
 supabase: Client = create_client(SUPABASE_URL, SUPABASE_SERVICE_ROLE_KEY)
 
@@ -50,3 +51,40 @@ async def upload_image(file: UploadFile = File(...)):
         print("UPLOAD ERROR:", e)
         print(traceback.format_exc())
         raise HTTPException(500, f"Upload failed: {e}")
+
+
+# ---------- NEW: SIGNED VIDEO UPLOAD (BROWSER -> SUPABASE) ----------
+@router.post("/video/signed-url")
+async def get_video_signed_url(
+    file_name: str = Form(...),
+    content_type: str = Form(...),
+):
+    """
+    Returns a one-time signed URL so the browser can PUT the file directly to Supabase.
+    """
+    try:
+        # build a unique object name
+        ext = os.path.splitext(file_name)[1] or mimetypes.guess_extension(content_type) or ""
+        name = f"{uuid.uuid4()}{ext}"
+
+        # create signed upload URL
+        res = supabase.storage.from_(SUPABASE_VIDEO_BUCKET).create_signed_upload_url(name)
+        # SDK response might use signedUrl or signed_url depending on version
+        signed_url = (res.get("signedUrl") or res.get("signed_url"))
+        if not signed_url:
+            raise RuntimeError(f"Failed to create signed upload URL: {res}")
+
+        public_url = f"{SUPABASE_URL}/storage/v1/object/public/{SUPABASE_VIDEO_BUCKET}/{name}"
+
+        # You PUT the file to signed_url with Content-Type and x-upsert headers
+        return {
+            "upload_url": signed_url,
+            "path": name,
+            "public_url": public_url,
+            "content_type": content_type,
+            "bucket": SUPABASE_VIDEO_BUCKET,
+        }
+    except Exception as e:
+        print("SIGNED URL ERROR (video):", e)
+        print(traceback.format_exc())
+        raise HTTPException(500, f"Could not create signed upload URL: {e}")

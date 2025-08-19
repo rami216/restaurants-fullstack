@@ -6,6 +6,8 @@ import React, { useState, useEffect } from "react";
 import api from "@/lib/axios";
 import ElementPalette from "@/components/builder/ElementPalette";
 import BuilderCanvas from "@/components/builder/BuilderCanvas";
+import { buildPublicUrl } from "@/lib/publicUrl";
+
 import {
   WebsiteData,
   Page,
@@ -859,6 +861,18 @@ const CreateWebsitePage = () => {
       alert("AI page generation failed. Please check the console.");
     }
   };
+
+  const previewHref = websiteData
+    ? buildPublicUrl({
+        subdomain: websiteData.subdomain,
+        slug: "/", // or current page's slug if you want deep-link preview
+        primaryDomain: websiteData.primary_custom_domain ?? null,
+        primaryDomainVerified: Boolean(
+          websiteData.primary_custom_domain_status
+        ),
+      })
+    : "#";
+
   if (loading)
     return (
       <div className="flex justify-center items-center h-screen">
@@ -962,14 +976,22 @@ const CreateWebsitePage = () => {
               </button>
             )}
             {websiteData?.subdomain && (
-              <a
-                href={`/${websiteData.subdomain}`}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
-              >
-                Preview
-              </a>
+              <>
+                <a
+                  href="/builder/custom-domain"
+                  className="inline-flex items-center px-3 py-1.5 rounded bg-slate-200 text-slate-900 text-sm"
+                >
+                  Custom Domain
+                </a>
+                <a
+                  href={previewHref}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
+                >
+                  Preview
+                </a>
+              </>
             )}
             <button
               onClick={handleSaveChangesToDB}

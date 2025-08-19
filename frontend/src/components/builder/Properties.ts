@@ -1,4 +1,7 @@
 // frontend/src/components/builder/Properties.ts
+
+import { UUID } from "crypto";
+
 // New, strongly-typed interface for element properties
 export interface ElementProperties {
   // Standard Element Props
@@ -109,6 +112,11 @@ export interface WebsiteData {
   total_spend_usd?: number; // may be undefined/null from API
   monthly_spend_usd?: number; // "
   ai_spend_limit_usd?: number | null; // "
+
+  // custom domain preview helpers
+  primary_custom_domain?: string | null;
+  primary_custom_domain_status?: string | null; // <-- New
+  primary_custom_domain_id?: UUID | null;
 }
 
 export type Selection = {
