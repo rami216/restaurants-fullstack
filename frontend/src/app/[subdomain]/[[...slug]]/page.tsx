@@ -66,7 +66,7 @@ export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
 const API_BASE =
-  process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
+  process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
   "http://localhost:8000";
 
 // Your main hosts (requests to these should use the [subdomain] param)
