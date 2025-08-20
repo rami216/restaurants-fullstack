@@ -80,21 +80,13 @@ export default function AuthFormElement({
     setError(null);
 
     try {
-      // ✅ Resolve the site slug RIGHT NOW (works on zygoflow.com and localhost)
-      const siteSlug =
-        (subdomain && subdomain.trim()) ||
-        (typeof window !== "undefined"
-          ? window.location.pathname.split("/").filter(Boolean)[0] || ""
-          : "");
+      // --- THIS IS THE FIX ---
+      // 1. Only use the reliable 'subdomain' prop.
+      const siteSlug = subdomain;
+      if (!siteSlug) throw new Error("Missing site identifier for auth.");
 
-      if (!siteSlug) throw new Error("Missing site slug for auth.");
-
-      // ✅ Use the resolved slug for the API call
-      const url =
-        kind === "login"
-          ? `/site-auth/${siteSlug}/login`
-          : `/site-auth/${siteSlug}/register`;
-
+      // 2. Build the API URL correctly.
+      const url = `/site-auth/${siteSlug}/${kind}`;
       const { data } = await api.post(url, form);
 
       if (kind === "login" && data?.access_token) {
@@ -104,18 +96,37 @@ export default function AuthFormElement({
 
       onSuccess?.();
 
-      // ✅ Build redirect from the same slug
-      let redirect = buildRedirect(kind, siteSlug, props);
+      // 3. Build the redirect path intelligently.
+      const isMainHost =
+        typeof window !== "undefined" &&
+        (window.location.hostname === "zygoflow.com" ||
+          window.location.hostname === "www.zygoflow.com");
 
-      // Safety: if something produced "/" but we DO have a slug, go to "/{slug}"
-      if (redirect === "/" && siteSlug) redirect = `/${siteSlug}`;
-
-      try {
-        router.push(redirect);
-        router.refresh?.();
-      } catch {
-        if (typeof window !== "undefined") window.location.assign(redirect);
+      let redirect = "/"; // Default redirect for custom domains
+      if (isMainHost) {
+        // On your main site, redirect to the subdomain's homepage
+        redirect = `/${siteSlug}`;
       }
+
+      // Allow for a custom success redirect from the builder properties
+      const customRedirect = props?.successRedirect;
+      if (
+        customRedirect &&
+        typeof customRedirect === "string" &&
+        customRedirect.trim()
+      ) {
+        redirect = customRedirect.startsWith("/")
+          ? customRedirect
+          : `/${customRedirect}`;
+        if (isMainHost) {
+          redirect = `/${siteSlug}${redirect}`;
+        }
+      }
+
+      // Perform the redirect
+      router.push(redirect);
+      router.refresh?.();
+      // --- END OF FIX ---
     } catch (err: any) {
       const d = err?.response?.data?.detail;
       const msg = Array.isArray(d)

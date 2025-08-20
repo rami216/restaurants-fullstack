@@ -605,8 +605,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   // };
   // keep units predictable for offsets
   const NavBar = () => {
+    // --- THIS IS THE FIX ---
+    // First, check if the user is on your main platform domain.
+    const isMainHost =
+      typeof window !== "undefined" &&
+      (window.location.hostname === "zygoflow.com" ||
+        window.location.hostname === "www.zygoflow.com");
+
     const subdomain = websiteData.subdomain || "";
-    const base = `/${subdomain}`;
+    const base = isMainHost ? `/${subdomain}` : "";
     const [menuOpen, setMenuOpen] = useState(false);
 
     const isLoggedIn =
