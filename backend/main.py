@@ -70,13 +70,13 @@ class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
                 response.headers["Vary"] = "Origin"
                 # no cookies for these endpoints:
                 response.headers["Access-Control-Allow-Credentials"] = "false"
+            response.headers["X-Dynamic-CORS"] = "1"   # <- debug
             return response
 
         # Not a SaaS public endpoint → let normal pipeline handle it
         return await call_next(request)
 
 # Register dynamic middleware FIRST so it runs before the global CORS
-app.add_middleware(DynamicSaaSCORSMiddleware)
 
 
 app.add_middleware(
@@ -86,6 +86,7 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+app.add_middleware(DynamicSaaSCORSMiddleware)
 
 
 # ---- Static files (keep only if the folder exists in the container)
