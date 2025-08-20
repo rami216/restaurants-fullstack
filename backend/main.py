@@ -1,8 +1,10 @@
 # main.py
 import os
-from fastapi import FastAPI
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 # If you want to keep .env loading locally:
 try:
@@ -34,6 +36,48 @@ origins_env = os.getenv("FRONTEND_ORIGIN", "")
 ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 
 app = FastAPI()
+
+# --- Dynamic CORS only for SaaS/public endpoints (no cookies there) ---
+SaaS_CORS_PATH_PREFIXES = (
+    "/site-auth/",                # site member login/register/me
+    "/users-stripe-account/",     # (if you call this directly from client sites)
+    "/public/",                   # any public resolver you expose
+)
+class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
+    async def dispatch(self, request: Request, call_next):
+        path = request.url.path
+
+        if path.startswith(SaaS_CORS_PATH_PREFIXES):
+            origin = request.headers.get("origin")
+            # Preflight
+            if request.method == "OPTIONS":
+                acrh = request.headers.get("access-control-request-headers", "*")
+                headers = {
+                    "Access-Control-Allow-Origin": origin or "*",
+                    "Vary": "Origin",
+                    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+                    "Access-Control-Allow-Headers": acrh,
+                    "Access-Control-Max-Age": "86400",
+                    # site-member flows do NOT use cookies:
+                    "Access-Control-Allow-Credentials": "false",
+                }
+                return Response(status_code=204, headers=headers)
+
+            # Actual request
+            response = await call_next(request)
+            if origin:
+                response.headers["Access-Control-Allow-Origin"] = origin
+                response.headers["Vary"] = "Origin"
+                # no cookies for these endpoints:
+                response.headers["Access-Control-Allow-Credentials"] = "false"
+            return response
+
+        # Not a SaaS public endpoint → let normal pipeline handle it
+        return await call_next(request)
+
+# Register dynamic middleware FIRST so it runs before the global CORS
+app.add_middleware(DynamicSaaSCORSMiddleware)
+
 
 app.add_middleware(
     CORSMiddleware,

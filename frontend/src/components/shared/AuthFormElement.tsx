@@ -2,6 +2,20 @@
 import * as React from "react";
 import { useRouter } from "next/navigation";
 
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL!; // https://<your-backend>.onrender.com
+
+async function apiFetch(path: string, init?: RequestInit) {
+  return fetch(`${API_BASE}${path}`, {
+    ...init,
+    mode: "cors",
+    credentials: "omit", // no cookies for site members
+    headers: {
+      "Content-Type": "application/json",
+      ...(init?.headers || {}),
+    },
+  });
+}
+
 type Field = {
   id: string;
   label?: string;
@@ -59,9 +73,8 @@ export default function AuthFormElement({
       if (!site) throw new Error("Missing site identifier for auth.");
 
       // call backend API
-      const res = await fetch(`/site-auth/${site}/${kind}`, {
+      const res = await apiFetch(`/site-auth/${site}/${kind}`, {
         method: "POST",
-        headers: { "Content-Type": "application/json" },
         body: JSON.stringify(form),
       });
 
