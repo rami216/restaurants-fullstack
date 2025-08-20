@@ -5,7 +5,8 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 
 from database import get_db
-from .models import Website, CustomDomain, Page, Section, Subsection, Element, Navbar, NavbarItem, Location
+from .models import Website, CustomDomain, Page, Section, Subsection, Element, Navbar, NavbarItem 
+from models import Location
 from . import schemas
 
 router = APIRouter(prefix="/public", tags=["Public"])
