@@ -57,6 +57,7 @@
 // app/[subdomain]/[[...slug]]/page.tsx
 // app/[subdomain]/[[...slug]]/page.tsx
 // app/[subdomain]/[[...slug]]/page.tsx
+// app/[subdomain]/[[...slug]]/page.tsx
 import { headers } from "next/headers";
 import { notFound } from "next/navigation";
 import PublicCanvas from "@/components/builder/PublicCanvas";
@@ -95,8 +96,15 @@ export default async function PublicSite({
 }: {
   params: { subdomain: string; slug?: string[] };
 }) {
-  // In some Next versions types say Promise<ReadonlyHeaders>, so just await it.
   const hdrs = await headers();
+
+  // --- NEW DEBUGGING LINES ---
+  console.log("--- DEBUGGING HEADERS on Next.js Server ---");
+  console.log("Host Header:", hdrs.get("host"));
+  console.log("X-Forwarded-Host Header:", hdrs.get("x-forwarded-host"));
+  console.log("-----------------------------------------");
+  // --- END DEBUGGING ---
+
   const hostRaw = hdrs.get("x-forwarded-host") || hdrs.get("host") || "";
   const host = hostRaw.toLowerCase();
 
