@@ -150,6 +150,71 @@ const Accordion = ({
   );
 };
 
+// export const CategoryMenuInCanvas = ({
+//   locations,
+//   categoryId,
+// }: {
+//   locations: Location[];
+//   categoryId: string;
+// }) => {
+//   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
+//   const [items, setItems] = useState<MenuItem[]>([]);
+
+//   useEffect(() => {
+//     if (!locationId) return;
+//     api
+//       .get<MenuItem[]>(
+//         `/locations/${locationId}/menu?category_id=${categoryId}`
+//       )
+//       .then((r) => setItems(r.data))
+//       .catch(() => setItems([]));
+//   }, [locationId, categoryId]);
+
+//   return (
+//     <div className="p-4">
+//       {/* location dropdown */}
+//       <div className="mb-4">
+//         <label className="block font-medium mb-1">Choose location:</label>
+//         <select
+//           className="border rounded p-2"
+//           value={locationId}
+//           onChange={(e) => setLocationId(e.target.value)}
+//         >
+//           {locations.map((loc) => (
+//             <option key={loc.location_id} value={loc.location_id}>
+//               {loc.location_name}
+//             </option>
+//           ))}
+//         </select>
+//       </div>
+
+//       {/* menu items grid */}
+//       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+//         {items.map((item) => (
+//           <div
+//             key={item.item_id}
+//             className="border rounded-lg bg-white shadow hover:shadow-lg transition overflow-hidden"
+//             style={{ maxWidth: 280 }}
+//           >
+//             <div className="w-full aspect-[4/3] overflow-hidden">
+//               <img
+//                 src={`${api.defaults.baseURL}${item.image_url}`}
+//                 alt={item.item_name}
+//                 className="w-full h-full object-cover"
+//               />
+//             </div>
+//             <div className="p-3">
+//               <h4 className="font-semibold text-base mb-1">{item.item_name}</h4>
+//               <p className="text-sm text-gray-600 mb-2">{item.description}</p>
+//               <p className="font-medium">${item.base_price.toFixed(2)}</p>
+//             </div>
+//           </div>
+//         ))}
+//       </div>
+//     </div>
+//   );
+// };
+
 export const CategoryMenuInCanvas = ({
   locations,
   categoryId,
@@ -159,16 +224,57 @@ export const CategoryMenuInCanvas = ({
 }) => {
   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
   const [items, setItems] = useState<MenuItem[]>([]);
+  const [loading, setLoading] = useState(false);
+  const [err, setErr] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!locationId) return;
-    api
-      .get<MenuItem[]>(
-        `/locations/${locationId}/menu?category_id=${categoryId}`
-      )
-      .then((r) => setItems(r.data))
-      .catch(() => setItems([]));
+    if (!locationId || !categoryId) return;
+
+    const fetchItems = async () => {
+      setLoading(true);
+      setErr(null);
+      try {
+        // If your API expects an integer for category_id, force it here:
+        const catParam = Number.isFinite(Number(categoryId))
+          ? Number(categoryId)
+          : categoryId;
+
+        const { data } = await api.get(`/locations/${locationId}/menu`, {
+          params: { category_id: catParam },
+        });
+
+        // Normalize shape: allow either {items:[...]} or [...].
+        const list = Array.isArray(data)
+          ? data
+          : Array.isArray(data?.items)
+          ? data.items
+          : [];
+        setItems(list);
+        // Helpful debug (remove later):
+        console.log("Menu items:", {
+          locationId,
+          categoryId,
+          count: list.length,
+          sample: list[0],
+        });
+      } catch (e: any) {
+        console.error("Menu fetch failed:", e);
+        setErr(e?.message || "Failed to load menu");
+        setItems([]);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchItems();
   }, [locationId, categoryId]);
+
+  // Helper to make image src always valid (absolute)
+  const imgSrc = (p: string | undefined) => {
+    if (!p) return "";
+    // your resolveImageSrc already handles absolute/relative → reuse it
+    return resolveImageSrc(p);
+  };
 
   return (
     <div className="p-4">
@@ -188,6 +294,12 @@ export const CategoryMenuInCanvas = ({
         </select>
       </div>
 
+      {loading && <p className="text-sm text-gray-500">Loading menu…</p>}
+      {err && !loading && <p className="text-sm text-red-600">Error: {err}</p>}
+      {!loading && !err && items.length === 0 && (
+        <p className="text-sm text-gray-500">No items in this category.</p>
+      )}
+
       {/* menu items grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {items.map((item) => (
@@ -196,17 +308,20 @@ export const CategoryMenuInCanvas = ({
             className="border rounded-lg bg-white shadow hover:shadow-lg transition overflow-hidden"
             style={{ maxWidth: 280 }}
           >
-            <div className="w-full aspect-[4/3] overflow-hidden">
+            <div className="w-full aspect-[4/3] overflow-hidden bg-gray-100">
               <img
-                src={`${api.defaults.baseURL}${item.image_url}`}
+                src={imgSrc(item.image_url)}
                 alt={item.item_name}
                 className="w-full h-full object-cover"
+                loading="lazy"
               />
             </div>
             <div className="p-3">
               <h4 className="font-semibold text-base mb-1">{item.item_name}</h4>
               <p className="text-sm text-gray-600 mb-2">{item.description}</p>
-              <p className="font-medium">${item.base_price.toFixed(2)}</p>
+              <p className="font-medium">
+                ${Number(item.base_price).toFixed(2)}
+              </p>
             </div>
           </div>
         ))}
