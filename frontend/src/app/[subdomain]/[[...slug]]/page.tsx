@@ -105,7 +105,12 @@ export default async function PublicSite({
   console.log("-----------------------------------------");
   // --- END DEBUGGING ---
 
-  const hostRaw = hdrs.get("x-forwarded-host") || hdrs.get("host") || "";
+  // **THE FIX**: Look for our custom header from the Worker first
+  const hostRaw =
+    hdrs.get("x-original-host") ||
+    hdrs.get("x-forwarded-host") ||
+    hdrs.get("host") ||
+    "";
   const host = hostRaw.toLowerCase();
 
   let websiteData: PublicWebsiteData;
