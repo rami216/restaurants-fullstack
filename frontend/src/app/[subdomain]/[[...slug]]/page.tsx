@@ -84,7 +84,7 @@ async function fetchBySubdomain(subdomain: string): Promise<PublicWebsiteData> {
 
 async function fetchByHost(host: string): Promise<PublicWebsiteData> {
   const res = await fetch(
-    `${API_BASE}/builder/public/by-host?host=${encodeURIComponent(host)}`,
+    `${API_BASE}/public/by-host?host=${encodeURIComponent(host)}`,
     { cache: "no-store" }
   );
   if (!res.ok) throw new Error("not found");
