@@ -41,7 +41,11 @@ app = FastAPI()
 SaaS_CORS_PATH_PREFIXES = (
     "/site-auth/",                # site member login/register/me
     "/users-stripe-account/",     # (if you call this directly from client sites)
-    "/public/",                   # any public resolver you expose
+    "/public/",
+    "/locations/",            # ← menu list
+    "/menu-item-extras/",     # ← extras
+    "/menu-item-options/",    # ← options
+    "/uploads/",              # ← images if served by backend# any public resolver you expose
 )
 class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):

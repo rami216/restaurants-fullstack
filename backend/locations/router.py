@@ -134,7 +134,7 @@ async def get_menu_by_location_id(
     # If a category_id is provided, add another filter to the query
     if category_id is not None:
         query = query.where(MenuItem.category_id == category_id)
-
+    
     # Execute the final query
     result = await db.execute(query)
     menu_items = result.scalars().all()
