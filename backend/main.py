@@ -50,38 +50,44 @@ SaaS_CORS_PATH_PREFIXES = (
 class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
         path = request.url.path
+        origin = request.headers.get("origin")
 
+        # if request originates from your dashboard/frontend origins,
+        # DO NOT do the SaaS CORS here; let global CORSMiddleware handle it
+        if origin and origin in ALLOWED_ORIGINS:
+            return await call_next(request)
+
+        # For non-dashboard origins (custom domains, previews, etc.)
+        # apply public SaaS CORS only on the public endpoints:
         if path.startswith(SaaS_CORS_PATH_PREFIXES):
-            origin = request.headers.get("origin")
-            # Preflight
             if request.method == "OPTIONS":
                 acrh = request.headers.get("access-control-request-headers", "*")
-                headers = {
-                    "Access-Control-Allow-Origin": origin or "*",
-                    "Vary": "Origin",
-                    "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-                    "Access-Control-Allow-Headers": acrh,
-                    "Access-Control-Max-Age": "86400",
-                    # site-member flows do NOT use cookies:
-                    "Access-Control-Allow-Credentials": "false",
-                }
-                return Response(status_code=204, headers=headers)
+                return Response(
+                    status_code=204,
+                    headers={
+                        "Access-Control-Allow-Origin": origin or "*",
+                        "Vary": "Origin",
+                        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+                        "Access-Control-Allow-Headers": acrh,
+                        "Access-Control-Max-Age": "86400",
+                        # public endpoints don't use cookies:
+                        "Access-Control-Allow-Credentials": "false",
+                    },
+                )
 
-            # Actual request
-            response = await call_next(request)
+            resp = await call_next(request)
             if origin:
-                response.headers["Access-Control-Allow-Origin"] = origin
-                response.headers["Vary"] = "Origin"
-                # no cookies for these endpoints:
-                response.headers["Access-Control-Allow-Credentials"] = "false"
-            response.headers["X-Dynamic-CORS"] = "1"   # <- debug
-            return response
+                resp.headers["Access-Control-Allow-Origin"] = origin
+                resp.headers["Vary"] = "Origin"
+            resp.headers["Access-Control-Allow-Credentials"] = "false"
+            return resp
 
-        # Not a SaaS public endpoint → let normal pipeline handle it
         return await call_next(request)
+
 
 # Register dynamic middleware FIRST so it runs before the global CORS
 
+app.add_middleware(DynamicSaaSCORSMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -90,7 +96,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-app.add_middleware(DynamicSaaSCORSMiddleware)
 
 
 # ---- Static files (keep only if the folder exists in the container)

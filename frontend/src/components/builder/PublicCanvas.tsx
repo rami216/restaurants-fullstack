@@ -6,6 +6,7 @@ import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
 import { FiMenu, FiX } from "react-icons/fi"; // install react-icons if not already
+import saasApi, { API_BASE } from "@/lib/saasApi"; // <-- use the no-cookie client
 
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
@@ -162,7 +163,7 @@ export const CategoryMenuInCanvas = ({
 
   useEffect(() => {
     if (!locationId) return;
-    api
+    saasApi
       .get<MenuItem[]>(
         `/locations/${locationId}/menu?category_id=${categoryId}`
       )
@@ -198,7 +199,8 @@ export const CategoryMenuInCanvas = ({
           >
             <div className="w-full aspect-[4/3] overflow-hidden">
               <img
-                src={`${api.defaults.baseURL}${item.image_url}`}
+                // src={`${api.defaults.baseURL}${item.image_url}`}
+                src={`${API_BASE}${item.image_url}`} // don't rely on api.defaults.baseURL
                 alt={item.item_name}
                 className="w-full h-full object-cover"
               />
