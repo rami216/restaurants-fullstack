@@ -308,39 +308,42 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     // router.refresh();
   };
   const startCheckout = async (productId: string) => {
-    // No longer accepts memberId here
     if (!productId) return;
 
-    // 1. Get member_id from the user's session in localStorage
+    // member must be logged in
     const subdomain = websiteData.subdomain;
     const memberId =
       typeof window !== "undefined"
         ? localStorage.getItem(`siteMemberId:${subdomain}`)
         : null;
 
-    // 2. Check if the user is logged in
     if (!memberId) {
       alert("Please log in to complete your purchase.");
       return;
     }
 
     try {
-      // 3. Re-add the logic for ngrok/production origin
-      const origin =
-        process.env.NEXT_PUBLIC_WEBHOOK_BASE_URL ||
-        (typeof window !== "undefined" ? window.location.origin : "");
+      // Figure out what the user's browser origin should come back to
+      const win = typeof window !== "undefined" ? window : null;
+      const isMainHost =
+        !!win &&
+        (win.location.hostname === "zygoflow.com" ||
+          win.location.hostname === "www.zygoflow.com");
 
-      const base = websiteData?.subdomain ? `/${websiteData.subdomain}` : "";
+      // On custom domains → /thank-you (same origin).
+      // On zygoflow.com preview → /{subdomain}/thank-you
+      const basePath = isMainHost ? `/${subdomain}` : "";
+      const siteOrigin = win ? win.location.origin : ""; // https://www.whitemessagecenter.com OR https://zygoflow.com
 
-      const success_url = `${origin}${base}/thank-you`;
-      const cancel_url = `${origin}${base}${currentPage?.slug || ""}`;
+      const success_url = `${siteOrigin}${basePath}/thank-you`;
+      const cancel_url = `${siteOrigin}${basePath}${currentPage?.slug || ""}`;
 
+      // Call your API (no cookies needed)
       const { data } = await api.post(
         `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`,
-        // 4. Use the correct key 'member_id' to match your Python backend
         {
           product_id: productId,
-          member_id: memberId, // Use the ID from localStorage
+          member_id: memberId,
           success_url,
           cancel_url,
         }
@@ -357,6 +360,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       alert("Sorry — couldn’t start checkout. Please try again.");
     }
   };
+
   const performInteractivity = async (props: any) => {
     // Use destructuring with a default value to safely get the interactivity object.
     const { interactivity: inter = { action: "none" } } = props || {};
