@@ -20,6 +20,36 @@ type DnsInstructions = {
   message: string;
 };
 
+const normalizeDomain = (d: string) =>
+  d
+    .trim()
+    .toLowerCase()
+    .replace(/^https?:\/\//, "")
+    .replace(/\/+$/, "");
+
+/** Map whatever the backend returns to a consistent shape */
+const normalizeDnsInstructions = (raw: any): DnsInstructions => {
+  const record_type = raw?.record_type ?? raw?.type ?? "TXT";
+  const record_name =
+    raw?.record_name ?? raw?.name ?? raw?.host ?? raw?.record ?? "";
+  const record_value =
+    raw?.record_value ??
+    raw?.value ??
+    raw?.txt_value ??
+    raw?.target ??
+    raw?.content ??
+    "";
+  const message =
+    raw?.message ?? raw?.detail ?? "Add this TXT record at your registrar.";
+
+  return {
+    record_type: String(record_type),
+    record_name: String(record_name),
+    record_value: String(record_value),
+    message: String(message),
+  };
+};
+
 export default function CustomDomainPage() {
   const [site, setSite] = useState<Site | null>(null);
   const [domain, setDomain] = useState("");
@@ -29,27 +59,18 @@ export default function CustomDomainPage() {
   const [dnsInstructions, setDnsInstructions] =
     useState<DnsInstructions | null>(null);
 
-  // ---------- Helpers ----------
-  const normalizeDomain = (d: string) =>
-    d
-      .trim()
-      .toLowerCase()
-      .replace(/^https?:\/\//, "")
-      .replace(/\/+$/, "");
-
   const rootDomain = useMemo(() => {
     const d = normalizeDomain(domain || site?.primary_custom_domain || "");
     return d.replace(/^www\./, "");
   }, [domain, site?.primary_custom_domain]);
 
   const isActive = site?.primary_custom_domain_status === "active";
-
   const recordType = dnsInstructions?.record_type || "TXT";
   const wwwHost = "www";
   const wwwTarget = "www.zygoflow.com";
   const apexRedirectTarget = `https://www.${rootDomain || "yourdomain.com"}`;
 
-  // Extract only the label part users must paste into Host/Name:
+  // Extract only the label users must paste into Host/Name:
   // "_cf-custom-hostname.www.example.com" → "_cf-custom-hostname.www"
   const hostLabelToCopy = useMemo(() => {
     const name = dnsInstructions?.record_name;
@@ -73,7 +94,7 @@ export default function CustomDomainPage() {
       const { data } = await api.get<Site>("/builder/website");
       setSite(data);
       setDomain(data.primary_custom_domain || "");
-      // keep dnsInstructions as-is; user might still be viewing them
+      // keep dnsInstructions shown if already generated
     } catch (error) {
       console.error("Failed to fetch site data:", error);
     }
@@ -88,14 +109,16 @@ export default function CustomDomainPage() {
     if (!domain.trim() || !site?.website_id) return;
     setSaving(true);
     try {
-      const { data } = await api.post<DnsInstructions>("/custom-domains", {
+      const { data } = await api.post("/custom-domains", {
         website_id: site.website_id,
         domain: normalizeDomain(domain),
       });
-      setDnsInstructions(data);
+      // Map any server shape to our normalized one
+      setDnsInstructions(normalizeDnsInstructions(data));
+      // console.log("DNS instructions:", data);
     } catch (error: any) {
       alert(
-        `Error: ${error.response?.data?.detail || "Could not add domain."}`
+        `Error: ${error?.response?.data?.detail || "Could not add domain."}`
       );
     } finally {
       setSaving(false);
@@ -150,12 +173,13 @@ export default function CustomDomainPage() {
 
   const showActionBadge =
     !isActive && (dnsInstructions ? "Action Required" : "Pending Setup");
+  const txtValue = dnsInstructions?.record_value; // <- after normalization this should be filled
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold">Custom Domain</h1>
 
-      {/* Domain input card */}
+      {/* Domain input */}
       <div className="rounded-lg border p-4 space-y-3 bg-white">
         <label className="block text-sm font-medium">Your domain</label>
         <input
@@ -183,7 +207,7 @@ export default function CustomDomainPage() {
         {renderStatus()}
       </div>
 
-      {/* STEP 1: Always visible */}
+      {/* STEP 1 — always visible */}
       <div className="rounded-lg border p-4 space-y-4 bg-blue-50">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-blue-900">
@@ -205,7 +229,7 @@ export default function CustomDomainPage() {
         ) : (
           <p className="text-sm text-blue-800">
             Enter your domain above and click <b>Save Domain</b> to generate the
-            TXT record you need to add at your registrar.
+            TXT record you need to add.
           </p>
         )}
 
@@ -232,8 +256,8 @@ export default function CustomDomainPage() {
             </div>
             <p className="mt-2 text-xs text-gray-600">
               Paste exactly the label above (e.g. <b>_cf-custom-hostname.www</b>
-              ) into the <i>Host/Name</i> field. <b>Do not include</b> your
-              domain (e.g.{" "}
+              ) into the <i>Host/Name</i> field.
+              <b> Do not include</b> your domain (e.g.{" "}
               <span className="font-mono text-[11px]">.yourdomain.com</span>).
             </p>
           </div>
@@ -242,14 +266,12 @@ export default function CustomDomainPage() {
             <div className="text-xs text-gray-500 mb-1">Value / Target</div>
             <div className="flex items-center justify-between gap-3">
               <div className="font-mono text-sm break-all">
-                {dnsInstructions?.record_value || "—"}
+                {txtValue ||
+                  (dnsInstructions ? "(missing from server response)" : "—")}
               </div>
               <button
-                onClick={() =>
-                  dnsInstructions?.record_value &&
-                  copy(dnsInstructions.record_value)
-                }
-                disabled={!dnsInstructions?.record_value}
+                onClick={() => txtValue && copy(txtValue)}
+                disabled={!txtValue}
                 className="text-xs px-2 py-1 rounded bg-gray-900 text-white disabled:opacity-50"
               >
                 Copy
@@ -260,12 +282,11 @@ export default function CustomDomainPage() {
 
         <p className="text-xs text-gray-700">
           After adding this TXT record, wait a few minutes, then click{" "}
-          <b>Refresh Status</b>. Once the status is <b>Active</b>, continue to
-          Step 2.
+          <b>Refresh Status</b>. Once Active, proceed to Step 2.
         </p>
       </div>
 
-      {/* STEP 2: Always visible */}
+      {/* STEP 2 — always visible */}
       <div className="rounded-lg border p-4 space-y-4 bg-white">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">
@@ -290,16 +311,15 @@ export default function CustomDomainPage() {
             </span>{" "}
             you added in Step 1.
           </li>
-
           <li>
             Add a <b>CNAME</b> record to point your subdomain to our platform:
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
               <div className="rounded border p-3">
                 <div className="text-xs text-gray-500 mb-1">Name / Host</div>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm">{wwwHost}</div>
+                  <div className="font-mono text-sm">www</div>
                   <button
-                    onClick={() => copy(wwwHost)}
+                    onClick={() => copy("www")}
                     className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
                   >
                     Copy
@@ -309,9 +329,9 @@ export default function CustomDomainPage() {
               <div className="rounded border p-3">
                 <div className="text-xs text-gray-500 mb-1">Value / Target</div>
                 <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm">{wwwTarget}</div>
+                  <div className="font-mono text-sm">www.zygoflow.com</div>
                   <button
-                    onClick={() => copy(wwwTarget)}
+                    onClick={() => copy("www.zygoflow.com")}
                     className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
                   >
                     Copy
@@ -320,7 +340,6 @@ export default function CustomDomainPage() {
               </div>
             </div>
           </li>
-
           <li>
             Add a <b>URL Redirect / Forward</b> so the root domain redirects to
             the www version:
