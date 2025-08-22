@@ -12,6 +12,7 @@ import {
   Category,
 } from "./Properties";
 import { PanelLeftClose, PanelLeftOpen, MapPin } from "lucide-react";
+import { useSubscription } from "@/context/SubscriptionContext";
 
 interface ElementPaletteProps {
   isExpanded: boolean;
@@ -273,6 +274,8 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   categories,
   websiteId,
 }) => {
+  const { subscriptionStatus } = useSubscription(); // <-- 2. USE THE HOOK
+  const isSubscribed = subscriptionStatus === "active"; // <-- 3. CREATE A HELPER VARIABLE
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
   //for ai generated element
@@ -486,11 +489,16 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             />
             <button
               onClick={handleGenerateAi}
-              disabled={loadingAi || !aiPrompt.trim()}
+              disabled={loadingAi || !aiPrompt.trim() || !isSubscribed}
               className="mt-2 w-full bg-blue-600 text-white py-2 rounded disabled:opacity-50"
             >
               {loadingAi ? "Generating…" : "Generate AI Element"}
             </button>
+            {!isSubscribed && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                Please subscribe to use AI features.
+              </p>
+            )}
           </div>
           <hr className="my-4 border-gray-300" />
 

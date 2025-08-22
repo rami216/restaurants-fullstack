@@ -6,6 +6,8 @@ import BrandForm from "@/components/BrandForm";
 import LocationForm from "@/components/LocationForm";
 import { tableConfigs } from "@/constants/tableConfigs";
 import { loadStripe } from "@stripe/stripe-js";
+import { useSubscription } from "@/context/SubscriptionContext";
+import Link from "next/link"; // <-- 2. Import Link for the billing page
 
 const stripePromise = loadStripe(
   "pk_test_51PoT3lJ436yrzjfSZK3QP1DDzAG5HJvGKdAfj455nsKlalB76uKEjakezDDBVM2Ki9zaPxGm8UsvJKTpjdPejdEX00F4Pv3jkK"
@@ -24,6 +26,7 @@ const tableNames = [
 const BACKEND_URL = "http://127.0.0.1:8000";
 
 const MainPage = () => {
+  const { subscriptionStatus, creditBalance } = useSubscription();
   // --- STATE MANAGEMENT ---
   const [pendingFiles, setPendingFiles] = useState<Record<number, File | null>>(
     {}
@@ -84,10 +87,10 @@ const MainPage = () => {
   );
 
   // --- NEW PAYMENT & BILLING STATE ---
-  const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
-    null
-  );
-  const [creditBalance, setCreditBalance] = useState<number>(0);
+  // const [subscriptionStatus, setSubscriptionStatus] = useState<string | null>(
+  //   null
+  // );
+  // const [creditBalance, setCreditBalance] = useState<number>(0);
   const [topUpAmount, setTopUpAmount] = useState<string>("10"); // Default to $10
 
   // NEW STATE: To track if the conditions for the link are met
@@ -150,12 +153,12 @@ const MainPage = () => {
         setHasRestaurant(true);
         setRestaurantId(res.data.restaurant_id);
         // THE FIX: This line was missing. It updates the state with the new balance.
-        setCreditBalance(res.data.credit_balance || 0);
-        setSubscriptionStatus(res.data.subscription_status);
+        // setCreditBalance(res.data.credit_balance || 0);
+        // setSubscriptionStatus(res.data.subscription_status);
         await checkBrand(res.data.restaurant_id);
       } else {
         setHasRestaurant(false);
-        setCreditBalance(0);
+        // setCreditBalance(0);
       }
     } catch (error) {
       console.error("Failed to check restaurant", error);
@@ -164,40 +167,6 @@ const MainPage = () => {
     }
   };
   // --- PAYMENT HANDLERS ---
-  const handleSubscribe = async () => {
-    try {
-      const res = await api.post("/payments/create-subscription-checkout");
-      const { sessionId } = res.data;
-      const stripe = await stripePromise;
-      if (stripe) await stripe.redirectToCheckout({ sessionId });
-    } catch (error) {
-      console.error("Failed to create subscription session", error);
-      alert("Error creating subscription.");
-    }
-  };
-  const handleManageBilling = async () => {
-    try {
-      const res = await api.post("/payments/create-billing-portal-session");
-      window.location.href = res.data.url;
-    } catch (error) {
-      console.error("Failed to create billing portal session", error);
-      alert("Could not open billing portal.");
-    }
-  };
-  const handleTopUp = async () => {
-    const amount = parseFloat(topUpAmount);
-    if (isNaN(amount) || amount <= 0)
-      return alert("Please enter a valid amount.");
-    try {
-      const res = await api.post("/payments/create-top-up-session", { amount });
-      const { sessionId } = res.data;
-      const stripe = await stripePromise;
-      if (stripe) await stripe.redirectToCheckout({ sessionId });
-    } catch (error) {
-      console.error("Failed to create top-up session", error);
-      alert("Error creating payment session.");
-    }
-  };
 
   const createBrand = async () => {
     try {
@@ -709,49 +678,28 @@ const MainPage = () => {
                 </h3>
                 {/* --- BILLING & LOCATION SECTION --- */}
                 <div className="p-4 bg-black bg-opacity-20 rounded-lg text-center space-y-4">
-                  {subscriptionStatus === "active" ? (
-                    <>
-                      <div>
-                        {/* UPDATED: Simplified display */}
-                        <h4 className="text-lg font-semibold">
-                          Remaining Credit: ${creditBalance.toFixed(5)}
-                        </h4>
-                      </div>
-                      <div className="flex items-center justify-center space-x-2">
-                        <input
-                          type="number"
-                          value={topUpAmount}
-                          onChange={(e) => setTopUpAmount(e.target.value)}
-                          placeholder="e.g., 10.00"
-                          className="bg-white text-black px-2 py-1 rounded w-24"
-                        />
-                        <button
-                          onClick={handleTopUp}
-                          className="bg-blue-500 hover:bg-blue-600 text-white font-semibold px-4 py-1 rounded"
-                        >
-                          Add Funds
-                        </button>
-                      </div>
-                      <button
-                        onClick={handleManageBilling}
-                        className="text-sm text-gray-300 hover:underline"
+                  <div>
+                    <h4 className="text-lg font-semibold">
+                      Remaining Credit: ${creditBalance.toFixed(5)}
+                    </h4>
+                    <p className="text-sm text-gray-300 mt-1">
+                      Subscription Status:{" "}
+                      <span
+                        className={
+                          subscriptionStatus === "active"
+                            ? "text-green-400"
+                            : "text-red-400"
+                        }
                       >
-                        Manage Subscription & Billing
-                      </button>
-                    </>
-                  ) : (
-                    <div className="text-center">
-                      <p className="mb-2">
-                        Subscribe for $20/month to activate your account.
-                      </p>
-                      <button
-                        onClick={handleSubscribe}
-                        className="bg-green-500 hover:bg-green-600 text-white font-bold px-6 py-2 rounded"
-                      >
-                        Subscribe Now
-                      </button>
-                    </div>
-                  )}
+                        {subscriptionStatus || "Inactive"}
+                      </span>
+                    </p>
+                  </div>
+                  <Link href="/billingPage">
+                    <a className="text-white underline hover:text-pink-200">
+                      Manage Subscription & Billing
+                    </a>
+                  </Link>
                 </div>
                 {hasLocations ? (
                   <div className="text-center">
@@ -778,7 +726,7 @@ const MainPage = () => {
                     </div>
 
                     {/* This div puts the automation link on its own line */}
-                    {hasMenuItems && hasSchedules && (
+                    {hasMenuItems && hasSchedules && creditBalance > 0 && (
                       <div className="mt-4">
                         <a
                           href={`https://restaurants-automation.onrender.com/?restaurant_id=${restaurantId}&restaurant_name=${encodeURIComponent(

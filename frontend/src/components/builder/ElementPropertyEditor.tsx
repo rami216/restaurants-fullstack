@@ -36,6 +36,7 @@ import {
 import Mustache from "mustache";
 import VisibilityEditor from "./VisibilityEditor";
 import { resolveImageSrc } from "@/lib/imageUrl";
+import { useSubscription } from "@/context/SubscriptionContext";
 
 interface PropertyEditorProps {
   isExpanded: boolean;
@@ -78,6 +79,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onRefineElement,
   onCreateStandalonePage,
 }) => {
+  const { subscriptionStatus } = useSubscription(); // <-- 2. USE THE HOOK
+  const isSubscribed = subscriptionStatus === "active"; // <-- 3. CREATE A HELPER VARIABLE
+
   const [products, setProducts] = React.useState<
     { product_id: string; name: string }[]
   >([]);
@@ -576,6 +580,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                   );
                 }}
                 products={products}
+                isSubscribed={isSubscribed}
               />
             </div>
           </>
@@ -704,13 +709,20 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             />
             <button
               onClick={handleGenerateSectionClick}
-              disabled={isGeneratingSection || !sectionAiPrompt.trim()}
+              disabled={
+                isGeneratingSection || !sectionAiPrompt.trim() || !isSubscribed
+              }
               className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
             >
               {isGeneratingSection
                 ? "Generating..."
                 : "Generate Section Layout"}
             </button>
+            {!isSubscribed && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                Please subscribe to use AI features.
+              </p>
+            )}
           </div>
         </div>
         <hr />
@@ -729,11 +741,16 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             />
             <button
               onClick={handleRefineClick}
-              disabled={isRefining || !refinePrompt.trim()}
+              disabled={isRefining || !refinePrompt.trim() || !isSubscribed}
               className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
             >
               {isRefining ? "Refining..." : "Refine with AI"}
             </button>
+            {!isSubscribed && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                Please subscribe to use AI features.
+              </p>
+            )}
           </div>
         </div>
         {/* --- END: NEW REFINE UI --- */}
@@ -883,6 +900,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             );
           }}
           products={products}
+          isSubscribed={isSubscribed}
         />
       </div>
     );
@@ -2866,6 +2884,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             );
           }}
           products={products}
+          isSubscribed={isSubscribed} // <-- 7. PASS STATUS TO VISIBILITY EDITOR
         />
       </>
     );
@@ -2991,12 +3010,19 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       <button
                         onClick={handleRefineElementClick}
                         disabled={
-                          isRefiningElement || !elementRefinePrompt.trim()
+                          isRefiningElement ||
+                          !elementRefinePrompt.trim() ||
+                          !isSubscribed
                         }
                         className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
                       >
                         {isRefiningElement ? "Refining..." : "Refine Element"}
                       </button>
+                      {!isSubscribed && (
+                        <p className="mt-2 text-sm text-red-600 text-center">
+                          Please subscribe to use AI features.
+                        </p>
+                      )}
                     </div>
                   </div>
                   <hr className="my-4" />
