@@ -4,6 +4,7 @@ from decouple import config
 from sqlalchemy import text
 from sqlalchemy.ext.asyncio import create_async_engine
 from decimal import Decimal
+AI_SPEND_LIMIT_USD = Decimal(config("AI_SPEND_LIMIT_USD", default="0"))
 
 # pull in your DATABASE_URL from .env
 DATABASE_URL = config("DATABASE_URL")

@@ -13,6 +13,7 @@ from auth.auth_handler import get_current_active_user
 from models import User, RestaurantOwner,Location
 from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain
 from . import schemas
+from config import AI_SPEND_LIMIT_USD  # import the default from .env
 
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
@@ -65,29 +66,30 @@ async def get_my_website(current_user: User = Depends(get_current_active_user),
 # --- THIS IS THE CORRECTED ENDPOINT ---
 @router.post("/website", response_model=schemas.WebsiteResponse, status_code=status.HTTP_201_CREATED)
 async def create_website(website_data: schemas.WebsiteCreate, current_user: User = Depends(get_current_active_user), db: AsyncSession = Depends(get_db)):
-    """Creates a new website with default page, section, subsection, and navbar."""
     owner = await db.scalar(select(RestaurantOwner).where(RestaurantOwner.user_id == current_user.id))
-    if not owner: raise HTTPException(status_code=404, detail="Restaurant owner profile not found.")
-    
-    existing_website = await db.scalar(select(Website).where(Website.restaurant_id == owner.restaurant_id))
-    if existing_website: raise HTTPException(status_code=400, detail="A website already exists for this user.")
+    if not owner:
+        raise HTTPException(status_code=404, detail="Restaurant owner profile not found.")
 
-    # Create all the objects
-    new_website = Website(restaurant_id=owner.restaurant_id, subdomain=website_data.subdomain)
+    existing_website = await db.scalar(select(Website).where(Website.restaurant_id == owner.restaurant_id))
+    if existing_website:
+        raise HTTPException(status_code=400, detail="A website already exists for this user.")
+
+    new_website = Website(
+        restaurant_id=owner.restaurant_id,
+        subdomain=website_data.subdomain,
+        ai_spend_limit_usd=AI_SPEND_LIMIT_USD,  # ← comes from .env (e.g., 8)
+    )
+
     new_navbar = Navbar(website=new_website)
     home_page = Page(website=new_website, title="Home", slug="/")
     section = Section(page=home_page, section_type="hero", position=1, properties={})
     subsection = Subsection(section=section, position=1, properties={"flexDirection": "column", "alignItems": "center"})
     home_nav_item = NavbarItem(navbar=new_navbar, text="Home", link_url="/", position=1)
-    
+
     db.add_all([new_website, new_navbar, home_page, section, subsection, home_nav_item])
     await db.commit()
-    
-    # THE FIX: After committing, re-fetch the website using the comprehensive query.
-    # This ensures the returned object is fully loaded and matches the response model perfectly.
-    created_website = await get_my_website(current_user, db)
-    
-    return created_website
+
+    return await get_my_website(current_user, db)
 
 # --- Page Endpoints ---
 @router.post("/pages", response_model=schemas.PageResponse, status_code=status.HTTP_201_CREATED)
