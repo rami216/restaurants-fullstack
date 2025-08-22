@@ -53,6 +53,14 @@ export default function AuthFormElement({
   const [loading, setLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // Allow builder styles but provide good Tailwind defaults
+  const containerStyle: React.CSSProperties = props?.style || {};
+  const labelStyle: React.CSSProperties = props?.labelStyle || {};
+  const inputStyle: React.CSSProperties = props?.inputStyle || {};
+  const buttonStyle: React.CSSProperties = props?.submitButton?.style || {};
+  const buttonText: string =
+    props?.submitButton?.text || (kind === "login" ? "Login" : "Register");
+
   React.useEffect(() => {
     const initial: Record<string, string> = {};
     for (const f of fields) initial[f.name] = initial[f.name] ?? "";
@@ -72,7 +80,6 @@ export default function AuthFormElement({
     try {
       if (!site) throw new Error("Missing site identifier for auth.");
 
-      // call backend API
       const res = await apiFetch(`/site-auth/${site}/${kind}`, {
         method: "POST",
         body: JSON.stringify(form),
@@ -92,7 +99,6 @@ export default function AuthFormElement({
 
       onSuccess?.();
 
-      // Redirect logic
       const isMainHost =
         typeof window !== "undefined" &&
         (window.location.hostname === "zygoflow.com" ||
@@ -119,26 +125,67 @@ export default function AuthFormElement({
   }
 
   return (
-    <form onSubmit={handleSubmit} style={props?.style || {}}>
-      {props?.title && <h3>{props.title}</h3>}
-      <div style={{ display: "grid", gap: "0.75rem" }}>
-        {fields.map((f) => (
-          <div key={f.id}>
-            {f.label && <label>{f.label}</label>}
-            <input
-              type={f.type || "text"}
-              name={f.name}
-              placeholder={f.placeholder || ""}
-              value={form[f.name] || ""}
-              onChange={(e) => handleChange(f.name, e.target.value)}
-              required
-            />
-          </div>
-        ))}
+    <form
+      onSubmit={handleSubmit}
+      style={containerStyle}
+      className={`bg-white p-8 rounded shadow max-w-md w-full mx-auto space-y-4`}
+    >
+      {props?.title && (
+        <h3 className="text-2xl font-bold text-center text-gray-800">
+          {props.title}
+        </h3>
+      )}
+
+      {error && <div className="text-red-600 text-center text-sm">{error}</div>}
+
+      <div className="grid gap-3">
+        {fields.map((f) => {
+          const inputId = f.id || f.name;
+          return (
+            <div key={inputId}>
+              {f.label && (
+                <label
+                  htmlFor={inputId}
+                  className="block mb-1 text-gray-700"
+                  style={labelStyle}
+                >
+                  {f.label}
+                </label>
+              )}
+              <input
+                id={inputId}
+                type={f.type || "text"}
+                name={f.name}
+                placeholder={f.placeholder || ""}
+                value={form[f.name] || ""}
+                onChange={(e) => handleChange(f.name, e.target.value)}
+                required
+                style={inputStyle}
+                className="w-full border border-gray-300 rounded px-3 py-2 focus:outline-none focus:ring-2 focus:ring-pink-500"
+                autoComplete={
+                  f.type === "password"
+                    ? "current-password"
+                    : f.type === "email"
+                    ? "email"
+                    : "on"
+                }
+              />
+            </div>
+          );
+        })}
       </div>
-      {error && <div style={{ color: "red" }}>{error}</div>}
-      <button type={editMode ? "button" : "submit"} disabled={loading}>
-        {loading ? "Please wait..." : kind === "login" ? "Login" : "Register"}
+
+      <button
+        type={editMode ? "button" : "submit"}
+        disabled={loading}
+        style={buttonStyle}
+        className="w-full bg-pink-500 text-white font-bold py-2 rounded hover:bg-pink-600 transition-colors disabled:opacity-50"
+      >
+        {loading
+          ? kind === "login"
+            ? "Logging in..."
+            : "Registering..."
+          : buttonText}
       </button>
     </form>
   );
