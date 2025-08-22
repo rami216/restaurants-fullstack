@@ -577,15 +577,39 @@ const MainPage = () => {
     alert("Changes saved!");
     await handleTableClick(selectedTable);
   };
+  const interpolateUrl = (template: string, context: Record<string, any>) =>
+    template.replace(/\${(.*?)}/g, (_: any, key: string) => {
+      const val = context[key];
+      return val != null ? encodeURIComponent(String(val)) : "";
+    });
 
   const handleDeleteRow = async (item: any) => {
     const config = tableConfigs[selectedTable];
     if (!config?.deleteApi) return;
+
     const primaryKeyValue = item[config.primaryKey];
-    if (!primaryKeyValue)
-      return alert("Cannot delete row without a primary key.");
-    const apiUrl = config.deleteApi.replace(/\${(.*?)}/g, primaryKeyValue);
+    if (!primaryKeyValue) {
+      alert("Cannot delete row without a primary key.");
+      return;
+    }
+
+    if (config.deleteApi.includes("${restaurant_id}") && !restaurantId) {
+      alert("Missing restaurant_id (UUID) in state. Cannot delete.");
+      return;
+    }
+
     try {
+      const urlContext: Record<string, any> = {
+        restaurant_id: restaurantId, // UUID
+        location_id: selectedLocationId, // if any delete URL ever needs it
+        brand_id: brandId, // if needed
+        id: primaryKeyValue, // generic numeric ID (e.g., categories)
+        ...item, // e.g., item_id, extra_id, group_id, etc.
+      };
+
+      const apiUrl = interpolateUrl(config.deleteApi, urlContext);
+      // console.log("DELETE", apiUrl); // helpful if you still see 422
+
       await api.delete(apiUrl);
       alert("Deleted successfully!");
       await handleTableClick(selectedTable);
