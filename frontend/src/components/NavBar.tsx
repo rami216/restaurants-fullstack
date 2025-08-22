@@ -86,6 +86,21 @@ export default function NavBar() {
                   Create Website
                 </button>
               </li>
+              {/* --- THIS IS THE NEW BILLING LINK --- */}
+              <li>
+                <Link
+                  href="/billingPage"
+                  className={cn(
+                    "transition-colors",
+                    pathname === "/billingPage"
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  Billing
+                </Link>
+              </li>
+              {/* --- END OF CHANGE --- */}
               <li>
                 <button
                   onClick={handleLogout}

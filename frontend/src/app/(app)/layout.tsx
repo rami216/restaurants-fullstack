@@ -5,6 +5,8 @@ import "../globals.css";
 import NavBar from "@/components/NavBar"; // ✅ add this import
 import { AuthProvider } from "@/context/AuthContext";
 import AuthRedirect from "@/context/AuthRedirect";
+import { SubscriptionProvider } from "@/context/SubscriptionContext";
+
 const geistSans = Geist({
   variable: "--font-geist-sans",
 
@@ -33,13 +35,15 @@ export default function RootLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        <AuthProvider>
-          <AuthRedirect>
-            <NavBar />
+        <SubscriptionProvider>
+          <AuthProvider>
+            <AuthRedirect>
+              <NavBar />
 
-            {children}
-          </AuthRedirect>
-        </AuthProvider>
+              {children}
+            </AuthRedirect>
+          </AuthProvider>
+        </SubscriptionProvider>
       </body>
     </html>
   );
