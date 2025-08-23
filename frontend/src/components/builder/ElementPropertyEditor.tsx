@@ -2468,6 +2468,61 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         );
         break;
       }
+      case "MENU_ITEM": {
+        editorBody = (
+          <div className="space-y-4">
+            <h4 className="text-md font-medium text-gray-800">Chat Options</h4>
+            <label className="flex items-center gap-2">
+              <input
+                type="checkbox"
+                checked={!!selectedItem.properties.chatEnabled}
+                onChange={(e) =>
+                  handlePropertyChange("chatEnabled", e.target.checked)
+                }
+              />
+              <span>Show WhatsApp chat icon on this card</span>
+            </label>
+
+            {selectedItem.properties.chatEnabled && (
+              <>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    WhatsApp Number
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedItem.properties.whatsappNumber || ""}
+                    onChange={(e) =>
+                      handlePropertyChange("whatsappNumber", e.target.value)
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    placeholder="+1 555 123 4567"
+                  />
+                  <p className="text-xs text-gray-500">
+                    Any format is fine — it will be sanitized to digits for
+                    wa.me.
+                  </p>
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Default Message (optional)
+                  </label>
+                  <input
+                    type="text"
+                    value={selectedItem.properties.chatMessage || ""}
+                    onChange={(e) =>
+                      handlePropertyChange("chatMessage", e.target.value)
+                    }
+                    className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    placeholder="Hi! I'd like to ask about this item."
+                  />
+                </div>
+              </>
+            )}
+          </div>
+        );
+        break;
+      }
 
       case "AI": {
         const payload = selectedItem.aiPayload || {};

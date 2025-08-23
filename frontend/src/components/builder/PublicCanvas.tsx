@@ -7,7 +7,7 @@ import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
 import { FiMenu, FiX } from "react-icons/fi"; // install react-icons if not already
 import saasApi, { API_BASE } from "@/lib/saasApi"; // <-- use the no-cookie client
-
+import { FaWhatsapp } from "react-icons/fa";
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
   Page,
@@ -833,6 +833,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
     return merged;
   };
+  const openWhatsApp = (phone: string, msg?: string) => {
+    if (!phone) return;
+    const digits = String(phone).replace(/[^\d]/g, "");
+    if (!digits) return;
+    const url = `https://wa.me/${digits}${
+      msg ? `?text=${encodeURIComponent(msg)}` : ""
+    }`;
+    window.open(url, "_blank", "noopener,noreferrer");
+  };
 
   const MainContent = () => {
     // This component now relies on the `isLoggedIn` and `role` states from the parent `PublicCanvas` component.
@@ -1076,10 +1085,31 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       return (
         <div onClick={() => handleMenuItemClick(element.properties.item_id)}>
           {element.element_type === "AI" ? (
-            <AiElementRunner element={element} />
+            // Wrap AI output so we can position the chat icon correctly
+            <div className="relative">
+              <AiElementRunner element={element} />
+              {props.chatEnabled && props.whatsappNumber && (
+                <button
+                  type="button"
+                  aria-label="Chat on WhatsApp"
+                  title="Chat on WhatsApp"
+                  className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openWhatsApp(
+                      props.whatsappNumber,
+                      props.chatMessage ||
+                        `Hi! I'm interested in ${props.item_name}`
+                    );
+                  }}
+                >
+                  <FaWhatsapp size={20} />
+                </button>
+              )}
+            </div>
           ) : (
             <motion.div
-              className="border rounded-lg p-4 bg-white shadow cursor-pointer"
+              className="relative border rounded-lg p-4 bg-white shadow cursor-pointer"
               style={style}
               initial={initial}
               animate={animate}
@@ -1099,6 +1129,26 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               <p className="font-semibold text-gray-600 text-right">
                 ${props.base_price?.toFixed(2)}
               </p>
+
+              {/* WhatsApp chat icon (only when enabled and number provided) */}
+              {props.chatEnabled && props.whatsappNumber && (
+                <button
+                  type="button"
+                  aria-label="Chat on WhatsApp"
+                  title="Chat on WhatsApp"
+                  className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    openWhatsApp(
+                      props.whatsappNumber,
+                      props.chatMessage ||
+                        `Hi! I'm interested in ${props.item_name}`
+                    );
+                  }}
+                >
+                  <FaWhatsapp size={20} />
+                </button>
+              )}
             </motion.div>
           )}
 
