@@ -199,24 +199,24 @@ class SiteMemberPublic(BaseModel):
     role: Optional[str] = None
 
 # --- Helper: respond to CORS preflight for site-member endpoints (no cookies) ---
-def _preflight_ok(request: Request) -> Response:
-    origin = request.headers.get("origin", "*")
-    req_hdrs = request.headers.get("access-control-request-headers", "authorization, content-type")
-    resp = Response(status_code=204)
-    resp.headers["Access-Control-Allow-Origin"] = origin
-    resp.headers["Vary"] = "Origin"
-    resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
-    resp.headers["Access-Control-Allow-Headers"] = req_hdrs
-    # Do NOT set Allow-Credentials here (site-members use JWT in headers, not cookies)
-    return resp
+# def _preflight_ok(request: Request) -> Response:
+#     origin = request.headers.get("origin", "*")
+#     req_hdrs = request.headers.get("access-control-request-headers", "authorization, content-type")
+#     resp = Response(status_code=204)
+#     resp.headers["Access-Control-Allow-Origin"] = origin
+#     resp.headers["Vary"] = "Origin"
+#     resp.headers["Access-Control-Allow-Methods"] = "POST, OPTIONS"
+#     resp.headers["Access-Control-Allow-Headers"] = req_hdrs
+#     # Do NOT set Allow-Credentials here (site-members use JWT in headers, not cookies)
+#     return resp
 
-@router.options("/{subdomain}/login")
-async def preflight_login(subdomain: str, request: Request):
-    return _preflight_ok(request)
+# @router.options("/{subdomain}/login")
+# async def preflight_login(subdomain: str, request: Request):
+#     return _preflight_ok(request)
 
-@router.options("/{subdomain}/register")
-async def preflight_register(subdomain: str, request: Request):
-    return _preflight_ok(request)
+# @router.options("/{subdomain}/register")
+# async def preflight_register(subdomain: str, request: Request):
+#     return _preflight_ok(request)
 
 # --- Dependency: resolve website by subdomain ---
 async def get_website_by_subdomain(subdomain: str, db: AsyncSession) -> Website:
