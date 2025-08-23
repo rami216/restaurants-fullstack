@@ -236,7 +236,19 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       setEditedItemText("");
     }
   };
-
+  const deletePageUnified = async (pageId: string) => {
+    try {
+      await api.delete(`/builder/pages/${pageId}`);
+    } catch (err: any) {
+      const status = err?.response?.status;
+      if (status === 405) {
+        // some environments block DELETE – use the POST alias
+        await api.post(`/builder/pages/${pageId}/delete`);
+      } else {
+        throw err;
+      }
+    }
+  };
   const handleDeleteNavbarItem = async (
     itemId: string,
     itemText: string,
@@ -250,17 +262,18 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         (p: any) => p.slug === itemSlug
       );
       if (page) {
-        await api.delete(`/builder/pages/${page.page_id}`); // <-- unified delete
+        await deletePageUnified(page.page_id);
       } else {
-        await api.delete(`/builder/navbar-items/${itemId}`); // fallback
+        await api.delete(`/builder/navbar-items/${itemId}`);
       }
       alert("Deleted.");
-      window.location.reload(); // keeps UI state clean if you were on that page
+      window.location.reload();
     } catch (err) {
       console.error(err);
       alert("Delete failed.");
     }
   };
+
   // helpers
   const slugify = (s: string) =>
     "/" +
@@ -297,7 +310,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const handleDeleteStandalonePage = async (pageId: string, title: string) => {
     if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
     try {
-      await api.delete(`/builder/pages/${pageId}`); // unified delete (works for standalone too)
+      await deletePageUnified(pageId);
       alert("Deleted.");
       window.location.reload();
     } catch (e) {

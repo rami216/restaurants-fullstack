@@ -1,5 +1,5 @@
 # website_builder/router.py
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status,Response
 from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -296,13 +296,8 @@ async def create_navbar_item(item_data: schemas.NavbarItemCreate, db: AsyncSessi
     await db.commit()
     # await db.refresh(new_item)
     return new_item
-
-@router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
-async def delete_page(
-    page_id: UUID,
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user),
-):
+#region deletepage
+async def _delete_page_impl(page_id: UUID, db: AsyncSession, current_user: User):
     # Ownership check
     result = await db.execute(
         select(Page)
@@ -314,23 +309,40 @@ async def delete_page(
     if not db_page:
         raise HTTPException(status_code=404, detail="Page not found or no permission")
 
-    # Optional protection
     if db_page.slug == "/":
         raise HTTPException(status_code=400, detail="Home page cannot be deleted.")
 
-    # Remove any navbar items that point to this page's slug
+    # Remove nav items pointing at this page (standalone pages will just have none)
     items_q = await db.execute(
         select(NavbarItem)
         .join(Navbar)
-        .where(Navbar.website_id == db_page.website_id, NavbarItem.link_url == db_page.slug)
+        .where(
+            Navbar.website_id == db_page.website_id,
+            NavbarItem.link_url == db_page.slug
+        )
     )
     for item in items_q.scalars().all():
         await db.delete(item)
 
-    await db.delete(db_page)  # rely on ON DELETE CASCADE for sections/subsections/elements
+    await db.delete(db_page)
     await db.commit()
-    return
 
+@router.delete("/pages/{page_id}", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_page(page_id: UUID,
+                      db: AsyncSession = Depends(get_db),
+                      current_user: User = Depends(get_current_active_user)):
+    await _delete_page_impl(page_id, db, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+# ✅ Alias for hosts that block DELETE (or older deployments)
+@router.post("/pages/{page_id}/delete", status_code=status.HTTP_204_NO_CONTENT)
+async def delete_page_via_post(page_id: UUID,
+                               db: AsyncSession = Depends(get_db),
+                               current_user: User = Depends(get_current_active_user)):
+    await _delete_page_impl(page_id, db, current_user)
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+#endregion deletepage
 @router.put("/navbar-items/{item_id}", response_model=schemas.NavbarItemResponse)
 async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """
