@@ -1228,16 +1228,17 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       );
     } else if (element.element_type === "AI") {
       const showWA = !!props.chatEnabled && !!props.whatsappNumber;
-      // Fallback for GENERIC AI elements that don't have a special function
+    
       return (
         <div
           onClick={() => performInteractivity(element.properties)}
-          className="w-full h-full cursor-pointer" // Ensures the entire area is clickable
+          className="relative w-full h-full cursor-pointer"
         >
           <AiElementRunner
             key={element.aiPayload?.id || element.element_id}
             element={element}
           />
+    
           {showWA && (
             <button
               type="button"
@@ -1245,7 +1246,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               title="Chat on WhatsApp"
               className="absolute top-3 right-3 z-10 w-12 h-12 rounded-full flex items-center justify-center bg-[#25D366] text-white shadow-lg hover:scale-105 transition-transform"
               onClick={(e) => {
-                e.stopPropagation(); // don't trigger card click
+                e.stopPropagation();
                 openWhatsApp(
                   props.whatsappNumber,
                   props.chatMessage ||
