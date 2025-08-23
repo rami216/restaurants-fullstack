@@ -111,7 +111,6 @@ class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
 
 # Register dynamic middleware FIRST so it runs before the global CORS
 
-app.add_middleware(DynamicSaaSCORSMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -121,6 +120,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(DynamicSaaSCORSMiddleware)
 
 # ---- Static files (keep only if the folder exists in the container)
 if os.path.isdir("static"):
