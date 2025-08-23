@@ -2699,6 +2699,62 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 </select>
               </div>
             )}
+            <hr />
+            <h4 className="text-md font-medium text-gray-800 pt-2">
+              WhatsApp chat
+            </h4>
+            <div className="space-y-3">
+              <label className="inline-flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={!!selectedItem.properties.chatEnabled}
+                  onChange={(e) =>
+                    handlePropertyChange("chatEnabled", e.target.checked)
+                  }
+                />
+                <span className="text-sm">
+                  Show WhatsApp button on this card
+                </span>
+              </label>
+
+              {selectedItem.properties.chatEnabled && (
+                <>
+                  <div>
+                    <label className="block text-sm font-medium">
+                      WhatsApp number
+                    </label>
+                    <input
+                      className="w-full border p-2 rounded"
+                      placeholder="+1 555 123 4567"
+                      value={selectedItem.properties.whatsappNumber || ""}
+                      onChange={(e) =>
+                        handlePropertyChange("whatsappNumber", e.target.value)
+                      }
+                    />
+                    <p className="text-xs text-gray-500 mt-1">
+                      Any format is fine; we’ll keep digits only when opening
+                      WhatsApp.
+                    </p>
+                  </div>
+
+                  <div>
+                    <label className="block text-sm font-medium">
+                      Prefilled message (optional)
+                    </label>
+                    <input
+                      className="w-full border p-2 rounded"
+                      placeholder={`Hi! I'm interested in ${
+                        selectedItem.properties.item_name || "this item"
+                      }`}
+                      value={selectedItem.properties.chatMessage || ""}
+                      onChange={(e) =>
+                        handlePropertyChange("chatMessage", e.target.value)
+                      }
+                    />
+                  </div>
+                </>
+              )}
+            </div>
           </div>
         );
         break;

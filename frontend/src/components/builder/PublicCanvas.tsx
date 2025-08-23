@@ -1227,6 +1227,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         </div>
       );
     } else if (element.element_type === "AI") {
+      const showWA = !!props.chatEnabled && !!props.whatsappNumber;
       // Fallback for GENERIC AI elements that don't have a special function
       return (
         <div
@@ -1237,6 +1238,24 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             key={element.aiPayload?.id || element.element_id}
             element={element}
           />
+          {showWA && (
+            <button
+              type="button"
+              aria-label="Chat on WhatsApp"
+              title="Chat on WhatsApp"
+              className="absolute top-3 right-3 z-10 w-12 h-12 rounded-full flex items-center justify-center bg-[#25D366] text-white shadow-lg hover:scale-105 transition-transform"
+              onClick={(e) => {
+                e.stopPropagation(); // don't trigger card click
+                openWhatsApp(
+                  props.whatsappNumber,
+                  props.chatMessage ||
+                    `Hi! I'm interested in ${props.item_name || "this item"}`
+                );
+              }}
+            >
+              <FaWhatsapp size={28} />
+            </button>
+          )}
         </div>
       );
     } else if (effectiveType === "TEXT") {
