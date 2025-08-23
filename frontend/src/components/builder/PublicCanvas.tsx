@@ -1228,7 +1228,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       );
     } else if (element.element_type === "AI") {
       const showWA = !!props.chatEnabled && !!props.whatsappNumber;
-    
+      
       return (
         <div
           onClick={() => performInteractivity(element.properties)}
@@ -1238,7 +1238,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             key={element.aiPayload?.id || element.element_id}
             element={element}
           />
-    
+
           {showWA && (
             <button
               type="button"

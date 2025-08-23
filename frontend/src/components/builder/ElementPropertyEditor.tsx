@@ -81,6 +81,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 }) => {
   const { subscriptionStatus } = useSubscription(); // <-- 2. USE THE HOOK
   const isSubscribed = subscriptionStatus === "active"; // <-- 3. CREATE A HELPER VARIABLE
+  const [editingStandalonePageId, setEditingStandalonePageId] = useState<
+    string | null
+  >(null);
+  const [editedStandaloneTitle, setEditedStandaloneTitle] = useState("");
+  const [editedStandaloneSlug, setEditedStandaloneSlug] = useState("");
 
   const [products, setProducts] = React.useState<
     { product_id: string; name: string }[]
@@ -232,19 +237,75 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     }
   };
 
-  const handleDeleteNavbarItem = async (itemId: string, itemText: string) => {
-    const confirmationMessage = `Are you sure you want to delete the "${itemText}" link?\n\nThis will also permanently delete the entire page and all of its content. This action cannot be undone.`;
-    if (confirm(confirmationMessage)) {
-      try {
-        await api.delete(`/builder/navbar-items/${itemId}`);
-        alert("Page and link deleted successfully!");
-        window.location.reload();
-      } catch (error) {
-        console.error("Failed to delete link and page:", error);
-        alert("Error deleting link and page.");
+  const handleDeleteNavbarItem = async (
+    itemId: string,
+    itemText: string,
+    itemSlug: string
+  ) => {
+    const msg = `Delete the "${itemText}" page and navbar link?\n\nThis will permanently delete the page and its content.`;
+    if (!confirm(msg)) return;
+
+    try {
+      const page = (websiteData?.pages || []).find(
+        (p: any) => p.slug === itemSlug
+      );
+      if (page) {
+        await api.delete(`/builder/pages/${page.page_id}`); // <-- unified delete
+      } else {
+        await api.delete(`/builder/navbar-items/${itemId}`); // fallback
       }
+      alert("Deleted.");
+      window.location.reload(); // keeps UI state clean if you were on that page
+    } catch (err) {
+      console.error(err);
+      alert("Delete failed.");
     }
   };
+  // helpers
+  const slugify = (s: string) =>
+    "/" +
+    s
+      .trim()
+      .toLowerCase()
+      .replace(/^\//, "") // no double leading slash
+      .replace(/\s+/g, "-")
+      .replace(/[^a-z0-9\-\/]/g, ""); // keep letters, numbers, -, /
+
+  const beginEditStandalone = (p: Page) => {
+    setEditingStandalonePageId(p.page_id);
+    setEditedStandaloneTitle(p.title);
+    setEditedStandaloneSlug(p.slug);
+  };
+
+  const saveEditStandalone = async () => {
+    if (!editingStandalonePageId) return;
+    try {
+      await api.put(`/builder/pages/${editingStandalonePageId}`, {
+        title: editedStandaloneTitle.trim(),
+        slug: slugify(editedStandaloneSlug || editedStandaloneTitle),
+      });
+      alert("Page updated.");
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Update failed.");
+    } finally {
+      setEditingStandalonePageId(null);
+    }
+  };
+
+  const handleDeleteStandalonePage = async (pageId: string, title: string) => {
+    if (!confirm(`Delete "${title}"? This cannot be undone.`)) return;
+    try {
+      await api.delete(`/builder/pages/${pageId}`); // unified delete (works for standalone too)
+      alert("Deleted.");
+      window.location.reload();
+    } catch (e) {
+      console.error(e);
+      alert("Delete failed.");
+    }
+  };
+
   const handleImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
     propertyName: string // 'backgroundImage' | 'src' | 'image_url' | ...
@@ -403,7 +464,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       </button>
                       <button
                         onClick={() =>
-                          handleDeleteNavbarItem(item.item_id, item.text)
+                          handleDeleteNavbarItem(
+                            item.item_id,
+                            item.text,
+                            item.link_url
+                          )
                         }
                         className="p-1 text-red-600 hover:bg-red-100 rounded-full"
                       >
@@ -3148,15 +3213,17 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 <>
                   {renderNavbarEditor()}
 
-                  {/* --- START: NEW STANDALONE PAGE UI --- */}
+                  {/* --- START: STANDALONE PAGES (create + list/edit/delete) --- */}
                   <div className="mt-6 pt-6 border-t">
                     <h4 className="text-md font-medium text-gray-800 mb-2">
                       Standalone Pages
                     </h4>
                     <p className="text-sm text-gray-500 mb-3">
                       These pages won't appear in the main navbar but can be
-                      linked to from buttons or other elements.
+                      linked from buttons or other elements.
                     </p>
+
+                    {/* Create */}
                     {!isAddingStandalonePage ? (
                       <button
                         onClick={() => setIsAddingStandalonePage(true)}
@@ -3192,8 +3259,114 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         </div>
                       </div>
                     )}
+
+                    {/* List / Edit / Delete */}
+                    {(() => {
+                      const navSlugs = new Set(
+                        (websiteData?.navbar?.items || []).map(
+                          (i: NavbarItem) => i.link_url
+                        )
+                      );
+                      const standalonePages = (websiteData?.pages || []).filter(
+                        (p: Page) => p.slug !== "/" && !navSlugs.has(p.slug)
+                      );
+
+                      if (standalonePages.length === 0) {
+                        return (
+                          <p className="text-sm text-gray-500 mt-3">
+                            No standalone pages yet.
+                          </p>
+                        );
+                      }
+
+                      return (
+                        <div className="space-y-2 mt-4">
+                          {standalonePages.map((p: Page) => (
+                            <div
+                              key={p.page_id}
+                              className="p-2 border rounded bg-white flex items-center justify-between"
+                            >
+                              {editingStandalonePageId === p.page_id ? (
+                                <div className="flex-1 grid grid-cols-2 gap-2 mr-2">
+                                  <input
+                                    className="border rounded p-1 text-sm"
+                                    value={editedStandaloneTitle}
+                                    onChange={(e) =>
+                                      setEditedStandaloneTitle(e.target.value)
+                                    }
+                                    placeholder="Title"
+                                  />
+                                  <input
+                                    className="border rounded p-1 text-sm"
+                                    value={editedStandaloneSlug}
+                                    onChange={(e) =>
+                                      setEditedStandaloneSlug(e.target.value)
+                                    }
+                                    placeholder="/my-page"
+                                  />
+                                </div>
+                              ) : (
+                                <div className="flex-1 min-w-0">
+                                  <div className="text-sm truncate">
+                                    {p.title}
+                                  </div>
+                                  <div className="text-xs text-gray-500 truncate">
+                                    {p.slug}
+                                  </div>
+                                </div>
+                              )}
+
+                              <div className="flex items-center gap-2">
+                                {editingStandalonePageId === p.page_id ? (
+                                  <>
+                                    <button
+                                      onClick={saveEditStandalone}
+                                      className="p-1 text-green-600 hover:bg-green-100 rounded-full"
+                                      title="Save"
+                                    >
+                                      <Check size={16} />
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        setEditingStandalonePageId(null)
+                                      }
+                                      className="p-1 text-gray-500 hover:bg-gray-200 rounded-full"
+                                      title="Cancel"
+                                    >
+                                      <X size={16} />
+                                    </button>
+                                  </>
+                                ) : (
+                                  <>
+                                    <button
+                                      onClick={() => beginEditStandalone(p)}
+                                      className="p-1 text-blue-600 hover:bg-blue-100 rounded-full"
+                                      title="Edit"
+                                    >
+                                      <Edit size={16} />
+                                    </button>
+                                    <button
+                                      onClick={() =>
+                                        handleDeleteStandalonePage(
+                                          p.page_id,
+                                          p.title
+                                        )
+                                      }
+                                      className="p-1 text-red-600 hover:bg-red-100 rounded-full"
+                                      title="Delete"
+                                    >
+                                      <Trash2 size={16} />
+                                    </button>
+                                  </>
+                                )}
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      );
+                    })()}
                   </div>
-                  {/* --- END: NEW STANDALONE PAGE UI --- */}
+                  {/* --- END: STANDALONE PAGES --- */}
                 </>
               )}
               {selectionType === "navbar_item" && renderNavbarItemEditor()}
