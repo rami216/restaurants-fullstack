@@ -1131,12 +1131,13 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               </p>
 
               {/* WhatsApp chat icon (only when enabled and number provided) */}
+              {/* WhatsApp chat icon — TOP RIGHT + BIGGER */}
               {props.chatEnabled && props.whatsappNumber && (
                 <button
                   type="button"
                   aria-label="Chat on WhatsApp"
                   title="Chat on WhatsApp"
-                  className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
+                  className="absolute top-3 right-3 z-10 w-12 h-12 rounded-full flex items-center justify-center bg-[#25D366] text-white shadow-lg hover:scale-105 transition-transform"
                   onClick={(e) => {
                     e.stopPropagation();
                     openWhatsApp(
@@ -1146,7 +1147,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                     );
                   }}
                 >
-                  <FaWhatsapp size={20} />
+                  <FaWhatsapp size={28} />
                 </button>
               )}
             </motion.div>
