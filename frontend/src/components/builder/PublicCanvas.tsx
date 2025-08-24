@@ -88,6 +88,9 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
       rendered = htmlOnly;
     }
     containerRef.current.innerHTML = rendered;
+    containerRef.current
+      .querySelectorAll('a[href="#"], a[href=""], a:not([href])')
+      .forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
 
     // 4) Execute JS if provided
     if (aiPayload.script) {
@@ -1083,7 +1086,21 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const itemOptions = options[element.properties.item_id] || [];
 
       return (
-        <div onClick={() => handleMenuItemClick(element.properties.item_id)}>
+        <div
+          onClick={(e) => {
+            e.preventDefault(); // ← stop "#"/empty anchors from scrolling to top
+            e.stopPropagation();
+            handleMenuItemClick(element.properties.item_id);
+          }}
+          role="button"
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              handleMenuItemClick(element.properties.item_id);
+            }
+          }}
+        >
           {element.element_type === "AI" ? (
             // Wrap AI output so we can position the chat icon correctly
             <div className="relative">
@@ -1228,7 +1245,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       );
     } else if (element.element_type === "AI") {
       const showWA = !!props.chatEnabled && !!props.whatsappNumber;
-      
+
       return (
         <div
           onClick={() => performInteractivity(element.properties)}
