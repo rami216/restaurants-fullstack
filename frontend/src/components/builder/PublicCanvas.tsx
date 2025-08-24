@@ -614,8 +614,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   // };
   // keep units predictable for offsets
   const NavBar = () => {
-    // --- THIS IS THE FIX ---
-    // First, check if the user is on your main platform domain.
+    // Are we on the platform host? If yes, prefix routes with /{subdomain}
     const isMainHost =
       typeof window !== "undefined" &&
       (window.location.hostname === "zygoflow.com" ||
@@ -623,6 +622,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
     const subdomain = websiteData.subdomain || "";
     const base = isMainHost ? `/${subdomain}` : "";
+
     const [menuOpen, setMenuOpen] = useState(false);
 
     const isLoggedIn =
@@ -636,14 +636,23 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       }
     };
 
-    const items = websiteData.navbar!.items.filter((ni: NavbarItem) => {
-      const url = (ni.link_url || "").toLowerCase();
-      if (isLoggedIn && (url === "/login" || url === "/register")) return false;
+    // Hide login/register when logged in
+    const items = (websiteData.navbar?.items ?? []).filter((ni: NavbarItem) => {
+      const url = (ni.link_url || "").trim().toLowerCase();
+      if (
+        isLoggedIn &&
+        (url === "/login" ||
+          url === "login" ||
+          url === "/register" ||
+          url === "register")
+      ) {
+        return false;
+      }
       return true;
     });
 
     const hasLogout = items.some(
-      (ni: NavbarItem) => (ni.link_url || "").toLowerCase() === "/logout"
+      (ni: NavbarItem) => (ni.link_url || "").trim().toLowerCase() === "/logout"
     );
 
     const finalItems: NavbarItem[] =
@@ -658,17 +667,83 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           ]
         : items;
 
+    // ---- helpers -------------------------------------------------------------
+
+    // Normalize internal paths:
+    // - empty or "#" -> "/"
+    // - ensure leading "/"
+    // - keep full http(s) links as-is (external)
+    const normalizePath = (raw = "") => {
+      const u = raw.trim();
+      if (!u || u === "#") return "/";
+      if (/^https?:\/\//i.test(u)) return u;
+      return u.startsWith("/") ? u : `/${u}`;
+    };
+
+    // Render a single nav item (used by desktop + mobile)
+    const renderNavItem = (ni: NavbarItem) => {
+      const raw = (ni.link_url || "").trim();
+      const lower = raw.toLowerCase();
+
+      // Special case: Logout button
+      if (lower === "/logout") {
+        return (
+          <button
+            key={ni.item_id}
+            onClick={logout}
+            style={websiteData.navbar?.properties?.itemStyle}
+            className="text-sm font-medium hover:underline"
+          >
+            {ni.text || "Logout"}
+          </button>
+        );
+      }
+
+      const normalized = normalizePath(raw);
+      const isExternal = /^https?:\/\//i.test(normalized);
+
+      // Build href for <a> (external stays as-is, internal gets base prefix)
+      const href = isExternal ? normalized : `${base}${normalized}`;
+
+      const handleClick: React.MouseEventHandler<HTMLAnchorElement> = (e) => {
+        // Always close the mobile menu
+        setMenuOpen(false);
+
+        if (isExternal) return; // let browser handle external navigation
+
+        // Internal navigation: prevent default and use router
+        e.preventDefault();
+        setActiveCategory(null);
+        router.push(href);
+      };
+
+      return (
+        <a
+          key={ni.item_id}
+          href={href}
+          onClick={handleClick}
+          style={websiteData.navbar?.properties?.itemStyle}
+          className="text-sm font-medium hover:underline"
+        >
+          {ni.text}
+        </a>
+      );
+    };
+
+    // -------------------------------------------------------------------------
+
     return (
       <nav
         ref={navRef}
-        style={websiteData.navbar!.properties}
+        style={websiteData.navbar?.properties}
         className="shadow-sm"
       >
         <div className="flex items-center justify-between px-4 py-3 md:px-6">
-          {/* Left: Hamburger menu (mobile) */}
+          {/* Hamburger (mobile) */}
           <button
             className="md:hidden text-2xl"
-            onClick={() => setMenuOpen(!menuOpen)}
+            onClick={() => setMenuOpen((v) => !v)}
+            aria-label="Toggle menu"
           >
             {menuOpen ? <FiX /> : <FiMenu />}
           </button>
@@ -676,91 +751,22 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           {/* Logo */}
           <div className="font-bold text-xl">Your Logo</div>
 
-          {/* Desktop Nav */}
+          {/* Desktop nav */}
           <div className="hidden md:flex space-x-4">
-            {finalItems.map((ni: NavbarItem) => {
-              const url = (ni.link_url || "").toLowerCase();
-
-              if (url === "/logout") {
-                return (
-                  <button
-                    key={ni.item_id}
-                    onClick={logout}
-                    style={websiteData.navbar!.properties.itemStyle}
-                    className="text-sm font-medium hover:underline"
-                  >
-                    {ni.text || "Logout"}
-                  </button>
-                );
-              }
-
-              const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
-              if (!tgt) return null;
-
-              return (
-                <a
-                  key={ni.item_id}
-                  href={ni.link_url}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setActiveCategory(null);
-                    router.push(`${base}${tgt.slug}`);
-                  }}
-                  style={websiteData.navbar!.properties.itemStyle}
-                  className="text-sm font-medium hover:underline"
-                >
-                  {ni.text}
-                </a>
-              );
-            })}
+            {finalItems.map(renderNavItem)}
           </div>
         </div>
 
-        {/* Mobile Menu */}
+        {/* Mobile menu */}
         {menuOpen && (
           <div className="md:hidden px-4 pb-4 space-y-2 border-t">
-            {finalItems.map((ni: NavbarItem) => {
-              const url = (ni.link_url || "").toLowerCase();
-
-              if (url === "/logout") {
-                return (
-                  <button
-                    key={ni.item_id}
-                    onClick={() => {
-                      logout();
-                      setMenuOpen(false);
-                    }}
-                    className="block w-full text-left text-sm font-medium hover:underline"
-                  >
-                    {ni.text || "Logout"}
-                  </button>
-                );
-              }
-
-              const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
-              if (!tgt) return null;
-
-              return (
-                <a
-                  key={ni.item_id}
-                  href={ni.link_url}
-                  onClick={(e) => {
-                    e.preventDefault();
-                    setActiveCategory(null);
-                    router.push(`${base}${tgt.slug}`);
-                    setMenuOpen(false);
-                  }}
-                  className="block text-sm font-medium hover:underline"
-                >
-                  {ni.text}
-                </a>
-              );
-            })}
+            {finalItems.map(renderNavItem)}
           </div>
         )}
       </nav>
     );
   };
+
   const navRef = React.useRef<HTMLElement | null>(null);
   const lastSectionRef = React.useRef<HTMLDivElement | null>(null);
 
