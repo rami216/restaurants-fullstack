@@ -47,66 +47,41 @@ SaaS_CORS_PATH_PREFIXES = (
     "/menu-item-options/",    # ← options
     "/uploads/",              # ← images if served by backend# any public resolver you expose
 )
-# class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
-#     async def dispatch(self, request: Request, call_next):
-#         path = request.url.path
-#         origin = request.headers.get("origin")
-
-#         # if request originates from your dashboard/frontend origins,
-#         # DO NOT do the SaaS CORS here; let global CORSMiddleware handle it
-#         if origin and origin in ALLOWED_ORIGINS:
-#             return await call_next(request)
-
-#         # For non-dashboard origins (custom domains, previews, etc.)
-#         # apply public SaaS CORS only on the public endpoints:
-#         if path.startswith(SaaS_CORS_PATH_PREFIXES):
-#             if request.method == "OPTIONS":
-#                 acrh = request.headers.get("access-control-request-headers", "*")
-#                 return Response(
-#                     status_code=204,
-#                     headers={
-#                         "Access-Control-Allow-Origin": origin or "*",
-#                         "Vary": "Origin",
-#                         "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
-#                         "Access-Control-Allow-Headers": acrh,
-#                         "Access-Control-Max-Age": "86400",
-#                         # public endpoints don't use cookies:
-#                         "Access-Control-Allow-Credentials": "false",
-#                     },
-#                 )
-
-#             resp = await call_next(request)
-#             if origin:
-#                 resp.headers["Access-Control-Allow-Origin"] = origin
-#                 resp.headers["Vary"] = "Origin"
-#             resp.headers["Access-Control-Allow-Credentials"] = "false"
-#             return resp
-
-#         return await call_next(request)
 class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request: Request, call_next):
-        path = request.url.path
         origin = request.headers.get("origin")
+        path = request.url.path
+        method = request.method.upper()
 
-        if path.startswith(SaaS_CORS_PATH_PREFIXES):
-            if request.method == "OPTIONS":
+        # 1) Dashboard / known frontends -> let the global CORSMiddleware handle it.
+        #    (ALLOWED_ORIGINS should include https://www.zygoflow.com, http://localhost:3000, etc.)
+        if origin and origin in ALLOWED_ORIGINS:
+            return await call_next(request)
+
+        # 2) Public SaaS endpoints for unknown origins:
+        #    allow only GETs (and preflight) with NO credentials.
+        if path.startswith(SaaS_CORS_PATH_PREFIXES) and method in ("GET", "OPTIONS"):
+            if method == "OPTIONS":
                 acrh = request.headers.get("access-control-request-headers", "*")
                 return Response(
                     status_code=204,
                     headers={
                         "Access-Control-Allow-Origin": origin or "*",
                         "Vary": "Origin",
-                        "Access-Control-Allow-Methods": "GET,POST,PUT,PATCH,DELETE,OPTIONS",
+                        "Access-Control-Allow-Methods": "GET,OPTIONS",
                         "Access-Control-Allow-Headers": acrh,
                         "Access-Control-Max-Age": "86400",
+                        "Access-Control-Allow-Credentials": "false",
                     },
                 )
+
             resp = await call_next(request)
-            if origin:
-                resp.headers["Access-Control-Allow-Origin"] = origin
-                resp.headers["Vary"] = "Origin"
+            resp.headers["Access-Control-Allow-Origin"] = origin or "*"
+            resp.headers["Vary"] = "Origin"
+            resp.headers["Access-Control-Allow-Credentials"] = "false"
             return resp
 
+        # 3) Everything else -> app + global CORSMiddleware (which has allow_credentials=True)
         return await call_next(request)
 
 # Register dynamic middleware FIRST so it runs before the global CORS
