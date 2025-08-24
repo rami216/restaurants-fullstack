@@ -4,22 +4,23 @@
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
 
-// Keep ids as string to avoid Node 'crypto' UUID typing in Next.js
+/** API shapes */
 type Site = {
   website_id: string;
   subdomain: string;
   primary_custom_domain?: string | null;
-  primary_custom_domain_status?: string | null;
-  primary_custom_domain_id?: string | null;
+  primary_custom_domain_status?: string | null; // e.g. "active", "pending_validation"
+  primary_custom_domain_id?: string | null; // keep as string in client code
 };
 
 type DnsInstructions = {
   record_type: string; // e.g. "TXT"
   record_name: string; // e.g. "_cf-custom-hostname.www.example.com"
-  record_value: string; // e.g. "hash"
+  record_value: string; // e.g. the long TXT token
   message: string;
 };
 
+/** Helpers */
 const normalizeDomain = (d: string) =>
   d
     .trim()
@@ -27,8 +28,8 @@ const normalizeDomain = (d: string) =>
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
 
-/** Map whatever the backend returns to a consistent shape */
-const normalizeDnsInstructions = (raw: any): DnsInstructions => {
+/** Robustly map backend payloads into a consistent DNS instruction shape */
+const toDns = (raw: any): DnsInstructions => {
   const record_type = raw?.record_type ?? raw?.type ?? "TXT";
   const record_name =
     raw?.record_name ?? raw?.name ?? raw?.host ?? raw?.record ?? "";
@@ -59,42 +60,13 @@ export default function CustomDomainPage() {
   const [dnsInstructions, setDnsInstructions] =
     useState<DnsInstructions | null>(null);
 
-  const rootDomain = useMemo(() => {
-    const d = normalizeDomain(domain || site?.primary_custom_domain || "");
-    return d.replace(/^www\./, "");
-  }, [domain, site?.primary_custom_domain]);
-
-  const isActive = site?.primary_custom_domain_status === "active";
-  const recordType = dnsInstructions?.record_type || "TXT";
-  const wwwHost = "www";
-  const wwwTarget = "www.zygoflow.com";
-  const apexRedirectTarget = `https://www.${rootDomain || "yourdomain.com"}`;
-
-  // Extract only the label users must paste into Host/Name:
-  // "_cf-custom-hostname.www.example.com" → "_cf-custom-hostname.www"
-  const hostLabelToCopy = useMemo(() => {
-    const name = dnsInstructions?.record_name;
-    if (!name) return "_cf-custom-hostname.www";
-    const dn = normalizeDomain(name);
-    const rd = normalizeDomain(rootDomain);
-    const suffix = rd ? `.${rd}` : "";
-    return dn.endsWith(suffix) ? dn.slice(0, -suffix.length) : dn;
-  }, [dnsInstructions?.record_name, rootDomain]);
-
-  const copy = async (text: string) => {
-    try {
-      await navigator.clipboard.writeText(text);
-    } catch {
-      /* no-op */
-    }
-  };
-
+  /** Fetch current site info */
   const fetchSite = async () => {
     try {
       const { data } = await api.get<Site>("/builder/website");
       setSite(data);
       setDomain(data.primary_custom_domain || "");
-      // keep dnsInstructions shown if already generated
+      // Keep dnsInstructions if already shown; user may still need to copy them
     } catch (error) {
       console.error("Failed to fetch site data:", error);
     }
@@ -105,6 +77,38 @@ export default function CustomDomainPage() {
     fetchSite().finally(() => setLoading(false));
   }, []);
 
+  /** Derived values for UI */
+  const rootDomain = useMemo(() => {
+    const d = normalizeDomain(domain || site?.primary_custom_domain || "");
+    return d.replace(/^www\./, "");
+  }, [domain, site?.primary_custom_domain]);
+
+  const isActive = site?.primary_custom_domain_status === "active";
+
+  const apexRedirectTarget = `https://www.${rootDomain || "yourdomain.com"}`;
+
+  /** Extract only the label users must paste into Host/Name:
+   *  "_cf-custom-hostname.www.example.com" → "_cf-custom-hostname.www"
+   */
+  const hostLabelToCopy = useMemo(() => {
+    const name = dnsInstructions?.record_name;
+    if (!name) return "_cf-custom-hostname.www";
+    const dn = normalizeDomain(name);
+    const rd = normalizeDomain(rootDomain);
+    const suffix = rd ? `.${rd}` : "";
+    return dn.endsWith(suffix) ? dn.slice(0, -suffix.length) : dn;
+  }, [dnsInstructions?.record_name, rootDomain]);
+
+  /** Clipboard */
+  const copy = async (text: string) => {
+    try {
+      await navigator.clipboard.writeText(text);
+    } catch {
+      /* no-op */
+    }
+  };
+
+  /** Save requested domain and show TXT instructions from server */
   const saveDomain = async () => {
     if (!domain.trim() || !site?.website_id) return;
     setSaving(true);
@@ -113,9 +117,8 @@ export default function CustomDomainPage() {
         website_id: site.website_id,
         domain: normalizeDomain(domain),
       });
-      // Map any server shape to our normalized one
-      setDnsInstructions(normalizeDnsInstructions(data));
-      // console.log("DNS instructions:", data);
+      // Some backends wrap result under { result: {...} }, handle both
+      setDnsInstructions(toDns((data as any)?.result ?? data));
     } catch (error: any) {
       alert(
         `Error: ${error?.response?.data?.detail || "Could not add domain."}`
@@ -125,6 +128,7 @@ export default function CustomDomainPage() {
     }
   };
 
+  /** Ask backend to re-check status with provider, then refresh site */
   const refreshStatus = async () => {
     if (!site?.primary_custom_domain_id) return;
     setVerifying(true);
@@ -140,31 +144,28 @@ export default function CustomDomainPage() {
     }
   };
 
+  /** Status chip */
   const renderStatus = () => {
     if (!site?.primary_custom_domain) return null;
     const status = site.primary_custom_domain_status;
-    let cls = "bg-gray-200 text-gray-800";
+    let color = "text-gray-600";
     let text = status || "Unknown";
 
     if (status === "active") {
-      cls = "bg-green-100 text-green-800";
+      color = "text-green-600";
       text = "Active";
     } else if (status === "pending_validation" || status === "initializing") {
-      cls = "bg-orange-100 text-orange-800";
+      color = "text-orange-600";
       text = "Pending Verification";
     } else if (status?.includes("fail")) {
-      cls = "bg-red-100 text-red-800";
+      color = "text-red-600";
       text = "Failed";
     }
 
     return (
       <div className="text-sm mt-2">
         Current: <b>{site.primary_custom_domain}</b>{" "}
-        <span
-          className={`inline-block px-2 py-0.5 rounded text-xs align-middle ${cls}`}
-        >
-          {text}
-        </span>
+        <span className={color}>({text})</span>
       </div>
     );
   };
@@ -173,13 +174,14 @@ export default function CustomDomainPage() {
 
   const showActionBadge =
     !isActive && (dnsInstructions ? "Action Required" : "Pending Setup");
-  const txtValue = dnsInstructions?.record_value; // <- after normalization this should be filled
+  const recordType = dnsInstructions?.record_type || "TXT";
+  const txtValue = dnsInstructions?.record_value;
 
   return (
     <div className="max-w-2xl mx-auto p-6 space-y-6">
       <h1 className="text-2xl font-bold">Custom Domain</h1>
 
-      {/* Domain input */}
+      {/* Domain input / status */}
       <div className="rounded-lg border p-4 space-y-3 bg-white">
         <label className="block text-sm font-medium">Your domain</label>
         <input
@@ -207,7 +209,7 @@ export default function CustomDomainPage() {
         {renderStatus()}
       </div>
 
-      {/* STEP 1 — always visible */}
+      {/* STEP 1 — Verify Domain Ownership (TXT) */}
       <div className="rounded-lg border p-4 space-y-4 bg-blue-50">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold text-blue-900">
@@ -256,8 +258,8 @@ export default function CustomDomainPage() {
             </div>
             <p className="mt-2 text-xs text-gray-600">
               Paste exactly the label above (e.g. <b>_cf-custom-hostname.www</b>
-              ) into the <i>Host/Name</i> field.
-              <b> Do not include</b> your domain (e.g.{" "}
+              ) into the <i>Host/Name</i> field. <b>Do not include</b> your
+              domain (e.g.{" "}
               <span className="font-mono text-[11px]">.yourdomain.com</span>).
             </p>
           </div>
@@ -286,7 +288,7 @@ export default function CustomDomainPage() {
         </p>
       </div>
 
-      {/* STEP 2 — always visible */}
+      {/* STEP 2 — Go Live (after TXT is verified) */}
       <div className="rounded-lg border p-4 space-y-4 bg-white">
         <div className="flex items-center justify-between">
           <h2 className="font-semibold">
@@ -311,6 +313,7 @@ export default function CustomDomainPage() {
             </span>{" "}
             you added in Step 1.
           </li>
+
           <li>
             Add a <b>CNAME</b> record to point your subdomain to our platform:
             <div className="mt-2 grid gap-2 sm:grid-cols-2">
@@ -340,6 +343,7 @@ export default function CustomDomainPage() {
               </div>
             </div>
           </li>
+
           <li>
             Add a <b>URL Redirect / Forward</b> so the root domain redirects to
             the www version:
