@@ -1171,7 +1171,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           )}
 
           {isExpanded && (
-            <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 dark:bg-slate-800 -mt-2 space-y-4">
+            <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 dark:bg-slate-800 space-y-4">
               {isLoadingDetails ? (
                 <p className="text-sm text-slate-500">Loading details...</p>
               ) : itemExtras.length > 0 || itemOptions.length > 0 ? (
