@@ -47,12 +47,20 @@ PUBLIC_RULES = [
     ("/uploads/", {"GET", "OPTIONS"}),
 ]
 
+def _is_has_purchase(path: str) -> bool:
+    # /users-stripe-account/{subdomain}/has-purchase
+    return path.startswith("/users-stripe-account/") and "/has-purchase" in path
+
+
 def _allowed_methods_for(path: str) -> set[str]:
-    allowed: set[str] = set()
+    allow: set[str] = set()
     for prefix, methods in PUBLIC_RULES:
         if path.startswith(prefix):
-            allowed |= methods
-    return allowed
+            allow |= methods
+    # ⬇️ allow GET/OPTIONS for the has-purchase probe from custom domains
+    if _is_has_purchase(path):
+        allow |= {"GET", "OPTIONS"}
+    return allow
 
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response

@@ -461,7 +461,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               product_id: String(v.required_product_id),
             });
 
-            const { data: hasPurchase } = await api.get<boolean>(
+            const { data: hasPurchase } = await saasApi.get<boolean>(
               `/users-stripe-account/${
                 websiteData.subdomain
               }/has-purchase?${params.toString()}`
