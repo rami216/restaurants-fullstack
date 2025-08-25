@@ -37,55 +37,70 @@ ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 
 app = FastAPI()
 
-# --- Dynamic CORS only for SaaS/public endpoints (no cookies there) ---
-SaaS_CORS_PATH_PREFIXES = (
-    "/site-auth/",                # site member login/register/me
-    "/users-stripe-account/",     # (if you call this directly from client sites)
-    "/public/",
-    "/locations/",            # ← menu list
-    "/menu-item-extras/",     # ← extras
-    "/menu-item-options/",    # ← options
-    "/uploads/",              # ← images if served by backend# any public resolver you expose
-)
+PUBLIC_RULES = [
+    # site-member auth (needs POST from custom domains)
+    ("/site-auth/", {"GET", "POST", "OPTIONS"}),
+
+    # checkout from custom domains (your endpoint is /users-stripe-account/public/...)
+    ("/users-stripe-account/public/", {"POST", "OPTIONS"}),
+
+    # read-only public data
+    ("/public/", {"GET", "OPTIONS"}),
+    ("/locations/", {"GET", "OPTIONS"}),
+    ("/menu-item-extras/", {"GET", "OPTIONS"}),   # GET only for custom domains
+    ("/menu-item-options/", {"GET", "OPTIONS"}),  # GET only for custom domains
+    ("/uploads/", {"GET", "OPTIONS"}),
+]
+
+def _allowed_methods_for(path: str) -> set[str]:
+    allow: set[str] = set()
+    for prefix, methods in PUBLIC_RULES:
+        if path.startswith(prefix):
+            allow |= methods
+    return allow
+
 class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
-    async def dispatch(self, request: Request, call_next):
+    async def dispatch(self, request, call_next):
         origin = request.headers.get("origin")
         path = request.url.path
         method = request.method.upper()
 
-        # 1) Dashboard / known frontends -> let the global CORSMiddleware handle it.
-        #    (ALLOWED_ORIGINS should include https://www.zygoflow.com, http://localhost:3000, etc.)
+        # 1) Known dashboard/frontends -> handled by global CORSMiddleware (cookies allowed)
         if origin and origin in ALLOWED_ORIGINS:
             return await call_next(request)
 
-        # 2) Public SaaS endpoints for unknown origins:
-        #    allow only GETs (and preflight) with NO credentials.
-        if path.startswith(SaaS_CORS_PATH_PREFIXES) and method in ("GET", "OPTIONS"):
-            if method == "OPTIONS":
-                acrh = request.headers.get("access-control-request-headers", "*")
+        # 2) Unknown origins (custom domains, other sites) -> allow only per PUBLIC_RULES and never cookies
+        allowed = _allowed_methods_for(path)
+
+        # Preflight
+        if method == "OPTIONS":
+            req_method = request.headers.get("access-control-request-method", "").upper()
+            if req_method and req_method in allowed:
+                acrh = request.headers.get("access-control-request-headers", "content-type")
                 return Response(
                     status_code=204,
                     headers={
                         "Access-Control-Allow-Origin": origin or "*",
                         "Vary": "Origin",
-                        "Access-Control-Allow-Methods": "GET,OPTIONS",
+                        "Access-Control-Allow-Methods": ",".join(sorted(allowed)),
                         "Access-Control-Allow-Headers": acrh,
                         "Access-Control-Max-Age": "86400",
-                        "Access-Control-Allow-Credentials": "false",
+                        # NOTE: do NOT send Access-Control-Allow-Credentials for unknown origins
                     },
                 )
+            # not an allowed preflight -> fall through to app (will likely 405)
 
+        # Actual request
+        if method in allowed:
             resp = await call_next(request)
             resp.headers["Access-Control-Allow-Origin"] = origin or "*"
             resp.headers["Vary"] = "Origin"
-            resp.headers["Access-Control-Allow-Credentials"] = "false"
+            # no Access-Control-Allow-Credentials for unknown origins
             return resp
 
-        # 3) Everything else -> app + global CORSMiddleware (which has allow_credentials=True)
+        # 3) Everything else -> normal app + global CORS
         return await call_next(request)
-
-# Register dynamic middleware FIRST so it runs before the global CORS
-
+app.add_middleware(DynamicSaaSCORSMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -95,7 +110,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-app.add_middleware(DynamicSaaSCORSMiddleware)
 
 # ---- Static files (keep only if the folder exists in the container)
 if os.path.isdir("static"):

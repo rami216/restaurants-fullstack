@@ -10,7 +10,7 @@ class WebsiteStripeAccount(Base):
 
     account_id = Column(UUID(as_uuid=True), primary_key=True, server_default=func.gen_random_uuid())
     website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), nullable=False)
-
+    
     stripe_secret_key = Column(String, nullable=False)
     stripe_webhook_secret = Column(String, nullable=False)
 
