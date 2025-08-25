@@ -1,25 +1,29 @@
-// imageUrl.ts (or inline near the top of the file)
-import api from "./axios";
-export function resolveImageSrc(path?: string): any {
+// lib/imageUrl.ts
+import api from "@/lib/axios";
+
+const PUBLIC_BASE = process.env.NEXT_PUBLIC_API_BASE_URL || ""; // e.g. https://api.zygoflow.com
+const PRIVATE_BASE = (api?.defaults?.baseURL as string) || ""; // axios base (dashboard)
+const DEFAULT_BASE = PUBLIC_BASE || PRIVATE_BASE;
+
+export function resolveImageSrc(path?: string): string {
   if (!path) return "";
-  const BACKEND_URL = api.defaults.baseURL || "";
+  const s = path.trim();
 
-  // If it's already absolute, just return it
-  if (/^https?:\/\//i.test(path)) {
-    return path;
-  }
+  // already absolute (or data/blob) → return as-is
+  if (/^(https?:|data:|blob:)/i.test(s)) return s;
+  if (s.startsWith("//")) return `https:${s}`;
 
-  // If it's a CSS background-image value (url('...'))
-  if (path.startsWith("url(")) {
-    const inner = path.replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+  // CSS url(...) → unwrap + recurse
+  if (s.startsWith("url(")) {
+    const inner = s.replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
     return `url(${resolveImageSrc(inner)})`;
   }
 
-  // If it starts with "/", prepend backend URL
-  if (path.startsWith("/")) {
-    return `${BACKEND_URL}${path}`;
+  // backend-relative path
+  if (s.startsWith("/")) {
+    return DEFAULT_BASE ? `${DEFAULT_BASE}${s}` : s;
   }
 
-  // Fallback: return as is
-  return path;
+  // other relative paths (e.g. "uploads/foo.jpg")
+  return DEFAULT_BASE ? `${DEFAULT_BASE}/${s}` : s;
 }

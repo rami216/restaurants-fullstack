@@ -203,7 +203,7 @@ export const CategoryMenuInCanvas = ({
             <div className="w-full aspect-[4/3] overflow-hidden">
               <img
                 // src={`${api.defaults.baseURL}${item.image_url}`}
-                src={`${API_BASE}${item.image_url}`} // don't rely on api.defaults.baseURL
+                src={resolveImageSrc(item.image_url)}
                 alt={item.item_name}
                 className="w-full h-full object-cover"
               />
