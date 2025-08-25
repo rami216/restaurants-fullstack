@@ -17,6 +17,12 @@ from config import AI_SPEND_LIMIT_USD  # import the default from .env
 
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
+def _normalize_slug(s: str | None) -> str:
+    s = (s or "").strip()
+    if not s or s == "/":
+        return "/"
+    return s if s.startswith("/") else f"/{s}"
+
 # --- Helper function for ownership check ---
 async def get_website_and_check_ownership(website_id: UUID, current_user: User, db: AsyncSession) -> Website:
     result = await db.execute(
@@ -93,8 +99,8 @@ async def create_website(website_data: schemas.WebsiteCreate, current_user: User
 
 # --- Page Endpoints ---
 @router.post("/pages", response_model=schemas.PageResponse, status_code=status.HTTP_201_CREATED)
-async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    # THE FIX: Eagerly load the navbar and its items to prevent the async error
+async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(get_db),
+                      current_user: User = Depends(get_current_active_user)):
     result = await db.execute(
         select(Website)
         .options(selectinload(Website.navbar).selectinload(Navbar.items))
@@ -104,19 +110,27 @@ async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(
     website = result.scalars().first()
     if not website:
         raise HTTPException(status_code=404, detail="Website not found or you do not have permission.")
-
-    if not website.navbar: 
+    if not website.navbar:
         raise HTTPException(status_code=404, detail="Navbar not found.")
-    
-    new_page = Page(title=page_data.title, slug=page_data.slug, website_id=page_data.website_id,properties=page_data.properties or {} )
+
+    slug = _normalize_slug(page_data.slug)
+    if slug == "/":
+        raise HTTPException(status_code=400, detail="Use the existing Home page for '/'.")
+
+    new_page = Page(title=page_data.title, slug=slug,
+                    website_id=page_data.website_id,
+                    properties=page_data.properties or {})
     db.add(new_page)
-    
-    # This line is now safe because website.navbar.items is pre-loaded
-    new_navbar_item = NavbarItem(navbar_id=website.navbar.navbar_id, text=new_page.title, link_url=new_page.slug, position=len(website.navbar.items) + 1)
-    db.add(new_navbar_item)
-    
+
+    new_item = NavbarItem(
+        navbar_id=website.navbar.navbar_id,
+        text=new_page.title,
+        link_url=new_page.slug,
+        position=len(website.navbar.items) + 1
+    )
+    db.add(new_item)
+
     await db.commit()
-    # await db.refresh(new_page)
     return new_page
 
 # --- Section Endpoints ---
@@ -344,30 +358,36 @@ async def delete_page_via_post(page_id: UUID,
 
 #endregion deletepage
 @router.put("/navbar-items/{item_id}", response_model=schemas.NavbarItemResponse)
-async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-    """
-    Updates a navbar item and also finds and updates the corresponding page.
-    """
+async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate,
+                             db: AsyncSession = Depends(get_db),
+                             current_user: User = Depends(get_current_active_user)):
     db_item = await db.get(NavbarItem, item_id)
     if not db_item:
         raise HTTPException(status_code=404, detail="Navbar item not found")
 
-    # Store the old link_url to find the associated page
-    old_link_url = db_item.link_url
+    old_link_url = db_item.link_url or "/"
+    is_home = (old_link_url == "/")
 
-    # Update the navbar item with new data from the request
-    update_data = item_data.model_dump(exclude_unset=True)
-    for key, value in update_data.items():
-        setattr(db_item, key, value)
+    update = item_data.model_dump(exclude_unset=True)
 
-    # Find the page that corresponds to the OLD navbar link
-    if old_link_url:
-        result = await db.execute(select(Page).where(Page.slug == old_link_url))
-        page_to_update = result.scalars().first()
-        
-        # If a page is found, update its title and slug to match the new navbar item
-        if page_to_update:
-            page_to_update.title = db_item.text
+    # Apply text/position directly
+    if "text" in update:
+        db_item.text = update["text"]
+    if "position" in update:
+        db_item.position = update["position"]
+
+    # Normalize requested link
+    new_link = _normalize_slug(update.get("link_url", db_item.link_url))
+
+    # If this was the home item, freeze it at "/"
+    db_item.link_url = "/" if is_home else new_link
+
+    # Update the corresponding page title, and slug only if not home
+    page_q = await db.execute(select(Page).where(Page.slug == old_link_url))
+    page_to_update = page_q.scalars().first()
+    if page_to_update:
+        page_to_update.title = db_item.text or page_to_update.title
+        if not is_home:
             page_to_update.slug = db_item.link_url
 
     await db.commit()
@@ -549,7 +569,6 @@ async def update_page(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user),
 ):
-    # Ensure ownership
     result = await db.execute(
         select(Page)
         .join(Website)
@@ -561,6 +580,16 @@ async def update_page(
         raise HTTPException(status_code=404, detail="Page not found or no permission")
 
     data = payload.model_dump(exclude_unset=True)
+
+    # ⛔ don't allow changing the slug of the homepage
+    if "slug" in data:
+        new_slug = _normalize_slug(data["slug"])
+        if db_page.slug == "/":
+            # Ignore attempts to move the homepage
+            data.pop("slug", None)
+        else:
+            data["slug"] = new_slug
+
     for k, v in data.items():
         setattr(db_page, k, v)
         if k == "properties":
@@ -568,6 +597,7 @@ async def update_page(
 
     await db.commit()
     return db_page
+
 
 
 #endregion updatepage

@@ -364,38 +364,58 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   };
 
   const performInteractivity = async (props: any) => {
-    // Use destructuring with a default value to safely get the interactivity object.
     const { interactivity: inter = { action: "none" } } = props || {};
 
-    // Use a switch statement for cleaner handling of different actions.
     switch (inter.action) {
       case "link": {
         if (!inter.href) return;
 
-        const targetPage = websiteData.pages.find((p) => p.slug === inter.href);
+        // Same host rule as NavBar
+        const isMainHost =
+          typeof window !== "undefined" &&
+          (window.location.hostname === "zygoflow.com" ||
+            window.location.hostname === "www.zygoflow.com");
 
-        if (targetPage) {
-          setActiveCategory(null);
-          setCurrentPage(targetPage);
-          const base = websiteData?.subdomain
-            ? `/${websiteData.subdomain}`
-            : "";
-          router.push(`${base}${targetPage.slug}`);
+        const base = isMainHost ? `/${websiteData.subdomain}` : "";
+
+        // normalize internal path
+        const raw = String(inter.href).trim();
+        const normalized = /^https?:\/\//i.test(raw)
+          ? raw
+          : raw
+          ? raw.startsWith("/")
+            ? raw
+            : `/${raw}`
+          : "/";
+
+        // internal?
+        const isExternal = /^https?:\/\//i.test(normalized);
+        if (isExternal) {
+          window.location.href = normalized;
+          return;
         }
+
+        const targetPage = websiteData.pages.find((p) => p.slug === normalized);
+        if (!targetPage) {
+          // fall back to push anyway
+          router.push(`${base}${normalized}`);
+          return;
+        }
+
+        setActiveCategory(null);
+        setCurrentPage(targetPage);
+        router.push(`${base}${targetPage.slug}`);
         break;
       }
 
       case "purchase": {
         if (!inter.product_id) return;
-
         await startCheckout(inter.product_id);
         break;
       }
 
-      // The default case handles "none" or any other unknown actions.
-      default: {
+      default:
         return;
-      }
     }
   };
 
