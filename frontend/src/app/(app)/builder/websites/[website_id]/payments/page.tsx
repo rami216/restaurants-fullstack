@@ -36,8 +36,9 @@ export default function BuilderPaymentsPage() {
   const [saving, setSaving] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
   const [view, setView] = React.useState<StripeConfigView | null>(null);
+  const [editing, setEditing] = React.useState(false); // <<< NEW
 
-  // product list & form
+  // products
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [creatingProduct, setCreatingProduct] = React.useState(false);
   const [prodError, setProdError] = React.useState<string | null>(null);
@@ -50,6 +51,16 @@ export default function BuilderPaymentsPage() {
   const [pAmount, setPAmount] = React.useState<string | number>("");
   const [pActive, setPActive] = React.useState(true);
 
+  // Build webhook URL from public API base. This MUST be your API host (not a custom domain).
+  const API_BASE =
+    process.env.NEXT_PUBLIC_API_BASE_URL ||
+    (api?.defaults?.baseURL as string) ||
+    "";
+  const webhookUrl = `${API_BASE.replace(
+    /\/+$/,
+    ""
+  )}/users-stripe-account/webhook`;
+
   React.useEffect(() => {
     if (!websiteId) return;
 
@@ -57,13 +68,10 @@ export default function BuilderPaymentsPage() {
       setLoading(true);
       setError(null);
       try {
-        // 1) load stripe config (to know if configured)
         const { data } = await api.get(
           `/users-stripe-account/builder/websites/${websiteId}/stripe-config`
         );
         setView(data as StripeConfigView);
-
-        // 2) if configured, load products
         if (data?.exists) {
           await loadProducts();
         }
@@ -92,7 +100,6 @@ export default function BuilderPaymentsPage() {
       );
       setProducts(data as ProductRow[]);
     } catch (err: any) {
-      // don’t block the page; just show a small error below the section
       setProdError(
         err?.response?.data?.detail || err?.message || "Failed to load products"
       );
@@ -113,7 +120,6 @@ export default function BuilderPaymentsPage() {
       const { data } = await api.get(
         `/users-stripe-account/builder/websites/${websiteId}/stripe/price/${priceId}`
       );
-      // backend returns { product_id, product_name, currency, unit_amount }
       setPName((prev) => (prev?.trim() ? prev : data.product_name || ""));
       setPCurrency((data.currency || "usd").toLowerCase());
       setPAmount(
@@ -130,7 +136,8 @@ export default function BuilderPaymentsPage() {
     }
   };
 
-  const onCreateStripeConfig = async (e: React.FormEvent) => {
+  // Upsert Stripe config (create or update)
+  const onSaveStripeConfig = async (e: React.FormEvent) => {
     e.preventDefault();
     const form = new FormData(e.currentTarget as HTMLFormElement);
     const secretKey = String(form.get("secretKey") || "").trim();
@@ -153,6 +160,7 @@ export default function BuilderPaymentsPage() {
         `/users-stripe-account/builder/websites/${websiteId}/stripe-config`
       );
       setView(data as StripeConfigView);
+      setEditing(false); // <<< close edit mode after saving
       await loadProducts();
     } catch (err: any) {
       setError(
@@ -165,6 +173,7 @@ export default function BuilderPaymentsPage() {
     }
   };
 
+  // Create product
   const onCreateProduct = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!websiteId) return;
@@ -210,8 +219,6 @@ export default function BuilderPaymentsPage() {
     }
   };
 
-  const webhookUrl = `http://localhost:8000/users-stripe-account/builder/websites/${websiteId}/stripe/webhook`;
-
   if (!websiteId) return null;
   if (loading) return <div className="p-6">Loading…</div>;
   if (error)
@@ -233,12 +240,33 @@ export default function BuilderPaymentsPage() {
 
       {/* 1) Stripe config */}
       {view?.exists ? (
-        <ConfiguredBox webhookUrl={webhookUrl} view={view} />
+        editing ? (
+          <div className="space-y-3">
+            <StripeConfigForm
+              saving={saving}
+              webhookUrl={webhookUrl}
+              onSubmit={onSaveStripeConfig}
+            />
+            <button
+              type="button"
+              onClick={() => setEditing(false)}
+              className="text-sm underline"
+            >
+              Cancel
+            </button>
+          </div>
+        ) : (
+          <ConfiguredBox
+            webhookUrl={webhookUrl}
+            view={view}
+            onEdit={() => setEditing(true)}
+          />
+        )
       ) : (
         <StripeConfigForm
           saving={saving}
           webhookUrl={webhookUrl}
-          onSubmit={onCreateStripeConfig}
+          onSubmit={onSaveStripeConfig}
         />
       )}
 
@@ -399,43 +427,61 @@ function pDescOrNull(s: string) {
 function ConfiguredBox({
   webhookUrl,
   view,
+  onEdit,
 }: {
   webhookUrl: string;
   view: Extract<StripeConfigView, { exists: true }>;
+  onEdit: () => void;
 }) {
   return (
     <div className="border rounded p-4 bg-white space-y-3">
-      <div className="text-sm">
-        <div>
-          <span className="font-medium">Status:</span>{" "}
-          <span className="text-green-700">Configured</span>
-        </div>
-        <div>
-          <span className="font-medium">Stripe Secret Key:</span>{" "}
-          {view.secret_key_last4 ? `•••• ${view.secret_key_last4}` : "Hidden"}
-        </div>
-        <div>
-          <span className="font-medium">Webhook Secret:</span>{" "}
-          {view.has_webhook ? "••••••" : "Not set"}
-        </div>
-        {view.updated_at && (
-          <div className="text-xs text-gray-500">
-            Updated: {new Date(view.updated_at).toLocaleString()}
+      <div className="flex items-start justify-between">
+        <div className="text-sm">
+          <div>
+            <span className="font-medium">Status:</span>{" "}
+            <span className="text-green-700">Configured</span>
           </div>
-        )}
+          <div>
+            <span className="font-medium">Stripe Secret Key:</span>{" "}
+            {view.secret_key_last4 ? `•••• ${view.secret_key_last4}` : "Hidden"}
+          </div>
+          <div>
+            <span className="font-medium">Webhook Secret:</span>{" "}
+            {view.has_webhook ? "••••••" : "Not set"}
+          </div>
+          {view.updated_at && (
+            <div className="text-xs text-gray-500">
+              Updated: {new Date(view.updated_at).toLocaleString()}
+            </div>
+          )}
+        </div>
+        <button
+          type="button"
+          onClick={onEdit}
+          className="text-sm px-3 py-1.5 rounded bg-blue-600 text-white"
+        >
+          Edit
+        </button>
       </div>
 
       <div className="space-y-2">
         <div className="text-sm">
           <span className="font-medium">Webhook URL to use in Stripe:</span>
-          <div className="mt-1">
+          <div className="mt-1 flex items-center gap-2">
             <code className="bg-gray-100 px-2 py-1 rounded">{webhookUrl}</code>
+            <button
+              type="button"
+              onClick={() => navigator.clipboard.writeText(webhookUrl)}
+              className="text-xs px-2 py-1 rounded border"
+            >
+              Copy
+            </button>
           </div>
         </div>
         <div className="text-xs text-gray-500">
           Paste that URL into <b>Stripe → Developers → Webhooks</b> and enable{" "}
           <code>checkout.session.completed</code>. Copy the{" "}
-          <b>signing secret</b> from Stripe and save it here.
+          <b>Signing secret</b> from Stripe and save it here.
         </div>
       </div>
     </div>
@@ -510,7 +556,7 @@ function StripeConfigForm({
         disabled={saving}
         className="w-full bg-blue-600 text-white rounded px-4 py-2 disabled:opacity-50"
       >
-        {saving ? "Saving…" : "Create Stripe Account"}
+        {saving ? "Saving…" : "Save Stripe Settings"}
       </button>
     </form>
   );
