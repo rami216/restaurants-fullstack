@@ -28,7 +28,6 @@ import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
-
 const normalizeBackground = (bg?: string) => {
   if (!bg) return undefined;
   // if we already have url(...), extract inner and pass through resolver
@@ -342,7 +341,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const cancel_url = `${siteOrigin}${basePath}${currentPage?.slug || ""}`;
 
       // Call your API (no cookies needed)
-      const { data } = await api.post(
+      const { data } = await saasApi.post(
         `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`,
         {
           product_id: productId,
