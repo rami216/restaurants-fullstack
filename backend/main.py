@@ -38,8 +38,8 @@ ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 app = FastAPI()
 
 PUBLIC_RULES = [
-    ("/site-auth/", {"GET", "POST", "OPTIONS"}),                # login/register
-    ("/users-stripe-account/public/", {"POST", "OPTIONS"}),     # checkout
+    ("/site-auth", {"GET", "POST", "OPTIONS"}),                 # <- allow both '/site-auth' and '/site-auth/...'
+    ("/users-stripe-account/public/", {"POST", "OPTIONS"}),
     ("/public/", {"GET", "OPTIONS"}),
     ("/locations/", {"GET", "OPTIONS"}),
     ("/menu-item-extras/", {"GET", "OPTIONS"}),
@@ -54,7 +54,8 @@ def _allowed_methods_for(path: str) -> set[str]:
             allowed |= methods
     return allowed
 
-SAFE_DEFAULT_HEADERS = "content-type, authorization"
+from starlette.middleware.base import BaseHTTPMiddleware
+from starlette.responses import Response
 
 class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -62,39 +63,35 @@ class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method.upper()
 
-        # Known dashboard/frontends -> handled later by global CORSMiddleware (cookies allowed)
+        # Known dashboard/admin origins -> let global CORSMiddleware handle (cookies allowed)
         if origin and origin in ALLOWED_ORIGINS:
             return await call_next(request)
 
-        # Unknown origins (custom domains) -> path/method based CORS (no cookies)
         allowed = _allowed_methods_for(path)
 
+        # Preflight: be permissive even if Access-Control-Request-Method header is missing
         if method == "OPTIONS" and allowed:
-            # Be permissive: reply even if Access-Control-Request-Method header is absent
-            acrm = request.headers.get("access-control-request-method", "").upper()
-            acrh = request.headers.get("access-control-request-headers", SAFE_DEFAULT_HEADERS)
+            acrh = request.headers.get("access-control-request-headers", "content-type")
             return Response(
                 status_code=204,
                 headers={
                     "Access-Control-Allow-Origin": origin or "*",
                     "Vary": "Origin",
                     "Access-Control-Allow-Methods": ",".join(sorted(allowed)),
-                    "Access-Control-Allow-Headers": acrh or SAFE_DEFAULT_HEADERS,
+                    "Access-Control-Allow-Headers": acrh or "content-type",
                     "Access-Control-Max-Age": "86400",
-                    # DO NOT include Allow-Credentials for unknown origins
+                    # No Allow-Credentials for unknown origins
                 },
             )
 
+        # Actual request from unknown origins to public paths
         if allowed and method in allowed:
             resp = await call_next(request)
             resp.headers["Access-Control-Allow-Origin"] = origin or "*"
             resp.headers["Vary"] = "Origin"
-            # no Allow-Credentials for unknown origins
             return resp
 
-        # Everything else -> normal app + global CORSMiddleware (cookie routes)
         return await call_next(request)
-app.add_middleware(DynamicSaaSCORSMiddleware)
 
 app.add_middleware(
     CORSMiddleware,
@@ -104,6 +101,7 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+app.add_middleware(DynamicSaaSCORSMiddleware)
 
 # ---- Static files (keep only if the folder exists in the container)
 if os.path.isdir("static"):
