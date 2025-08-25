@@ -38,26 +38,23 @@ ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 app = FastAPI()
 
 PUBLIC_RULES = [
-    # site-member auth (needs POST from custom domains)
-    ("/site-auth/", {"GET", "POST", "OPTIONS"}),
-
-    # checkout from custom domains (your endpoint is /users-stripe-account/public/...)
-    ("/users-stripe-account/public/", {"POST", "OPTIONS"}),
-
-    # read-only public data
+    ("/site-auth/", {"GET", "POST", "OPTIONS"}),                # login/register
+    ("/users-stripe-account/public/", {"POST", "OPTIONS"}),     # checkout
     ("/public/", {"GET", "OPTIONS"}),
     ("/locations/", {"GET", "OPTIONS"}),
-    ("/menu-item-extras/", {"GET", "OPTIONS"}),   # GET only for custom domains
-    ("/menu-item-options/", {"GET", "OPTIONS"}),  # GET only for custom domains
+    ("/menu-item-extras/", {"GET", "OPTIONS"}),
+    ("/menu-item-options/", {"GET", "OPTIONS"}),
     ("/uploads/", {"GET", "OPTIONS"}),
 ]
 
 def _allowed_methods_for(path: str) -> set[str]:
-    allow: set[str] = set()
+    allowed: set[str] = set()
     for prefix, methods in PUBLIC_RULES:
         if path.startswith(prefix):
-            allow |= methods
-    return allow
+            allowed |= methods
+    return allowed
+
+SAFE_DEFAULT_HEADERS = "content-type, authorization"
 
 class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
     async def dispatch(self, request, call_next):
@@ -65,40 +62,37 @@ class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
         path = request.url.path
         method = request.method.upper()
 
-        # 1) Known dashboard/frontends -> handled by global CORSMiddleware (cookies allowed)
+        # Known dashboard/frontends -> handled later by global CORSMiddleware (cookies allowed)
         if origin and origin in ALLOWED_ORIGINS:
             return await call_next(request)
 
-        # 2) Unknown origins (custom domains, other sites) -> allow only per PUBLIC_RULES and never cookies
+        # Unknown origins (custom domains) -> path/method based CORS (no cookies)
         allowed = _allowed_methods_for(path)
 
-        # Preflight
-        if method == "OPTIONS":
-            req_method = request.headers.get("access-control-request-method", "").upper()
-            if req_method and req_method in allowed:
-                acrh = request.headers.get("access-control-request-headers", "content-type")
-                return Response(
-                    status_code=204,
-                    headers={
-                        "Access-Control-Allow-Origin": origin or "*",
-                        "Vary": "Origin",
-                        "Access-Control-Allow-Methods": ",".join(sorted(allowed)),
-                        "Access-Control-Allow-Headers": acrh,
-                        "Access-Control-Max-Age": "86400",
-                        # NOTE: do NOT send Access-Control-Allow-Credentials for unknown origins
-                    },
-                )
-            # not an allowed preflight -> fall through to app (will likely 405)
+        if method == "OPTIONS" and allowed:
+            # Be permissive: reply even if Access-Control-Request-Method header is absent
+            acrm = request.headers.get("access-control-request-method", "").upper()
+            acrh = request.headers.get("access-control-request-headers", SAFE_DEFAULT_HEADERS)
+            return Response(
+                status_code=204,
+                headers={
+                    "Access-Control-Allow-Origin": origin or "*",
+                    "Vary": "Origin",
+                    "Access-Control-Allow-Methods": ",".join(sorted(allowed)),
+                    "Access-Control-Allow-Headers": acrh or SAFE_DEFAULT_HEADERS,
+                    "Access-Control-Max-Age": "86400",
+                    # DO NOT include Allow-Credentials for unknown origins
+                },
+            )
 
-        # Actual request
-        if method in allowed:
+        if allowed and method in allowed:
             resp = await call_next(request)
             resp.headers["Access-Control-Allow-Origin"] = origin or "*"
             resp.headers["Vary"] = "Origin"
-            # no Access-Control-Allow-Credentials for unknown origins
+            # no Allow-Credentials for unknown origins
             return resp
 
-        # 3) Everything else -> normal app + global CORS
+        # Everything else -> normal app + global CORSMiddleware (cookie routes)
         return await call_next(request)
 app.add_middleware(DynamicSaaSCORSMiddleware)
 
