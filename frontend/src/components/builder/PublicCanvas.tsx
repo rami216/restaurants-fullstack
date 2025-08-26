@@ -111,6 +111,162 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
 
   return <div ref={containerRef} />;
 };
+const MenuItemDetails = ({
+  basePrice,
+  itemExtras,
+  itemOptions,
+}: {
+  basePrice: number;
+  itemExtras: Extra[];
+  itemOptions: PublicOptionGroup[];
+}) => {
+  // State to track which extras are selected (using their IDs)
+  const [selectedExtras, setSelectedExtras] = useState(new Set<string>());
+
+  // State to track the selected choice for each option group (group_id: choice_id)
+  const [selectedOptions, setSelectedOptions] = useState<
+    Record<string, string>
+  >({});
+
+  // State to hold the final calculated price
+  const [totalPrice, setTotalPrice] = useState(basePrice);
+
+  // This effect recalculates the total price whenever a selection changes
+  useEffect(() => {
+    let currentTotal = basePrice;
+
+    // Add price of selected extras
+    selectedExtras.forEach((extraId) => {
+      const extra = itemExtras.find((e) => e.extra_id === extraId);
+      if (extra) {
+        currentTotal += extra.price;
+      }
+    });
+
+    // Add price adjustment of selected options
+    Object.values(selectedOptions).forEach((choiceId) => {
+      for (const group of itemOptions) {
+        const choice = group.choices.find((c) => c.choice_id === choiceId);
+        if (choice) {
+          currentTotal += choice.price_adjustment;
+          break; // Found the choice, move to the next selected option
+        }
+      }
+    });
+
+    setTotalPrice(currentTotal);
+  }, [selectedExtras, selectedOptions, basePrice, itemExtras, itemOptions]);
+
+  // Handler for toggling an extra (checkbox)
+  const handleExtraToggle = (extraId: string) => {
+    setSelectedExtras((prev) => {
+      const newSet = new Set(prev);
+      if (newSet.has(extraId)) {
+        newSet.delete(extraId);
+      } else {
+        newSet.add(extraId);
+      }
+      return newSet;
+    });
+  };
+
+  // Handler for changing an option (radio button)
+  const handleOptionChange = (groupId: string, choiceId: string) => {
+    setSelectedOptions((prev) => ({
+      ...prev,
+      [groupId]: choiceId,
+    }));
+  };
+
+  return (
+    <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 dark:bg-slate-800 space-y-4">
+      {/* --- Section for Extras (using checkboxes) --- */}
+      {itemExtras.length > 0 && (
+        <div>
+          <h5 className="font-semibold mb-2 text-slate-800 dark:text-slate-200">
+            Add Extras:
+          </h5>
+          <div className="space-y-2">
+            {itemExtras.map((extra) => (
+              <label
+                key={extra.extra_id}
+                className="flex justify-between items-center cursor-pointer text-sm"
+              >
+                <span className="text-slate-700 dark:text-slate-300">
+                  {extra.name}
+                </span>
+                <div className="flex items-center space-x-3">
+                  <span className="font-semibold text-slate-900 dark:text-slate-100">
+                    + ${extra.price.toFixed(2)}
+                  </span>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    onChange={() => handleExtraToggle(extra.extra_id)}
+                    checked={selectedExtras.has(extra.extra_id)}
+                  />
+                </div>
+              </label>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {/* --- Section for Options (using radio buttons) --- */}
+      {itemOptions.length > 0 && (
+        <div className="space-y-4">
+          {itemOptions.map((group) => (
+            <div key={group.group_id}>
+              <h5 className="font-semibold text-slate-800 dark:text-slate-200">
+                {group.group_name}
+              </h5>
+              <div className="mt-2 space-y-2">
+                {group.choices.map((choice) => (
+                  <label
+                    key={choice.choice_id}
+                    className="flex justify-between items-center cursor-pointer text-sm"
+                  >
+                    <span className="text-slate-700 dark:text-slate-300">
+                      {choice.name}
+                    </span>
+                    <div className="flex items-center space-x-3">
+                      {choice.price_adjustment > 0 && (
+                        <span className="font-semibold text-slate-900 dark:text-slate-100">
+                          + ${choice.price_adjustment.toFixed(2)}
+                        </span>
+                      )}
+                      <input
+                        type="radio"
+                        name={group.group_id} // This groups the radio buttons
+                        className="h-5 w-5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        onChange={() =>
+                          handleOptionChange(group.group_id, choice.choice_id)
+                        }
+                        checked={
+                          selectedOptions[group.group_id] === choice.choice_id
+                        }
+                      />
+                    </div>
+                  </label>
+                ))}
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+
+      {/* --- Total Price Display --- */}
+      <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4 flex justify-between items-center">
+        <span className="text-lg font-bold text-slate-800 dark:text-slate-100">
+          Total:
+        </span>
+        <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
+          ${totalPrice.toFixed(2)}
+        </span>
+      </div>
+    </div>
+  );
+};
 
 const Accordion = ({
   items,
@@ -1113,7 +1269,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       return (
         <div
           onClick={(e) => {
-            e.preventDefault(); // ← stop "#"/empty anchors from scrolling to top
+            e.preventDefault();
             e.stopPropagation();
             handleMenuItemClick(element.properties.item_id);
           }}
@@ -1127,7 +1283,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           }}
         >
           {element.element_type === "AI" ? (
-            // Wrap AI output so we can position the chat icon correctly
             <div className="relative">
               <AiElementRunner element={element} />
               {props.chatEnabled && props.whatsappNumber && (
@@ -1171,9 +1326,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               <p className="font-semibold text-gray-600 text-right">
                 ${props.base_price?.toFixed(2)}
               </p>
-
-              {/* WhatsApp chat icon (only when enabled and number provided) */}
-              {/* WhatsApp chat icon — TOP RIGHT + BIGGER */}
               {props.chatEnabled && props.whatsappNumber && (
                 <button
                   type="button"
@@ -1195,77 +1347,19 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             </motion.div>
           )}
 
-          {isExpanded && (
-            <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 dark:bg-slate-800 space-y-4">
-              {isLoadingDetails ? (
+          {/* ✅ REPLACED: Use the new component for the expanded view */}
+          {isExpanded &&
+            (isLoadingDetails ? (
+              <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
                 <p className="text-sm text-slate-500">Loading details...</p>
-              ) : itemExtras.length > 0 || itemOptions.length > 0 ? (
-                <>
-                  {/* --- Section for Extras --- */}
-                  {itemExtras.length > 0 && (
-                    <div>
-                      <h5 className="font-semibold mb-2 text-slate-800 dark:text-slate-200">
-                        Add Extras:
-                      </h5>
-                      <div className="flow-root">
-                        <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                          {itemExtras.map((extra) => (
-                            <li
-                              key={extra.extra_id}
-                              className="py-2 flex justify-between items-center text-sm"
-                            >
-                              <span className="text-slate-700 dark:text-slate-300">
-                                {extra.name}
-                              </span>
-                              <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                + ${extra.price.toFixed(2)}
-                              </span>
-                            </li>
-                          ))}
-                        </ul>
-                      </div>
-                    </div>
-                  )}
-
-                  {/* --- Section for Options --- */}
-                  {itemOptions.length > 0 && (
-                    <div className="space-y-4">
-                      {itemOptions.map((group) => (
-                        <div key={group.group_id}>
-                          <h5 className="font-semibold text-slate-800 dark:text-slate-200">
-                            {group.group_name}
-                          </h5>
-                          <div className="flow-root mt-2">
-                            <ul className="divide-y divide-slate-200 dark:divide-slate-700">
-                              {group.choices.map((choice) => (
-                                <li
-                                  key={choice.choice_id}
-                                  className="py-2 flex justify-between items-center text-sm"
-                                >
-                                  <span className="text-slate-700 dark:text-slate-300">
-                                    {choice.name}
-                                  </span>
-                                  {choice.price_adjustment > 0 && (
-                                    <span className="font-semibold text-slate-900 dark:text-slate-100">
-                                      + ${choice.price_adjustment.toFixed(2)}
-                                    </span>
-                                  )}
-                                </li>
-                              ))}
-                            </ul>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </>
-              ) : (
-                <p className="text-sm text-slate-500">
-                  No extras or options available for this item.
-                </p>
-              )}
-            </div>
-          )}
+              </div>
+            ) : (
+              <MenuItemDetails
+                basePrice={props.base_price || 0}
+                itemExtras={itemExtras}
+                itemOptions={itemOptions}
+              />
+            ))}
         </div>
       );
     } else if (element.element_type === "AI") {

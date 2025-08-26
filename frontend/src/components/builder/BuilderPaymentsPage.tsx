@@ -63,7 +63,7 @@ export default function BuilderPaymentsPage() {
     };
     run();
   }, [websiteId, token, router]);
-
+  
   const onCreate = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!secretKey || !webhookSecret) {
