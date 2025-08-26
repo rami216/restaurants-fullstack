@@ -1265,90 +1265,106 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const isExpanded = expandedMenuItemId === element.properties.item_id;
       const itemExtras = extras[element.properties.item_id] || [];
       const itemOptions = options[element.properties.item_id] || [];
+      const props = element.properties || {};
+      const style = props.style || {};
+      const { initial, animate, transition } = getMotionConfig(props.animation);
 
       return (
-        <div
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            handleMenuItemClick(element.properties.item_id);
-          }}
-          role="button"
-          tabIndex={0}
-          onKeyDown={(e) => {
-            if (e.key === "Enter" || e.key === " ") {
+        // This outer div no longer needs an onClick, we'll move it down
+        <div>
+          {/* Main Card - Add the onClick handler here */}
+          <div
+            onClick={(e) => {
               e.preventDefault();
+              e.stopPropagation();
               handleMenuItemClick(element.properties.item_id);
-            }
-          }}
-        >
-          {element.element_type === "AI" ? (
-            <div className="relative">
-              <AiElementRunner element={element} />
-              {props.chatEnabled && props.whatsappNumber && (
-                <button
-                  type="button"
-                  aria-label="Chat on WhatsApp"
-                  title="Chat on WhatsApp"
-                  className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openWhatsApp(
-                      props.whatsappNumber,
-                      props.chatMessage ||
-                        `Hi! I'm interested in ${props.item_name}`
-                    );
-                  }}
-                >
-                  <FaWhatsapp size={20} />
-                </button>
-              )}
-            </div>
-          ) : (
-            <motion.div
-              className="relative border rounded-lg p-4 bg-white shadow cursor-pointer"
-              style={style}
-              initial={initial}
-              animate={animate}
-              transition={transition}
-            >
-              {props.image_url && (
-                <img
-                  src={resolveImageSrc(props.image_url)}
-                  alt={props.item_name}
-                  className="w-full object-cover rounded-md mb-4"
-                />
-              )}
-              <h4 className="font-bold text-gray-600 text-lg">
-                {props.item_name}
-              </h4>
-              <p className="text-sm text-gray-600 my-2">{props.description}</p>
-              <p className="font-semibold text-gray-600 text-right">
-                ${props.base_price?.toFixed(2)}
-              </p>
-              {props.chatEnabled && props.whatsappNumber && (
-                <button
-                  type="button"
-                  aria-label="Chat on WhatsApp"
-                  title="Chat on WhatsApp"
-                  className="absolute top-3 right-3 z-10 w-12 h-12 rounded-full flex items-center justify-center bg-[#25D366] text-white shadow-lg hover:scale-105 transition-transform"
-                  onClick={(e) => {
-                    e.stopPropagation();
-                    openWhatsApp(
-                      props.whatsappNumber,
-                      props.chatMessage ||
-                        `Hi! I'm interested in ${props.item_name}`
-                    );
-                  }}
-                >
-                  <FaWhatsapp size={28} />
-                </button>
-              )}
-            </motion.div>
-          )}
+            }}
+            role="button"
+            tabIndex={0}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                handleMenuItemClick(element.properties.item_id);
+              }
+            }}
+          >
+            {element.element_type === "AI" ? (
+              // ... (Your AI Runner JSX for the card, no changes needed here)
+              <div className="relative">
+                <AiElementRunner element={element} />
+                {props.chatEnabled && props.whatsappNumber && (
+                  <button
+                    type="button"
+                    aria-label="Chat on WhatsApp"
+                    title="Chat on WhatsApp"
+                    className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openWhatsApp(
+                        props.whatsappNumber,
+                        props.chatMessage ||
+                          `Hi! I'm interested in ${props.item_name}`
+                      );
+                    }}
+                  >
+                    <FaWhatsapp size={20} />
+                  </button>
+                )}
+              </div>
+            ) : (
+              // ... (Your regular card JSX, no changes needed here)
+              <motion.div
+                className="relative border rounded-lg p-4 bg-white shadow cursor-pointer"
+                style={style}
+                initial={initial}
+                animate={animate}
+                transition={transition}
+              >
+                {props.image_url && (
+                  <img
+                    src={resolveImageSrc(props.image_url)}
+                    alt={props.item_name}
+                    className="w-full object-cover rounded-md mb-4"
+                  />
+                )}
+                <h4 className="font-bold text-gray-600 text-lg">
+                  {props.item_name}
+                </h4>
+                <p className="text-sm text-gray-600 my-2">
+                  {props.description}
+                </p>
+                <p className="font-semibold text-gray-600 text-right">
+                  ${props.base_price?.toFixed(2)}
+                </p>
+                {props.chatEnabled && props.whatsappNumber && (
+                  <button
+                    type="button"
+                    aria-label="Chat on WhatsApp"
+                    title="Chat on WhatsApp"
+                    className="absolute top-3 right-3 z-10 w-12 h-12 rounded-full flex items-center justify-center bg-[#25D366] text-white shadow-lg hover:scale-105 transition-transform"
+                    onClick={(e) => {
+                      e.stopPropagation();
+                      openWhatsApp(
+                        props.whatsappNumber,
+                        props.chatMessage ||
+                          `Hi! I'm interested in ${props.item_name}`
+                      );
+                    }}
+                  >
+                    <FaWhatsapp size={28} />
+                  </button>
+                )}
+              </motion.div>
+            )}
+          </div>
 
-          {isExpanded && (
-            // ✅ FIX: Added a div with e.stopPropagation() here
+          {/* ✅ FIX: This wrapper div handles the smooth animation */}
+          <div
+            className={`transition-all duration-500 ease-in-out overflow-hidden ${
+              isExpanded ? "max-h-[1000px]" : "max-h-0"
+            }`}
+          >
+            {/* The stopPropagation click handler is still needed here */}
             <div onClick={(e) => e.stopPropagation()}>
               {isLoadingDetails ? (
                 <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
@@ -1362,7 +1378,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 />
               )}
             </div>
-          )}
+          </div>
         </div>
       );
     } else if (element.element_type === "AI") {
