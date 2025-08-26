@@ -1347,19 +1347,22 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             </motion.div>
           )}
 
-          {/* ✅ REPLACED: Use the new component for the expanded view */}
-          {isExpanded &&
-            (isLoadingDetails ? (
-              <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
-                <p className="text-sm text-slate-500">Loading details...</p>
-              </div>
-            ) : (
-              <MenuItemDetails
-                basePrice={props.base_price || 0}
-                itemExtras={itemExtras}
-                itemOptions={itemOptions}
-              />
-            ))}
+          {isExpanded && (
+            // ✅ FIX: Added a div with e.stopPropagation() here
+            <div onClick={(e) => e.stopPropagation()}>
+              {isLoadingDetails ? (
+                <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
+                  <p className="text-sm text-slate-500">Loading details...</p>
+                </div>
+              ) : (
+                <MenuItemDetails
+                  basePrice={props.base_price || 0}
+                  itemExtras={itemExtras}
+                  itemOptions={itemOptions}
+                />
+              )}
+            </div>
+          )}
         </div>
       );
     } else if (element.element_type === "AI") {
