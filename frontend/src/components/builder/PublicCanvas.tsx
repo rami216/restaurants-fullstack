@@ -53,7 +53,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
     // Get the backend URL and create a safe copy of the properties
     const BACKEND_URL = api.defaults.baseURL || "";
     const processedProps = { ...aiPayload.properties };
-    const imageUrlKeys = ["src", "image_url", "backgroundImage"];
+    const imageUrlKeys = ["src", "poster", "image_url", "backgroundImage"];
 
     // Loop through the properties and fix any relative image paths
     for (const key of imageUrlKeys) {

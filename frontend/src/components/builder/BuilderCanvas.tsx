@@ -87,7 +87,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
     if (!aiPayload || !ref.current) return;
 
     const processed = { ...(aiPayload.properties || {}) };
-    for (const key of ["src", "image_url", "backgroundImage"]) {
+    for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
       if (processed[key]) processed[key] = resolveImageSrc(processed[key]);
     }
 
