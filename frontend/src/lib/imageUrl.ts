@@ -36,13 +36,24 @@
  *   or already-wrapped css url(...) strings.
  * - Rewrites Supabase origin to Cloudflare media host if provided.
  */
-const ORIGIN_BASE =
-  process.env.NEXT_PUBLIC_SUPABASE_BASE_URL?.replace(/\/+$/, "") || "";
-const CDN_BASE = process.env.NEXT_PUBLIC_MEDIA_BASE?.replace(/\/+$/, "") || "";
-const PUBLIC_PREFIX = "/storage/v1/object/public"; // do not change
+const ORIGIN_BASE = (process.env.NEXT_PUBLIC_SUPABASE_URL || "").replace(
+  /\/+$/,
+  ""
+);
+const CDN_BASE = (process.env.NEXT_PUBLIC_MEDIA_BASE || "").replace(/\/+$/, "");
+
+const PUBLIC_PREFIX = "/storage/v1/object/public"; // Supabase public objects
 
 function stripCssUrl(input: string) {
   return input.replace(/^url\(["']?/, "").replace(/["']?\)$/, "");
+}
+
+function isStoragePublicPath(path: string) {
+  return (
+    path.startsWith(PUBLIC_PREFIX) ||
+    path.startsWith("/storage/v1/object/public/") ||
+    path.startsWith("/all_vids/")
+  );
 }
 
 export function resolveImageSrc(input?: string): string {
@@ -53,27 +64,31 @@ export function resolveImageSrc(input?: string): string {
   // data: / blob: passthrough
   if (/^(data:|blob:)/i.test(raw)) return raw;
 
-  // Already an absolute http(s) URL
+  // Already absolute
   if (/^https?:\/\//i.test(raw)) {
-    // If it's the Supabase origin, swap to CDN if configured
+    // If it’s pointing at the Supabase origin, swap to CDN if we have one
     if (ORIGIN_BASE && raw.startsWith(ORIGIN_BASE) && CDN_BASE) {
       return raw.replace(ORIGIN_BASE, CDN_BASE);
     }
     return raw;
   }
 
-  // Relative path → ensure leading slash
-  const path = raw.startsWith("/") ? raw : `/${raw}`;
+  // Ensure a leading slash
+  let path = raw.startsWith("/") ? raw : `/${raw}`;
 
-  // If it's a storage public path, prefix with CDN (or origin fallback)
+  // Support short form: /all_vids/...  →  /storage/v1/object/public/all_vids/...
+  if (path.startsWith("/all_vids/")) {
+    path = `${PUBLIC_PREFIX}${path.replace(/^\/all_vids/, "/all_vids")}`;
+  }
+
+  // Only rewrite known Supabase public paths to CDN/origin
   if (path.startsWith(PUBLIC_PREFIX)) {
     const base = CDN_BASE || ORIGIN_BASE || "";
     return base ? `${base}${path}` : path;
   }
 
-  // Anything else relative (rare): prefix with CDN (or origin) as best effort
-  const base = CDN_BASE || ORIGIN_BASE || "";
-  return base ? `${base}${path}` : path;
+  // Anything else (e.g., /logo.svg, /_next/static/...): leave as-is
+  return path;
 }
 
 /**
@@ -82,8 +97,9 @@ export function resolveImageSrc(input?: string): string {
  */
 export function normalizeBackground(bg?: string) {
   if (!bg) return undefined;
-  const url = resolveImageSrc(stripCssUrl(bg));
-  // If the value already looks like a gradient, keep it as-is
+  // Keep gradients intact
   if (/^linear-gradient/i.test(bg)) return bg;
+
+  const url = resolveImageSrc(stripCssUrl(bg));
   return `url(${url})`;
 }
