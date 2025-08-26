@@ -38,7 +38,284 @@ const normalizeBackground = (bg?: string) => {
   // plain path or absolute url
   return `url(${resolveImageSrc(bg)})`;
 };
+const GatedContent: React.FC<{
+  elementProps: any;
+  children: React.ReactNode;
+  isLoggedIn: boolean;
+  websiteData: PublicWebsiteData;
+}> = ({ elementProps, children, isLoggedIn, websiteData }) => {
+  const [visibility, setVisibility] = useState<
+    "loading" | "visible" | "hidden"
+  >("loading");
+  const [hiddenReason, setHiddenReason] = useState<"auth" | "purchase" | null>(
+    null
+  );
+  const purchaseCacheRef = useRef<Record<string, boolean>>({});
 
+  useEffect(() => {
+    const checkVisibility = async () => {
+      const v = elementProps?.visibility || {};
+      if (v.requiresAnonymous && isLoggedIn) {
+        setHiddenReason("auth");
+        setVisibility("hidden");
+        return;
+      }
+      if (v.requiresAuth && !isLoggedIn) {
+        setHiddenReason("auth");
+        setVisibility("hidden");
+        return;
+      }
+      if (v.required_product_id) {
+        const memberId = localStorage.getItem(
+          `siteMemberId:${websiteData?.subdomain}`
+        );
+        if (!isLoggedIn || !memberId || !websiteData) {
+          setHiddenReason("auth");
+          setVisibility("hidden");
+          return;
+        }
+        const cacheKey = `${memberId}_${v.required_product_id}`;
+        const cached = purchaseCacheRef.current[cacheKey];
+        if (typeof cached !== "undefined") {
+          setHiddenReason(cached ? null : "purchase");
+          setVisibility(cached ? "visible" : "hidden");
+          return;
+        }
+        try {
+          const params = new URLSearchParams({
+            website_id: String(websiteData.website_id),
+            member_id: memberId,
+            product_id: String(v.required_product_id),
+          });
+          const { data: hasPurchase } = await saasApi.get<boolean>(
+            `/users-stripe-account/${
+              websiteData.subdomain
+            }/has-purchase?${params.toString()}`
+          );
+          purchaseCacheRef.current[cacheKey] = !!hasPurchase;
+          setHiddenReason(hasPurchase ? null : "purchase");
+          setVisibility(hasPurchase ? "visible" : "hidden");
+          return;
+        } catch {
+          purchaseCacheRef.current[cacheKey] = false;
+          setHiddenReason("purchase");
+          setVisibility("hidden");
+          return;
+        }
+      }
+      setHiddenReason(null);
+      setVisibility("visible");
+    };
+    checkVisibility();
+  }, [
+    JSON.stringify(elementProps?.visibility || {}),
+    isLoggedIn,
+    websiteData?.subdomain,
+    websiteData?.website_id,
+  ]);
+
+  if (visibility === "loading") {
+    return (
+      <div className="p-4 text-center text-gray-400">Loading Content...</div>
+    );
+  }
+  if (visibility === "hidden") {
+    const isContainer =
+      elementProps?.padding || elementProps?.display || elementProps?.style;
+    if (isContainer) {
+      return (
+        <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
+          <h4 className="font-semibold">Content Locked</h4>
+          <p className="text-sm mt-1">
+            {hiddenReason === "auth"
+              ? "You must log in to view this content."
+              : "You must purchase a specific product to view this content."}
+          </p>
+        </div>
+      );
+    }
+    return null;
+  }
+  return <>{children}</>;
+};
+
+const MainContent = ({
+  currentPage,
+  activeCategory,
+  setActiveCategory,
+  websiteData,
+  lastSectionRef,
+  renderElement,
+  isLoggedIn,
+  buildSubsectionStyle,
+}: {
+  currentPage: Page | undefined;
+  activeCategory: string | null;
+  setActiveCategory: (id: string | null) => void;
+  websiteData: PublicWebsiteData;
+  lastSectionRef: React.RefObject<HTMLDivElement | null>;
+  renderElement: (element: ElementType) => React.ReactNode;
+  isLoggedIn: boolean;
+  buildSubsectionStyle: (props: any) => React.CSSProperties;
+}) => {
+  if (activeCategory) {
+    return (
+      <>
+        <div className="p-4">
+          <button
+            onClick={() => setActiveCategory(null)}
+            className="text-blue-600 underline mb-4"
+          >
+            ← Back to "{currentPage?.title}"
+          </button>
+        </div>
+        <CategoryMenuInCanvas
+          locations={websiteData.locations}
+          categoryId={activeCategory}
+        />
+      </>
+    );
+  }
+
+  return (
+    <GatedContent
+      elementProps={currentPage?.properties}
+      isLoggedIn={isLoggedIn}
+      websiteData={websiteData}
+    >
+      <div className="space-y-0 flex-1 flex flex-col">
+        {currentPage?.sections.map((sec, idx) => {
+          const isLast = idx === currentPage.sections.length - 1;
+          const p = sec.properties || {};
+          const styleProps = p.style || {};
+          const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
+          let backgroundImage: string | undefined;
+          if (typeof rawBg === "string" && rawBg.trim()) {
+            backgroundImage = rawBg.startsWith("linear-gradient")
+              ? rawBg
+              : normalizeBackground(rawBg);
+          }
+          const containerStyle: React.CSSProperties = {
+            backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
+            padding: p.padding ?? styleProps.padding,
+            ...(styleProps || {}),
+            ...(backgroundImage ? { backgroundImage } : {}),
+            ...(backgroundImage && backgroundImage.startsWith("url(")
+              ? { backgroundSize: "cover", backgroundPosition: "center" }
+              : {}),
+            ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
+          };
+          if (isLast) {
+            if (
+              (containerStyle as any).minHeight &&
+              String((containerStyle as any).minHeight).includes("vh")
+            ) {
+              (containerStyle as any).minHeight = "auto";
+            }
+            if (
+              (containerStyle as any).height &&
+              String((containerStyle as any).height).includes("vh")
+            ) {
+              (containerStyle as any).height = "auto";
+            }
+          }
+          if (
+            containerStyle.backgroundImage &&
+            !String(containerStyle.backgroundImage).includes("gradient")
+          ) {
+            containerStyle.backgroundImage = resolveImageSrc(
+              containerStyle.backgroundImage
+            );
+            containerStyle.backgroundSize = "cover";
+            containerStyle.backgroundPosition = "center";
+          }
+          return (
+            <GatedContent
+              key={sec.section_id}
+              elementProps={sec.properties}
+              isLoggedIn={isLoggedIn}
+              websiteData={websiteData}
+            >
+              <div
+                ref={isLast ? lastSectionRef : undefined}
+                style={{
+                  ...containerStyle,
+                  ...(isLast ? { flexGrow: 1 } : {}),
+                }}
+                className={isLast ? "last-section" : undefined}
+              >
+                <div
+                  className="w-full flex flex-wrap"
+                  style={{
+                    display: p.display || "flex",
+                    flexDirection: p.flexDirection,
+                    justifyContent: p.justifyContent,
+                    alignItems: p.alignItems,
+                    gap: p.gap,
+                    ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
+                  }}
+                >
+                  {sec.subsections.map((sub) => {
+                    const subProps = sub.properties || {};
+                    const { initial, animate, transition } = getMotionConfig(
+                      subProps.animation
+                    );
+                    const subsectionStyle = {
+                      ...buildSubsectionStyle(subProps),
+                      ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
+                    };
+                    if (isLast) {
+                      if (
+                        (subsectionStyle as any).minHeight &&
+                        String((subsectionStyle as any).minHeight).includes(
+                          "vh"
+                        )
+                      ) {
+                        (subsectionStyle as any).minHeight = "auto";
+                      }
+                      if (
+                        (subsectionStyle as any).height &&
+                        String((subsectionStyle as any).height).includes("vh")
+                      ) {
+                        (subsectionStyle as any).height = "auto";
+                      }
+                    }
+                    return (
+                      <GatedContent
+                        key={sub.subsection_id}
+                        elementProps={sub.properties}
+                        isLoggedIn={isLoggedIn}
+                        websiteData={websiteData}
+                      >
+                        <motion.div
+                          style={subsectionStyle}
+                          initial={initial}
+                          animate={animate}
+                          transition={transition}
+                        >
+                          {sub.elements.map((el) => (
+                            <GatedContent
+                              key={el.element_id}
+                              elementProps={el.properties}
+                              isLoggedIn={isLoggedIn}
+                              websiteData={websiteData}
+                            >
+                              {renderElement(el)}
+                            </GatedContent>
+                          ))}
+                        </motion.div>
+                      </GatedContent>
+                    );
+                  })}
+                </div>
+              </div>
+            </GatedContent>
+          );
+        })}
+      </div>
+    </GatedContent>
+  );
+};
 interface AiElementRunnerProps {
   element: BuilderElement;
 }
@@ -578,128 +855,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   useEffect(() => {
     setCurrentPage(initialPage);
   }, [initialPage]);
-  const GatedContent: React.FC<{
-    elementProps: any;
-    children: React.ReactNode;
-  }> = ({ elementProps, children }) => {
-    const [visibility, setVisibility] = useState<
-      "loading" | "visible" | "hidden"
-    >("loading");
-    const [hiddenReason, setHiddenReason] = useState<
-      "auth" | "purchase" | null
-    >(null);
-
-    // lightweight per-component cache: { `${memberId}_${productId}`: boolean }
-    const purchaseCacheRef = useRef<Record<string, boolean>>({});
-
-    useEffect(() => {
-      const checkVisibility = async () => {
-        const v = elementProps?.visibility || {};
-
-        // 1) anonymous-only
-        if (v.requiresAnonymous && isLoggedIn) {
-          setHiddenReason("auth");
-          setVisibility("hidden");
-          return;
-        }
-
-        // 2) requires auth
-        if (v.requiresAuth && !isLoggedIn) {
-          setHiddenReason("auth");
-          setVisibility("hidden");
-          return;
-        }
-
-        // 3) requires purchase (only runs if a product is specified)
-        if (v.required_product_id) {
-          // must be logged in and have a member id
-          const memberId = localStorage.getItem(
-            `siteMemberId:${websiteData?.subdomain}`
-          );
-          if (!isLoggedIn || !memberId || !websiteData) {
-            setHiddenReason("auth");
-            setVisibility("hidden");
-            return;
-          }
-
-          const cacheKey = `${memberId}_${v.required_product_id}`;
-          const cached = purchaseCacheRef.current[cacheKey];
-          if (typeof cached !== "undefined") {
-            setHiddenReason(cached ? null : "purchase");
-            setVisibility(cached ? "visible" : "hidden");
-            return;
-          }
-
-          try {
-            const params = new URLSearchParams({
-              website_id: String(websiteData.website_id),
-              member_id: memberId,
-              product_id: String(v.required_product_id),
-            });
-
-            const { data: hasPurchase } = await saasApi.get<boolean>(
-              `/users-stripe-account/${
-                websiteData.subdomain
-              }/has-purchase?${params.toString()}`
-            );
-
-            purchaseCacheRef.current[cacheKey] = !!hasPurchase;
-            setHiddenReason(hasPurchase ? null : "purchase");
-            setVisibility(hasPurchase ? "visible" : "hidden");
-            return;
-          } catch {
-            // on failure, be safe and deny
-            purchaseCacheRef.current[cacheKey] = false;
-            setHiddenReason("purchase");
-            setVisibility("hidden");
-            return;
-          }
-        }
-
-        // 4) no special rule -> visible
-        setHiddenReason(null);
-        setVisibility("visible");
-      };
-
-      // re-check when rules or login state change
-      checkVisibility();
-      // eslint-disable-next-line react-hooks/exhaustive-deps
-    }, [
-      JSON.stringify(elementProps?.visibility || {}),
-      isLoggedIn,
-      websiteData?.subdomain,
-      websiteData?.website_id,
-    ]);
-
-    if (visibility === "loading") {
-      return (
-        <div className="p-4 text-center text-gray-400">Loading Content...</div>
-      );
-    }
-
-    if (visibility === "hidden") {
-      // consider something a "container" (page/section) if it has layout-ish props
-      const isContainer =
-        elementProps?.padding || elementProps?.display || elementProps?.style;
-      if (isContainer) {
-        return (
-          <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
-            <h4 className="font-semibold">Content Locked</h4>
-            <p className="text-sm mt-1">
-              {hiddenReason === "auth"
-                ? "You must log in to view this content."
-                : "You must purchase a specific product to view this content."}
-            </p>
-          </div>
-        );
-      }
-      // for small inline elements, render nothing
-      return null;
-    }
-
-    // visible
-    return <>{children}</>;
-  };
 
   // const NavBar = () => {
   //   const subdomain = websiteData.subdomain || "";
@@ -1025,168 +1180,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       msg ? `?text=${encodeURIComponent(msg)}` : ""
     }`;
     window.open(url, "_blank", "noopener,noreferrer");
-  };
-
-  const MainContent = () => {
-    // This component now relies on the `isLoggedIn` and `role` states from the parent `PublicCanvas` component.
-    // The old `canShow` and local `isLoggedIn` calculation have been removed.
-
-    if (activeCategory) {
-      return (
-        <>
-          <div className="p-4">
-            <button
-              onClick={() => setActiveCategory(null)}
-              className="text-blue-600 underline mb-4"
-            >
-              ← Back to "{currentPage?.title}"
-            </button>
-          </div>
-          <CategoryMenuInCanvas
-            locations={websiteData.locations}
-            categoryId={activeCategory}
-          />
-        </>
-      );
-    }
-
-    // Wrap the entire page's content in GatedContent to check page-level visibility first.
-    return (
-      <GatedContent elementProps={currentPage?.properties}>
-        <div className="space-y-0 flex-1 flex flex-col">
-          {currentPage?.sections.map((sec, idx) => {
-            const isLast = idx === currentPage.sections.length - 1;
-            // Calculate styles here, as they are needed regardless of visibility for the wrapper
-            const p = sec.properties || {};
-            const styleProps = p.style || {};
-
-            // pick bg from either place
-            const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
-            let backgroundImage: string | undefined;
-            if (typeof rawBg === "string" && rawBg.trim()) {
-              backgroundImage = rawBg.startsWith("linear-gradient")
-                ? rawBg
-                : normalizeBackground(rawBg); // <- uses your resolveImageSrc under the hood
-            }
-            const containerStyle: React.CSSProperties = {
-              backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
-              padding: p.padding ?? styleProps.padding,
-              ...(styleProps || {}),
-              ...(backgroundImage ? { backgroundImage } : {}),
-              ...(backgroundImage && backgroundImage.startsWith("url(")
-                ? { backgroundSize: "cover", backgroundPosition: "center" }
-                : {}),
-              ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
-            };
-            if (isLast) {
-              if (
-                (containerStyle as any).minHeight &&
-                String((containerStyle as any).minHeight).includes("vh")
-              ) {
-                (containerStyle as any).minHeight = "auto";
-              }
-              if (
-                (containerStyle as any).height &&
-                String((containerStyle as any).height).includes("vh")
-              ) {
-                (containerStyle as any).height = "auto";
-              }
-            }
-            if (
-              containerStyle.backgroundImage &&
-              !String(containerStyle.backgroundImage).includes("gradient")
-            ) {
-              containerStyle.backgroundImage = resolveImageSrc(
-                containerStyle.backgroundImage
-              );
-              containerStyle.backgroundSize = "cover";
-              containerStyle.backgroundPosition = "center";
-            }
-
-            return (
-              <GatedContent key={sec.section_id} elementProps={sec.properties}>
-                <div
-                  ref={isLast ? lastSectionRef : undefined} // ⬅️ add this
-                  style={{
-                    ...containerStyle,
-                    ...(isLast ? { flexGrow: 1 } : {}), // <-- make the last section fill the rest
-                  }}
-                  className={isLast ? "last-section" : undefined}
-                >
-                  <div
-                    className="w-full flex flex-wrap"
-                    style={{
-                      display: p.display || "flex",
-                      flexDirection: p.flexDirection,
-                      justifyContent: p.justifyContent,
-                      alignItems: p.alignItems,
-                      gap: p.gap,
-                      // extra safety for last wrapper:
-                      ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
-                    }}
-                  >
-                    {sec.subsections.map((sub) => {
-                      const subProps = sub.properties || {};
-                      const { initial, animate, transition } = getMotionConfig(
-                        subProps.animation
-                      );
-                      const subsectionStyle = {
-                        ...buildSubsectionStyle(subProps),
-                        ...(isLast
-                          ? { marginBottom: 0, paddingBottom: 0 }
-                          : {}),
-                      };
-                      // ⬇️ NEW: also neutralize vh on LAST subsection (common on mobile)
-                      if (isLast) {
-                        if (
-                          (subsectionStyle as any).minHeight &&
-                          String((subsectionStyle as any).minHeight).includes(
-                            "vh"
-                          )
-                        ) {
-                          (subsectionStyle as any).minHeight = "auto";
-                        }
-                        if (
-                          (subsectionStyle as any).height &&
-                          String((subsectionStyle as any).height).includes("vh")
-                        ) {
-                          (subsectionStyle as any).height = "auto";
-                        }
-                      }
-
-                      return (
-                        <GatedContent
-                          key={sub.subsection_id}
-                          elementProps={sub.properties}
-                        >
-                          <motion.div
-                            // className="max-w-full"
-                            style={subsectionStyle}
-                            initial={initial}
-                            animate={animate}
-                            transition={transition}
-                          >
-                            {sub.elements.map((el) => (
-                              <GatedContent
-                                key={el.element_id}
-                                elementProps={el.properties}
-                              >
-                                {/* The final rendered element goes here */}
-                                {renderElement(el)}
-                              </GatedContent>
-                            ))}
-                          </motion.div>
-                        </GatedContent>
-                      );
-                    })}
-                  </div>
-                </div>
-              </GatedContent>
-            );
-          })}
-        </div>
-      </GatedContent>
-    );
   };
 
   function renderElement(element: ElementType) {
@@ -1581,7 +1574,16 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   return (
     <div className="bg-white m-0 p-0 w-full overflow-x-hidden flex flex-col min-h-[100svh]">
       <NavBar />
-      <MainContent />
+      <MainContent
+        currentPage={currentPage}
+        activeCategory={activeCategory}
+        setActiveCategory={setActiveCategory}
+        websiteData={websiteData}
+        lastSectionRef={lastSectionRef}
+        renderElement={renderElement}
+        isLoggedIn={isLoggedIn}
+        buildSubsectionStyle={buildSubsectionStyle}
+      />
     </div>
   );
 };
