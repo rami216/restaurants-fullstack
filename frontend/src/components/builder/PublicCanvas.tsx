@@ -610,6 +610,16 @@ export const CategoryMenuInCanvas = ({
   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
   const [items, setItems] = useState<MenuItem[]>([]);
 
+  // --- NEW: State for interactive elements ---
+  const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
+    null
+  );
+  const [extras, setExtras] = useState<Record<string, Extra[]>>({});
+  const [options, setOptions] = useState<Record<string, PublicOptionGroup[]>>(
+    {}
+  );
+  const [isLoadingDetails, setIsLoadingDetails] = useState(false);
+
   useEffect(() => {
     if (!locationId) return;
     saasApi
@@ -620,9 +630,32 @@ export const CategoryMenuInCanvas = ({
       .catch(() => setItems([]));
   }, [locationId, categoryId]);
 
+  // --- NEW: Handler to fetch details when an item is clicked ---
+  const handleMenuItemClick = async (menuItemId: string) => {
+    if (expandedMenuItemId === menuItemId) {
+      setExpandedMenuItemId(null);
+      return;
+    }
+    setIsLoadingDetails(true);
+    setExpandedMenuItemId(menuItemId);
+    try {
+      const [extrasResponse, optionsResponse] = await Promise.all([
+        api.get<Extra[]>(`/menu-item-extras/extras-for-item/${menuItemId}`),
+        api.get<PublicOptionGroup[]>(
+          `/menu-item-options/options-for-item/${menuItemId}`
+        ),
+      ]);
+      setExtras((prev) => ({ ...prev, [menuItemId]: extrasResponse.data }));
+      setOptions((prev) => ({ ...prev, [menuItemId]: optionsResponse.data }));
+    } catch (error) {
+      console.error("Failed to fetch item details:", error);
+    } finally {
+      setIsLoadingDetails(false);
+    }
+  };
+
   return (
     <div className="p-4">
-      {/* location dropdown */}
       <div className="mb-4">
         <label className="block font-medium mb-1">Choose location:</label>
         <select
@@ -638,29 +671,63 @@ export const CategoryMenuInCanvas = ({
         </select>
       </div>
 
-      {/* menu items grid */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-        {items.map((item) => (
-          <div
-            key={item.item_id}
-            className="border rounded-lg bg-white shadow hover:shadow-lg transition overflow-hidden"
-            style={{ maxWidth: 280 }}
-          >
-            <div className="w-full aspect-[4/3] overflow-hidden">
-              <img
-                // src={`${api.defaults.baseURL}${item.image_url}`}
-                src={resolveImageSrc(item.image_url)}
-                alt={item.item_name}
-                className="w-full h-full object-cover"
-              />
+        {items.map((item) => {
+          const isExpanded = expandedMenuItemId === item.item_id;
+          const itemExtras = extras[item.item_id] || [];
+          const itemOptions = options[item.item_id] || [];
+
+          return (
+            <div key={item.item_id}>
+              {/* Main Card */}
+              <div
+                onClick={() => handleMenuItemClick(item.item_id)}
+                className="border rounded-lg bg-white shadow hover:shadow-lg transition overflow-hidden cursor-pointer"
+                style={{ maxWidth: 280 }}
+              >
+                <div className="w-full aspect-[4/3] overflow-hidden">
+                  <img
+                    src={resolveImageSrc(item.image_url)}
+                    alt={item.item_name}
+                    className="w-full h-full object-cover"
+                  />
+                </div>
+                <div className="p-3">
+                  <h4 className="font-semibold text-base mb-1">
+                    {item.item_name}
+                  </h4>
+                  <p className="text-sm text-gray-600 mb-2">
+                    {item.description}
+                  </p>
+                  <p className="font-medium">${item.base_price.toFixed(2)}</p>
+                </div>
+              </div>
+
+              {/* Expandable Details Section */}
+              <div
+                className={`transition-all duration-500 ease-in-out overflow-hidden ${
+                  isExpanded ? "max-h-[1000px]" : "max-h-0"
+                }`}
+              >
+                <div onClick={(e) => e.stopPropagation()}>
+                  {isLoadingDetails ? (
+                    <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
+                      <p className="text-sm text-slate-500">
+                        Loading details...
+                      </p>
+                    </div>
+                  ) : (
+                    <MenuItemDetails
+                      basePrice={item.base_price || 0}
+                      itemExtras={itemExtras}
+                      itemOptions={itemOptions}
+                    />
+                  )}
+                </div>
+              </div>
             </div>
-            <div className="p-3">
-              <h4 className="font-semibold text-base mb-1">{item.item_name}</h4>
-              <p className="text-sm text-gray-600 mb-2">{item.description}</p>
-              <p className="font-medium">${item.base_price.toFixed(2)}</p>
-            </div>
-          </div>
-        ))}
+          );
+        })}
       </div>
     </div>
   );
