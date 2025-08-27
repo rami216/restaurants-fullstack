@@ -33,18 +33,36 @@ const MainPage = () => {
   );
   // helper to resolve image URL for display
   const resolveImageSrc = (val: string | null | undefined) => {
+    // 1. Return a placeholder if the value is null or empty
     if (!val) return "https://placehold.co/60x60/e2e8f0/a0aec0?text=No+Image";
+
+    // 2. If it's already a full URL or a local blob preview, use it directly
     if (
+      val.startsWith("http") ||
       val.startsWith("blob:") ||
-      val.startsWith("data:") ||
-      val.startsWith("http")
-    )
+      val.startsWith("data:")
+    ) {
       return val;
+    }
 
+    // 3. Get the Supabase URL from your environment variables
     const base = process.env.NEXT_PUBLIC_SUPABASE_URL?.replace(/\/+$/, "");
-    if (!base) return "https://placehold.co/60x60/fecaca/991b1b?text=Bad+URL";
+    if (!base) {
+      console.error("NEXT_PUBLIC_SUPABASE_URL is not set.");
+      return "https://placehold.co/60x60/fecaca/991b1b?text=Bad+URL";
+    }
 
-    if (val.startsWith("/storage/")) return `${base}${val}`;
+    // 4. This is the main logic: If the path starts with "/", assume it's a valid
+    //    Supabase storage path (like /storage/v1/...) and prepend the base URL.
+    if (val.startsWith("/")) {
+      return `${base}${val}`;
+    }
+
+    // 5. Fallback for old data: If it's just a filename, log a warning
+    //    and assume it's in the menu_item_images bucket.
+    console.warn(
+      `Resolving a legacy image path. Please update "${val}" in the database to a full path.`
+    );
     return `${base}/storage/v1/object/public/menu_item_images/${val}`;
   };
   const handlePickFile = (event: React.ChangeEvent<HTMLInputElement>) => {
