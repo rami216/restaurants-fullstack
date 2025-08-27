@@ -9,42 +9,59 @@ type Product = {
   name: string;
 };
 
+// Note: You should also update your VisibilityRule type in your Properties.ts file to include this:
+// export interface VisibilityRule {
+//   // ... other rules
+//   forbidden_product_id?: string;
+// }
+
 export default function VisibilityEditor({
   value,
   onChange,
   onBecameProtected,
   products = [],
-  isSubscribed = false, // <-- NEW: default to true
+  isSubscribed = false,
 }: {
   value: any | undefined;
   onChange: (next: any) => void;
   onBecameProtected?: () => void;
   products?: Product[];
-  isSubscribed?: boolean; // <-- NEW
+  isSubscribed?: boolean;
 }) {
   const v: VisibilityRule = value?.visibility || {};
-  const wasProtected = !!v.requiresAuth || !!v.required_product_id;
+  const wasProtected =
+    !!v.requiresAuth || !!v.required_product_id || !!v.forbidden_product_id;
 
   const handleVisibilityChange = (rule: keyof VisibilityRule, val: any) => {
     let nextVisibility: VisibilityRule = { ...v, [rule]: val };
 
-    // Add logic for exclusivity and dependencies
+    // --- Logic for exclusivity and dependencies ---
     if (rule === "requiresAuth" && val) {
       nextVisibility.requiresAnonymous = false;
     }
     if (rule === "requiresAnonymous" && val) {
       nextVisibility.requiresAuth = false;
       nextVisibility.required_product_id = ""; // Can't require product if user must be anonymous
+      nextVisibility.forbidden_product_id = ""; // Can't forbid product if user must be anonymous
     }
     if (rule === "required_product_id" && val) {
       nextVisibility.requiresAuth = true; // Force login if a product is required
+      nextVisibility.requiresAnonymous = false;
+      nextVisibility.forbidden_product_id = ""; // A product cannot be both required and forbidden
+    }
+    if (rule === "forbidden_product_id" && val) {
+      nextVisibility.requiresAuth = true; // Must be logged in to check purchase status
+      nextVisibility.requiresAnonymous = false;
+      nextVisibility.required_product_id = ""; // A product cannot be both required and forbidden
     }
 
     onChange({ ...value, visibility: nextVisibility });
 
-    // Trigger auth page creation if needed
     const isNowProtected =
-      nextVisibility.requiresAuth || !!nextVisibility.required_product_id;
+      nextVisibility.requiresAuth ||
+      !!nextVisibility.required_product_id ||
+      !!nextVisibility.forbidden_product_id;
+
     if (!wasProtected && isNowProtected) {
       onBecameProtected?.();
     }
@@ -60,7 +77,6 @@ export default function VisibilityEditor({
         </div>
       )}
 
-      {/* Use fieldset to keep controls visible but non-interactive when not subscribed */}
       <fieldset
         disabled={!isSubscribed}
         className={!isSubscribed ? "opacity-60 pointer-events-none" : ""}
@@ -72,7 +88,11 @@ export default function VisibilityEditor({
             onChange={(e) =>
               handleVisibilityChange("requiresAuth", e.target.checked)
             }
-            disabled={!!v.required_product_id || !isSubscribed} // keep existing logic + subscription gate
+            disabled={
+              !!v.required_product_id ||
+              !!v.forbidden_product_id ||
+              !isSubscribed
+            }
           />
           <span>Require login (site member)</span>
         </label>
@@ -90,6 +110,7 @@ export default function VisibilityEditor({
         </label>
 
         <hr />
+
         <div>
           <label className="block text-sm font-medium text-gray-700">
             Require Product Purchase
@@ -106,6 +127,30 @@ export default function VisibilityEditor({
             disabled={v.requiresAnonymous || !isSubscribed}
           >
             <option value="">-- No product required --</option>
+            {products.map((p) => (
+              <option key={p.product_id} value={p.product_id}>
+                {p.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Hide on Product Purchase
+          </label>
+          <p className="text-xs text-gray-500 mb-2">
+            Hide this if the logged-in member has purchased a specific product.
+          </p>
+          <select
+            value={v.forbidden_product_id || ""}
+            onChange={(e) =>
+              handleVisibilityChange("forbidden_product_id", e.target.value)
+            }
+            className="block w-full border-gray-300 rounded-md shadow-sm p-2"
+            disabled={v.requiresAnonymous || !isSubscribed}
+          >
+            <option value="">-- Don't hide based on purchase --</option>
             {products.map((p) => (
               <option key={p.product_id} value={p.product_id}>
                 {p.name}

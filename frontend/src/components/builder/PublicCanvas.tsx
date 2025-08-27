@@ -38,6 +38,8 @@ const normalizeBackground = (bg?: string) => {
   // plain path or absolute url
   return `url(${resolveImageSrc(bg)})`;
 };
+// frontend/src/components/builder/PublicCanvas.tsx
+
 const GatedContent: React.FC<{
   elementProps: any;
   children: React.ReactNode;
@@ -55,37 +57,35 @@ const GatedContent: React.FC<{
   useEffect(() => {
     const checkVisibility = async () => {
       const v = elementProps?.visibility || {};
+
+      // Rule: Anonymous Only
       if (v.requiresAnonymous && isLoggedIn) {
-        setHiddenReason("auth");
         setVisibility("hidden");
         return;
       }
+
+      // Rule: Login Required
       if (v.requiresAuth && !isLoggedIn) {
-        setHiddenReason("auth");
         setVisibility("hidden");
         return;
       }
-      if (v.required_product_id) {
+
+      // Helper function to check purchase status & use cache
+      const checkPurchase = async (productId: string): Promise<boolean> => {
         const memberId = localStorage.getItem(
           `siteMemberId:${websiteData?.subdomain}`
         );
-        if (!isLoggedIn || !memberId || !websiteData) {
-          setHiddenReason("auth");
-          setVisibility("hidden");
-          return;
-        }
-        const cacheKey = `${memberId}_${v.required_product_id}`;
-        const cached = purchaseCacheRef.current[cacheKey];
-        if (typeof cached !== "undefined") {
-          setHiddenReason(cached ? null : "purchase");
-          setVisibility(cached ? "visible" : "hidden");
-          return;
+        if (!isLoggedIn || !memberId) return false;
+
+        const cacheKey = `${memberId}_${productId}`;
+        if (typeof purchaseCacheRef.current[cacheKey] !== "undefined") {
+          return purchaseCacheRef.current[cacheKey];
         }
         try {
           const params = new URLSearchParams({
             website_id: String(websiteData.website_id),
             member_id: memberId,
-            product_id: String(v.required_product_id),
+            product_id: productId,
           });
           const { data: hasPurchase } = await saasApi.get<boolean>(
             `/users-stripe-account/${
@@ -93,19 +93,35 @@ const GatedContent: React.FC<{
             }/has-purchase?${params.toString()}`
           );
           purchaseCacheRef.current[cacheKey] = !!hasPurchase;
-          setHiddenReason(hasPurchase ? null : "purchase");
-          setVisibility(hasPurchase ? "visible" : "hidden");
-          return;
+          return !!hasPurchase;
         } catch {
           purchaseCacheRef.current[cacheKey] = false;
-          setHiddenReason("purchase");
+          return false;
+        }
+      };
+
+      // Rule: Must have purchased a product
+      if (v.required_product_id) {
+        const hasRequiredProduct = await checkPurchase(v.required_product_id);
+        if (!hasRequiredProduct) {
           setVisibility("hidden");
           return;
         }
       }
-      setHiddenReason(null);
+
+      // ✅ NEW: Rule: Must NOT have purchased a product
+      if (v.forbidden_product_id) {
+        const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
+        if (hasForbiddenProduct) {
+          setVisibility("hidden");
+          return;
+        }
+      }
+
+      // If no rules hide the content, show it
       setVisibility("visible");
     };
+
     checkVisibility();
   }, [
     JSON.stringify(elementProps?.visibility || {}),
@@ -127,9 +143,7 @@ const GatedContent: React.FC<{
         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
           <h4 className="font-semibold">Content Locked</h4>
           <p className="text-sm mt-1">
-            {hiddenReason === "auth"
-              ? "You must log in to view this content."
-              : "You must purchase a specific product to view this content."}
+            This content is not available for your account.
           </p>
         </div>
       );

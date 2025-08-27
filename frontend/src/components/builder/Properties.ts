@@ -207,5 +207,9 @@ export type VisibilityRule = {
   /** Optional role restriction (applies only when logged in) */
   roles?: string[];
 
+  /** Only show if the user HAS purchased this product */
   required_product_id?: string;
+
+  /** ✅ NEW: Hide the element if the user HAS purchased this product */
+  forbidden_product_id?: string;
 };
