@@ -28,11 +28,11 @@ async def get_stripe_key(website_id: UUID, db: AsyncSession) -> str:
 
 # --- DTOs (Data Transfer Objects) ---
 class CartItem(BaseModel):
-    # This must exactly match the frontend CartItem interface in CartContext.tsx
+    # This must exactly match your frontend CartItem interface
     cartItemId: str
-    itemId: str # This should be a UUID, Pydantic will convert the string
+    itemId: str 
     name: str
-    unitPrice: float # ✅ FIX: Changed from basePrice to unitPrice
+    unitPrice: float # ✅ Corrected from basePrice
     quantity: int
     imageUrl: str | None = None
     selectedExtras: list = []
@@ -117,11 +117,12 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
     
     total = 0
     for item in payload.cart:
-        db_item = await db.get(MenuItem, item.itemId)
+        # Fetch item from DB to ensure it exists
+        db_item = await db.get(MenuItem, UUID(item.itemId)) # Ensure itemId is converted to UUID
         if not db_item:
             raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
-        # ✅ FIX: Use the corrected field name here as well
+        # ✅ FIX: Use item.unitPrice, which matches the data sent from the frontend
         total += item.unitPrice * item.quantity
 
     if total <= 0:
