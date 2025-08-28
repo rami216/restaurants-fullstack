@@ -3,6 +3,7 @@
 import React from "react";
 import { Geist, Geist_Mono } from "next/font/google";
 import "../globals.css"; // UPDATED: Import global styles
+import { CartProvider } from "@/context/CartContext";
 
 // --- NEW: Add the same font setup as your main layout ---
 const geistSans = Geist({
@@ -26,7 +27,7 @@ export default function SubdomainLayout({
       <body
         className={`${geistSans.variable} ${geistMono.variable} antialiased`}
       >
-        {children}
+        <CartProvider>{children}</CartProvider>
       </body>
     </html>
   );
