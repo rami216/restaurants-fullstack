@@ -41,7 +41,7 @@ app = FastAPI()
 PUBLIC_RULES = [
     ("/site-auth", {"GET", "POST", "OPTIONS"}),                 # <- allow both '/site-auth' and '/site-auth/...'
     ("/users-stripe-account/public/", {"POST", "OPTIONS"}),  # checkout
-    ("/users-stripe-account/public/stripe-key/", {"GET", "OPTIONS"}),
+    ("/users-stripe-account/public/stripe-key", {"GET", "OPTIONS"}),
     ("/checkout/", {"POST", "OPTIONS"}),
     ("/public/", {"GET", "OPTIONS"}),
     ("/locations/", {"GET", "OPTIONS"}),
