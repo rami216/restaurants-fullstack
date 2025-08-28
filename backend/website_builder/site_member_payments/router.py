@@ -61,12 +61,14 @@ async def save_stripe_config_owner(
     if row:
         row.stripe_secret_key = body.stripe_secret_key
         row.stripe_webhook_secret = body.stripe_webhook_secret
+        row.stripe_publishable_key = body.stripe_publishable_key 
     else:
         db.add(
             WebsiteStripeAccount(
                 website_id=website_id,
                 stripe_secret_key=body.stripe_secret_key,
                 stripe_webhook_secret=body.stripe_webhook_secret,
+                stripe_publishable_key=body.stripe_publishable_key
             )
         )
     await db.commit()
