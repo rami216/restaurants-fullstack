@@ -135,6 +135,10 @@ export interface MenuItem {
   description?: string;
   base_price: number;
   image_url?: string;
+  // ✅ ADD THESE NEW PROPERTIES
+  is_shippable?: boolean;
+  stripe_product_id?: string;
+  stripe_price_id?: string;
 }
 export interface Category {
   id: number;

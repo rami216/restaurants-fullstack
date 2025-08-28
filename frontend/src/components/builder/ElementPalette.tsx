@@ -433,6 +433,9 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       description: item.description,
       base_price: item.base_price,
       image_url: item.image_url,
+      is_shippable: item.is_shippable,
+      stripe_product_id: item.stripe_product_id,
+      stripe_price_id: item.stripe_price_id,
       // You can add default styles for the card here
       style: {
         padding: "1rem",
