@@ -44,7 +44,7 @@ async def sync_menu_item_with_stripe(
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_active_user)
 ):
-    # ✅ FIX: This query now follows your exact model relationships to find the owner
+    # This first query is correct and well-optimized
     result = await db.execute(
         select(MenuItem)
         .options(selectinload(MenuItem.location).selectinload(Location.restaurant))
@@ -62,20 +62,22 @@ async def sync_menu_item_with_stripe(
     if menu_item.location.restaurant.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You do not own this menu item.")
 
-    # ✅ FIX: Eagerly load the 'website' relationship when fetching the 'owner'.
-    # This is the one-line change that fixes the error.
-    owner = await db.get(RestaurantOwner, menu_item.location.restaurant_id, options=[selectinload(RestaurantOwner.website)])
+    # Get the owner object from the already loaded relationship
+    owner = menu_item.location.restaurant
     
-    if not owner or not owner.website:
+    # ✅ FIX: Eagerly load the 'website' relationship for the owner object.
+    # We must do this before accessing owner.website.
+    await db.refresh(owner, attribute_names=["website"])
+    
+    if not owner.website:
          raise HTTPException(status_code=404, detail="Website not found for this item's owner.")
     
     stripe.api_key = await get_stripe_key(owner.website.website_id, db)
     
     try:
+        # ... (the rest of your Stripe logic remains the same)
         if menu_item.stripe_product_id:
-            # Update existing product name in Stripe
             product = stripe.Product.modify(menu_item.stripe_product_id, name=menu_item.item_name)
-            # Deactivate old price and create a new one to reflect potential price changes
             if menu_item.stripe_price_id:
                 stripe.Price.modify(menu_item.stripe_price_id, active=False)
             
@@ -86,7 +88,6 @@ async def sync_menu_item_with_stripe(
             )
             menu_item.stripe_price_id = new_price.id
         else:
-            # Create new product and price in Stripe
             product = stripe.Product.create(name=menu_item.item_name)
             price = stripe.Price.create(
                 product=product.id,
