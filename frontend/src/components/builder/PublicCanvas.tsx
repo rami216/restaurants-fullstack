@@ -342,6 +342,7 @@ const MainContent = ({
   renderElement,
   isLoggedIn,
   buildSubsectionStyle,
+  addToCart, // ✅ ADD THIS PROP
 }: {
   currentPage: Page | undefined;
   activeCategory: string | null;
@@ -351,6 +352,7 @@ const MainContent = ({
   renderElement: (element: ElementType) => React.ReactNode;
   isLoggedIn: boolean;
   buildSubsectionStyle: (props: any) => React.CSSProperties;
+  addToCart: (item: CartItem) => void; // ✅ DEFINE THE PROP TYPE
 }) => {
   if (activeCategory) {
     return (
@@ -366,6 +368,7 @@ const MainContent = ({
         <CategoryMenuInCanvas
           locations={websiteData.locations}
           categoryId={activeCategory}
+          onAddToCart={addToCart} // ✅ PASS THE PROP DOWN
         />
       </>
     );
@@ -825,11 +828,12 @@ const Accordion = ({
 export const CategoryMenuInCanvas = ({
   locations,
   categoryId,
+  onAddToCart, // ✅ ADD THIS PROP
 }: {
   locations: Location[];
   categoryId: string;
+  onAddToCart: (item: CartItem) => void; // ✅ DEFINE THE PROP TYPE
 }) => {
-  const { addToCart } = useCart(); // ✅ Get addToCart here
   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
   const [items, setItems] = useState<MenuItem[]>([]);
   const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
@@ -945,7 +949,7 @@ export const CategoryMenuInCanvas = ({
                       item={item}
                       itemExtras={itemExtras}
                       itemOptions={itemOptions}
-                      onAddToCart={addToCart} // ✅ Pass the function down
+                      onAddToCart={onAddToCart} // ✅ PASS THE PROP DOWN
                     />
                   )}
                 </div>
@@ -1165,93 +1169,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     setCurrentPage(initialPage);
   }, [initialPage]);
 
-  // const NavBar = () => {
-  //   const subdomain = websiteData.subdomain || "";
-  //   const base = `/${subdomain}`;
-
-  //   // safe read for CSR
-  //   const isLoggedIn =
-  //     typeof window !== "undefined" &&
-  //     !!localStorage.getItem(`siteToken:${subdomain}`);
-
-  //   const logout = () => {
-  //     if (typeof window !== "undefined") {
-  //       localStorage.removeItem(`siteToken:${subdomain}`);
-  //       window.location.assign(`${base}/login`);
-  //     }
-  //   };
-
-  //   // Filter/augment items for auth
-  //   const items = websiteData.navbar!.items.filter((ni: NavbarItem) => {
-  //     const url = (ni.link_url || "").toLowerCase();
-  //     if (isLoggedIn && (url === "/login" || url === "/register")) return false; // hide when logged in
-  //     return true;
-  //   });
-
-  //   // If logged in and there's no explicit logout item, add one
-  //   const hasLogout = items.some(
-  //     (ni: NavbarItem) => (ni.link_url || "").toLowerCase() === "/logout"
-  //   );
-  //   const finalItems: NavbarItem[] =
-  //     isLoggedIn && !hasLogout
-  //       ? [
-  //           ...items,
-  //           {
-  //             item_id: "auto_logout",
-  //             text: "Logout",
-  //             link_url: "/logout",
-  //           } as any,
-  //         ]
-  //       : items;
-
-  //   return (
-  //     <nav style={websiteData.navbar!.properties}>
-  //       <div className="flex items-center justify-between px-6 py-3 shadow-sm">
-  //         <div className="font-bold text-xl">Your Logo</div>
-  //         <div className="flex space-x-4">
-  //           {finalItems.map((ni: NavbarItem) => {
-  //             const url = (ni.link_url || "").toLowerCase();
-
-  //             // special action for logout
-  //             if (url === "/logout") {
-  //               return (
-  //                 <button
-  //                   key={ni.item_id}
-  //                   onClick={logout}
-  //                   style={websiteData.navbar!.properties.itemStyle}
-  //                   className="text-sm font-medium hover:underline"
-  //                 >
-  //                   {ni.text || "Logout"}
-  //                 </button>
-  //               );
-  //             }
-
-  //             // normal page links (use your slug->page lookup + router push)
-  //             const tgt = websiteData.pages.find((p) => p.slug === ni.link_url);
-  //             if (!tgt) return null;
-
-  //             return (
-  //               <a
-  //                 key={ni.item_id}
-  //                 href={ni.link_url}
-  //                 onClick={(e) => {
-  //                   e.preventDefault();
-  //                   setActiveCategory(null);
-  //                   router.push(`${base}${tgt.slug}`);
-  //                 }}
-  //                 style={websiteData.navbar!.properties.itemStyle}
-  //                 className="text-sm font-medium hover:underline"
-  //               >
-  //                 {ni.text}
-  //               </a>
-  //             );
-  //           })}
-  //         </div>
-  //       </div>
-  //     </nav>
-  //   );
-  // };
-  // keep units predictable for offsets
   const NavBar = () => {
     // ✅ Get the live cart count from the context
     const { cartCount } = useCart();
@@ -1916,6 +1833,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         renderElement={renderElement}
         isLoggedIn={isLoggedIn}
         buildSubsectionStyle={buildSubsectionStyle}
+        addToCart={addToCart} // ✅ Pass the function down
       />
     </div>
   );
