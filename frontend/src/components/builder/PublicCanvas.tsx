@@ -118,7 +118,8 @@ const CartView = ({
     useState<Promise<Stripe | null> | null>(null);
 
   useEffect(() => {
-    api
+    // ✅ FIX: Use saasApi for this public, cookie-less request
+    saasApi
       .get(`/users-stripe-account/public/stripe-key/${websiteData.website_id}`)
       .then((res) => {
         if (res.data.publishableKey) {

@@ -41,6 +41,22 @@ def _get_owned_website_stmt(website_id: str, user_id: int):
         .limit(1)
     )
 
+@router.get("/public/stripe-key/{website_id}")
+async def get_public_stripe_key(website_id: str, db: AsyncSession = Depends(get_db)):
+    """
+    Safely provides the public Stripe key for a given website.
+    This is a public endpoint and does not require authentication.
+    """
+    publishable_key = await db.scalar(
+        select(WebsiteStripeAccount.stripe_publishable_key)
+        .where(WebsiteStripeAccount.website_id == website_id)
+    )
+    
+    if not publishable_key:
+        raise HTTPException(status_code=404, detail="Stripe publishable key not found for this site.")
+    
+    return {"publishableKey": publishable_key}
+
 # =========================
 # Save Stripe Config (Self-service)
 # =========================
