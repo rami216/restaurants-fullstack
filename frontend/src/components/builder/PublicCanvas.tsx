@@ -586,13 +586,15 @@ const MenuItemDetails = ({
   item,
   itemExtras,
   itemOptions,
+  onAddToCart, // ✅ 1. Accept the handler function as a prop
 }: {
   item: MenuItem;
   itemExtras: Extra[];
   itemOptions: PublicOptionGroup[];
+  onAddToCart: (item: CartItem) => void; // ✅ 2. Define the prop's type
 }) => {
   // State to track which extras are selected (using their IDs)
-  const { addToCart } = useCart();
+  // const { addToCart } = useCart();
   const [selectedExtras, setSelectedExtras] = useState(new Set<string>());
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
@@ -649,6 +651,35 @@ const MenuItemDetails = ({
       ...prev,
       [groupId]: choiceId,
     }));
+  };
+  const handleAddToCartClick = () => {
+    // This function creates the item and calls the prop function
+    const extrasList = itemExtras.filter((extra) =>
+      selectedExtras.has(extra.extra_id)
+    );
+    const optionsDict: Record<string, string> = {};
+    for (const group of itemOptions) {
+      const selectedChoiceId = selectedOptions[group.group_id];
+      if (selectedChoiceId) {
+        const choice = group.choices.find(
+          (c) => c.choice_id === selectedChoiceId
+        );
+        if (choice) optionsDict[group.group_name] = choice.name;
+      }
+    }
+    const cartItem: CartItem = {
+      cartItemId: `${item.item_id}-${Date.now()}`,
+      itemId: item.item_id,
+      name: item.item_name,
+      imageUrl: item.image_url,
+      quantity: 1,
+      unitPrice: totalPrice,
+      selectedExtras: extrasList,
+      selectedOptions: optionsDict,
+    };
+
+    // ✅ 3. Call the function that was passed down from the parent
+    onAddToCart(cartItem);
   };
 
   return (
@@ -737,6 +768,15 @@ const MenuItemDetails = ({
           ${totalPrice.toFixed(2)}
         </span>
       </div>
+      {/* ✅ 4. Add the button and connect it to the new handler */}
+      {item.is_shippable && (
+        <button
+          onClick={handleAddToCartClick}
+          className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700"
+        >
+          Add to Cart
+        </button>
+      )}
     </div>
   );
 };
@@ -789,6 +829,7 @@ export const CategoryMenuInCanvas = ({
   locations: Location[];
   categoryId: string;
 }) => {
+  const { addToCart } = useCart(); // ✅ Get addToCart here
   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
   const [items, setItems] = useState<MenuItem[]>([]);
   const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
@@ -904,6 +945,7 @@ export const CategoryMenuInCanvas = ({
                       item={item}
                       itemExtras={itemExtras}
                       itemOptions={itemOptions}
+                      onAddToCart={addToCart} // ✅ Pass the function down
                     />
                   )}
                 </div>
@@ -925,6 +967,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   initialPage,
   websiteData,
 }) => {
+  const { cartCount } = useCart();
+  const { addToCart } = useCart(); // ✅ Get addToCart here
   const [currentView, setCurrentView] = useState("page"); // 'page' or 'cart'
   const router = useRouter();
 
@@ -1656,6 +1700,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   item={props as MenuItem}
                   itemExtras={itemExtras}
                   itemOptions={itemOptions}
+                  onAddToCart={addToCart} // ✅ Pass the function down
                 />
               )}
             </div>
