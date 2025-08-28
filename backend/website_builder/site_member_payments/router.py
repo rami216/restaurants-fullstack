@@ -12,7 +12,7 @@ from website_builder.site_auth_router import site_member_required
 from website_builder.site_commerce_models import WebsiteStripeAccount,SitePurchase,SiteProduct
 from website_builder.models import Website
 from auth.auth_handler import get_current_active_user as get_current_user
-from models import RestaurantOwner  # <-- where your RestaurantOwner model lives
+from models import RestaurantOwner, WebsiteOrder # ✅ 1. IMPORT WebsiteOrder
 
 router = APIRouter(prefix="/users-stripe-account", tags=["SiteMemberPayments"])
 
@@ -150,12 +150,11 @@ async def create_checkout_session(
 async def webhook(
     request: Request,
     db: AsyncSession = Depends(get_db),
-    stripe_signature: str | None = Header(None, alias="Stripe-Signature"),  # <- alias
+    stripe_signature: str | None = Header(None, alias="Stripe-Signature"),
 ):
     payload = await request.body()
 
-    # Peek just enough to get website_id from metadata
-    import json
+    # Peek into the payload to find the website_id from metadata
     try:
         raw = json.loads(payload)
         md = raw.get("data", {}).get("object", {}).get("metadata", {}) or {}
@@ -164,16 +163,16 @@ async def webhook(
         website_id = None
 
     if not website_id:
-        return {"status": "ignored (no website_id)"}
+        return {"status": "ignored (no website_id in metadata)"}
 
-    # Get website’s webhook secret
+    # Get the correct webhook secret for this specific website
     account = await db.scalar(
         select(WebsiteStripeAccount).where(WebsiteStripeAccount.website_id == website_id)
     )
     if not account or not account.stripe_webhook_secret:
         return {"status": "ignored (no website webhook secret configured)"}
 
-    # Verify event
+    # Verify the event signature
     try:
         event = stripe.Webhook.construct_event(
             payload=payload,
@@ -183,42 +182,78 @@ async def webhook(
     except Exception as e:
         raise HTTPException(400, f"Webhook verification failed: {e}")
 
-    # Handle
+    # --- Handle Different Event Types ---
+
+    # --- Logic for your original digital product purchases ---
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         if session.get("payment_status") != "paid":
             return {"status": "ignored (not paid)"}
 
         md = session.get("metadata") or {}
-        if md.get("type") != "site_member_unlock":
-            return {"status": "ignored"}
+        if md.get("type") == "site_member_unlock":
+            website_id = md.get("website_id")
+            member_id = md.get("member_id")
+            product_id = md.get("product_id")
 
-        website_id = md.get("website_id")
-        member_id  = md.get("member_id")
-        product_id = md.get("product_id")
-
-        if not (website_id and member_id and product_id):
-            return {"status": "missing metadata"}
-
-        exists = await db.scalar(
-            select(SitePurchase).where(
-                SitePurchase.website_id == website_id,
-                SitePurchase.member_id  == member_id,
-                SitePurchase.product_id == product_id,
-                SitePurchase.status     == "paid",
+            if not (website_id and member_id and product_id):
+                return {"status": "ignored (missing metadata for unlock)"}
+            
+            exists = await db.scalar(
+                select(SitePurchase).where(SitePurchase.payment_intent_id == session.get("payment_intent"))
             )
-        )
-        if not exists:
-            db.add(SitePurchase(
-                website_id=website_id,
-                member_id=member_id,
-                product_id=product_id,
-                status="paid",
-            ))
-            await db.commit()
+            if not exists:
+                db.add(SitePurchase(
+                    website_id=website_id,
+                    member_id=member_id,
+                    product_id=product_id,
+                    status="paid",
+                    payment_intent_id=session.get("payment_intent")
+                ))
+                await db.commit()
+
+    # --- Logic for your new shopping cart orders ---
+    elif event["type"] == "payment_intent.succeeded":
+        payment_intent = event["data"]["object"]
+        md = payment_intent.get("metadata", {})
+
+        if md.get("type") == "cart_checkout":
+            website_id = md.get("website_id")
+            cart_items_json = md.get("cart_items")
+            
+            shipping_details = payment_intent.get("shipping")
+            customer_name = shipping_details.get("name") if shipping_details else "N/A"
+            customer_email = payment_intent.get("receipt_email")
+            customer_phone = shipping_details.get("phone") if shipping_details else None
+            
+            address_parts = [
+                shipping_details.get("address", {}).get("line1"),
+                shipping_details.get("address", {}).get("city"),
+                shipping_details.get("address", {}).get("state"),
+                shipping_details.get("address", {}).get("postal_code"),
+                shipping_details.get("address", {}).get("country"),
+            ]
+            shipping_address = ", ".join(filter(None, address_parts))
+
+            # Check if order already exists to prevent duplicates
+            exists = await db.scalar(select(WebsiteOrder).where(WebsiteOrder.payment_intent_id == payment_intent.get("id")))
+            if not exists:
+                new_order = WebsiteOrder(
+                    website_id=website_id,
+                    customer_name=customer_name,
+                    customer_email=customer_email,
+                    customer_phone=customer_phone,
+                    shipping_address=shipping_address,
+                    cart_items=json.loads(cart_items_json) if cart_items_json else [],
+                    total_amount_cents=payment_intent.get("amount"),
+                    currency=payment_intent.get("currency"),
+                    payment_intent_id=payment_intent.get("id"),
+                    status="paid",
+                )
+                db.add(new_order)
+                await db.commit()
 
     return {"status": "ok"}
-
 def _assert_site_owner(ctx, website: Website):
     # If you later add roles/ownership checks, enforce here.
     # For now ctx["member"] belongs to website already (via subdomain),

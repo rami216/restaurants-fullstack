@@ -85,6 +85,12 @@ const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
           required
           className="p-3 border rounded-md w-full"
         />
+        <input
+          name="phone"
+          type="tel"
+          placeholder="Phone Number (Optional)"
+          className="p-3 border rounded-md w-full"
+        />
       </div>
       <h3 className="text-lg font-semibold pt-4">Payment Details</h3>
       <div className="p-4 border rounded-md bg-gray-50">
