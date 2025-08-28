@@ -142,8 +142,10 @@ export default function BuilderPaymentsPage() {
     const form = new FormData(e.currentTarget as HTMLFormElement);
     const secretKey = String(form.get("secretKey") || "").trim();
     const webhookSecret = String(form.get("webhookSecret") || "").trim();
-    if (!secretKey || !webhookSecret) {
-      setError("Both fields are required.");
+    const publishableKey = String(form.get("publishableKey") || "").trim();
+    if (!secretKey || !webhookSecret || !publishableKey) {
+      // ✅ 2. Validate all three fields
+      setError("All three Stripe keys are required.");
       return;
     }
     setSaving(true);
@@ -154,6 +156,7 @@ export default function BuilderPaymentsPage() {
         {
           stripe_secret_key: secretKey,
           stripe_webhook_secret: webhookSecret,
+          stripe_publishable_key: publishableKey, // ✅ 3. Send the new key to the backend
         }
       );
       const { data } = await api.get(
@@ -267,6 +270,7 @@ export default function BuilderPaymentsPage() {
           saving={saving}
           webhookUrl={webhookUrl}
           onSubmit={onSaveStripeConfig}
+          onCancel={view?.exists ? () => setEditing(false) : undefined}
         />
       )}
 
@@ -492,16 +496,41 @@ function StripeConfigForm({
   saving,
   webhookUrl,
   onSubmit,
+  onCancel, // Add cancel handler
 }: {
   saving: boolean;
   webhookUrl: string;
   onSubmit: (e: React.FormEvent) => void;
+  onCancel?: () => void;
 }) {
   const [showSecret, setShowSecret] = React.useState(false);
   const [showWebhook, setShowWebhook] = React.useState(false);
+  const [showPublishable, setShowPublishable] = React.useState(false); // State for new key
 
   return (
     <form onSubmit={onSubmit} className="border rounded p-4 bg-white space-y-4">
+      {/* ✅ NEW: Publishable Key Field */}
+      <div className="space-y-1">
+        <label className="block text-sm font-medium">
+          Stripe Publishable Key (test or live)
+        </label>
+        <div className="flex gap-2">
+          <input
+            name="publishableKey"
+            type={showPublishable ? "text" : "password"}
+            placeholder="pk_test_..."
+            className="flex-1 border rounded px-3 py-2"
+            required
+          />
+          <button
+            type="button"
+            onClick={() => setShowPublishable((s) => !s)}
+            className="text-sm underline"
+          >
+            {showPublishable ? "Hide" : "Show"}
+          </button>
+        </div>
+      </div>
       <div className="space-y-1">
         <label className="block text-sm font-medium">
           Stripe Secret Key (test or live)
