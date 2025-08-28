@@ -79,6 +79,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onRefineElement,
   onCreateStandalonePage,
 }) => {
+  const [isSyncing, setIsSyncing] = React.useState(false);
   const { subscriptionStatus } = useSubscription(); // <-- 2. USE THE HOOK
   const isSubscribed = subscriptionStatus === "active"; // <-- 3. CREATE A HELPER VARIABLE
   const [editingStandalonePageId, setEditingStandalonePageId] = useState<
@@ -2547,8 +2548,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         break;
       }
       case "MENU_ITEM": {
-        const [isSyncing, setIsSyncing] = useState(false);
-
         const handleToggleShippable = async (isShippable: boolean) => {
           if (!selectedItem) return;
           if (!isShippable) {
