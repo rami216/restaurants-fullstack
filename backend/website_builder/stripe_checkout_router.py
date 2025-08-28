@@ -62,9 +62,10 @@ async def sync_menu_item_with_stripe(
     if menu_item.location.restaurant.user_id != current_user.id:
         raise HTTPException(status_code=403, detail="You do not own this menu item.")
 
-    # Get the website_id from the owner's restaurant relationship
-    # Assumes a one-to-one relationship between RestaurantOwner and Website
+    # ✅ FIX: Eagerly load the 'website' relationship when fetching the 'owner'.
+    # This is the one-line change that fixes the error.
     owner = await db.get(RestaurantOwner, menu_item.location.restaurant_id, options=[selectinload(RestaurantOwner.website)])
+    
     if not owner or not owner.website:
          raise HTTPException(status_code=404, detail="Website not found for this item's owner.")
     
