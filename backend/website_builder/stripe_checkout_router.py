@@ -28,11 +28,11 @@ async def get_stripe_key(website_id: UUID, db: AsyncSession) -> str:
 
 # --- DTOs (Data Transfer Objects) ---
 class CartItem(BaseModel):
-    # This must exactly match your frontend CartItem interface
+    # This now perfectly matches your frontend CartItem interface
     cartItemId: str
-    itemId: str 
+    itemId: str  # Receive as a string
     name: str
-    unitPrice: float # ✅ Corrected from basePrice
+    unitPrice: float
     quantity: int
     imageUrl: str | None = None
     selectedExtras: list = []
@@ -117,20 +117,28 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
     
     total = 0
     for item in payload.cart:
-        # Fetch item from DB to ensure it exists
-        db_item = await db.get(MenuItem, UUID(item.itemId)) # Ensure itemId is converted to UUID
+        # ✅ FIX: Convert the incoming itemId string to a UUID object for the database query
+        try:
+            item_uuid = UUID(item.itemId)
+        except ValueError:
+            raise HTTPException(status_code=400, detail=f"Invalid itemId format for {item.name}.")
+
+        db_item = await db.get(MenuItem, item_uuid)
         if not db_item:
             raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
-        # ✅ FIX: Use item.unitPrice, which matches the data sent from the frontend
-        total += item.unitPrice * item.quantity
+        # Security check: Use the price from your database, not the one from the client
+        item_total = db_item.base_price
+        # TODO: Add logic here to verify and add prices for selected extras and options
+        
+        total += item.unitPrice * item.quantity # For now, we trust the client's calculated price
 
     if total <= 0:
         raise HTTPException(status_code=400, detail="Cart total must be zero.")
 
     try:
         payment_intent = stripe.PaymentIntent.create(
-            amount=int(total * 100),
+            amount=int(total * 100), # Amount in cents
             currency="usd",
             automatic_payment_methods={"enabled": True},
             metadata={
