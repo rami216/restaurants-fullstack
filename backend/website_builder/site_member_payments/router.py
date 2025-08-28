@@ -22,6 +22,7 @@ router = APIRouter(prefix="/users-stripe-account", tags=["SiteMemberPayments"])
 class StripeConfigDTO(BaseModel):
     stripe_secret_key: str
     stripe_webhook_secret: str
+    stripe_publishable_key:str
 
 class CheckoutDTO(BaseModel):
     price_id: str          # Stripe Price ID
