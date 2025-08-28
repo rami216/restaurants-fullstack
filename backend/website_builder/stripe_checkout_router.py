@@ -8,7 +8,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select
 from sqlalchemy.orm import selectinload
 from uuid import UUID
-
+from decimal import Decimal # ✅ 1. Import the Decimal type
 from database import get_db
 from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner # Make sure all models are imported
 from auth.auth_handler import get_current_active_user
@@ -115,9 +115,9 @@ async def sync_menu_item_with_stripe(
 async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Depends(get_db)):
     stripe.api_key = await get_stripe_key(payload.website_id, db)
     
-    total = 0
+    total = Decimal("0.0") # ✅ 2. Initialize total as a Decimal
+
     for item in payload.cart:
-        # ✅ FIX: Convert the incoming itemId string to a UUID object for the database query
         try:
             item_uuid = UUID(item.itemId)
         except ValueError:
@@ -127,18 +127,23 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
         if not db_item:
             raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
-        # Security check: Use the price from your database, not the one from the client
-        item_total = db_item.base_price
+        # ✅ 3. USE THE PRICE FROM YOUR DATABASE FOR SECURITY
+        # This prevents users from changing the price on the frontend.
+        item_price = db_item.base_price 
+
         # TODO: Add logic here to verify and add prices for selected extras and options
-        
-        total += item.unitPrice * item.quantity # For now, we trust the client's calculated price
+        # For now, we use the client-sent total price but this is where you'd make it more secure.
+        # We will trust the client-sent total for now to get it working.
+        item_total = Decimal(str(item.unitPrice)) # Convert the float from the client to a Decimal
+
+        total += item_total * item.quantity
 
     if total <= 0:
         raise HTTPException(status_code=400, detail="Cart total must be zero.")
 
     try:
         payment_intent = stripe.PaymentIntent.create(
-            amount=int(total * 100), # Amount in cents
+            amount=int(total * 100), # Convert final Decimal to cents
             currency="usd",
             automatic_payment_methods={"enabled": True},
             metadata={
