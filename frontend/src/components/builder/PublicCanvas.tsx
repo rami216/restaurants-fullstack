@@ -368,7 +368,7 @@ const MainContent = ({
         <CategoryMenuInCanvas
           locations={websiteData.locations}
           categoryId={activeCategory}
-          onAddToCart={addToCart} // ✅ PASS THE PROP DOWN
+          onAddToCart={addToCart} // ✅ PASS THE PROP DOWNCategoryMenuInCanvas
         />
       </>
     );
@@ -971,8 +971,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   initialPage,
   websiteData,
 }) => {
-  const { cartCount } = useCart();
-  const { addToCart } = useCart(); // ✅ Get addToCart here
+  const { cartCount, addToCart } = useCart(); // ✅ Get addToCart from the hook here
+
   const [currentView, setCurrentView] = useState("page"); // 'page' or 'cart'
   const router = useRouter();
 
