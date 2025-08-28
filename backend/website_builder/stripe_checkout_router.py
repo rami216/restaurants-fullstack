@@ -27,11 +27,15 @@ async def get_stripe_key(website_id: UUID, db: AsyncSession) -> str:
 
 # --- DTOs (Data Transfer Objects) ---
 class CartItem(BaseModel):
-    itemId: UUID
+    # This must exactly match the frontend CartItem interface in CartContext.tsx
+    cartItemId: str
+    itemId: str # This should be a UUID, Pydantic will convert the string
     name: str
+    unitPrice: float # ✅ FIX: Changed from basePrice to unitPrice
     quantity: int
-    basePrice: float
-    # We will verify prices on the backend
+    imageUrl: str | None = None
+    selectedExtras: list = []
+    selectedOptions: dict = {}
 
 class CheckoutPayload(BaseModel):
     cart: list[CartItem]
