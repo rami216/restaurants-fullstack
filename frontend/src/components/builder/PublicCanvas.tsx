@@ -131,7 +131,7 @@ const CartView = ({
 
   useEffect(() => {
     if (cart.length > 0 && websiteData) {
-      api
+      saasApi
         .post("/checkout/create-payment-intent", {
           cart,
           website_id: websiteData.website_id,
