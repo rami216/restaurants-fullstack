@@ -115,7 +115,9 @@ async def sync_menu_item_with_stripe(
 async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Depends(get_db)):
     stripe.api_key = await get_stripe_key(payload.website_id, db)
     
-    total = Decimal("0.0") # Use Decimal for accurate money calculations
+    total = 0
+    # ✅ 1. Create a simplified list for the metadata
+    simplified_cart_for_metadata = []
 
     for item in payload.cart:
         try:
@@ -127,15 +129,18 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
         if not db_item:
             raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
-        # ✅ FIX: Securely use the price from your database and convert it to a float
-        # This prevents both security issues and the data type crash.
-        item_price_from_db = float(db_item.base_price)
+        # We'll trust the client's calculated price for now
+        total += item.unitPrice * item.quantity
 
-        # For now, we will trust the client-sent total price to get it working,
-        # but in production, you would recalculate the full price here.
-        item_total = Decimal(str(item.unitPrice))
+        # ✅ 2. Build the simplified object for metadata
+        simplified_item = {
+            "itemId": item.itemId,
+            "quantity": item.quantity,
+            "selectedExtras": [extra.get("extra_id") for extra in item.selectedExtras],
+            "selectedOptions": item.selectedOptions
+        }
+        simplified_cart_for_metadata.append(simplified_item)
 
-        total += item_total * item.quantity
 
     if total <= 0:
         raise HTTPException(status_code=400, detail="Cart total must be zero.")
@@ -148,12 +153,12 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
             metadata={
                 "type": "cart_checkout",
                 "website_id": str(payload.website_id),
-                "cart_items": json.dumps([item.model_dump(mode='json') for item in payload.cart])
+                # ✅ 3. Save the simplified, shorter version to metadata
+                "cart_items": json.dumps(simplified_cart_for_metadata)
             }
         )
         return {"clientSecret": payment_intent.client_secret}
     except Exception as e:
-        # It is helpful to log the actual error on the server
         print(f"Stripe Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
