@@ -1169,9 +1169,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     setCurrentPage(initialPage);
   }, [initialPage]);
 
-  const NavBar = () => {
+  const NavBar = ({ cartCount }: { cartCount: number }) => {
     // ✅ Get the live cart count from the context
-    const { cartCount } = useCart();
 
     // --- Existing state and variables ---
     const isMainHost =
@@ -1823,18 +1822,24 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
   return (
     <div className="bg-white m-0 p-0 w-full overflow-x-hidden flex flex-col min-h-[100svh]">
-      <NavBar />
-      <MainContent
-        currentPage={currentPage}
-        activeCategory={activeCategory}
-        setActiveCategory={setActiveCategory}
-        websiteData={websiteData}
-        lastSectionRef={lastSectionRef}
-        renderElement={renderElement}
-        isLoggedIn={isLoggedIn}
-        buildSubsectionStyle={buildSubsectionStyle}
-        addToCart={addToCart} // ✅ Pass the function down
-      />
+      {/* ✅ FIX: Pass cartCount as a prop to the NavBar */}
+      <NavBar cartCount={cartCount} />
+
+      {currentView === "page" ? (
+        <MainContent
+          currentPage={currentPage}
+          activeCategory={activeCategory}
+          setActiveCategory={setActiveCategory}
+          websiteData={websiteData}
+          lastSectionRef={lastSectionRef}
+          renderElement={renderElement}
+          isLoggedIn={isLoggedIn}
+          buildSubsectionStyle={buildSubsectionStyle}
+          addToCart={addToCart}
+        />
+      ) : (
+        <CartView websiteData={websiteData} setCurrentView={setCurrentView} />
+      )}
     </div>
   );
 };
