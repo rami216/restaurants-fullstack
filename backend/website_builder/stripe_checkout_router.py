@@ -1,5 +1,6 @@
 # Create a new file: website_builder/stripe_checkout_router.py
 
+import json
 import stripe
 from fastapi import APIRouter, Depends, HTTPException
 from pydantic import BaseModel
@@ -114,25 +115,28 @@ async def sync_menu_item_with_stripe(
 async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Depends(get_db)):
     stripe.api_key = await get_stripe_key(payload.website_id, db)
     
-    # --- Server-side price calculation for security ---
     total = 0
     for item in payload.cart:
         db_item = await db.get(MenuItem, item.itemId)
         if not db_item:
             raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
-        # NOTE: For full security, you should recalculate extras/options prices here
-        # based on IDs sent from the client, not just the final price.
-        total += item.basePrice * item.quantity
+        # ✅ FIX: Use the corrected field name here as well
+        total += item.unitPrice * item.quantity
 
     if total <= 0:
         raise HTTPException(status_code=400, detail="Cart total must be zero.")
 
     try:
         payment_intent = stripe.PaymentIntent.create(
-            amount=int(total * 100), # Amount in cents
+            amount=int(total * 100),
             currency="usd",
             automatic_payment_methods={"enabled": True},
+            metadata={
+                "type": "cart_checkout",
+                "website_id": str(payload.website_id),
+                "cart_items": json.dumps([item.model_dump(mode='json') for item in payload.cart])
+            }
         )
         return {"clientSecret": payment_intent.client_secret}
     except Exception as e:
