@@ -2547,8 +2547,55 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         break;
       }
       case "MENU_ITEM": {
+        const [isSyncing, setIsSyncing] = useState(false);
+
+        const handleToggleShippable = async (isShippable: boolean) => {
+          if (!selectedItem) return;
+          if (!isShippable) {
+            updateItem({
+              ...selectedItem,
+              properties: { ...selectedItem.properties, is_shippable: false },
+            });
+            return;
+          }
+          setIsSyncing(true);
+          try {
+            const response = await api.post(
+              `/checkout/sync-product/${selectedItem.properties.item_id}`
+            );
+            updateItem({
+              ...selectedItem,
+              properties: {
+                ...selectedItem.properties,
+                is_shippable: true,
+                stripe_product_id: response.data.stripe_product_id,
+              },
+            });
+            alert("Product synced with Stripe successfully!");
+          } catch (error) {
+            console.error("Failed to sync product:", error);
+            alert("Error: Could not sync product.");
+          } finally {
+            setIsSyncing(false);
+          }
+        };
         editorBody = (
           <div className="space-y-4">
+            <div className="p-3 border rounded-md bg-gray-50 space-y-2">
+              <label className="flex items-center gap-2 font-medium">
+                <input
+                  type="checkbox"
+                  checked={!!selectedItem.properties.is_shippable}
+                  onChange={(e) => handleToggleShippable(e.target.checked)}
+                  disabled={isSyncing}
+                />
+                <span>Enable as a shippable product</span>
+              </label>
+              {isSyncing && <p className="text-sm">Syncing with Stripe...</p>}
+              {selectedItem.properties.is_shippable && (
+                <p className="text-xs text-green-700">Synced with Stripe!</p>
+              )}
+            </div>
             <h4 className="text-md font-medium text-gray-800">Chat Options</h4>
             <label className="flex items-center gap-2">
               <input

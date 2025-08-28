@@ -6,6 +6,7 @@ import NavBar from "@/components/NavBar"; // ✅ add this import
 import { AuthProvider } from "@/context/AuthContext";
 import AuthRedirect from "@/context/AuthRedirect";
 import { SubscriptionProvider } from "@/context/SubscriptionContext";
+import { CartProvider } from "@/context/CartContext"; // ✅ 1. Add this import
 
 const geistSans = Geist({
   variable: "--font-geist-sans",
@@ -38,9 +39,10 @@ export default function RootLayout({
         <SubscriptionProvider>
           <AuthProvider>
             <AuthRedirect>
-              <NavBar />
-
-              {children}
+              <CartProvider>
+                <NavBar />
+                {children}
+              </CartProvider>
             </AuthRedirect>
           </AuthProvider>
         </SubscriptionProvider>

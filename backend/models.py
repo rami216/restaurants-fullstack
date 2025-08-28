@@ -1,5 +1,6 @@
 #models.py
-from sqlalchemy import Column, String, Integer, DateTime, ForeignKey, BigInteger,Boolean,text,Numeric,Time
+import datetime
+from sqlalchemy import JSON, Column, String, Integer, DateTime, ForeignKey, BigInteger,Boolean,text,Numeric,Time
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from database import Base
@@ -121,6 +122,12 @@ class MenuItem(Base):
     # Foreign Keys
     location_id = Column(UUID(as_uuid=True), ForeignKey("locations.location_id"), nullable=False)
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=False)
+    
+     # --- ADD THESE COLUMNS ---
+    is_shippable = Column(Boolean, default=False, nullable=False)
+    stripe_product_id = Column(String, nullable=True)
+    stripe_price_id = Column(String, nullable=True)
+    # -------------------------
 
     # Relationships
     location = relationship("Location", back_populates="menu_items")
@@ -254,3 +261,25 @@ class Schedule(Base):
 
     # Relationship
     location = relationship("Location", back_populates="schedules")
+    
+    
+# --- ADD THIS NEW MODEL ---
+class WebsiteOrder(Base):
+    __tablename__ = "website_orders"
+    order_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id"), nullable=False)
+    
+    customer_name = Column(String, nullable=False)
+    customer_email = Column(String, nullable=False)
+    customer_phone = Column(String, nullable=True)
+    shipping_address = Column(String, nullable=False)
+    
+    cart_items = Column(JSON, nullable=False)
+    total_amount_cents = Column(Integer, nullable=False)
+    currency = Column(String(3), nullable=False, default="usd")
+    
+    payment_intent_id = Column(String, nullable=True, index=True)
+    status = Column(String, default="pending", nullable=False)
+    
+    created_at = Column(DateTime, default=datetime.utcnow)
+    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)

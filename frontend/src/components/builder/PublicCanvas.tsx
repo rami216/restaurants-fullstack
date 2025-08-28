@@ -8,6 +8,14 @@ import { resolveImageSrc } from "@/lib/imageUrl";
 import { FiMenu, FiX } from "react-icons/fi"; // install react-icons if not already
 import saasApi, { API_BASE } from "@/lib/saasApi"; // <-- use the no-cookie client
 import { FaWhatsapp } from "react-icons/fa";
+import { loadStripe, Stripe, StripeElementsOptions } from "@stripe/stripe-js";
+import {
+  Elements,
+  PaymentElement,
+  useStripe,
+  useElements,
+} from "@stripe/react-stripe-js";
+
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
   Page,
@@ -28,6 +36,178 @@ import { ChevronDown } from "lucide-react";
 import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
+import { useCart, CartItem } from "@/context/CartContext";
+
+const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
+  const stripe = useStripe();
+  const elements = useElements();
+  const { cartTotal } = useCart();
+  const [isLoading, setIsLoading] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+
+  const handleSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!stripe || !elements) return;
+    setIsLoading(true);
+    const { error } = await stripe.confirmPayment({
+      elements,
+      confirmParams: { return_url: `${window.location.origin}/thank-you` },
+    });
+    if (error) setErrorMessage(error.message || "An error occurred.");
+    setIsLoading(false);
+  };
+
+  return (
+    <form
+      onSubmit={handleSubmit}
+      className="space-y-6 bg-white p-6 rounded-lg shadow-md"
+    >
+      <h3 className="text-lg font-semibold">Contact & Shipping</h3>
+      <div className="grid grid-cols-1 gap-y-4">
+        <input
+          type="text"
+          name="name"
+          placeholder="Full Name"
+          required
+          className="p-3 border rounded-md w-full"
+        />
+        <input
+          type="email"
+          name="email"
+          placeholder="Email Address"
+          required
+          className="p-3 border rounded-md w-full"
+        />
+        <input
+          type="text"
+          name="address"
+          placeholder="Shipping Address"
+          required
+          className="p-3 border rounded-md w-full"
+        />
+      </div>
+      <h3 className="text-lg font-semibold pt-4">Payment Details</h3>
+      <div className="p-4 border rounded-md bg-gray-50">
+        <PaymentElement />
+      </div>
+      <button
+        disabled={isLoading || !stripe || !elements}
+        className="w-full bg-indigo-600 text-white font-semibold py-4 rounded-lg hover:bg-indigo-700 disabled:bg-gray-400"
+      >
+        <span>
+          {isLoading ? "Processing..." : `Pay $${cartTotal.toFixed(2)}`}
+        </span>
+      </button>
+      {errorMessage && (
+        <div className="text-red-500 text-center">{errorMessage}</div>
+      )}
+    </form>
+  );
+};
+
+const CartView = ({
+  websiteData,
+  setCurrentView,
+}: {
+  websiteData: PublicWebsiteData;
+  setCurrentView: (view: string) => void;
+}) => {
+  const { cart, cartTotal, removeFromCart } = useCart();
+  const [clientSecret, setClientSecret] = useState("");
+  const [stripePromise, setStripePromise] =
+    useState<Promise<Stripe | null> | null>(null);
+
+  useEffect(() => {
+    api
+      .get(`/users-stripe-account/public/stripe-key/${websiteData.website_id}`)
+      .then((res) => {
+        if (res.data.publishableKey) {
+          setStripePromise(loadStripe(res.data.publishableKey));
+        }
+      })
+      .catch((err) => console.error("Could not load Stripe key.", err));
+  }, [websiteData.website_id]);
+
+  useEffect(() => {
+    if (cart.length > 0 && websiteData) {
+      api
+        .post("/checkout/create-payment-intent", {
+          cart,
+          website_id: websiteData.website_id,
+        })
+        .then((res) => setClientSecret(res.data.clientSecret))
+        .catch((err) => console.error("Failed to create payment intent", err));
+    }
+  }, [cart, cartTotal, websiteData]);
+
+  const options: StripeElementsOptions = {
+    clientSecret,
+    appearance: { theme: "stripe" },
+  };
+
+  if (cart.length === 0) {
+    return (
+      <div className="container mx-auto text-center py-20">
+        <h1 className="text-3xl font-bold">Your Cart is Empty</h1>
+        <button
+          onClick={() => setCurrentView("page")}
+          className="text-indigo-600 hover:underline mt-4 inline-block"
+        >
+          ← Continue Shopping
+        </button>
+      </div>
+    );
+  }
+  return (
+    <div className="container mx-auto p-4 md:p-8">
+      <button
+        onClick={() => setCurrentView("page")}
+        className="text-indigo-600 hover:underline mb-8 inline-block"
+      >
+        ← Back to Shop
+      </button>
+      <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
+      <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        <div className="lg:col-span-2 space-y-4">
+          {cart.map((item) => (
+            <div
+              key={item.cartItemId}
+              className="flex items-center border p-4 rounded-lg shadow-sm bg-white"
+            >
+              <img
+                src={item.imageUrl || "https://placehold.co/100x100"}
+                alt={item.name}
+                className="w-24 h-24 object-cover rounded-md"
+              />
+              <div className="ml-4 flex-grow">
+                <h2 className="font-semibold text-lg">{item.name}</h2>
+              </div>
+              <div className="text-right">
+                <p className="font-semibold text-lg">
+                  ${item.unitPrice.toFixed(2)}
+                </p>
+                <button
+                  onClick={() => removeFromCart(item.cartItemId)}
+                  className="text-red-500 text-sm hover:underline"
+                >
+                  Remove
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+        <div className="lg:col-span-1">
+          {clientSecret && stripePromise && (
+            <Elements options={options} stripe={stripePromise}>
+              <CheckoutForm websiteId={websiteData.website_id} />
+            </Elements>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+};
+
 const normalizeBackground = (bg?: string) => {
   if (!bg) return undefined;
   // if we already have url(...), extract inner and pass through resolver
@@ -403,50 +583,52 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
   return <div ref={containerRef} />;
 };
 const MenuItemDetails = ({
-  basePrice,
+  item,
   itemExtras,
   itemOptions,
 }: {
-  basePrice: number;
+  item: MenuItem;
   itemExtras: Extra[];
   itemOptions: PublicOptionGroup[];
 }) => {
   // State to track which extras are selected (using their IDs)
+  const { addToCart } = useCart();
   const [selectedExtras, setSelectedExtras] = useState(new Set<string>());
-
-  // State to track the selected choice for each option group (group_id: choice_id)
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
   >({});
 
   // State to hold the final calculated price
-  const [totalPrice, setTotalPrice] = useState(basePrice);
+  const [totalPrice, setTotalPrice] = useState(item.base_price);
 
-  // This effect recalculates the total price whenever a selection changes
   useEffect(() => {
-    let currentTotal = basePrice;
+    let currentTotal = item.base_price;
 
-    // Add price of selected extras
     selectedExtras.forEach((extraId) => {
       const extra = itemExtras.find((e) => e.extra_id === extraId);
       if (extra) {
-        currentTotal += extra.price;
+        currentTotal += Number(extra.price); // Ensure price is a number
       }
     });
 
-    // Add price adjustment of selected options
     Object.values(selectedOptions).forEach((choiceId) => {
       for (const group of itemOptions) {
         const choice = group.choices.find((c) => c.choice_id === choiceId);
         if (choice) {
-          currentTotal += choice.price_adjustment;
-          break; // Found the choice, move to the next selected option
+          currentTotal += Number(choice.price_adjustment); // Ensure price is a number
+          break;
         }
       }
     });
 
     setTotalPrice(currentTotal);
-  }, [selectedExtras, selectedOptions, basePrice, itemExtras, itemOptions]);
+  }, [
+    selectedExtras,
+    selectedOptions,
+    item.base_price,
+    itemExtras,
+    itemOptions,
+  ]);
 
   // Handler for toggling an extra (checkbox)
   const handleExtraToggle = (extraId: string) => {
@@ -609,8 +791,6 @@ export const CategoryMenuInCanvas = ({
 }) => {
   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
   const [items, setItems] = useState<MenuItem[]>([]);
-
-  // --- NEW: State for interactive elements ---
   const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
     null
   );
@@ -630,7 +810,6 @@ export const CategoryMenuInCanvas = ({
       .catch(() => setItems([]));
   }, [locationId, categoryId]);
 
-  // --- NEW: Handler to fetch details when an item is clicked ---
   const handleMenuItemClick = async (menuItemId: string) => {
     if (expandedMenuItemId === menuItemId) {
       setExpandedMenuItemId(null);
@@ -699,7 +878,9 @@ export const CategoryMenuInCanvas = ({
                   <p className="text-sm text-gray-600 mb-2">
                     {item.description}
                   </p>
-                  <p className="font-medium">${item.base_price.toFixed(2)}</p>
+                  <p className="font-medium">
+                    ${Number(item.base_price).toFixed(2)}
+                  </p>
                 </div>
               </div>
 
@@ -710,7 +891,8 @@ export const CategoryMenuInCanvas = ({
                 }`}
               >
                 <div onClick={(e) => e.stopPropagation()}>
-                  {isLoadingDetails ? (
+                  {/* ✅ IMPROVEMENT: Only show loading for the currently expanding item */}
+                  {isLoadingDetails && isExpanded ? (
                     <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
                       <p className="text-sm text-slate-500">
                         Loading details...
@@ -718,7 +900,8 @@ export const CategoryMenuInCanvas = ({
                     </div>
                   ) : (
                     <MenuItemDetails
-                      basePrice={item.base_price || 0}
+                      // ✅ FIX: Pass the entire 'item' object
+                      item={item}
                       itemExtras={itemExtras}
                       itemOptions={itemOptions}
                     />
@@ -742,6 +925,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   initialPage,
   websiteData,
 }) => {
+  const [currentView, setCurrentView] = useState("page"); // 'page' or 'cart'
   const router = useRouter();
 
   const [currentPage, setCurrentPage] = useState<Page | undefined>(initialPage);
@@ -1025,7 +1209,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   // };
   // keep units predictable for offsets
   const NavBar = () => {
-    // Are we on the platform host? If yes, prefix routes with /{subdomain}
+    // ✅ Get the live cart count from the context
+    const { cartCount } = useCart();
+
+    // --- Existing state and variables ---
     const isMainHost =
       typeof window !== "undefined" &&
       (window.location.hostname === "zygoflow.com" ||
@@ -1047,7 +1234,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       }
     };
 
-    // Hide login/register when logged in
+    // --- Logic to filter nav items (unchanged) ---
     const items = (websiteData.navbar?.items ?? []).filter((ni: NavbarItem) => {
       const url = (ni.link_url || "").trim().toLowerCase();
       if (
@@ -1078,12 +1265,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           ]
         : items;
 
-    // ---- helpers -------------------------------------------------------------
-
-    // Normalize internal paths:
-    // - empty or "#" -> "/"
-    // - ensure leading "/"
-    // - keep full http(s) links as-is (external)
+    // --- Helper functions (unchanged) ---
     const normalizePath = (raw = "") => {
       const u = raw.trim();
       if (!u || u === "#") return "/";
@@ -1091,12 +1273,16 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       return u.startsWith("/") ? u : `/${u}`;
     };
 
-    // Render a single nav item (used by desktop + mobile)
+    // ✅ NEW: Click handler for the cart icon
+    const handleCartClick = () => {
+      setMenuOpen(false);
+      setCurrentView("cart"); // This switches the view inside PublicCanvas
+    };
+
     const renderNavItem = (ni: NavbarItem) => {
       const raw = (ni.link_url || "").trim();
       const lower = raw.toLowerCase();
 
-      // Special case: Logout button
       if (lower === "/logout") {
         return (
           <button
@@ -1112,19 +1298,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
       const normalized = normalizePath(raw);
       const isExternal = /^https?:\/\//i.test(normalized);
-
-      // Build href for <a> (external stays as-is, internal gets base prefix)
       const href = isExternal ? normalized : `${base}${normalized}`;
 
       const handleClick: React.MouseEventHandler<HTMLAnchorElement> = (e) => {
-        // Always close the mobile menu
         setMenuOpen(false);
-
-        if (isExternal) return; // let browser handle external navigation
-
-        // Internal navigation: prevent default and use router
+        if (isExternal) return;
         e.preventDefault();
         setActiveCategory(null);
+        setCurrentView("page"); // Ensure we switch back to page view on nav clicks
         router.push(href);
       };
 
@@ -1141,8 +1322,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       );
     };
 
-    // -------------------------------------------------------------------------
-
     return (
       <nav
         ref={navRef}
@@ -1150,7 +1329,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         className="shadow-sm"
       >
         <div className="flex items-center justify-between px-4 py-3 md:px-6">
-          {/* Hamburger (mobile) */}
           <button
             className="md:hidden text-2xl"
             onClick={() => setMenuOpen((v) => !v)}
@@ -1159,19 +1337,47 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             {menuOpen ? <FiX /> : <FiMenu />}
           </button>
 
-          {/* Logo */}
           <div className="font-bold text-xl">Your Logo</div>
 
-          {/* Desktop nav */}
-          <div className="hidden md:flex space-x-4">
+          <div className="hidden md:flex items-center space-x-4">
             {finalItems.map(renderNavItem)}
+
+            {/* ✅ ADDED: Cart Icon for Desktop */}
+            <button onClick={handleCartClick} className="relative p-2">
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                className="h-6 w-6"
+                fill="none"
+                viewBox="0 0 24 24"
+                stroke="currentColor"
+              >
+                <path
+                  strokeLinecap="round"
+                  strokeLinejoin="round"
+                  strokeWidth="2"
+                  d="M3 3h2l.4 2M7 13h10l4-8H5.4M7 13L5.4 5M7 13l-2.293 2.293c-.63.63-.184 1.707.707 1.707H17m0 0a2 2 0 100 4 2 2 0 000-4zm-8 2a2 2 0 11-4 0 2 2 0 014 0z"
+                />
+              </svg>
+              {cartCount > 0 && (
+                <span className="absolute top-0 right-0 block h-5 w-5 rounded-full bg-red-500 text-white text-xs flex items-center justify-center">
+                  {cartCount}
+                </span>
+              )}
+            </button>
           </div>
         </div>
 
-        {/* Mobile menu */}
         {menuOpen && (
           <div className="md:hidden px-4 pb-4 space-y-2 border-t">
             {finalItems.map(renderNavItem)}
+
+            {/* ✅ ADDED: Cart Link for Mobile */}
+            <a
+              onClick={handleCartClick}
+              className="text-sm font-medium hover:underline cursor-pointer"
+            >
+              Cart ({cartCount})
+            </a>
           </div>
         )}
       </nav>
@@ -1446,7 +1652,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 </div>
               ) : (
                 <MenuItemDetails
-                  basePrice={props.base_price || 0}
+                  // ✅ FIX: Pass the entire 'props' object as the 'item' prop
+                  item={props as MenuItem}
                   itemExtras={itemExtras}
                   itemOptions={itemOptions}
                 />
