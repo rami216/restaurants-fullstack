@@ -1,5 +1,5 @@
 #models.py
-import datetime
+# import datetime
 from sqlalchemy import JSON, Column, String, Integer, DateTime, ForeignKey, BigInteger,Boolean,text,Numeric,Time
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
@@ -281,5 +281,5 @@ class WebsiteOrder(Base):
     payment_intent_id = Column(String, nullable=True, index=True)
     status = Column(String, default="pending", nullable=False)
     
-    created_at = Column(DateTime, default=datetime.utcnow)
-    updated_at = Column(DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
