@@ -39,9 +39,12 @@ ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 app = FastAPI()
 
 PUBLIC_RULES = [
-    ("/site-auth", {"GET", "POST", "OPTIONS"}),                 # <- allow both '/site-auth' and '/site-auth/...'
-    ("/users-stripe-account/public/", {"POST", "OPTIONS"}),  # checkout
+    # Specific public routes first
     ("/users-stripe-account/public/stripe-key", {"GET", "OPTIONS"}),
+    ("/users-stripe-account/public/checkout", {"POST", "OPTIONS"}),
+
+    # General public routes
+    ("/site-auth", {"GET", "POST", "OPTIONS"}),
     ("/checkout/", {"POST", "OPTIONS"}),
     ("/public/", {"GET", "OPTIONS"}),
     ("/locations/", {"GET", "OPTIONS"}),
