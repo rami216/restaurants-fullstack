@@ -43,7 +43,7 @@ class RestaurantOwner(Base):
     # Use Numeric for precision with currency. Stores the balance in dollars.
     credit_balance = Column(Numeric(10, 4), nullable=False, default=0.0)
     website = relationship("Website", back_populates="restaurant", uselist=False, cascade="all, delete-orphan")
-    
+    locations = relationship("Location", back_populates="restaurant")
 
 class RestaurantBrand(Base):
     __tablename__ = "restaurant_brands"
@@ -88,7 +88,7 @@ class Location(Base):
     option_groups = relationship("OptionGroup", back_populates="location")
     option_choices = relationship("OptionChoice", back_populates="location")
     schedules = relationship("Schedule", back_populates="location")
-
+    restaurant = relationship("RestaurantOwner", back_populates="locations")
     
 class Category(Base):
     __tablename__ = "categories"
