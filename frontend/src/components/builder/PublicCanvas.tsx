@@ -133,8 +133,11 @@ const EditableCartItem = ({
   const [editedOptions, setEditedOptions] = useState<Record<string, string>>(
     {}
   );
-  const [editedPrice, setEditedPrice] = useState(0); // Will be calculated in useEffect
 
+  // ✅ FIX: This state now correctly holds the price for a SINGLE item.
+  const [editedUnitPrice, setEditedUnitPrice] = useState(0);
+
+  // Fetch all possible options and extras for this menu item
   useEffect(() => {
     const fetchDetails = async () => {
       setIsLoading(true);
@@ -193,7 +196,7 @@ const EditableCartItem = ({
       }
     });
 
-    setEditedPrice(currentTotal);
+    setEditedUnitPrice(currentTotal);
   }, [
     editedExtras,
     editedOptions,
@@ -218,7 +221,7 @@ const EditableCartItem = ({
 
     const updates: Partial<CartItem> = {
       quantity: editedQuantity,
-      unitPrice: editedPrice,
+      unitPrice: editedUnitPrice,
       selectedExtras: newSelectedExtras,
       selectedOptions: newSelectedOptions,
     };
@@ -242,21 +245,18 @@ const EditableCartItem = ({
     <div className="p-4 border-2 border-indigo-400 rounded-lg bg-indigo-50 space-y-4">
       <h3 className="font-bold text-lg">Editing: {item.name}</h3>
 
-      {/* --- ✅ FULL UI for Extras --- */}
       {allExtras.length > 0 && (
         <div className="border-t pt-4">
-          <h5 className="font-semibold mb-2 text-slate-800">Add Extras:</h5>
+          <h5 className="font-semibold mb-2 text-slate-800">Extras:</h5>
           <div className="space-y-2">
             {allExtras.map((extra) => (
               <label
                 key={extra.extra_id}
                 className="flex justify-between items-center cursor-pointer text-sm"
               >
-                <span className="text-slate-700">{extra.name}</span>
+                <span>{extra.name}</span>
                 <div className="flex items-center space-x-3">
-                  <span className="font-semibold text-slate-900">
-                    + ${Number(extra.price).toFixed(2)}
-                  </span>
+                  <span>+ ${Number(extra.price).toFixed(2)}</span>
                   <input
                     type="checkbox"
                     className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
@@ -270,7 +270,6 @@ const EditableCartItem = ({
         </div>
       )}
 
-      {/* --- ✅ FULL UI for Options --- */}
       {allOptions.length > 0 && (
         <div className="space-y-4 border-t pt-4">
           {allOptions.map((group) => (
@@ -284,10 +283,10 @@ const EditableCartItem = ({
                     key={choice.choice_id}
                     className="flex justify-between items-center cursor-pointer text-sm"
                   >
-                    <span className="text-slate-700">{choice.name}</span>
+                    <span>{choice.name}</span>
                     <div className="flex items-center space-x-3">
                       {Number(choice.price_adjustment) > 0 && (
-                        <span className="font-semibold text-slate-900">
+                        <span>
                           + ${Number(choice.price_adjustment).toFixed(2)}
                         </span>
                       )}
@@ -330,9 +329,9 @@ const EditableCartItem = ({
         </div>
       </div>
       <div className="flex justify-between items-center">
-        <span className="text-md font-bold">New Item Price:</span>
+        <span className="text-md font-bold">New Price per Item:</span>
         <span className="text-lg font-bold text-indigo-600">
-          ${editedPrice.toFixed(2)}
+          ${editedUnitPrice.toFixed(2)}
         </span>
       </div>
       <div className="flex gap-2 pt-4 border-t">
