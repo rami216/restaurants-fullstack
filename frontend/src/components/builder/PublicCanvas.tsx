@@ -152,7 +152,6 @@ const EditableCartItem = ({
         setAllExtras(extrasRes.data);
         setAllOptions(optionsRes.data);
 
-        // Pre-populate the editedOptions state with the correct choice IDs
         const initialOptions: Record<string, string> = {};
         optionsRes.data.forEach((group) => {
           const selectedChoiceName = item.selectedOptions[group.group_name];
@@ -197,7 +196,6 @@ const EditableCartItem = ({
 
     setEditedPrice(currentTotal);
   }, [
-    editedQuantity,
     editedExtras,
     editedOptions,
     basePrice,
@@ -245,7 +243,7 @@ const EditableCartItem = ({
     <div className="p-4 border-2 border-indigo-400 rounded-lg bg-indigo-50 space-y-4">
       <h3 className="font-bold text-lg">Editing: {item.name}</h3>
 
-      {/* --- RENDER THE FULL EDITOR UI --- */}
+      {/* --- ✅ FULL UI for Extras --- */}
       {allExtras.length > 0 && (
         <div>
           <h5 className="font-semibold mb-2 text-slate-800">Add Extras:</h5>
@@ -273,6 +271,7 @@ const EditableCartItem = ({
         </div>
       )}
 
+      {/* --- ✅ FULL UI for Options --- */}
       {allOptions.length > 0 && (
         <div className="space-y-4">
           {allOptions.map((group) => (
@@ -332,7 +331,7 @@ const EditableCartItem = ({
         </div>
       </div>
       <div className="border-t pt-2 mt-2 flex justify-between items-center">
-        <span className="text-md font-bold">New Price per Item:</span>
+        <span className="text-md font-bold">New Item Price:</span>
         <span className="text-lg font-bold text-indigo-600">
           ${editedPrice.toFixed(2)}
         </span>
