@@ -133,9 +133,8 @@ const EditableCartItem = ({
   const [editedOptions, setEditedOptions] = useState<Record<string, string>>(
     {}
   );
-  const [editedPrice, setEditedPrice] = useState(item.unitPrice);
+  const [editedPrice, setEditedPrice] = useState(0); // Will be calculated in useEffect
 
-  // Fetch all possible options and extras for this menu item
   useEffect(() => {
     const fetchDetails = async () => {
       setIsLoading(true);
@@ -245,7 +244,7 @@ const EditableCartItem = ({
 
       {/* --- ✅ FULL UI for Extras --- */}
       {allExtras.length > 0 && (
-        <div>
+        <div className="border-t pt-4">
           <h5 className="font-semibold mb-2 text-slate-800">Add Extras:</h5>
           <div className="space-y-2">
             {allExtras.map((extra) => (
@@ -273,7 +272,7 @@ const EditableCartItem = ({
 
       {/* --- ✅ FULL UI for Options --- */}
       {allOptions.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-4 border-t pt-4">
           {allOptions.map((group) => (
             <div key={group.group_id}>
               <h5 className="font-semibold text-slate-800">
@@ -312,7 +311,7 @@ const EditableCartItem = ({
         </div>
       )}
 
-      <div className="flex items-center justify-between">
+      <div className="flex items-center justify-between pt-4 border-t">
         <span className="font-semibold">Quantity:</span>
         <div className="flex items-center gap-2">
           <button
@@ -330,7 +329,7 @@ const EditableCartItem = ({
           </button>
         </div>
       </div>
-      <div className="border-t pt-2 mt-2 flex justify-between items-center">
+      <div className="flex justify-between items-center">
         <span className="text-md font-bold">New Item Price:</span>
         <span className="text-lg font-bold text-indigo-600">
           ${editedPrice.toFixed(2)}
