@@ -119,78 +119,88 @@ const EditableCartItem = ({
   onCancel: () => void;
   onSave: (cartItemId: string, updates: Partial<CartItem>) => void;
 }) => {
-  // State to hold all available options/extras for this product
+  // All available extras/options for this product
   const [allExtras, setAllExtras] = useState<Extra[]>([]);
   const [allOptions, setAllOptions] = useState<PublicOptionGroup[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [basePrice, setBasePrice] = useState(0);
+  const [basePrice, setBasePrice] = useState<number>(0);
 
-  // State for the temporary edits, initialized from the item prop
-  const [editedQuantity, setEditedQuantity] = useState(item.quantity);
-  const [editedExtras, setEditedExtras] = useState(
+  // Temporary edits (initialized from cart item)
+  const [editedQuantity, setEditedQuantity] = useState<number>(item.quantity);
+  const [editedExtras, setEditedExtras] = useState<Set<string>>(
     new Set(item.selectedExtras.map((e) => e.extra_id))
   );
   const [editedOptions, setEditedOptions] = useState<Record<string, string>>(
     {}
   );
 
-  // ✅ FIX: This state now correctly holds the price for a SINGLE item.
-  const [editedUnitPrice, setEditedUnitPrice] = useState(0);
+  // Keep a live per-item unit price, initialize from cart to avoid 0 flicker
+  const [editedUnitPrice, setEditedUnitPrice] = useState<number>(
+    Number(item.unitPrice || 0)
+  );
 
-  // Fetch all possible options and extras for this menu item
+  // Fetch all possible options and extras for this menu item (public → use saasApi)
   useEffect(() => {
     const fetchDetails = async () => {
       setIsLoading(true);
       try {
         const [itemRes, extrasRes, optionsRes] = await Promise.all([
-          api.get(`/menu-items/${item.itemId}`),
-          api.get<Extra[]>(`/menu-item-extras/extras-for-item/${item.itemId}`),
-          api.get<PublicOptionGroup[]>(
+          saasApi.get(`/menu-items/${item.itemId}`),
+          saasApi.get<Extra[]>(
+            `/menu-item-extras/extras-for-item/${item.itemId}`
+          ),
+          saasApi.get<PublicOptionGroup[]>(
             `/menu-item-options/options-for-item/${item.itemId}`
           ),
         ]);
 
-        setBasePrice(Number(itemRes.data.base_price));
-        setAllExtras(extrasRes.data);
-        setAllOptions(optionsRes.data);
+        setBasePrice(Number(itemRes.data.base_price) || 0);
+        setAllExtras(extrasRes.data || []);
+        setAllOptions(optionsRes.data || []);
 
+        // Rehydrate options: cart stores names; map them to current choice_ids
         const initialOptions: Record<string, string> = {};
-        optionsRes.data.forEach((group) => {
+        for (const group of optionsRes.data || []) {
           const selectedChoiceName = item.selectedOptions[group.group_name];
-          if (selectedChoiceName) {
-            const choice = group.choices.find(
-              (c) => c.name === selectedChoiceName
-            );
-            if (choice) {
-              initialOptions[group.group_id] = choice.choice_id;
-            }
-          }
-        });
+          if (!selectedChoiceName) continue;
+          const choice = group.choices.find(
+            (c) => c.name === selectedChoiceName
+          );
+          if (choice) initialOptions[group.group_id] = choice.choice_id;
+        }
         setEditedOptions(initialOptions);
+
+        // Rehydrate extras from cart (already IDs)
+        setEditedExtras(new Set(item.selectedExtras.map((e) => e.extra_id)));
       } catch (error) {
         console.error("Failed to fetch item details for editing", error);
+        // Fallback to cart's current unit price so UI stays usable
+        setEditedUnitPrice(Number(item.unitPrice || 0));
       } finally {
         setIsLoading(false);
       }
     };
     fetchDetails();
-  }, [item.itemId, item.selectedOptions]);
+  }, [item.itemId, item.selectedOptions, item.selectedExtras, item.unitPrice]);
 
-  // Recalculate price whenever edits are made
+  // Recalculate the per-item price whenever edits change
   useEffect(() => {
     if (isLoading) return;
-    let currentTotal = basePrice;
 
+    let currentTotal = Number(basePrice) || 0;
+
+    // Extras
     editedExtras.forEach((extraId) => {
       const extra = allExtras.find((e) => e.extra_id === extraId);
-      if (extra) currentTotal += Number(extra.price);
+      if (extra) currentTotal += Number(extra.price) || 0;
     });
 
+    // Options (sum the price_adjustment of selected choices)
     Object.values(editedOptions).forEach((choiceId) => {
       for (const group of allOptions) {
         const choice = group.choices.find((c) => c.choice_id === choiceId);
         if (choice) {
-          currentTotal += Number(choice.price_adjustment);
+          currentTotal += Number(choice.price_adjustment) || 0;
           break;
         }
       }
@@ -207,42 +217,58 @@ const EditableCartItem = ({
   ]);
 
   const handleSaveChanges = () => {
+    if (isLoading) return; // don't allow saving mid-load
+
+    // Build new selectedExtras list
     const newSelectedExtras = allExtras.filter((e) =>
       editedExtras.has(e.extra_id)
     );
+
+    // Build new selectedOptions map (group_name → choice.name)
     const newSelectedOptions: Record<string, string> = {};
     allOptions.forEach((group) => {
       const choiceId = editedOptions[group.group_id];
-      if (choiceId) {
-        const choice = group.choices.find((c) => c.choice_id === choiceId);
-        if (choice) newSelectedOptions[group.group_name] = choice.name;
-      }
+      if (!choiceId) return;
+      const choice = group.choices.find((c) => c.choice_id === choiceId);
+      if (choice) newSelectedOptions[group.group_name] = choice.name;
     });
+
+    const safeUnitPrice =
+      !Number.isFinite(editedUnitPrice) || editedUnitPrice <= 0
+        ? Number(item.unitPrice || 0)
+        : editedUnitPrice;
 
     const updates: Partial<CartItem> = {
       quantity: editedQuantity,
-      unitPrice: editedUnitPrice,
+      unitPrice: safeUnitPrice,
       selectedExtras: newSelectedExtras,
       selectedOptions: newSelectedOptions,
     };
+
     onSave(item.cartItemId, updates);
   };
 
   const handleExtraToggle = (extraId: string) =>
     setEditedExtras((prev) => {
-      const newSet = new Set(prev);
-      newSet.has(extraId) ? newSet.delete(extraId) : newSet.add(extraId);
-      return newSet;
+      const next = new Set(prev);
+      next.has(extraId) ? next.delete(extraId) : next.add(extraId);
+      return next;
     });
 
   const handleOptionChange = (groupId: string, choiceId: string) =>
     setEditedOptions((prev) => ({ ...prev, [groupId]: choiceId }));
 
-  if (isLoading)
+  if (isLoading) {
     return <div className="p-4 text-center">Loading Editor...</div>;
+  }
 
   return (
-    <div className="p-4 border-2 border-indigo-400 rounded-lg bg-indigo-50 space-y-4">
+    // Prevent any ancestor click handlers from interfering
+    <div
+      className="p-4 border-2 border-indigo-400 rounded-lg bg-indigo-50 space-y-4"
+      onClick={(e) => e.stopPropagation()}
+      onMouseDown={(e) => e.stopPropagation()}
+    >
       <h3 className="font-bold text-lg">Editing: {item.name}</h3>
 
       {allExtras.length > 0 && (
@@ -328,16 +354,19 @@ const EditableCartItem = ({
           </button>
         </div>
       </div>
+
       <div className="flex justify-between items-center">
         <span className="text-md font-bold">New Price per Item:</span>
         <span className="text-lg font-bold text-indigo-600">
-          ${editedUnitPrice.toFixed(2)}
+          ${Number(editedUnitPrice).toFixed(2)}
         </span>
       </div>
+
       <div className="flex gap-2 pt-4 border-t">
         <button
           onClick={handleSaveChanges}
-          className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg"
+          disabled={isLoading}
+          className="flex-1 bg-indigo-600 text-white px-4 py-2 rounded-lg disabled:bg-indigo-300"
         >
           Save Changes
         </button>
@@ -359,14 +388,16 @@ const CartView = ({
   websiteData: PublicWebsiteData;
   setCurrentView: (view: string) => void;
 }) => {
-  const { cart, cartTotal, removeFromCart, updateCartItem } = useCart(); // ✅ Get the new updateCartItem function
+  const { cart, cartTotal, removeFromCart, updateCartItem } = useCart();
+
   const [clientSecret, setClientSecret] = useState("");
   const [stripePromise, setStripePromise] =
     useState<Promise<Stripe | null> | null>(null);
-  const [editingItemId, setEditingItemId] = useState<string | null>(null); // ✅ State to track which item is being edited
+  const [editingItemId, setEditingItemId] = useState<string | null>(null);
+  const [piError, setPiError] = useState<string | null>(null);
 
+  // Load website-specific publishable key
   useEffect(() => {
-    // This fetches the website-specific Stripe key
     saasApi
       .get(`/users-stripe-account/public/stripe-key/${websiteData.website_id}`)
       .then((res) => {
@@ -377,17 +408,24 @@ const CartView = ({
       .catch((err) => console.error("Could not load Stripe key.", err));
   }, [websiteData.website_id]);
 
+  // Create/refresh PaymentIntent when cart changes
   useEffect(() => {
-    // This creates the payment intent when the cart changes
-    if (cart.length > 0 && websiteData) {
-      saasApi
-        .post("/checkout/create-payment-intent", {
-          cart,
-          website_id: websiteData.website_id,
-        })
-        .then((res) => setClientSecret(res.data.clientSecret))
-        .catch((err) => console.error("Failed to create payment intent", err));
+    setPiError(null);
+    if (!cart.length || !websiteData) {
+      setClientSecret("");
+      return;
     }
+    saasApi
+      .post("/checkout/create-payment-intent", {
+        cart,
+        website_id: websiteData.website_id,
+      })
+      .then((res) => setClientSecret(res.data.clientSecret || ""))
+      .catch((err) => {
+        console.error("Failed to create payment intent", err);
+        setClientSecret("");
+        setPiError("Could not start checkout. Please try again.");
+      });
   }, [cart, cartTotal, websiteData]);
 
   const options: StripeElementsOptions = {
@@ -417,79 +455,101 @@ const CartView = ({
       >
         ← Back to Shop
       </button>
+
       <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
+        {/* Items column */}
         <div className="lg:col-span-2 space-y-4">
-          {cart.map((item) => (
-            <div
-              key={item.cartItemId}
-              className="border p-4 rounded-lg shadow-sm bg-white"
-            >
-              {/* ✅ CONDITIONAL RENDERING: Show editor or static view */}
-              {editingItemId === item.cartItemId ? (
-                <EditableCartItem
-                  item={item}
-                  onCancel={() => setEditingItemId(null)}
-                  onSave={(cartItemId, updates) => {
-                    updateCartItem(cartItemId, updates);
-                    setEditingItemId(null);
-                  }}
-                />
-              ) : (
-                <div className="flex items-center">
-                  <img
-                    src={item.imageUrl || "https://placehold.co/100x100"}
-                    alt={item.name}
-                    className="w-24 h-24 object-cover rounded-md"
+          {cart.map((item) => {
+            const isEditing = editingItemId === item.cartItemId;
+            return (
+              <div
+                key={item.cartItemId}
+                className="border p-4 rounded-lg shadow-sm bg-white"
+              >
+                {isEditing ? (
+                  <EditableCartItem
+                    key={`${item.cartItemId}-${item.quantity}-${item.unitPrice}`}
+                    item={item}
+                    onCancel={() => setEditingItemId(null)}
+                    onSave={(cartItemId, updates) => {
+                      updateCartItem(cartItemId, updates);
+                      setEditingItemId(null);
+                    }}
                   />
-                  <div className="ml-4 flex-grow">
-                    <h2 className="font-semibold text-lg">{item.name}</h2>
-                    <div className="text-sm text-gray-600">
-                      {Object.entries(item.selectedOptions).map(
-                        ([group, choice]) => (
-                          <p key={group}>
-                            <strong>{group}:</strong> {choice}
+                ) : (
+                  <div className="flex items-center">
+                    <img
+                      src={item.imageUrl || "https://placehold.co/100x100"}
+                      alt={item.name}
+                      className="w-24 h-24 object-cover rounded-md"
+                    />
+                    <div className="ml-4 flex-grow">
+                      <h2 className="font-semibold text-lg">{item.name}</h2>
+                      <div className="text-sm text-gray-600">
+                        {Object.entries(item.selectedOptions).map(
+                          ([group, choice]) => (
+                            <p key={group}>
+                              <strong>{group}:</strong> {choice}
+                            </p>
+                          )
+                        )}
+                        {item.selectedExtras.length > 0 && (
+                          <p>
+                            <strong>Extras:</strong>{" "}
+                            {item.selectedExtras.map((e) => e.name).join(", ")}
                           </p>
-                        )
-                      )}
-                      {item.selectedExtras.length > 0 && (
+                        )}
                         <p>
-                          <strong>Extras:</strong>{" "}
-                          {item.selectedExtras.map((e) => e.name).join(", ")}
+                          <strong>Quantity:</strong> {item.quantity}
                         </p>
-                      )}
-                      <p>
-                        <strong>Quantity:</strong> {item.quantity}
+                      </div>
+                    </div>
+                    <div className="text-right">
+                      <p className="font-semibold text-lg">
+                        ${(Number(item.unitPrice) * item.quantity).toFixed(2)}
                       </p>
+                      <button
+                        onClick={() => removeFromCart(item.cartItemId)}
+                        className="text-red-500 text-sm hover:underline"
+                      >
+                        Remove
+                      </button>
+                      <button
+                        onClick={() => setEditingItemId(item.cartItemId)}
+                        className="text-indigo-600 text-sm hover:underline ml-2"
+                      >
+                        Edit
+                      </button>
                     </div>
                   </div>
-                  <div className="text-right">
-                    <p className="font-semibold text-lg">
-                      ${(item.unitPrice * item.quantity).toFixed(2)}
-                    </p>
-                    <button
-                      onClick={() => removeFromCart(item.cartItemId)}
-                      className="text-red-500 text-sm hover:underline"
-                    >
-                      Remove
-                    </button>
-                    <button
-                      onClick={() => setEditingItemId(item.cartItemId)}
-                      className="text-indigo-600 text-sm hover:underline ml-2"
-                    >
-                      Edit
-                    </button>
-                  </div>
-                </div>
-              )}
-            </div>
-          ))}
+                )}
+              </div>
+            );
+          })}
         </div>
+
+        {/* Checkout column */}
         <div className="lg:col-span-1">
-          {clientSecret && stripePromise && (
-            <Elements options={options} stripe={stripePromise}>
+          {piError && (
+            <div className="mb-4 p-3 rounded bg-red-50 text-red-600 text-sm">
+              {piError}
+            </div>
+          )}
+          {clientSecret && stripePromise ? (
+            <Elements
+              options={options}
+              stripe={stripePromise}
+              // Force re-init when a new intent is created
+              key={clientSecret}
+            >
               <CheckoutForm websiteId={websiteData.website_id} />
             </Elements>
+          ) : (
+            <div className="p-6 border rounded-lg bg-gray-50 text-sm text-gray-600">
+              Initializing checkout…
+            </div>
           )}
         </div>
       </div>
