@@ -119,11 +119,12 @@ const EditableCartItem = ({
   onCancel: () => void;
   onSave: (cartItemId: string, updates: Partial<CartItem>) => void;
 }) => {
+  // Data for this product
   const [allExtras, setAllExtras] = React.useState<Extra[]>([]);
   const [allOptions, setAllOptions] = React.useState<PublicOptionGroup[]>([]);
   const [isLoading, setIsLoading] = React.useState(true);
-  const [basePrice, setBasePrice] = React.useState<number>(0);
 
+  // Selections
   const [editedQuantity, setEditedQuantity] = React.useState<number>(
     item.quantity
   );
@@ -134,49 +135,21 @@ const EditableCartItem = ({
     Record<string, string>
   >({});
 
-  // Start from cart value to avoid $0 blip
+  // Pricing
+  const [basePrice, setBasePrice] = React.useState<number>(0); // inferred
   const [editedUnitPrice, setEditedUnitPrice] = React.useState<number>(
     Number(item.unitPrice || 0)
   );
 
   const toNum = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
 
-  const computeUnitPrice = React.useCallback(() => {
-    // Use fetched basePrice if available; otherwise fall back to the cart’s unitPrice
-    let total =
-      (basePrice && basePrice > 0 ? basePrice : toNum(item.unitPrice)) || 0;
-
-    // Extras
-    editedExtras.forEach((extraId) => {
-      const extra = allExtras.find((e) => e.extra_id === extraId);
-      if (extra) total += toNum(extra.price);
-    });
-
-    // Options (sum price_adjustment for selected choices)
-    Object.entries(editedOptions).forEach(([groupId, choiceId]) => {
-      const group = allOptions.find((g) => g.group_id === groupId);
-      const choice = group?.choices.find((c) => c.choice_id === choiceId);
-      if (choice) total += toNum(choice.price_adjustment);
-    });
-
-    return total;
-  }, [
-    basePrice,
-    item.unitPrice,
-    editedExtras,
-    editedOptions,
-    allExtras,
-    allOptions,
-  ]);
-
-  // Fetch details (PUBLIC → use saasApi)
+  // Load only what we can call cross-origin: extras & options (no /menu-items/:id)
   React.useEffect(() => {
     let cancelled = false;
     (async () => {
       setIsLoading(true);
       try {
-        const [itemRes, extrasRes, optionsRes] = await Promise.all([
-          saasApi.get(`/menu-items/${item.itemId}`),
+        const [extrasRes, optionsRes] = await Promise.all([
           saasApi.get<Extra[]>(
             `/menu-item-extras/extras-for-item/${item.itemId}`
           ),
@@ -186,50 +159,45 @@ const EditableCartItem = ({
         ]);
         if (cancelled) return;
 
-        setBasePrice(toNum(itemRes.data?.base_price));
-        setAllExtras(extrasRes.data ?? []);
-        setAllOptions(optionsRes.data ?? []);
+        const extras = extrasRes.data ?? [];
+        const options = optionsRes.data ?? [];
+        setAllExtras(extras);
+        setAllOptions(options);
 
         // Rehydrate options: cart stores names → map to current choice_ids
-        const initOpts: Record<string, string> = {};
-        for (const group of optionsRes.data ?? []) {
+        const initOptions: Record<string, string> = {};
+        for (const group of options) {
           const nameFromCart = item.selectedOptions[group.group_name];
           if (!nameFromCart) continue;
           const choice = group.choices.find((c) => c.name === nameFromCart);
-          if (choice) initOpts[group.group_id] = choice.choice_id;
+          if (choice) initOptions[group.group_id] = choice.choice_id;
         }
-        setEditedOptions(initOpts);
+        setEditedOptions(initOptions);
 
-        // Rehydrate extras (already IDs in cart)
-        setEditedExtras(new Set(item.selectedExtras.map((e) => e.extra_id)));
+        // Infer base price from cart unitPrice minus current selected adjustments
+        const extrasSum = (item.selectedExtras || []).reduce(
+          (acc, e: any) => acc + toNum(e.price),
+          0
+        );
+        let optionsSum = 0;
+        for (const group of options) {
+          const selName = item.selectedOptions[group.group_name];
+          if (!selName) continue;
+          const choice = group.choices.find((c) => c.name === selName);
+          if (choice) optionsSum += toNum(choice.price_adjustment);
+        }
+        const inferred = Math.max(
+          0,
+          toNum(item.unitPrice) - extrasSum - optionsSum
+        );
+        setBasePrice(inferred);
 
-        // Compute an authoritative unit price now that we have fresh data
-        // (uses basePrice from the API + current selections)
-        setEditedUnitPrice(() => {
-          const bp = toNum(itemRes.data?.base_price);
-          let total = bp > 0 ? bp : toNum(item.unitPrice);
-          // extras
-          (extrasRes.data ?? []).forEach((ex) => {
-            if (
-              (item.selectedExtras || []).some(
-                (e: any) => e.extra_id === ex.extra_id
-              )
-            ) {
-              total += toNum(ex.price);
-            }
-          });
-          // options
-          for (const group of optionsRes.data ?? []) {
-            const nameFromCart = item.selectedOptions[group.group_name];
-            if (!nameFromCart) continue;
-            const choice = group.choices.find((c) => c.name === nameFromCart);
-            if (choice) total += toNum(choice.price_adjustment);
-          }
-          return total;
-        });
+        // With inferred base we can compute an authoritative current unit price
+        setEditedUnitPrice(inferred + extrasSum + optionsSum);
       } catch (err) {
-        console.error("EditableCartItem fetch failed:", err);
-        // Keep cart unit price so UI remains usable
+        console.error("EditableCartItem fetch (extras/options) failed:", err);
+        // We can still allow qty edits; price will stick to cart’s current unit price
+        setBasePrice(0);
         setEditedUnitPrice(toNum(item.unitPrice));
       } finally {
         if (!cancelled) setIsLoading(false);
@@ -238,20 +206,56 @@ const EditableCartItem = ({
     return () => {
       cancelled = true;
     };
-  }, [item.itemId, item.selectedOptions, item.selectedExtras, item.unitPrice]);
+  }, [
+    item.itemId,
+    JSON.stringify(item.selectedOptions),
+    JSON.stringify(item.selectedExtras),
+    item.unitPrice,
+  ]);
 
-  // Recompute on any change (don’t gate on isLoading; we fall back safely)
+  // Recompute unit price whenever user toggles anything
   React.useEffect(() => {
-    setEditedUnitPrice(computeUnitPrice());
-  }, [computeUnitPrice]);
+    const extrasSum = Array.from(editedExtras).reduce((acc, id) => {
+      const ex = allExtras.find((e) => e.extra_id === id);
+      return acc + (ex ? toNum(ex.price) : 0);
+    }, 0);
+
+    const optionsSum = Object.entries(editedOptions).reduce(
+      (acc, [groupId, choiceId]) => {
+        const group = allOptions.find((g) => g.group_id === groupId);
+        const choice = group?.choices.find((c) => c.choice_id === choiceId);
+        return acc + (choice ? toNum(choice.price_adjustment) : 0);
+      },
+      0
+    );
+
+    const base = basePrice > 0 ? basePrice : toNum(item.unitPrice); // fallback
+    setEditedUnitPrice(base + extrasSum + optionsSum);
+  }, [
+    editedExtras,
+    editedOptions,
+    allExtras,
+    allOptions,
+    basePrice,
+    item.unitPrice,
+  ]);
+
+  const handleExtraToggle = (extraId: string) =>
+    setEditedExtras((prev) => {
+      const next = new Set(prev);
+      next.has(extraId) ? next.delete(extraId) : next.add(extraId);
+      return next;
+    });
+
+  const handleOptionChange = (groupId: string, choiceId: string) =>
+    setEditedOptions((prev) => ({ ...prev, [groupId]: choiceId }));
 
   const handleSaveChanges = () => {
     if (isLoading) return;
-
+    // Build updated selections
     const newSelectedExtras = allExtras.filter((e) =>
       editedExtras.has(e.extra_id)
     );
-
     const newSelectedOptions: Record<string, string> = {};
     allOptions.forEach((group) => {
       const choiceId = editedOptions[group.group_id];
@@ -264,7 +268,6 @@ const EditableCartItem = ({
       toNum(editedUnitPrice) > 0
         ? toNum(editedUnitPrice)
         : toNum(item.unitPrice);
-
     onSave(item.cartItemId, {
       quantity: editedQuantity,
       unitPrice: safeUnit,
@@ -272,16 +275,6 @@ const EditableCartItem = ({
       selectedOptions: newSelectedOptions,
     });
   };
-
-  const handleExtraToggle = (extraId: string) =>
-    setEditedExtras((prev) => {
-      const next = new Set(prev);
-      next.has(extraId) ? next.delete(extraId) : next.add(extraId);
-      return next;
-    });
-
-  const handleOptionChange = (groupId: string, choiceId: string) =>
-    setEditedOptions((prev) => ({ ...prev, [groupId]: choiceId }));
 
   if (isLoading)
     return <div className="p-4 text-center">Loading Editor...</div>;
