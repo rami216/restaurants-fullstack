@@ -45,15 +45,41 @@ const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  // ✅ 1. Add state to hold the customer's details
+  const [name, setName] = useState("");
+  const [email, setEmail] = useState("");
+  const [address, setAddress] = useState("");
+  const [phone, setPhone] = useState("");
+
   const handleSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
-    if (!stripe || !elements) return;
+    if (!stripe || !elements) {
+      return;
+    }
+
     setIsLoading(true);
+
+    // ✅ 2. Pass the shipping details to Stripe when confirming the payment
     const { error } = await stripe.confirmPayment({
       elements,
-      confirmParams: { return_url: `${window.location.origin}/thank-you` },
+      confirmParams: {
+        return_url: `${window.location.origin}/thank-you`,
+        receipt_email: email,
+        shipping: {
+          name: name,
+          address: {
+            line1: address, // Stripe requires at least line1 for shipping
+          },
+          phone: phone,
+        },
+      },
     });
-    if (error) setErrorMessage(error.message || "An error occurred.");
+
+    if (error.type === "card_error" || error.type === "validation_error") {
+      setErrorMessage(error.message || "An unexpected error occurred.");
+    } else {
+      setErrorMessage("An unexpected error occurred.");
+    }
     setIsLoading(false);
   };
 
@@ -64,30 +90,35 @@ const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
     >
       <h3 className="text-lg font-semibold">Contact & Shipping</h3>
       <div className="grid grid-cols-1 gap-y-4">
+        {/* ✅ 3. Connect the input fields to the state */}
         <input
           type="text"
-          name="name"
+          value={name}
+          onChange={(e) => setName(e.target.value)}
           placeholder="Full Name"
           required
           className="p-3 border rounded-md w-full"
         />
         <input
           type="email"
-          name="email"
+          value={email}
+          onChange={(e) => setEmail(e.target.value)}
           placeholder="Email Address"
           required
           className="p-3 border rounded-md w-full"
         />
         <input
           type="text"
-          name="address"
+          value={address}
+          onChange={(e) => setAddress(e.target.value)}
           placeholder="Shipping Address"
           required
           className="p-3 border rounded-md w-full"
         />
         <input
-          name="phone"
           type="tel"
+          value={phone}
+          onChange={(e) => setPhone(e.target.value)}
           placeholder="Phone Number (Optional)"
           className="p-3 border rounded-md w-full"
         />
@@ -110,6 +141,7 @@ const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
     </form>
   );
 };
+
 const EditableCartItem = ({
   item,
   onCancel,

@@ -154,7 +154,6 @@ async def webhook(
 ):
     payload = await request.body()
 
-    # Peek into the payload to find the website_id from metadata
     try:
         raw = json.loads(payload)
         md = raw.get("data", {}).get("object", {}).get("metadata", {}) or {}
@@ -165,14 +164,12 @@ async def webhook(
     if not website_id:
         return {"status": "ignored (no website_id in metadata)"}
 
-    # Get the correct webhook secret for this specific website
     account = await db.scalar(
         select(WebsiteStripeAccount).where(WebsiteStripeAccount.website_id == website_id)
     )
     if not account or not account.stripe_webhook_secret:
         return {"status": "ignored (no website webhook secret configured)"}
 
-    # Verify the event signature
     try:
         event = stripe.Webhook.construct_event(
             payload=payload,
@@ -184,7 +181,6 @@ async def webhook(
 
     # --- Handle Different Event Types ---
 
-    # --- Logic for your original digital product purchases ---
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         if session.get("payment_status") != "paid":
@@ -195,12 +191,15 @@ async def webhook(
             website_id = md.get("website_id")
             member_id = md.get("member_id")
             product_id = md.get("product_id")
+            
+            # ✅ FIX: The payment_intent is just a string ID on the session object
+            payment_intent_id = session.get("payment_intent")
 
-            if not (website_id and member_id and product_id):
+            if not (website_id and member_id and product_id and payment_intent_id):
                 return {"status": "ignored (missing metadata for unlock)"}
             
             exists = await db.scalar(
-                select(SitePurchase).where(SitePurchase.payment_intent_id == session.get("payment_intent"))
+                select(SitePurchase).where(SitePurchase.payment_intent_id == payment_intent_id)
             )
             if not exists:
                 db.add(SitePurchase(
@@ -208,11 +207,10 @@ async def webhook(
                     member_id=member_id,
                     product_id=product_id,
                     status="paid",
-                    payment_intent_id=session.get("payment_intent")
+                    payment_intent_id=payment_intent_id
                 ))
                 await db.commit()
 
-    # --- Logic for your new shopping cart orders ---
     elif event["type"] == "payment_intent.succeeded":
         payment_intent = event["data"]["object"]
         md = payment_intent.get("metadata", {})
@@ -221,7 +219,7 @@ async def webhook(
             website_id = md.get("website_id")
             cart_items_json = md.get("cart_items")
             
-            shipping_details = payment_intent.get("shipping")
+            shipping_details = payment_intent.get("address")
             customer_name = shipping_details.get("name") if shipping_details else "N/A"
             customer_email = payment_intent.get("receipt_email")
             customer_phone = shipping_details.get("phone") if shipping_details else None
@@ -254,6 +252,9 @@ async def webhook(
                 await db.commit()
 
     return {"status": "ok"}
+
+
+
 def _assert_site_owner(ctx, website: Website):
     # If you later add roles/ownership checks, enforce here.
     # For now ctx["member"] belongs to website already (via subdomain),
