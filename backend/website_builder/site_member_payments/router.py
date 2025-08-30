@@ -219,17 +219,21 @@ async def webhook(
             website_id = md.get("website_id")
             cart_items_json = md.get("cart_items")
             
-            shipping_details = payment_intent.get("address")
+            # ✅ FIX: The shipping details are under the "shipping" key, not "address"
+            shipping_details = payment_intent.get("shipping")
+            
+            # Use safe access with .get() in case shipping_details is None
             customer_name = shipping_details.get("name") if shipping_details else "N/A"
             customer_email = payment_intent.get("receipt_email")
             customer_phone = shipping_details.get("phone") if shipping_details else None
             
+            address_details = shipping_details.get("address", {}) if shipping_details else {}
             address_parts = [
-                shipping_details.get("address", {}).get("line1"),
-                shipping_details.get("address", {}).get("city"),
-                shipping_details.get("address", {}).get("state"),
-                shipping_details.get("address", {}).get("postal_code"),
-                shipping_details.get("address", {}).get("country"),
+                address_details.get("line1"),
+                address_details.get("city"),
+                address_details.get("state"),
+                address_details.get("postal_code"),
+                address_details.get("country"),
             ]
             shipping_address = ", ".join(filter(None, address_parts))
 
