@@ -153,6 +153,8 @@ async def unsync_menu_item_from_stripe(
 
     # Update your database
     menu_item.is_shippable = False
+    menu_item.stripe_product_id = None
+    menu_item.stripe_price_id = None
     await db.commit()
     
     return {"status": "un-synced successfully"}
