@@ -2550,30 +2550,46 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       case "MENU_ITEM": {
         const handleToggleShippable = async (isShippable: boolean) => {
           if (!selectedItem) return;
-          if (!isShippable) {
-            updateItem({
-              ...selectedItem,
-              properties: { ...selectedItem.properties, is_shippable: false },
-            });
-            return;
-          }
+
           setIsSyncing(true);
           try {
-            const response = await api.post(
-              `/checkout/sync-product/${selectedItem.properties.item_id}`
-            );
+            if (isShippable) {
+              // Logic to ENABLE and sync the product
+              const response = await api.post(
+                `/checkout/sync-product/${selectedItem.properties.item_id}`
+              );
+              updateItem({
+                ...selectedItem,
+                properties: {
+                  ...selectedItem.properties,
+                  is_shippable: true,
+                  stripe_product_id: response.data.stripe_product_id,
+                  stripe_price_id: response.data.stripe_price_id, // Also save the price ID
+                },
+              });
+              alert("Product synced with Stripe successfully!");
+            } else {
+              // Logic to DISABLE and un-sync the product
+              await api.post(
+                `/checkout/unsync-product/${selectedItem.properties.item_id}`
+              );
+              updateItem({
+                ...selectedItem,
+                properties: { ...selectedItem.properties, is_shippable: false },
+              });
+              alert("Product un-synced successfully.");
+            }
+          } catch (error) {
+            console.error("Failed to sync product:", error);
+            alert("Error: Could not sync product.");
+            // Optional: Revert checkbox state on failure
             updateItem({
               ...selectedItem,
               properties: {
                 ...selectedItem.properties,
-                is_shippable: true,
-                stripe_product_id: response.data.stripe_product_id,
+                is_shippable: !isShippable,
               },
             });
-            alert("Product synced with Stripe successfully!");
-          } catch (error) {
-            console.error("Failed to sync product:", error);
-            alert("Error: Could not sync product.");
           } finally {
             setIsSyncing(false);
           }

@@ -109,6 +109,53 @@ async def sync_menu_item_with_stripe(
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"Stripe API error: {str(e)}")
 
+@router.post("/unsync-product/{item_id}")
+async def unsync_menu_item_from_stripe(
+    item_id: UUID, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_active_user)
+):
+    # Fetch the menu item with all its relationships
+    result = await db.execute(
+        select(MenuItem)
+        .options(selectinload(MenuItem.location).selectinload(Location.restaurant))
+        .where(MenuItem.item_id == item_id)
+    )
+    menu_item = result.scalars().first()
+
+    if not menu_item:
+        raise HTTPException(status_code=404, detail="Menu item not found.")
+    
+    # Ownership Check
+    if not menu_item.location or not menu_item.location.restaurant or menu_item.location.restaurant.user_id != current_user.id:
+        raise HTTPException(status_code=403, detail="You do not own this menu item.")
+
+    # Deactivate the product in Stripe
+    if menu_item.stripe_product_id:
+        try:
+            owner = menu_item.location.restaurant
+            await db.refresh(owner, attribute_names=["website"])
+            if not owner.website:
+                raise HTTPException(status_code=404, detail="Website not found for this item's owner.")
+            
+            stripe.api_key = await get_stripe_key(owner.website.website_id, db)
+
+            # Deactivating the price is often sufficient
+            if menu_item.stripe_price_id:
+                stripe.Price.modify(menu_item.stripe_price_id, active=False)
+            
+            # You can also deactivate the product itself
+            stripe.Product.modify(menu_item.stripe_product_id, active=False)
+
+        except Exception as e:
+            # Don't block the UI if Stripe fails, just log it
+            print(f"Could not deactivate Stripe product {menu_item.stripe_product_id}. Error: {e}")
+
+    # Update your database
+    menu_item.is_shippable = False
+    await db.commit()
+    
+    return {"status": "un-synced successfully"}
 
 # --- Endpoint to create a Payment Intent for the cart ---
 @router.post("/create-payment-intent")
