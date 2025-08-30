@@ -1,7 +1,7 @@
 # website_builder/schemas.py
 
-from pydantic import BaseModel, ConfigDict, Field
-from typing import Optional, List, Dict, Any
+from pydantic import BaseModel, ConfigDict, Field,StringConstraints
+from typing import Optional, List, Dict, Any,Annotated
 from uuid import UUID
 # import datetime
 # from datetime import datetime as d  # <-- this gives you the class, not the module
@@ -153,7 +153,11 @@ class NavbarResponse(BaseModel):
 
 # --- Website Schemas ---
 class WebsiteBase(BaseModel):
-    subdomain: Optional[str] = None
+    subdomain: Annotated[
+        str,
+        Field(pattern=r'^[a-z0-9-]+$'), # Validation rules go in Field
+        StringConstraints(strip_whitespace=True, to_lower=True) # Conversion rules go here
+    ]
 
 class WebsiteCreate(WebsiteBase):
     pass

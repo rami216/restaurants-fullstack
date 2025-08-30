@@ -37,6 +37,7 @@ type DeletedItem = {
 
 const CreateWebsitePage = () => {
   const router = useRouter(); // ⬅️ add this
+  const [subdomain, setSubdomain] = useState(""); // ✅ 1. Add state for the subdomain input
 
   const [loading, setLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -178,11 +179,24 @@ const CreateWebsitePage = () => {
   };
 
   const handleCreateWebsite = async () => {
+    const formattedSubdomain = subdomain.trim().toLowerCase();
+    if (!formattedSubdomain) {
+      alert("Please enter a subdomain.");
+      return;
+    }
+
     try {
-      await api.post("/builder/website", {});
+      await api.post("/builder/website", { subdomain: formattedSubdomain });
       await fetchWebsiteData();
-    } catch (error) {
-      alert("Failed to create website.");
+    } catch (error: any) {
+      // Type error as 'any' to safely access nested properties
+
+      // ✅ Get the specific error message from the backend response if it exists
+      const detail = error.response?.data?.detail;
+
+      // ✅ Show the specific message, or a fallback if none is available
+      alert(`Failed to create website: ${detail || error.message}`);
+
       console.error(error);
     }
   };
@@ -881,15 +895,31 @@ const CreateWebsitePage = () => {
     );
   if (!websiteData) {
     return (
-      <div className="flex flex-col justify-center items-center h-screen bg-gray-100">
-        <h2 className="text-2xl font-bold mb-4">No Website Found</h2>
-        <p className="mb-6">Get started by creating your website.</p>
-        <button
-          onClick={handleCreateWebsite}
-          className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-4 rounded"
-        >
-          Create a Website
-        </button>
+      <div className="flex flex-col justify-center items-center h-screen bg-gray-100 text-gray-800">
+        <div className="bg-white p-8 rounded-lg shadow-md text-center">
+          <h2 className="text-2xl font-bold mb-4">Create Your Website</h2>
+          <p className="mb-6">
+            Choose a subdomain to get started. This will be your site's address.
+          </p>
+          <div className="flex items-center border rounded-lg overflow-hidden">
+            <input
+              type="text"
+              placeholder="your-site-name"
+              value={subdomain}
+              onChange={(e) => setSubdomain(e.target.value)}
+              className="p-3 w-full outline-none"
+            />
+            <span className="bg-gray-200 p-3 text-gray-600">
+              www.zygoflow.com/yourdomainname
+            </span>
+          </div>
+          <button
+            onClick={handleCreateWebsite}
+            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg mt-4 w-full"
+          >
+            Create My Website
+          </button>
+        </div>
       </div>
     );
   }

@@ -80,6 +80,12 @@ async def create_website(website_data: schemas.WebsiteCreate, current_user: User
     if existing_website:
         raise HTTPException(status_code=400, detail="A website already exists for this user.")
 
+    # ✅ ADD THIS BLOCK: Check if the subdomain is already taken by ANY user
+    subdomain_check = await db.scalar(
+        select(Website).where(Website.subdomain == website_data.subdomain)
+    )
+    if subdomain_check:
+        raise HTTPException(status_code=400, detail="This subdomain is already taken. Please choose another.")
     new_website = Website(
         restaurant_id=owner.restaurant_id,
         subdomain=website_data.subdomain,
