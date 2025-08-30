@@ -986,43 +986,35 @@ const MenuItemDetails = ({
   item,
   itemExtras,
   itemOptions,
-  onAddToCart, // ✅ 1. Accept the handler function as a prop
+  onAddToCart,
 }: {
   item: MenuItem;
   itemExtras: Extra[];
   itemOptions: PublicOptionGroup[];
-  onAddToCart: (item: CartItem) => void; // ✅ 2. Define the prop's type
+  onAddToCart: (item: CartItem) => void;
 }) => {
-  // State to track which extras are selected (using their IDs)
-  // const { addToCart } = useCart();
   const [selectedExtras, setSelectedExtras] = useState(new Set<string>());
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
   >({});
-
-  // State to hold the final calculated price
-  const [totalPrice, setTotalPrice] = useState(item.base_price);
+  const [quantity, setQuantity] = useState(1);
+  const [totalPrice, setTotalPrice] = useState(Number(item.base_price));
 
   useEffect(() => {
-    let currentTotal = item.base_price;
-
+    let currentTotal = Number(item.base_price);
     selectedExtras.forEach((extraId) => {
       const extra = itemExtras.find((e) => e.extra_id === extraId);
-      if (extra) {
-        currentTotal += Number(extra.price); // Ensure price is a number
-      }
+      if (extra) currentTotal += Number(extra.price);
     });
-
     Object.values(selectedOptions).forEach((choiceId) => {
       for (const group of itemOptions) {
         const choice = group.choices.find((c) => c.choice_id === choiceId);
         if (choice) {
-          currentTotal += Number(choice.price_adjustment); // Ensure price is a number
+          currentTotal += Number(choice.price_adjustment);
           break;
         }
       }
     });
-
     setTotalPrice(currentTotal);
   }, [
     selectedExtras,
@@ -1032,28 +1024,19 @@ const MenuItemDetails = ({
     itemOptions,
   ]);
 
-  // Handler for toggling an extra (checkbox)
   const handleExtraToggle = (extraId: string) => {
     setSelectedExtras((prev) => {
       const newSet = new Set(prev);
-      if (newSet.has(extraId)) {
-        newSet.delete(extraId);
-      } else {
-        newSet.add(extraId);
-      }
+      newSet.has(extraId) ? newSet.delete(extraId) : newSet.add(extraId);
       return newSet;
     });
   };
 
-  // Handler for changing an option (radio button)
   const handleOptionChange = (groupId: string, choiceId: string) => {
-    setSelectedOptions((prev) => ({
-      ...prev,
-      [groupId]: choiceId,
-    }));
+    setSelectedOptions((prev) => ({ ...prev, [groupId]: choiceId }));
   };
+
   const handleAddToCartClick = () => {
-    // This function creates the item and calls the prop function
     const extrasList = itemExtras.filter((extra) =>
       selectedExtras.has(extra.extra_id)
     );
@@ -1072,37 +1055,28 @@ const MenuItemDetails = ({
       itemId: item.item_id,
       name: item.item_name,
       imageUrl: item.image_url,
-      quantity: 1,
+      quantity: quantity,
       unitPrice: totalPrice,
       selectedExtras: extrasList,
       selectedOptions: optionsDict,
     };
-
-    // ✅ 3. Call the function that was passed down from the parent
     onAddToCart(cartItem);
   };
 
   return (
-    <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 dark:bg-slate-800 space-y-4">
-      {/* --- Section for Extras (using checkboxes) --- */}
+    <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 space-y-4">
       {itemExtras.length > 0 && (
         <div>
-          <h5 className="font-semibold mb-2 text-slate-800 dark:text-slate-200">
-            Add Extras:
-          </h5>
+          <h5 className="font-semibold mb-2 text-slate-800">Add Extras:</h5>
           <div className="space-y-2">
             {itemExtras.map((extra) => (
               <label
                 key={extra.extra_id}
                 className="flex justify-between items-center cursor-pointer text-sm"
               >
-                <span className="text-slate-700 dark:text-slate-300">
-                  {extra.name}
-                </span>
+                <span>{extra.name}</span>
                 <div className="flex items-center space-x-3">
-                  <span className="font-semibold text-slate-900 dark:text-slate-100">
-                    + ${extra.price.toFixed(2)}
-                  </span>
+                  <span>+ ${Number(extra.price).toFixed(2)}</span>
                   <input
                     type="checkbox"
                     className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
@@ -1113,23 +1087,14 @@ const MenuItemDetails = ({
               </label>
             ))}
           </div>
-          {item.is_shippable && (
-            <button
-              onClick={handleAddToCartClick}
-              className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700"
-            >
-              Add to Cart
-            </button>
-          )}
         </div>
       )}
 
-      {/* --- Section for Options (using radio buttons) --- */}
       {itemOptions.length > 0 && (
-        <div className="space-y-4">
+        <div className="space-y-4 pt-4 border-t">
           {itemOptions.map((group) => (
             <div key={group.group_id}>
-              <h5 className="font-semibold text-slate-800 dark:text-slate-200">
+              <h5 className="font-semibold text-slate-800">
                 {group.group_name}
               </h5>
               <div className="mt-2 space-y-2">
@@ -1138,18 +1103,16 @@ const MenuItemDetails = ({
                     key={choice.choice_id}
                     className="flex justify-between items-center cursor-pointer text-sm"
                   >
-                    <span className="text-slate-700 dark:text-slate-300">
-                      {choice.name}
-                    </span>
+                    <span>{choice.name}</span>
                     <div className="flex items-center space-x-3">
-                      {choice.price_adjustment > 0 && (
-                        <span className="font-semibold text-slate-900 dark:text-slate-100">
-                          + ${choice.price_adjustment.toFixed(2)}
+                      {Number(choice.price_adjustment) > 0 && (
+                        <span>
+                          + ${Number(choice.price_adjustment).toFixed(2)}
                         </span>
                       )}
                       <input
                         type="radio"
-                        name={group.group_id} // This groups the radio buttons
+                        name={`${item.item_id}-${group.group_id}`}
                         className="h-5 w-5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
                         onChange={() =>
                           handleOptionChange(group.group_id, choice.choice_id)
@@ -1167,16 +1130,33 @@ const MenuItemDetails = ({
         </div>
       )}
 
-      {/* --- Total Price Display --- */}
-      <div className="border-t border-slate-200 dark:border-slate-700 pt-4 mt-4 flex justify-between items-center">
-        <span className="text-lg font-bold text-slate-800 dark:text-slate-100">
-          Total:
-        </span>
-        <span className="text-xl font-bold text-indigo-600 dark:text-indigo-400">
-          ${totalPrice.toFixed(2)}
-        </span>
+      <div className="border-t pt-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold">Quantity:</span>
+          <div className="flex items-center gap-2">
+            <button
+              onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+              className="w-8 h-8 rounded-full bg-gray-200 font-bold"
+            >
+              -
+            </button>
+            <span className="font-bold w-8 text-center">{quantity}</span>
+            <button
+              onClick={() => setQuantity((q) => q + 1)}
+              className="w-8 h-8 rounded-full bg-gray-200 font-bold"
+            >
+              +
+            </button>
+          </div>
+        </div>
+        <div className="flex justify-between items-center">
+          <span className="text-lg font-bold">Total:</span>
+          <span className="text-xl font-bold text-indigo-600">
+            ${(totalPrice * quantity).toFixed(2)}
+          </span>
+        </div>
       </div>
-      {/* ✅ 4. Add the button and connect it to the new handler */}
+
       {item.is_shippable && (
         <button
           onClick={handleAddToCartClick}
@@ -1915,9 +1895,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const { initial, animate, transition } = getMotionConfig(props.animation);
 
       return (
-        // This outer div no longer needs an onClick, we'll move it down
         <div>
-          {/* Main Card - Add the onClick handler here */}
+          {/* Main Card */}
           <div
             onClick={(e) => {
               e.preventDefault();
@@ -1934,7 +1913,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             }}
           >
             {element.element_type === "AI" ? (
-              // ... (Your AI Runner JSX for the card, no changes needed here)
               <div className="relative">
                 <AiElementRunner element={element} />
                 {props.chatEnabled && props.whatsappNumber && (
@@ -1957,7 +1935,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 )}
               </div>
             ) : (
-              // ... (Your regular card JSX, no changes needed here)
               <motion.div
                 className="relative border rounded-lg p-4 bg-white shadow cursor-pointer"
                 style={style}
@@ -1979,7 +1956,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   {props.description}
                 </p>
                 <p className="font-semibold text-gray-600 text-right">
-                  ${props.base_price?.toFixed(2)}
+                  ${Number(props.base_price).toFixed(2)}
                 </p>
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
@@ -2003,26 +1980,28 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             )}
           </div>
 
-          {/* ✅ FIX: This wrapper div handles the smooth animation */}
+          {/* Expandable Details Section */}
           <div
             className={`transition-all duration-500 ease-in-out overflow-hidden ${
               isExpanded ? "max-h-[1000px]" : "max-h-0"
             }`}
           >
-            {/* The stopPropagation click handler is still needed here */}
             <div onClick={(e) => e.stopPropagation()}>
-              {isLoadingDetails ? (
+              {/* ✅ FIX: Show loading indicator specifically for this component */}
+              {isLoadingDetails && isExpanded ? (
                 <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
                   <p className="text-sm text-slate-500">Loading details...</p>
                 </div>
               ) : (
-                <MenuItemDetails
-                  // ✅ FIX: Pass the entire 'props' object as the 'item' prop
-                  item={props as MenuItem}
-                  itemExtras={itemExtras}
-                  itemOptions={itemOptions}
-                  onAddToCart={addToCart} // ✅ Pass the function down
-                />
+                // ✅ FIX: Only render MenuItemDetails if it is expanded to ensure data is ready
+                isExpanded && (
+                  <MenuItemDetails
+                    item={props as MenuItem}
+                    itemExtras={itemExtras}
+                    itemOptions={itemOptions}
+                    onAddToCart={addToCart}
+                  />
+                )
               )}
             </div>
           </div>

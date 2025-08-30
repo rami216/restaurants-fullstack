@@ -127,11 +127,18 @@ class MenuItemUpdate(BaseModel):
     is_available: Optional[bool] = None
     image_url: Optional[str] = None
     category_id: Optional[int] = None
+    is_shippable: Optional[bool] = None
+    stripe_product_id: Optional[str] = None
+    stripe_price_id: Optional[str] = None
 
 class MenuItemResponse(MenuItemBase):
     item_id: UUID
     created_at: datetime.datetime
     updated_at: Optional[datetime.datetime] = None
+    
+    is_shippable: bool
+    stripe_product_id: Optional[str] = None
+    stripe_price_id: Optional[str] = None
 
     class Config:
         from_attributes = True
