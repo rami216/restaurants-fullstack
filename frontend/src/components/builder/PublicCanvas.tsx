@@ -506,9 +506,12 @@ const CartView = ({
     setIsSubmitting(true);
     try {
       await saasApi.post("/checkout/submit-cod-order", {
-        cart,
+        cart: cart,
         website_id: websiteData.website_id,
-        ...codDetails,
+        customer_name: codDetails.name,
+        customer_email: codDetails.email,
+        shipping_address: codDetails.address,
+        customer_phone: codDetails.phone,
       });
       clearCart();
       // You must have a /thank-you page for this to work
