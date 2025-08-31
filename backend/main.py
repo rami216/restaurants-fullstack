@@ -46,6 +46,7 @@ PUBLIC_RULES = [
     # General public routes
     ("/site-auth", {"GET", "POST", "OPTIONS"}),
     ("/checkout/", {"POST", "OPTIONS"}),
+    ("/cod/", {"POST", "OPTIONS"}), # ADD THIS LINE
     ("/public/", {"GET", "OPTIONS"}),
     ("/locations/", {"GET", "OPTIONS"}),
     ("/menu-item-extras/", {"GET", "OPTIONS"}),
