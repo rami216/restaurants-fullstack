@@ -505,7 +505,7 @@ const CartView = ({
     event.preventDefault();
     setIsSubmitting(true);
     try {
-      await saasApi.post("/cod/submit-order", {
+      await saasApi.post("/checkout/submit-cod-order", {
         cart,
         website_id: websiteData.website_id,
         ...codDetails,

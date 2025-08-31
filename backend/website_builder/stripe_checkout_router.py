@@ -211,3 +211,30 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
         print(f"Stripe Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
+
+class OrderPayload(BaseModel):
+    cart: list[CartItem]
+    website_id: UUID
+    customer_name: str
+    customer_email: str
+    customer_phone: str | None = None
+    shipping_address: str
+
+@router.post("/submit-cod-order")
+async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get_db)):
+    new_order = WebsiteOrder(
+        website_id=payload.website_id,
+        customer_name=payload.customer_name,
+        customer_email=payload.customer_email,
+        customer_phone=payload.customer_phone,
+        shipping_address=payload.shipping_address,
+        cart_items=[item.model_dump() for item in payload.cart],
+        total_amount_cents=int(sum(item.unitPrice * item.quantity for item in payload.cart) * 100),
+        currency="usd",
+        payment_intent_id=None,
+        status="pending",
+    )
+    db.add(new_order)
+    await db.commit()
+    
+    return {"status": "success", "order_id": new_order.order_id}
