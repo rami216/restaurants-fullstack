@@ -30,7 +30,7 @@ class Website(Base):
     total_spend_usd = Column(Numeric, default=0)
     monthly_spend_usd = Column(Numeric, default=0)
     ai_spend_limit_usd = Column(Numeric, nullable=True, default=DEFAULT_AI_SPEND_LIMIT)
-   
+    payment_method = Column(String, default='display', nullable=False)
     monthly_period_start    = Column(DateTime(timezone=True))
     monthly_spend_limit_usd = Column(Numeric(12, 2))  # NULL means no cap
 

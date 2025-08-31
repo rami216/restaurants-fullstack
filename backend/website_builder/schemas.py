@@ -175,10 +175,14 @@ class WebsiteResponse(WebsiteBase):
     primary_custom_domain: Optional[str] = None
     primary_custom_domain_status: Optional[str] = None # <-- New: More descriptive than a boolean
     primary_custom_domain_id: Optional[UUID] = None   # <-- add this
+    
+    payment_method: str
     class Config:
         from_attributes = True
 
-
+class WebsiteUpdatePayload(BaseModel):
+    payment_method: str
+    
 class LocationResponse(BaseModel):
     location_id: UUID
     location_name: str

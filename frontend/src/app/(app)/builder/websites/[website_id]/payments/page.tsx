@@ -37,7 +37,7 @@ export default function BuilderPaymentsPage() {
   const [error, setError] = React.useState<string | null>(null);
   const [view, setView] = React.useState<StripeConfigView | null>(null);
   const [editing, setEditing] = React.useState(false); // <<< NEW
-
+  const [paymentMethod, setPaymentMethod] = React.useState("display");
   // products
   const [products, setProducts] = React.useState<ProductRow[]>([]);
   const [creatingProduct, setCreatingProduct] = React.useState(false);
@@ -222,8 +222,22 @@ export default function BuilderPaymentsPage() {
     }
   };
 
+  const handleSavePaymentMethod = async () => {
+    try {
+      setSaving(true);
+      await api.put(`/builder/websites/${websiteId}/payment-method`, {
+        payment_method: paymentMethod,
+      });
+      alert("Payment method updated!");
+    } catch (err) {
+      alert("Failed to save payment method.");
+    } finally {
+      setSaving(false);
+    }
+  };
   if (!websiteId) return null;
   if (loading) return <div className="p-6">Loading…</div>;
+
   if (error)
     return (
       <div className="p-6 text-red-600">
@@ -240,7 +254,31 @@ export default function BuilderPaymentsPage() {
   return (
     <div className="max-w-3xl mx-auto p-6 space-y-8">
       <h1 className="text-2xl font-bold">Payments setup</h1>
-
+      {/* ✅ 4. ADD THIS NEW JSX BLOCK FOR THE DROPDOWN */}
+      <div className="p-4 bg-white rounded-lg border shadow-sm space-y-3">
+        <h3 className="font-medium text-gray-800">Checkout Mode</h3>
+        <p className="text-sm text-gray-500">
+          Choose how customers will check out from the cart.
+        </p>
+        <div className="flex items-center gap-4">
+          <select
+            value={paymentMethod}
+            onChange={(e) => setPaymentMethod(e.target.value)}
+            className="flex-1 border-gray-300 rounded-md shadow-sm p-2"
+          >
+            <option value="display">Display Only (No Checkout)</option>
+            <option value="cod">Cash on Delivery</option>
+            <option value="stripe">Stripe (Online Payments)</option>
+          </select>
+          <button
+            onClick={handleSavePaymentMethod}
+            disabled={saving}
+            className="bg-blue-600 text-white font-semibold px-4 py-2 rounded-md disabled:bg-gray-400"
+          >
+            {saving ? "Saving..." : "Save Mode"}
+          </button>
+        </div>
+      </div>
       {/* 1) Stripe config */}
       {view?.exists ? (
         editing ? (

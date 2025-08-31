@@ -436,30 +436,54 @@ const CartView = ({
   websiteData: PublicWebsiteData;
   setCurrentView: (view: string) => void;
 }) => {
-  const { cart, cartTotal, removeFromCart, updateCartItem } = useCart();
-
+  const { cart, cartTotal, removeFromCart, updateCartItem, clearCart } =
+    useCart();
   const [clientSecret, setClientSecret] = useState("");
   const [stripePromise, setStripePromise] =
     useState<Promise<Stripe | null> | null>(null);
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [piError, setPiError] = useState<string | null>(null);
 
-  // Load website-specific publishable key
-  useEffect(() => {
-    saasApi
-      .get(`/users-stripe-account/public/stripe-key/${websiteData.website_id}`)
-      .then((res) => {
-        if (res.data.publishableKey) {
-          setStripePromise(loadStripe(res.data.publishableKey));
-        }
-      })
-      .catch((err) => console.error("Could not load Stripe key.", err));
-  }, [websiteData.website_id]);
+  // State for the Cash on Delivery form
+  const [codDetails, setCodDetails] = useState({
+    name: "",
+    email: "",
+    address: "",
+    phone: "",
+  });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // Create/refresh PaymentIntent when cart changes
+  // This useEffect only runs if Stripe is the selected payment method
+  useEffect(() => {
+    if (websiteData.payment_method === "stripe") {
+      saasApi
+        .get(
+          `/users-stripe-account/public/stripe-key/${websiteData.website_id}`
+        )
+        .then((res) => {
+          if (res.data.publishableKey) {
+            setStripePromise(loadStripe(res.data.publishableKey));
+          } else {
+            setPiError(
+              "This site has not configured Stripe payments correctly."
+            );
+          }
+        })
+        .catch((err) => {
+          console.error("Could not load Stripe key.", err);
+          setPiError("Could not connect to the payment service.");
+        });
+    }
+  }, [websiteData.website_id, websiteData.payment_method]);
+
+  // This useEffect also only runs if Stripe is selected
   useEffect(() => {
     setPiError(null);
-    if (!cart.length || !websiteData) {
+    if (
+      cart.length === 0 ||
+      !websiteData ||
+      websiteData.payment_method !== "stripe"
+    ) {
       setClientSecret("");
       return;
     }
@@ -475,6 +499,26 @@ const CartView = ({
         setPiError("Could not start checkout. Please try again.");
       });
   }, [cart, cartTotal, websiteData]);
+
+  // Handler for submitting a Cash on Delivery order
+  const handleCodSubmit = async (event: React.FormEvent) => {
+    event.preventDefault();
+    setIsSubmitting(true);
+    try {
+      await saasApi.post("/cod/submit-order", {
+        cart,
+        website_id: websiteData.website_id,
+        ...codDetails,
+      });
+      clearCart();
+      // You must have a /thank-you page for this to work
+      window.location.href = `/thank-you`;
+    } catch (error) {
+      alert("There was an error placing your order. Please try again.");
+    } finally {
+      setIsSubmitting(false);
+    }
+  };
 
   const options: StripeElementsOptions = {
     clientSecret,
@@ -503,11 +547,8 @@ const CartView = ({
       >
         ← Back to Shop
       </button>
-
       <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
-
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
-        {/* Items column */}
         <div className="lg:col-span-2 space-y-4">
           {cart.map((item) => {
             const isEditing = editingItemId === item.cartItemId;
@@ -578,25 +619,106 @@ const CartView = ({
           })}
         </div>
 
-        {/* Checkout column */}
         <div className="lg:col-span-1">
-          {piError && (
-            <div className="mb-4 p-3 rounded bg-red-50 text-red-600 text-sm">
-              {piError}
-            </div>
+          {/* --- ✅ CONDITIONAL RENDER based on payment_method --- */}
+
+          {websiteData.payment_method === "stripe" && (
+            <>
+              {piError && (
+                <div className="mb-4 p-3 rounded bg-red-50 text-red-600 text-sm">
+                  {piError}
+                </div>
+              )}
+              {clientSecret && stripePromise ? (
+                <Elements
+                  options={options}
+                  stripe={stripePromise}
+                  key={clientSecret}
+                >
+                  <CheckoutForm websiteId={websiteData.website_id} />
+                </Elements>
+              ) : (
+                !piError && (
+                  <div className="p-6 border rounded-lg bg-gray-50 text-center text-sm text-gray-600">
+                    Initializing Secure Checkout…
+                  </div>
+                )
+              )}
+            </>
           )}
-          {clientSecret && stripePromise ? (
-            <Elements
-              options={options}
-              stripe={stripePromise}
-              // Force re-init when a new intent is created
-              key={clientSecret}
+
+          {websiteData.payment_method === "cod" && (
+            <form
+              onSubmit={handleCodSubmit}
+              className="space-y-6 bg-white p-6 rounded-lg shadow-md"
             >
-              <CheckoutForm websiteId={websiteData.website_id} />
-            </Elements>
-          ) : (
-            <div className="p-6 border rounded-lg bg-gray-50 text-sm text-gray-600">
-              Initializing checkout…
+              <h3 className="text-lg font-semibold">Contact & Shipping</h3>
+              <p className="text-sm text-gray-600">
+                You will pay with cash upon delivery.
+              </p>
+              <div className="grid grid-cols-1 gap-y-4">
+                <input
+                  type="text"
+                  value={codDetails.name}
+                  onChange={(e) =>
+                    setCodDetails({ ...codDetails, name: e.target.value })
+                  }
+                  placeholder="Full Name"
+                  required
+                  className="p-3 border rounded-md"
+                />
+                <input
+                  type="email"
+                  value={codDetails.email}
+                  onChange={(e) =>
+                    setCodDetails({ ...codDetails, email: e.target.value })
+                  }
+                  placeholder="Email Address"
+                  required
+                  className="p-3 border rounded-md"
+                />
+                <input
+                  type="text"
+                  value={codDetails.address}
+                  onChange={(e) =>
+                    setCodDetails({ ...codDetails, address: e.target.value })
+                  }
+                  placeholder="Shipping Address"
+                  required
+                  className="p-3 border rounded-md"
+                />
+                <input
+                  type="tel"
+                  value={codDetails.phone}
+                  onChange={(e) =>
+                    setCodDetails({ ...codDetails, phone: e.target.value })
+                  }
+                  placeholder="Phone Number (Optional)"
+                  className="p-3 border rounded-md"
+                />
+              </div>
+              <button
+                type="submit"
+                disabled={isSubmitting}
+                className="w-full bg-green-600 text-white font-semibold py-4 rounded-lg hover:bg-green-700 disabled:bg-gray-400"
+              >
+                {isSubmitting ? "Placing Order..." : "Place Order"}
+              </button>
+            </form>
+          )}
+
+          {websiteData.payment_method === "display" && (
+            <div className="p-6 border rounded-lg bg-gray-50 text-center">
+              <h3 className="font-semibold text-lg">Order Summary</h3>
+              <p className="text-gray-600 mt-2">
+                To place an order, please contact the restaurant directly.
+              </p>
+              <div className="text-left mt-4 border-t pt-4">
+                <div className="flex justify-between font-bold text-xl">
+                  <span>Total:</span>
+                  <span>${cartTotal.toFixed(2)}</span>
+                </div>
+              </div>
             </div>
           )}
         </div>

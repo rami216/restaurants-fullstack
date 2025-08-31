@@ -112,7 +112,7 @@ export interface WebsiteData {
   total_spend_usd?: number; // may be undefined/null from API
   monthly_spend_usd?: number; // "
   ai_spend_limit_usd?: number | null; // "
-
+  payment_method: "stripe" | "cod" | "display";
   // custom domain preview helpers
   primary_custom_domain?: string | null;
   primary_custom_domain_status?: string | null; // <-- New
@@ -180,6 +180,7 @@ export interface PublicWebsiteData {
   pages: Page[];
   subdomain: string;
   locations: Location[];
+  payment_method: "stripe" | "cod" | "display";
 }
 
 export interface Extra {

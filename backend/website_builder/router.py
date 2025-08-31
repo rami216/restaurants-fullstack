@@ -103,6 +103,23 @@ async def create_website(website_data: schemas.WebsiteCreate, current_user: User
 
     return await get_my_website(current_user, db)
 
+
+@router.put("/websites/{website_id}/payment-method")
+async def update_website_payment_method(
+    website_id: UUID,
+    payload: schemas.WebsiteUpdatePayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    website = await get_website_and_check_ownership(website_id, current_user, db)
+    
+    if payload.payment_method not in ['stripe', 'cod', 'display']:
+        raise HTTPException(status_code=400, detail="Invalid payment method.")
+        
+    website.payment_method = payload.payment_method
+    await db.commit()
+    return {"status": "success", "payment_method": website.payment_method}
+
 # --- Page Endpoints ---
 @router.post("/pages", response_model=schemas.PageResponse, status_code=status.HTTP_201_CREATED)
 async def create_page(page_data: schemas.PageCreate, db: AsyncSession = Depends(get_db),
