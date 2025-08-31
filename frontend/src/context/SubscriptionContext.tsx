@@ -15,6 +15,8 @@ interface SubscriptionContextType {
   creditBalance: number;
   isLoading: boolean;
   fetchSubscriptionStatus: () => Promise<void>;
+  storageUsed: number;
+  storageLimit: number;
 }
 
 // Create the context with a default value
@@ -29,7 +31,9 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
   );
   const [creditBalance, setCreditBalance] = useState<number>(0);
   const [isLoading, setIsLoading] = useState(true);
-
+  // ✅ 2. ADD state for storage usage
+  const [storageUsed, setStorageUsed] = useState(0);
+  const [storageLimit, setStorageLimit] = useState(1_000_000_000); // Default 1GB
   const fetchSubscriptionStatus = async () => {
     setIsLoading(true);
     try {
@@ -37,14 +41,19 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
       if (res.data.has_restaurant) {
         setSubscriptionStatus(res.data.subscription_status);
         setCreditBalance(res.data.credit_balance || 0);
+        // ✅ 3. SET the storage state from the API response
+        setStorageUsed(res.data.storage_bytes_used || 0);
+        setStorageLimit(res.data.storage_limit_bytes || 1_000_000_000);
       } else {
         setSubscriptionStatus(null);
         setCreditBalance(0);
+        setStorageUsed(0);
       }
     } catch (error) {
       console.error("Failed to fetch subscription status", error);
       setSubscriptionStatus(null);
       setCreditBalance(0);
+      setStorageUsed(0);
     } finally {
       setIsLoading(false);
     }
@@ -59,6 +68,8 @@ export const SubscriptionProvider = ({ children }: { children: ReactNode }) => {
     creditBalance,
     isLoading,
     fetchSubscriptionStatus,
+    storageUsed,
+    storageLimit,
   };
 
   return (

@@ -38,7 +38,7 @@ class RestaurantOwner(Base):
     stripe_customer_id = Column(String, nullable=True, unique=True)
     stripe_subscription_id = Column(String, nullable=True, unique=True)
     subscription_status = Column(String, nullable=True)
-
+    storage_bytes_used = Column(BigInteger, nullable=False, default=0)
     # --- NEW WALLET COLUMN ---
     # Use Numeric for precision with currency. Stores the balance in dollars.
     credit_balance = Column(Numeric(10, 4), nullable=False, default=0.0)

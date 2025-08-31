@@ -1,3 +1,4 @@
+//src/(app)/billingPgage/page.tsx
 "use client";
 
 import React, { useState } from "react";
@@ -9,6 +10,15 @@ import { useSubscription } from "@/context/SubscriptionContext";
 const stripePromise = loadStripe(
   process.env.NEXT_PUBLIC_STRIPE_PUBLISHABLE_KEY || ""
 );
+// ✅ NEW: Helper function to format bytes into MB/GB
+const formatBytes = (bytes: number, decimals = 2) => {
+  if (bytes === 0) return "0 Bytes";
+  const k = 1000;
+  const dm = decimals < 0 ? 0 : decimals;
+  const sizes = ["Bytes", "KB", "MB", "GB", "TB"];
+  const i = Math.floor(Math.log(bytes) / Math.log(k));
+  return parseFloat((bytes / Math.pow(k, i)).toFixed(dm)) + " " + sizes[i];
+};
 
 export default function BillingPage() {
   // Get live subscription data from the context
@@ -17,6 +27,8 @@ export default function BillingPage() {
     creditBalance,
     isLoading,
     fetchSubscriptionStatus,
+    storageUsed,
+    storageLimit,
   } = useSubscription();
   const [topUpAmount, setTopUpAmount] = useState("10"); // Default to $10
 
@@ -145,6 +157,21 @@ export default function BillingPage() {
             >
               Add Funds
             </button>
+          </div>
+        </div>
+        {/* ✅ 2. ADD the new Storage Usage card */}
+        <div className="bg-white p-6 rounded-lg shadow-md md:col-span-2">
+          <h2 className="text-xl font-semibold mb-4">Storage Usage</h2>
+          <div className="space-y-2">
+            <div className="w-full bg-gray-200 rounded-full h-4">
+              <div
+                className="bg-indigo-600 h-4 rounded-full"
+                style={{ width: `${(storageUsed / storageLimit) * 100}%` }}
+              ></div>
+            </div>
+            <p className="text-sm text-gray-600 text-right">
+              {formatBytes(storageUsed)} of {formatBytes(storageLimit)} used
+            </p>
           </div>
         </div>
       </div>

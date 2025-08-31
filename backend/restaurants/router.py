@@ -7,8 +7,10 @@ from models import RestaurantOwner, RestaurantBrand, User,Category
 from database import get_db
 from auth.auth_handler import get_current_active_user
 from schemas import RestaurantBrandCreate, RestaurantBrandResponse,RestaurantCreate,CategoryCreate,CategoryResponse,CategoryUpdate
+import os # ✅ 1. Add the OS import
 
 router = APIRouter(prefix="/restaurants", tags=["restaurants"])
+STORAGE_LIMIT_BYTES = int(os.getenv("DEFAULT_STORAGE_LIMIT_BYTES", 1_000_000_000))
 
 @router.get("/has-restaurant")
 async def has_restaurant(
@@ -30,7 +32,9 @@ async def has_restaurant(
             "has_restaurant": True,
             "restaurant_id": str(owner.restaurant_id),
             "credit_balance": remaining_balance,
-            "subscription_status": owner.subscription_status
+            "subscription_status": owner.subscription_status,
+            "storage_bytes_used": owner.storage_bytes_used,
+            "storage_limit_bytes": STORAGE_LIMIT_BYTES
         }
     else:
         return {

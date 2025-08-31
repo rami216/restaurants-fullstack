@@ -33,6 +33,8 @@ from website_builder.site_member_payments.router import router as site_member_pa
 from website_builder.custom_domains_router import router as custom_domains_router
 from website_builder.public_router import router as public_router
 from website_builder.stripe_checkout_router import router as checkout_router
+from webhooks.router import router as webhooks_router # ✅ ADD THIS
+
 origins_env = os.getenv("FRONTEND_ORIGIN", "")
 ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 
@@ -142,6 +144,7 @@ app.include_router(site_member_payments_router)
 app.include_router(custom_domains_router)
 app.include_router(public_router)
 app.include_router(checkout_router)
+app.include_router(webhooks_router) # ✅ ADD THIS
 
 
 # ---- Health check
