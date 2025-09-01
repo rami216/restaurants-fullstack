@@ -47,7 +47,7 @@ interface PropertyEditorProps {
   websiteData: any; // Pass the full website data to access all pages
   onUpdate: (updatedPage: Page) => void;
   onUpdateWebsite: (updatedWebsite: any) => void; // For navbar updates
-  onDelete: () => void;
+  onDelete: (item: any, type: Selection["type"]) => void;
   onCreatePage: (title: string) => void;
   clipboard: Element | null;
   onCopy: () => void;
@@ -703,7 +703,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const fileInputRef = useRef<HTMLInputElement>(null);
   const handleDelete = () => {
     if (confirm(`Are you sure you want to delete this ${selectionType}?`)) {
-      onDelete(); // Just call the function passed from the parent
+      onDelete(selectedItem, selectionType);
     }
   };
   if (!selectedItem || !selectionType || !activePage) {

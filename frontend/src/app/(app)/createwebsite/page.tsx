@@ -382,32 +382,60 @@ const CreateWebsitePage = () => {
 
   const selectedItem = findSelectedItem();
 
-  const handleDeleteItem = () => {
-    if (!selectedItem || !selection.type) return;
-    if (selection.type === "navbar") {
-      alert("The main navbar container cannot be deleted.");
-      return;
+  const handleDeleteItem = async (
+    itemToDelete: any,
+    type: Selection["type"]
+  ) => {
+    if (!itemToDelete || !type) return;
+
+    // --- 1. If it's an image or video, delete the file from storage FIRST ---
+    if (
+      type === "element" &&
+      ["IMAGE", "VIDEO"].includes(itemToDelete.element_type)
+    ) {
+      const props = itemToDelete.properties || {};
+      // Use 'src' for images/videos, but also check 'image_url' as a fallback
+      const fileUrl = props.src || props.image_url;
+
+      if (fileUrl && fileUrl.includes("/storage/v1/object/public/")) {
+        try {
+          // Extract the path and bucket from the full URL
+          const url = new URL(fileUrl);
+          const pathParts = url.pathname.split("/public/");
+          const [bucket, ...objectPathParts] = pathParts[1].split("/");
+          const objectPath = objectPathParts.join("/");
+
+          // Call the backend endpoint to securely delete the file
+          // This will trigger your Supabase webhook to update the storage count
+          await api.post("/uploads/delete-object", {
+            bucket,
+            path: objectPath,
+          });
+        } catch (error) {
+          console.error(
+            "Failed to delete file from storage, but proceeding to delete database record.",
+            error
+          );
+          // You can decide if you want to stop here or continue if file deletion fails
+        }
+      }
     }
 
-    const idKey = `${selection.type}_id` as keyof typeof selectedItem;
-    const idToDelete = selectedItem[idKey];
+    // --- 2. Remove the item from the local React state (your existing logic) ---
+    const idKey = `${type}_id` as keyof typeof itemToDelete;
+    const idToDelete = itemToDelete[idKey];
 
-    if (!isTempId(idToDelete)) {
-      setDeletedItems((prev) => [
-        ...prev,
-        { type: selection.type as DeletedItem["type"], id: idToDelete },
-      ]);
-    }
-
-    if (selection.type === "navbar_item") {
+    if (type === "navbar_item" && websiteData?.navbar) {
       const newNavbar = {
-        ...navbar!,
-        items: navbar!.items.filter((item) => item.item_id !== idToDelete),
+        ...websiteData.navbar,
+        items: websiteData.navbar.items.filter(
+          (item) => item.item_id !== idToDelete
+        ),
       };
-      setWebsiteData({ ...websiteData!, navbar: newNavbar });
+      setWebsiteData({ ...websiteData, navbar: newNavbar });
     } else if (activePage) {
       let updatedSections = activePage.sections;
-      if (selection.type === "section") {
+      if (type === "section") {
         updatedSections = activePage.sections.filter(
           (s) => s.section_id !== idToDelete
         );
@@ -426,6 +454,16 @@ const CreateWebsitePage = () => {
       }
       updateWebsiteData({ ...activePage, sections: updatedSections });
     }
+
+    // --- 3. Add the database ID to the list of items to be deleted on save ---
+    if (!isTempId(idToDelete)) {
+      setDeletedItems((prev) => [
+        ...prev,
+        { type: type as any, id: idToDelete },
+      ]);
+    }
+
+    // --- 4. Clear the selection ---
     setSelection({ type: null, id: null });
   };
 

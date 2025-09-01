@@ -2,6 +2,7 @@
 from fastapi import APIRouter, File, UploadFile, HTTPException, status, Form,Depends
 from fastapi.responses import JSONResponse
 import os, mimetypes, uuid, traceback, re, datetime
+from pydantic import BaseModel
 from supabase import create_client, Client
 from models import User, RestaurantOwner # ✅ 1. Import User and RestaurantOwner
 from auth.auth_handler import get_current_active_user
@@ -159,3 +160,29 @@ async def get_video_signed_url(
 
 
 
+class DeleteObjectPayload(BaseModel):
+    bucket: str
+    path: str
+
+@router.post("/delete-object")
+async def delete_storage_object(
+    payload: DeleteObjectPayload,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Deletes an object from Supabase storage, but only if the user owns it.
+    """
+    try:
+        # The user ID is the first part of the file path (e.g., "3/...")
+        owner_user_id_str = payload.path.split('/')[0]
+        if not owner_user_id_str.isdigit() or int(owner_user_id_str) != current_user.id:
+            raise HTTPException(status_code=403, detail="You do not have permission to delete this file.")
+
+        # If permission is granted, delete the file
+        res = supabase.storage.from_(payload.bucket).remove([payload.path])
+
+        return {"status": "success", "data": res}
+    except Exception as e:
+        print(f"Error deleting storage object: {e}")
+        raise HTTPException(status_code=500, detail="Failed to delete file from storage.")
