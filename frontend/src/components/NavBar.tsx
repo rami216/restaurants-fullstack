@@ -86,6 +86,19 @@ export default function NavBar() {
                   Create Website
                 </button>
               </li>
+              <li>
+                <Link
+                  href="/orders"
+                  className={cn(
+                    "...",
+                    pathname === "/orders"
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  Orders
+                </Link>
+              </li>
               {/* --- THIS IS THE NEW BILLING LINK --- */}
               <li>
                 <Link
@@ -179,6 +192,20 @@ export default function NavBar() {
                   >
                     Create Website
                   </button>
+                </li>
+                <li>
+                  <Link
+                    href="/orders"
+                    className={cn(
+                      "block transition-colors",
+                      pathname === "/orders"
+                        ? "text-blue-700 font-semibold"
+                        : "text-gray-600 hover:text-gray-900"
+                    )}
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Orders
+                  </Link>
                 </li>
                 <li>
                   <button

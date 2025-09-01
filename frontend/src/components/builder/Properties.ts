@@ -1,6 +1,7 @@
 // frontend/src/components/builder/Properties.ts
 
 import { UUID } from "crypto";
+import { CartItem } from "@/context/CartContext"; // Reuse the CartItem type
 
 // New, strongly-typed interface for element properties
 export interface ElementProperties {
@@ -218,3 +219,17 @@ export type VisibilityRule = {
   /** ✅ NEW: Hide the element if the user HAS purchased this product */
   forbidden_product_id?: string;
 };
+
+export interface WebsiteOrder {
+  order_id: string;
+  customer_name: string;
+  customer_email: string;
+  customer_phone?: string;
+  shipping_address: string;
+  cart_items: CartItem[];
+  total_amount_cents: number;
+  currency: string;
+  status: string;
+  created_at: string;
+  payment_intent_id?: string;
+}
