@@ -234,3 +234,16 @@ class CustomDomainOut(BaseModel):
         from_attributes = True
 
 #endregion customdomain
+
+
+class WebsiteOrderResponse(BaseModel):
+    order_id: UUID
+    customer_name: str
+    customer_email: str
+    customer_phone: Optional[str]
+    shipping_address: str
+    cart_items: List[Dict[str, Any]]
+    total_amount_cents: int
+    currency: str
+    status: str
+    created_at: datetime.datetime
