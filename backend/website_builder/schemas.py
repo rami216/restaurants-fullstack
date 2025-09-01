@@ -246,4 +246,4 @@ class WebsiteOrderResponse(BaseModel):
     total_amount_cents: int
     currency: str
     status: str
-    created_at: datetime.datetime
+    created_at: datetime
