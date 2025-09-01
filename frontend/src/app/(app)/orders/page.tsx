@@ -4,8 +4,11 @@ import React, { useState, useEffect } from "react";
 import api from "@/lib/axios";
 import { WebsiteOrder } from "@/components/builder/Properties";
 import { ChevronDown, Package } from "lucide-react";
+import { useParams } from "next/navigation"; // ✅ Import useParams
 
 export default function OrdersPage() {
+  const params = useParams<{ website_id: string }>(); // ✅ Get params from the URL
+  const websiteId = params.website_id;
   const [activeTab, setActiveTab] = useState("orders");
   const [orders, setOrders] = useState<WebsiteOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -13,10 +16,14 @@ export default function OrdersPage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
+    // Don't fetch until we have the websiteId from the URL
+    if (!websiteId) return;
+
     const fetchOrders = async () => {
       setLoading(true);
       try {
-        const response = await api.get(`/orders/my-orders`);
+        // ✅ FIX: Call the correct endpoint with the websiteId
+        const response = await api.get(`/orders/website/${websiteId}`);
         setOrders(response.data);
       } catch (err) {
         setError("Failed to load orders.");
@@ -26,8 +33,7 @@ export default function OrdersPage() {
       }
     };
     fetchOrders();
-  }, []);
-
+  }, [websiteId]); // ✅ Re-run the effect if the websiteId changes
   const toggleOrder = (orderId: string) => {
     setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
   };

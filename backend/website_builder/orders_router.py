@@ -22,10 +22,9 @@ async def get_orders_for_website(
     db: AsyncSession = Depends(get_db),
     current_user: User = Depends(get_current_active_user)
 ):
-    # First, verify the current user owns this website
+    # This correctly verifies that the logged-in user owns the website
     await get_website_and_check_ownership(website_id, current_user, db)
     
-    # Fetch all orders for this website, newest first
     result = await db.execute(
         select(WebsiteOrder)
         .where(WebsiteOrder.website_id == website_id)
