@@ -1687,6 +1687,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       }
 
       case "BUTTON": {
+        const inter = selectedItem.properties?.interactivity || {};
+        const action: "none" | "link" | "purchase" = inter.action || "none";
+        const productId = inter.product_id || "";
+        const linkHref = inter.href || "";
         editorBody = (
           <div className="space-y-4">
             <div>
@@ -1700,27 +1704,85 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
               />
             </div>
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Link URL
-              </label>
-              <select
-                value={selectedItem.properties.action_value || ""}
-                onChange={(e) =>
-                  handlePropertyChange("action_value", e.target.value)
-                }
-                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
-              >
-                <option value="" disabled>
-                  -- Select Page --
-                </option>
-                {websiteData?.pages.map((page: Page) => (
-                  <option key={page.page_id} value={page.slug}>
-                    {page.title}
-                  </option>
-                ))}
-              </select>
+
+            {/* ✅ START: NEW INTERACTIVITY SECTION */}
+            <hr />
+            <h4 className="text-md font-medium text-gray-800 pt-2">
+              Interactivity
+            </h4>
+            <div className="space-y-3">
+              <div>
+                <label className="block text-sm font-medium">Action</label>
+                <select
+                  className="border rounded p-2 w-full mt-1"
+                  value={action}
+                  onChange={(e) => {
+                    const newAction = e.target.value as
+                      | "none"
+                      | "link"
+                      | "purchase";
+                    handlePropertyChange("interactivity", {
+                      action: newAction,
+                    });
+                  }}
+                >
+                  <option value="none">No action</option>
+                  <option value="link">Go to page</option>
+                  <option value="purchase">Purchase product</option>
+                </select>
+              </div>
+
+              {action === "link" && (
+                <div>
+                  <label className="block text-sm font-medium">Page</label>
+                  <select
+                    className="border rounded p-2 w-full mt-1"
+                    value={linkHref}
+                    onChange={(e) =>
+                      handlePropertyChange("interactivity", {
+                        action: "link",
+                        href: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="" disabled>
+                      -- Select a Page --
+                    </option>
+                    {websiteData?.pages.map((page: Page) => (
+                      <option key={page.page_id} value={page.slug}>
+                        {page.title}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {action === "purchase" && (
+                <div className="mt-2">
+                  <label className="block text-sm font-medium mb-1">
+                    Product
+                  </label>
+                  <select
+                    className="border rounded p-2 w-full"
+                    value={productId}
+                    onChange={(e) =>
+                      handlePropertyChange("interactivity", {
+                        action: "purchase",
+                        product_id: e.target.value,
+                      })
+                    }
+                  >
+                    <option value="">Select a product…</option>
+                    {products.map((p) => (
+                      <option key={p.product_id} value={p.product_id}>
+                        {p.name}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
             </div>
+            {/* ✅ END: NEW INTERACTIVITY SECTION */}
 
             <hr />
             <h4 className="text-md font-medium text-gray-800 pt-2">Styling</h4>
