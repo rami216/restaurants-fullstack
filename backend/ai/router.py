@@ -494,349 +494,6 @@ async def generate_ai_element(
 #endregion gpt5
   #region refining element
 
-# class RefineRequest(BaseModel):
-#     prompt: str
-#     full_template: str         # may contain <style>…</style>, HTML, <script>…</script>
-#     unique_class_name: str
-
-
-# REFINE_SYSTEM_PROMPT = """
-# You are a combined HTML, CSS, and JavaScript editor.
-# You will receive:
-#   • A **user prompt** describing exactly what they want (structure, style, or behavior).
-#   • The **full existing template**, which may include:
-#     - A `<style>` block
-#     - The HTML markup
-#     - `<script>` tags with JavaScript interactivity
-
-# Your job is to return a single, complete updated snippet that:
-# 1. Implements everything the user asked (e.g. “hide all answers by default and make each question expandable”).
-# 2. Preserves unrelated parts of the original (don’t break other buttons, don’t drop other scripts).
-# 3. Modifies or adds **both** CSS and JS as needed.
-# 4. Returns the full `<style>…</style>`, the updated HTML, and any `<script>…</script>`.
-
-# **Return ONLY the updated snippet**, no Markdown fences or explanations.
-# """.strip()
-
-
-# @router.post("/refine-element")
-# async def refine_element(body: RefineRequest):
-#     try:
-#         user_content = (
-#             f"PROMPT: \"{body.prompt}\"\n\n"
-#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
-#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
-#         )
-#         resp = openai.chat.completions.create(
-#             model="gpt-4o",
-#             messages=[
-#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
-#                 {"role": "user",    "content": user_content},
-#             ],
-#             temperature=0.25
-#         )
-#         raw = resp.choices[0].message.content.strip()
-#         clean = re.sub(r"^```[^\n]*\n", "", raw)    
-#         clean = re.sub(r"\n```$", "", clean)    
-#     except (OpenAIError, json.JSONDecodeError) as e:
-#         raise HTTPException(500, f"Refine-element failed: {e}")
-
-#     return {"template": clean}
-# second approach 
-# class RefineRequest(BaseModel):
-#     prompt: str
-#     full_template: str
-#     unique_class_name: str
-
-# class RefineResponse(BaseModel):
-#     template: str
-#     script: Optional[str]
-
-# REFINE_SYSTEM_PROMPT = """
-# You are a combined HTML, CSS, and JavaScript editor.
-# You will receive:
-#   • A user prompt describing exactly what they want.
-#   • The full existing template, which may include:
-#     - A <style> block
-#     - HTML markup
-#     - <script> tags
-#   • A unique class name for scoping.
-
-# Return ONLY the updated snippet—any <style>…</style>, HTML, and <script>…</script>.
-# """.strip()
-
-# @router.post("/refine-element", response_model=RefineResponse)
-# async def refine_element(body: RefineRequest):
-#     try:
-#         # assemble the user prompt
-#         user_content = (
-#             f"PROMPT: \"{body.prompt}\"\n\n"
-#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
-#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
-#         )
-
-#         # call OpenAI
-#         resp = openai.chat.completions.create(
-#             model="gpt-4o",
-#             messages=[
-#                 {"role": "system", "content": REFINE_SYSTEM_PROMPT},
-#                 {"role": "user",   "content": user_content},
-#             ],
-#             temperature=0.2,
-#         )
-#         raw = resp.choices[0].message.content
-
-#         # 1) strip any ```html fences
-#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
-#         cleaned = re.sub(r"\n?```$", "", cleaned)
-
-#         # 2) extract <script> blocks
-#         script_re   = r"<script[\s\S]*?</script>"
-#         scripts     = re.findall(script_re, cleaned)
-#         template_only = re.sub(script_re, "", cleaned).strip()
-#         script_only   = "\n".join(scripts) if scripts else None
-
-#     except (OpenAIError, re.error) as e:
-#         raise HTTPException(500, f"Refine-element failed: {e}")
-
-#     return RefineResponse(template=template_only, script=script_only)
-
-# third approach
-# class RefineRequest(BaseModel):
-#     prompt: str
-#     full_template: str
-#     unique_class_name: str
-#     properties: Dict[str, Any] = Field(default_factory=dict)
-#     editableProps: List[Dict[str, Any]] = Field(default_factory=list)
-
-# class RefineResponse(BaseModel):
-#     template: str          # HTML + <style> only
-#     script: Optional[str]  # JS only
-#     properties: Dict[str, Any]
-#     editableProps: List[Dict[str, Any]]
-
-# REFINE_SYSTEM_PROMPT = """
-# You are a combined HTML, CSS, and JavaScript editor.
-# You will receive:
-#   • A user prompt describing exactly what they want.
-#   • The full existing template (HTML + <style> + possibly <script> tags).
-#   • A unique class name for scoping.
-
-# Return ONLY the updated snippet—any <style>…</style>, HTML—and return any
-# <script>…</script> blocks separately. Do not wrap your answer in Markdown.
-# """.strip()
-
-# @router.post("/refine-element", response_model=RefineResponse)
-# async def refine_element(body: RefineRequest):
-#     try:
-#         # 1) Build the Chat prompt
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
-#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
-#         )
-
-#         # 2) Call the LLM
-#         resp = openai.chat.completions.create(
-#             model="gpt-4o-mini",  # or "gpt-4o"
-#             messages=[
-#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
-#                 {"role": "user",    "content": user_content},
-#             ],
-#             temperature=0.2,
-#         )
-#         raw = resp.choices[0].message.content
-
-#         # 3) Strip any triple-backtick fences
-#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
-#         cleaned = re.sub(r"\n?```$", "", cleaned)
-
-#         # 4) Pull out script content and remove the tags from the template
-#         # Regex to find the full script blocks
-#         full_script_re = r"<script[\s\S]*?</script>"
-        
-#         # Regex to capture only the content *inside* the script tags
-#         script_content_re = r"<script.*?>([\s\S]*?)</script>"
-
-#         # Find and join only the JS content from the capturing group
-#         script_contents = re.findall(script_content_re, cleaned)
-#         script_only = "\n".join(c.strip() for c in script_contents).strip() or None
-
-#         # Remove the full script blocks to create the template
-#         template_only = re.sub(full_script_re, "", cleaned).strip()
-
-#     except (OpenAIError, re.error) as e:
-#         raise HTTPException(500, f"Refine-element failed: {e}")
-
-#     # 5) Echo back properties/editableProps unchanged
-#     return RefineResponse(
-#         template=template_only,
-#         script=script_only,
-#         properties=body.properties,
-#         editableProps=body.editableProps,
-#     )
-
-# forth approach
-
-# class RefineRequest(BaseModel):
-#     prompt: str
-#     full_template: str
-#     unique_class_name: str
-#     properties: Dict[str, Any] = Field(default_factory=dict)
-#     editableProps: List[Dict[str, Any]] = Field(default_factory=list)
-
-# class RefineResponse(BaseModel):
-#     template: str          # HTML + <style> only
-#     script: Optional[str]  # JS only
-#     properties: Dict[str, Any]
-#     editableProps: List[Dict[str, Any]]
-
-# REFINE_SYSTEM_PROMPT = """
-# You are a combined HTML, CSS, and JavaScript editor.
-# You will receive:
-#   • A user prompt describing exactly what they want.
-#   • The full existing template (HTML + <style> + possibly <script> tags).
-#   • A unique class name for scoping.
-
-# Return ONLY the updated snippet—any <style>…</style>, HTML—and return any
-# <script>…</script> blocks separately. Do not wrap your answer in Markdown.
-# """.strip()
-
-# @router.post("/refine-element", response_model=RefineResponse)
-# async def refine_element(body: RefineRequest):
-#     try:
-#         # 1) Build the Chat prompt
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
-#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
-#         )
-
-#         # 2) Call the LLM
-#         resp = openai.chat.completions.create(
-#             model="gpt-4o-mini",  # or "gpt-4o"
-#             messages=[
-#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
-#                 {"role": "user",    "content": user_content},
-#             ],
-#             temperature=0.2,
-#         )
-#         raw = resp.choices[0].message.content
-
-#         # 3) Strip any triple-backtick fences
-#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
-#         cleaned = re.sub(r"\n?```$", "", cleaned)
-
-#         # 4) Pull out script content and remove tags from the template
-#         # Regex to find the full script blocks for removal
-#         full_script_re = r"<script[\s\S]*?</script>"
-        
-#         # Regex to capture only the content *inside* the script tags
-#         script_content_re = r"<script.*?>([\s\S]*?)</script>"
-
-#         # Find and join only the JS content from the capturing group
-#         script_contents = re.findall(script_content_re, cleaned)
-#         script_only = "\n".join(c.strip() for c in script_contents).strip() or None
-
-#         # Remove the full script blocks to create the template
-#         template_only = re.sub(full_script_re, "", cleaned).strip()
-
-#     except (OpenAIError, re.error) as e:
-#         raise HTTPException(500, f"Refine-element failed: {e}")
-
-#     # 5) Echo back properties/editableProps unchanged
-#     return RefineResponse(
-#         template=template_only,
-#         script=script_only,
-#         properties=body.properties,
-#         editableProps=body.editableProps,
-#     )
-
-# fifth approach
-# class RefineRequest(BaseModel):
-#     prompt: str
-#     full_template: str
-#     unique_class_name: str
-#     properties: Dict[str, Any] = Field(default_factory=dict)
-#     editableProps: List[Dict[str, Any]] = Field(default_factory=list)
-
-# class RefineResponse(BaseModel):
-#     template: str          # HTML + <style> only
-#     script: Optional[str]  # JS only
-#     properties: Dict[str, Any]
-#     editableProps: List[Dict[str, Any]]
-
-
-# REFINE_SYSTEM_PROMPT = """
-# You are an expert HTML, CSS, and JavaScript editor. Your task is to modify an existing HTML snippet based on a user's request.
-
-# Return ONLY the updated snippet. The HTML, <style>, and <script> should all be in a single block.
-
-# **CRITICAL RULES:**
-
-# 1.  **HTML Restructuring for Animations**: To animate individual letters or words, you **MUST** first restructure the HTML by wrapping each character in its own `<span>` tag.
-#     * **Example:** `<h3>Hello</h3>` MUST become `<h3><span class="char">H</span><span class="char">e</span><span class="char">l</span><span class="char">l</span><span class="char">o</span></h3>`.
-
-# 2.  **Write Corresponding CSS**: You **MUST** write the necessary CSS, including `@keyframes` and staggered `animation-delay`, to animate the new `<span>` elements.
-
-# 3.  **Keep Everything In Sync**: The HTML structure, CSS animations, and any necessary JavaScript **MUST** work together perfectly.
-
-# 4.  **Preserve Existing Mustache Tokens**: Do not remove `{{...}}` tokens from the template if the user is only asking to change a color or font size that is already a variable.
-
-# 5.  **Editing Text Inside a Variable (NEW RULE)**: If a user asks to add formatting to text that is currently a `{{variable}}` (e.g., making a word bold), you **MUST** replace the variable with the new, static rich text. This "bakes" the text into the template.
-#     * **Example Template Contains:** `<h2>{{pageTitle}}</h2>`
-#     * **User Asks:** "make the word Title bold in 'My Title'"
-#     * **Your Response Should Contain:** `<h2>My <b>Title</b></h2>` (The `{{pageTitle}}` token is replaced).
-
-# You will receive a user prompt, the existing template, and a unique class name for scoping your CSS rules.
-# """.strip()
-
-# @router.post("/refine-element", response_model=RefineResponse)
-# async def refine_element(body: RefineRequest):
-#     try:
-#         # 1) Build the Chat prompt
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f"EXISTING_TEMPLATE:\n```html\n{body.full_template}\n```\n\n"
-#             f"UNIQUE_CLASS_NAME: `{body.unique_class_name}`"
-#         )
-
-#         # 2) Call the LLM
-#         resp = openai.chat.completions.create(
-#             model="gpt-4o",  # Using a more powerful model is recommended for complex tasks
-#             messages=[
-#                 {"role": "system",  "content": REFINE_SYSTEM_PROMPT},
-#                 {"role": "user",    "content": user_content},
-#             ],
-#             temperature=0.2,
-#         )
-#         raw = resp.choices[0].message.content
-
-#         # 3) Strip any triple-backtick fences
-#         cleaned = re.sub(r"^```(?:html)?\s*\n?", "", raw)
-#         cleaned = re.sub(r"\n?```$", "", cleaned)
-
-#         # 4) Pull out script content and remove tags from the template
-#         full_script_re = r"<script[\s\S]*?</script>"
-#         script_content_re = r"<script.*?>([\s\S]*?)</script>"
-
-#         script_contents = re.findall(script_content_re, cleaned)
-#         script_only = "\n".join(c.strip() for c in script_contents).strip() or None
-
-#         template_only = re.sub(full_script_re, "", cleaned).strip()
-
-#     except (OpenAIError, re.error) as e:
-#         raise HTTPException(500, f"Refine-element failed: {e}")
-
-#     # 5) Echo back properties/editableProps unchanged
-#     return RefineResponse(
-#         template=template_only,
-#         script=script_only,
-#         properties=body.properties,
-#         editableProps=body.editableProps,
-#     )
-
-#sixth approach
 
 class RefineStateRequest(BaseModel):
     prompt: str
@@ -1072,64 +729,6 @@ The value of "sections" must be an array of section objects.
 
 **OUTPUT:** A valid JSON object containing only the "sections" array.
 """.strip()
-# PAGE_SYSTEM_PROMPT = """
-# You are an expert website designer. Your task is to generate the JSON for a complete webpage layout based on a user's prompt. You will be given a list of standard components and a special, powerful "AI" component.
-
-# You MUST return a JSON object with a single top-level key: "sections".
-
-# ---
-# ### **CORE JSON STRUCTURE RULES**
-
-# 1.  **Structure:** The JSON must follow the `sections` -> `subsections` -> `elements` hierarchy.
-# 2.  **Styling:** All CSS styles MUST be in a nested `"style"` object, and all CSS property keys MUST be in camelCase format (e.g., `backgroundColor`).
-# 3.  **Component Choice:** You should **prefer to use the standard element types** listed below for simple content like text, buttons, and images. They are reliable. Use the powerful `"AI"` element type **only when you need to create a custom, interactive, or visually unique component** that is not on the standard list.
-
-# ---
-# ### **AVAILABLE ELEMENT TYPES**
-
-# You **MUST ONLY** use the `element_type` values from the list below. Do not invent new types.
-
-# **--- STANDARD COMPONENTS (USE THESE FIRST) ---**
-
-# **1. `TEXT` Element:** For headings and paragraphs.
-#    - **JSON Structure:** `{ "element_type": "TEXT", "properties": { "content": "HTML content here", "style": { ... } } }`
-
-# **2. `BUTTON` Element:** For clickable calls to action.
-#    - **JSON Structure:** `{ "element_type": "BUTTON", "properties": { "text": "Button Text", "style": { ... } } }`
-
-# **3. `IMAGE` Element:** For displaying images. Use professional placeholders from Pexels or Unsplash.
-#    - **JSON Structure:** `{ "element_type": "IMAGE", "properties": { "src": "image_url", "alt": "description", "style": { ... } } }`
-
-# **4. `LIST` Element:** For simple bulleted lists.
-#    - **JSON Structure:** `{ "element_type": "LIST", "properties": { "items": ["Item 1", "Item 2"] } }`
-
-# **--- ADVANCED COMPONENT (USE FOR CUSTOM/COOL STUFF) ---**
-
-# **5. `AI` Element:** Use this for anything custom, interactive, or visually complex (e.g., testimonial sliders, animated counters, unique cards with hover effects).
-#    - When you use `element_type: "AI"`, you must generate a complete `aiPayload` object.
-#    - **CRITICAL RULE:** The `aiPayload` MUST make all text and styles fully editable using `{{mustache}}` tokens, `properties`, and `editableProps`.
-#    - **JSON Structure & Example:**
-#      ```json
-#      {
-#        "element_type": "AI",
-#        "properties": {},
-#        "aiPayload": {
-#          "aiTemplate": "<div class=\\"custom-card\\"><style>.custom-card { background: {{bgColor}}; padding: 1rem; }</style><h3>{{title}}</h3></div>",
-#          "script": null,
-#          "properties": { "title": "My Custom Card", "bgColor": "#EEE" },
-#          "editableProps": [
-#            { "key": "title", "label": "Title", "type": "text" },
-#            { "key": "bgColor", "label": "Background", "type": "color" }
-#          ]
-#        }
-#      }
-#      ```
-
-# ---
-# **INPUT:** A user's prompt for a webpage.
-
-# **OUTPUT:** A valid JSON object containing the "sections" array, using a smart mix of the valid standard and AI elements defined above.
-# """.strip()
 
 
 
@@ -1187,3 +786,111 @@ async def generate_ai_page(
 
 
 #endregion pagegenerator  
+
+#region generatesection
+SECTION_GENERATOR_SYSTEM_PROMPT = """
+You are an expert layout and style designer creating a complete website section.
+Your task is to generate a single valid JSON object based on a user's prompt.
+
+Your output MUST be a valid JSON object containing TWO top-level keys: "properties" and "subsections".
+
+**CRITICAL RULES FOR YOUR OUTPUT:**
+1.  **`properties` Key:** This object is for the PARENT SECTION.
+    - It MUST contain layout properties like `display`, `flexDirection`, `justifyContent`, `alignItems`, and `gap`.
+    - It MUST also contain a nested `style` object for all visual styles like `backgroundColor`, `padding`, and `backgroundImage`.
+2.  **`subsections` Key:** This must be an array of one or more subsection objects, each with their own `properties` and `elements`.
+3.  **Content:** Fill all elements with relevant placeholder content that matches the user's prompt. Make the content interesting and visually appealing.
+4.  **Styling:** Use modern and clean design principles. All CSS properties in `style` objects must be in camelCase (e.g., `backgroundColor`).
+
+**Example Prompt:** "A dark hero section with a centered title and a call-to-action button."
+**Example Output:**
+{
+  "properties": {
+    "display": "flex",
+    "flexDirection": "column",
+    "alignItems": "center",
+    "justifyContent": "center",
+    "gap": "1.5rem",
+    "style": {
+      "backgroundColor": "#111827",
+      "padding": "6rem 2rem",
+      "borderRadius": "16px"
+    }
+  },
+  "subsections": [
+    {
+      "properties": { "style": { "textAlign": "center", "maxWidth": "600px" } },
+      "elements": [
+        {
+          "element_type": "TEXT",
+          "properties": { "content": "<h1>Innovative Solutions for a Digital World</h1><p>We build amazing web experiences.</p>", "style": { "fontSize": "3rem", "color": "#FFFFFF" } },
+          "aiPayload": null
+        },
+        {
+          "element_type": "BUTTON",
+          "properties": { "text": "Get Started", "style": { "backgroundColor": "#3b82f6", "color": "#FFFFFF", "padding": "1rem 2rem", "borderRadius": "8px", "fontSize": "1rem", "marginTop": "2rem" } },
+          "aiPayload": null
+        }
+      ]
+    }
+  ]
+}
+""".strip()
+
+class GenerateSectionRequest(BaseModel):
+    prompt: str
+    website_id: UUID | str
+
+@router.post("/generate-ai-section")
+async def generate_ai_section(
+    body: GenerateSectionRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    try:
+        if not body.website_id:
+            raise HTTPException(status_code=400, detail="website_id is required")
+
+        resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": SECTION_GENERATOR_SYSTEM_PROMPT},
+                {"role": "user",   "content": body.prompt},
+            ],
+            temperature=0.6,
+            max_tokens=4096,
+        )
+
+        payload = json.loads(resp.choices[0].message.content)
+        if "properties" not in payload or "subsections" not in payload:
+            raise HTTPException(status_code=500, detail="AI returned an invalid structure.")
+            
+        # --- AI Usage Tracking Logic ---
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="generate_section",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"prompt_len": len(body.prompt or "")}
+        )
+        # --- End of Usage Tracking ---
+
+        return payload
+
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"AI section generation failed: {e}")
+
+
+#endregion generatesection

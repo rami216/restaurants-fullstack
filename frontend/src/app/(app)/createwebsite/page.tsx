@@ -529,11 +529,14 @@ const CreateWebsitePage = () => {
   };
   //endregion copy
   const handleGenerateSection = async (prompt: string, sectionId: string) => {
-    if (!activePage) return;
+    if (!activePage || !websiteData) return; // Also check for websiteData
 
     try {
       // The AI response now contains { properties: {...}, subsections: [...] }
-      const { data } = await api.post("/ai/generate-ai-section", { prompt });
+      const { data } = await api.post("/ai/generate-ai-section", {
+        prompt,
+        website_id: websiteData.website_id,
+      });
 
       // The AI returns subsections. We need to assign new unique IDs to them and their elements.
       const newSubsections: Subsection[] = data.subsections.map((sub: any) => ({
