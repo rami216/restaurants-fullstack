@@ -282,6 +282,11 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
 
   const [aiPrompt, setAiPrompt] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
+
+  // ✅ NEW: State for the ADVANCED Data App generator
+  const [aiDataAppPrompt, setAiDataAppPrompt] = useState("");
+  const [isGeneratingDataApp, setIsGeneratingDataApp] = useState(false);
+
   // const handleGenerateAi = async () => {
   //   if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
   //   setLoadingAi(true);
@@ -374,6 +379,47 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       alert("AI generation failed");
     } finally {
       setLoadingAi(false);
+    }
+  };
+
+  const handleGenerateDataApp = async () => {
+    if (!aiDataAppPrompt.trim() || !selectedSubsectionId || !activePage) return;
+    setIsGeneratingDataApp(true);
+    try {
+      const { data: aiPayload } = await api.post(
+        "/ai/generate-data-app-element",
+        {
+          prompt: aiDataAppPrompt,
+          website_id: websiteId,
+        }
+      );
+
+      const newElement: ElementType = {
+        element_id: `data_app_${Date.now()}`,
+        element_type: "AI",
+        position: 999,
+        properties: aiPayload.properties,
+        aiPayload: aiPayload,
+      };
+
+      const updatedPage = {
+        ...activePage,
+        sections: activePage.sections.map((sec) => ({
+          ...sec,
+          subsections: sec.subsections.map((sub) =>
+            sub.subsection_id === selectedSubsectionId
+              ? { ...sub, elements: [...sub.elements, newElement] }
+              : sub
+          ),
+        })),
+      };
+      onUpdate(updatedPage);
+      setAiDataAppPrompt("");
+    } catch (err) {
+      console.error("AI Data App generation failed:", err);
+      alert("AI Data App generation failed. Please check the console.");
+    } finally {
+      setIsGeneratingDataApp(false);
     }
   };
 
@@ -504,7 +550,35 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             )}
           </div>
           <hr className="my-4 border-gray-300" />
+          {/* --- ✅ NEW: AI GENERATOR (Data Apps) --- */}
+          <div className="mb-4">
+            <label className="text-sm font-semibold text-gray-700">
+              Generate a Data Table
+            </label>
+            <textarea
+              rows={3}
+              className="w-full border rounded p-2 mt-1 text-sm"
+              placeholder="e.g., a table for team members with name, title, and photo..."
+              value={aiDataAppPrompt}
+              onChange={(e) => setAiDataAppPrompt(e.target.value)}
+            />
+            <button
+              onClick={handleGenerateDataApp}
+              disabled={
+                isGeneratingDataApp || !aiDataAppPrompt.trim() || !isSubscribed
+              }
+              className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {isGeneratingDataApp ? "Generating..." : "Generate Data App"}
+            </button>
+            {!isSubscribed && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                Please subscribe to use AI features.
+              </p>
+            )}
+          </div>
 
+          <hr className="my-4 border-gray-300" />
           <p
             className={`text-sm mb-4 ${
               selectedSubsectionId ? "text-green-600" : "text-red-600"

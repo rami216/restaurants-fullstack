@@ -283,3 +283,25 @@ class WebsiteOrder(Base):
     
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())
+
+#region customdata
+class CustomDataSchema(Base):
+    __tablename__ = "custom_data_schemas"
+    schema_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), nullable=False)
+    name = Column(String, nullable=False)
+    # This JSON field will store the array of fields: [{"id": "name", "label": "Name", "type": "text"}, ...]
+    fields = Column(JSON, nullable=False, default=[])
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+class CustomDataRow(Base):
+    __tablename__ = "custom_data_rows"
+    row_id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    schema_id = Column(UUID(as_uuid=True), ForeignKey("custom_data_schemas.schema_id", ondelete="CASCADE"), nullable=False)
+    # This JSON field will store the submitted data: {"name": "John Doe", "email": "..."}
+    data = Column(JSON, nullable=False)
+    sitemember_id = Column(UUID(as_uuid=True), nullable=True) 
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+
+
+#endregion customdata

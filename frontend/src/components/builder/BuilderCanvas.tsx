@@ -20,6 +20,7 @@ import { getMotionConfig } from "./animate";
 import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
+import saasApi from "@/lib/saasApi";
 // Standard Accordion
 const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
   items,
@@ -74,65 +75,62 @@ const normalizeBackground = (bg?: string) => {
 };
 
 interface AiElementRunnerProps {
-  element: BuilderElement;
+  element: ElementType;
+  isPreview: boolean;
 }
 
-const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
+const AiElementRunner: React.FC<AiElementRunnerProps> = ({
+  element,
+  isPreview,
+}) => {
   const { aiPayload } = element;
   const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
+    const processedProps = { ...(aiPayload.properties || {}) };
 
-    if (!aiPayload || !ref.current) return;
-
-    const processed = { ...(aiPayload.properties || {}) };
     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
-      if (processed[key]) processed[key] = resolveImageSrc(processed[key]);
+      if (processedProps[key])
+        processedProps[key] = resolveImageSrc(processedProps[key]);
     }
 
     let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
       ""
     );
-
-    // 2) (Your Handlebars conversion logic is good, keep it)
     const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
     loopMatches.forEach(([fullMatch, arrKey]) => {
       htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
       htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
     });
     htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+    ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
-    // 3) Render the template with the PROCESSED properties
-    let rendered: string;
-    try {
-      rendered = Mustache.render(htmlOnly, processed);
-    } catch {
-      rendered = htmlOnly;
-    }
-    ref.current.innerHTML = rendered;
-
-    // 4) Execute JS if provided
     if (aiPayload.script) {
       const jsBody = aiPayload.script
         .replace(/^\s*<script[^>]*>/, "")
         .replace(/<\/script>\s*$/, "");
       try {
-        const fn = new Function("container", jsBody);
-        fn(ref.current);
+        const schemaId = element.properties?.schema_id;
+        const apiClient = isPreview ? saasApi : api;
+        const fn = new Function(
+          "container",
+          "api",
+          "schemaId",
+          "properties",
+          jsBody
+        );
+        fn(ref.current, apiClient, schemaId, element.properties);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
     }
-  }, [
-    aiPayload?.aiTemplate,
-    aiPayload?.script,
-    JSON.stringify(aiPayload?.properties),
-  ]);
+  }, [aiPayload, element.properties, isPreview]);
 
   return <div ref={ref} />;
 };
+
 interface BuilderCanvasProps {
   page: Page | undefined;
   navbar: Navbar | null;
@@ -234,7 +232,11 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
     if (effectiveType === "CATEGORY") {
       if (element.element_type === "AI") {
-        return wrap(<AiElementRunner element={element} />);
+        <AiElementRunner
+          key={element.aiPayload?.id || element.element_id}
+          element={element}
+          isPreview={isPreview} // ✅ Pass down the isPreview prop
+        />;
       } else {
         const hasHover = Object.keys(style).some((k) =>
           k.startsWith("--hover-")
@@ -270,7 +272,13 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       }
     } else if (effectiveType === "MENU_ITEM") {
       if (element.element_type === "AI") {
-        return wrap(<AiElementRunner element={element} />);
+        return wrap(
+          <AiElementRunner
+            key={element.aiPayload?.id || element.element_id}
+            element={element}
+            isPreview={isPreview} // ✅ Pass down the isPreview prop
+          />
+        );
       } else {
         return wrap(
           <div className="border rounded-lg p-4 bg-white shadow" style={style}>
@@ -300,7 +308,13 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       }
     } else if (effectiveType === "FORM") {
       if (element.element_type === "AI") {
-        return wrap(<AiElementRunner element={element} />);
+        return wrap(
+          <AiElementRunner
+            key={element.aiPayload?.id || element.element_id}
+            element={element}
+            isPreview={isPreview} // ✅ Pass down the isPreview prop
+          />
+        );
       } else {
         const buttonStyle = props.submitButton?.style || {};
         const labelStyle = props.labelStyle || {};
@@ -342,6 +356,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         <AiElementRunner
           key={element.aiPayload?.id || element.element_id}
           element={element}
+          isPreview={isPreview} // ✅ Pass down the isPreview prop
         />
       );
     }

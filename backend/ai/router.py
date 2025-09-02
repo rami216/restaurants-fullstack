@@ -12,6 +12,8 @@ from auth.auth_handler import get_current_active_user
 from sqlalchemy.ext.asyncio import AsyncSession
 from database import get_db
 from models import User
+from models import CustomDataSchema
+from website_builder.custom_data_router import SchemaField
 
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -894,3 +896,131 @@ async def generate_ai_section(
 
 
 #endregion generatesection
+
+#region data_app_element
+
+# ✅ 1. ADD THIS NEW, ADVANCED PROMPT FOR THE DATA APP GENERATOR
+DATA_APP_GENERATOR_PROMPT = """
+You are an expert full-stack developer. Your task is to generate a complete JSON object for a self-contained, interactive data table element based on a user's prompt.
+
+Your output MUST be a valid JSON object with FIVE keys: "name", "schema", "displayTemplate", "formTemplate", and "script".
+
+**CRITICAL RULES FOR YOUR OUTPUT:**
+
+1.  **`name`**: A short, human-readable name for this data table (e.g., "Team Members").
+
+2.  **`schema`**: An array of objects defining the database fields. Each object must have `id`, `label`, and `type` (`text`, `textarea`, `image`, `number`).
+
+3.  **`displayTemplate`**: A Mustache/HTML template for displaying the rows of data. It must include an edit and delete button with a `data-row-id="{{row_id}}"` attribute.
+
+4.  **`formTemplate`**: A Mustache/HTML template for the form used to add or edit a row. The `<input>` elements must have a `name` attribute matching the `id` from your schema.
+
+5.  **`script`**: A complete, raw JavaScript string to make the element interactive.
+    - It will be executed in a function that receives FOUR arguments: `(container, api, schemaId, properties)`.
+    - `container`: The main `<div>` for the element.
+    - `api`: An `axios` instance for making API requests.
+    - `schemaId`: The unique ID for this table's schema.
+    - `properties`: The JSON object of the element's saved properties.
+    - **The script MUST be robust:** It must check if elements exist with `querySelector` before trying to use them (e.g., `if (!displayDiv) return;`).
+    - **The script MUST use function expressions (arrow functions), NOT function declarations.**
+    - The script must handle:
+        - Fetching initial data: `api.get(`/custom-data/rows/${schemaId}`)`.
+        - Rendering the initial data.
+        - Handling form submission to add new rows: `api.post(`/custom-data/rows/${schemaId}`, { data })`.
+        - Deleting rows: `api.delete(`/custom-data/rows/{row_id}`)`.
+        - Updating the display instantly without a page refresh.
+""".strip()
+
+
+
+# ✅ 2. ADD THESE NEW PYDANTIC MODELS
+class GenerateDataAppRequest(BaseModel):
+    prompt: str
+    website_id: UUID
+
+class AIResponseSchema(BaseModel):
+    name: str
+    schema_fields: List[SchemaField] = Field(..., alias="schema")
+    display_template: str = Field(..., alias="displayTemplate")
+    form_template: str = Field(..., alias="formTemplate")
+    script: str
+
+# ✅ 3. ADD THIS NEW API ENDPOINT
+@router.post("/generate-data-app-element")
+async def generate_data_app_element(
+    body: GenerateDataAppRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    try:
+        # Step A: Call OpenAI to get the application "packet"
+        resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
+                {"role": "user", "content": body.prompt},
+            ],
+            temperature=0.4,
+            max_tokens=4096,
+        )
+        
+        ai_json = json.loads(resp.choices[0].message.content)
+        ai_response = AIResponseSchema(**ai_json)
+
+        # Step B: Immediately create the database schema from the AI's response
+        new_schema = CustomDataSchema(
+            website_id=body.website_id,
+            name=ai_response.name,
+            fields=[field.model_dump() for field in ai_response.schema_fields]
+        )
+        db.add(new_schema)
+        await db.commit()
+        await db.refresh(new_schema)
+
+        # Step C: Create the final AI Payload for the frontend
+        # This now includes the real schema_id from our database
+        final_payload = {
+            "aiTemplate": f"""
+                <div class="p-4 border rounded-lg bg-white">
+                    <div class="flex justify-between items-center mb-4">
+                        <h3 class="text-lg font-semibold">{ai_response.name}</h3>
+                        <button class="add-new-btn bg-blue-500 text-white px-3 py-1 rounded text-sm">Add New</button>
+                    </div>
+                    <div class="form-container mb-4" style="display:none;">{ai_response.form_template}</div>
+                    <div class="data-display"></div>
+                    <template id="displayTemplate">{ai_response.display_template}</template>
+                </div>
+            """,
+            "properties": {
+                "schema_id": str(new_schema.schema_id),
+                "schema_name": new_schema.name,
+                "originalType": "DATA_TABLE" # A new type for the renderer
+            },
+            "editableProps": [], # Editable props are handled by the generated form
+            "script": ai_response.script,
+        }
+
+        # Step D: Track AI usage
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="generate_data_app",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"prompt_len": len(body.prompt)}
+        )
+
+        return final_payload
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
+

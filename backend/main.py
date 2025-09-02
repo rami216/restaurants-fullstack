@@ -35,6 +35,7 @@ from website_builder.public_router import router as public_router
 from website_builder.stripe_checkout_router import router as checkout_router
 from webhooks.router import router as webhooks_router # ✅ ADD THIS
 from website_builder.orders_router import router as orders_router # ✅ ADD THIS
+from website_builder.custom_data_router import router as custom_data_router # ✅ ADD THIS
 
 origins_env = os.getenv("FRONTEND_ORIGIN", "")
 ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
@@ -55,6 +56,7 @@ PUBLIC_RULES = [
     ("/menu-item-extras/", {"GET", "OPTIONS"}),
     ("/menu-item-options/", {"GET", "OPTIONS"}),
     ("/uploads/", {"GET", "OPTIONS"}),
+    ("/custom-data/rows/", {"POST", "OPTIONS"})
 ]
 
 def _is_has_purchase(path: str) -> bool:
@@ -147,7 +149,7 @@ app.include_router(public_router)
 app.include_router(checkout_router)
 app.include_router(webhooks_router) # ✅ ADD THIS
 app.include_router(orders_router) # ✅ ADD THIS
-
+app.include_router(custom_data_router) # ✅ ADD THIS
 
 # ---- Health check
 @app.get("/health")

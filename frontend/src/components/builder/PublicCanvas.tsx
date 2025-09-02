@@ -1036,77 +1036,62 @@ const MainContent = ({
   );
 };
 interface AiElementRunnerProps {
-  element: BuilderElement;
+  element: ElementType;
+  isPreview: boolean;
 }
-const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
+
+const AiElementRunner: React.FC<AiElementRunnerProps> = ({
+  element,
+  isPreview,
+}) => {
   const { aiPayload } = element;
-  const containerRef = useRef<HTMLDivElement>(null);
+  const ref = useRef<HTMLDivElement>(null);
 
   useLayoutEffect(() => {
-    if (!aiPayload || !containerRef.current) return;
+    if (!aiPayload || !ref.current) return;
+    const processedProps = { ...(aiPayload.properties || {}) };
 
-    // --- THIS IS THE FIX ---
-    // Get the backend URL and create a safe copy of the properties
-    const BACKEND_URL = api.defaults.baseURL || "";
-    const processedProps = { ...aiPayload.properties };
-    const imageUrlKeys = ["src", "poster", "image_url", "backgroundImage"];
-
-    // Loop through the properties and fix any relative image paths
-    for (const key of imageUrlKeys) {
-      if (processedProps[key]) {
+    for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
+      if (processedProps[key])
         processedProps[key] = resolveImageSrc(processedProps[key]);
-      }
     }
 
-    // --- END OF FIX ---
-
-    // 1) Strip out any <script>…</script> from the HTML/CSS
-    let htmlOnly = aiPayload.aiTemplate.replace(
+    let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
       ""
     );
-
-    // 2) (Your Handlebars conversion logic is good, keep it)
     const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
     loopMatches.forEach(([fullMatch, arrKey]) => {
       htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
       htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
     });
     htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+    ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
-    // 3) Render the template with the PROCESSED properties
-    let rendered: string;
-    try {
-      rendered = Mustache.render(htmlOnly, processedProps); // Use the fixed props
-    } catch (mErr) {
-      console.error("Mustache.render failed, falling back to raw HTML:", mErr);
-      rendered = htmlOnly;
-    }
-    containerRef.current.innerHTML = rendered;
-    containerRef.current
-      .querySelectorAll('a[href="#"], a[href=""], a:not([href])')
-      .forEach((a) => a.addEventListener("click", (e) => e.preventDefault()));
-
-    // 4) Execute JS if provided
     if (aiPayload.script) {
       const jsBody = aiPayload.script
         .replace(/^\s*<script[^>]*>/, "")
         .replace(/<\/script>\s*$/, "");
       try {
-        const fn = new Function("container", jsBody);
-        fn(containerRef.current);
+        const schemaId = element.properties?.schema_id;
+        const apiClient = isPreview ? saasApi : api;
+        const fn = new Function(
+          "container",
+          "api",
+          "schemaId",
+          "properties",
+          jsBody
+        );
+        fn(ref.current, apiClient, schemaId, element.properties);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
     }
-  }, [
-    aiPayload?.aiTemplate,
-    aiPayload?.script,
-    JSON.stringify(aiPayload?.properties),
-  ]);
+  }, [aiPayload, element.properties, isPreview]);
 
-  return <div ref={containerRef} />;
+  return <div ref={ref} />;
 };
+
 const MenuItemDetails = ({
   item,
   itemExtras,
@@ -1965,7 +1950,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           onClick={() => setActiveCategory(props.id)} // Your specific onClick logic
         >
           {element.element_type === "AI" ? (
-            <AiElementRunner element={element} />
+            <AiElementRunner
+              element={element}
+              isPreview={true} // <-- This is the crucial part
+            />
           ) : (
             <div className="rounded-lg overflow-hidden shadow">
               {props.image_url && (
@@ -2039,7 +2027,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           >
             {element.element_type === "AI" ? (
               <div className="relative">
-                <AiElementRunner element={element} />
+                <AiElementRunner
+                  element={element}
+                  isPreview={true} // <-- This is the crucial part
+                />
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
                     type="button"
@@ -2141,8 +2132,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           className="relative w-full h-full cursor-pointer"
         >
           <AiElementRunner
-            key={element.aiPayload?.id || element.element_id}
             element={element}
+            isPreview={true} // <-- This is the crucial part
           />
 
           {showWA && (
