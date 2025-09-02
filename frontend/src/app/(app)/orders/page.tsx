@@ -7,8 +7,6 @@ import { ChevronDown, Package } from "lucide-react";
 import { useParams } from "next/navigation"; // ✅ Import useParams
 
 export default function OrdersPage() {
-  const params = useParams<{ website_id: string }>(); // ✅ Get params from the URL
-  const websiteId = params.website_id;
   const [activeTab, setActiveTab] = useState("orders");
   const [orders, setOrders] = useState<WebsiteOrder[]>([]);
   const [loading, setLoading] = useState(true);
@@ -16,14 +14,11 @@ export default function OrdersPage() {
   const [expandedOrderId, setExpandedOrderId] = useState<string | null>(null);
 
   useEffect(() => {
-    // Don't fetch until we have the websiteId from the URL
-    if (!websiteId) return;
-
     const fetchOrders = async () => {
       setLoading(true);
       try {
-        // ✅ FIX: Call the correct endpoint with the websiteId
-        const response = await api.get(`/orders/website/${websiteId}`);
+        // ✅ FIX: Call the new endpoint that gets all orders for the logged-in user
+        const response = await api.get(`/orders/my-orders`);
         setOrders(response.data);
       } catch (err) {
         setError("Failed to load orders.");
@@ -33,7 +28,7 @@ export default function OrdersPage() {
       }
     };
     fetchOrders();
-  }, [websiteId]); // ✅ Re-run the effect if the websiteId changes
+  }, []); // ✅ This now runs once on page load
   const toggleOrder = (orderId: string) => {
     setExpandedOrderId(expandedOrderId === orderId ? null : orderId);
   };
