@@ -900,44 +900,101 @@ async def generate_ai_section(
 #region data_app_element
 
 # ✅ 1. ADD THIS NEW, ADVANCED PROMPT FOR THE DATA APP GENERATOR
-DATA_APP_GENERATOR_PROMPT = """
-You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element.
+# DATA_APP_GENERATOR_PROMPT = """
+# You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element.
 
-Your output MUST be a valid JSON object with SEVEN keys: "name", "schema", "aiTemplate", "properties", "editableProps", "script", and "displayTemplate".
+# Your output MUST be a valid JSON object with SEVEN keys: "name", "schema", "aiTemplate", "properties", "editableProps", "script", and "displayTemplate".
+
+# ---
+# ### **CRITICAL RULES FOR YOUR OUTPUT**
+
+# 1.  **`name`**: A short, human-readable name for this data table (e.g., "Team Members").
+
+# 2.  **`schema`**: An array of objects defining the database fields. Each object must have `id`, `label`, and `type`.
+
+# 3.  **`aiTemplate`**: The main HTML structure. It MUST include a `<style>` tag, a container for the data rows, a container for the form, and an "Add New" button. It must also contain a `<template id="displayTemplate">` tag which will hold the `displayTemplate`.
+
+# 4.  **`displayTemplate`**: A Mustache/HTML template for ONE data row. It MUST be a `<tr>` element and include edit/delete buttons with a `data-row-id="{{row_id}}"`.
+
+# 5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+#     -   You MUST make the component's styling fully editable (colors, fonts, borders, spacing).
+#     -   All style values in the `<style>` tag and all user-facing text in the `aiTemplate` and `formTemplate` MUST use mustache tokens (e.g., `{{buttonTextColor}}`, `{{formTitle}}`).
+#     -   For EVERY token, you MUST add a corresponding entry in both the `properties` object (with a default value) and the `editableProps` array (with a key, label, and type).
+#     -   **CRITICAL SCOPING RULE:** You will be given a `unique_class_name`. **Every single CSS rule** in the `<style>` tag **MUST** be prefixed with this class name to prevent styles from leaking.
+
+# 6.  **`script`**: A complete, raw JavaScript string to make the element interactive.
+#     -   It is executed in a function that receives `(container, api, schemaId)`.
+#     -   It MUST handle fetching, rendering, adding, updating, AND deleting data.
+#     -   API Calls to Use:
+#         -   Fetch all rows: `api.get(`/custom-data/rows/${schemaId}`)`
+#         -   Add: `api.post(`/custom-data/rows/${schemaId}`, { data })`
+#         -   Update: `api.put(`/custom-data/rows/{ROW_ID}`, { data })`
+#         -   Delete: `api.delete(`/custom-data/rows/{ROW_ID}`)`
+#     -   It MUST update the display instantly without a page refresh.
+#     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
+# ---
+# **INPUT:** A user's prompt and a `unique_class_name`.
+# **OUTPUT:** A single, valid JSON object that follows all rules.
+# """.strip()
+
+DATA_APP_GENERATOR_PROMPT = """
+You are an expert full-stack developer creating a single, self-contained, interactive CRUD (Create, Read, Update, Delete) data table element.
+
+Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
 
 ---
 ### **CRITICAL RULES FOR YOUR OUTPUT**
 
 1.  **`name`**: A short, human-readable name for this data table (e.g., "Team Members").
 
-2.  **`schema`**: An array of objects defining the database fields. Each object must have `id`, `label`, and `type`.
+2.  **`schema`**: An array of objects defining the database fields. Each must have `id` (lowercase, no spaces), `label`, and `type`.
 
-3.  **`aiTemplate`**: The main HTML structure. It MUST include a `<style>` tag, a container for the data rows, a container for the form, and an "Add New" button. It must also contain a `<template id="displayTemplate">` tag which will hold the `displayTemplate`.
+3.  **`aiTemplate`**: The main HTML structure. It MUST include a `<style>` tag, a container for rows with class `data-display`, a form container with class `form-container`, an "Add New" button with class `add-new-btn`, and a `<template id="displayTemplate">`.
 
-4.  **`displayTemplate`**: A Mustache/HTML template for ONE data row. It MUST be a `<tr>` element and include edit/delete buttons with a `data-row-id="{{row_id}}"`.
-
-5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   You MUST make the component's styling fully editable (colors, fonts, borders, spacing).
-    -   All style values in the `<style>` tag and all user-facing text in the `aiTemplate` and `formTemplate` MUST use mustache tokens (e.g., `{{buttonTextColor}}`, `{{formTitle}}`).
+    -   All style values in the `<style>` tag and all user-facing text in the `aiTemplate` (like the main title and button text) MUST use mustache tokens (e.g., `{{buttonTextColor}}`, `{{formTitle}}`).
     -   For EVERY token, you MUST add a corresponding entry in both the `properties` object (with a default value) and the `editableProps` array (with a key, label, and type).
-    -   **CRITICAL SCOPING RULE:** You will be given a `unique_class_name`. **Every single CSS rule** in the `<style>` tag **MUST** be prefixed with this class name to prevent styles from leaking.
+    -   **CRITICAL SCOPING RULE:** You will be given a `unique_class_name`. **Every single CSS rule** in the `<style>` tag **MUST** be prefixed with this class name.
 
-6.  **`script`**: A complete, raw JavaScript string to make the element interactive.
+5.  **`script`**: A complete, raw JavaScript string to make the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId)`.
     -   It MUST handle fetching, rendering, adding, updating, AND deleting data.
     -   API Calls to Use:
-        -   Fetch all rows: `api.get(`/custom-data/rows/${schemaId}`)`
-        -   Add: `api.post(`/custom-data/rows/${schemaId}`, { data })`
-        -   Update: `api.put(`/custom-data/rows/{ROW_ID}`, { data })`
-        -   Delete: `api.delete(`/custom-data/rows/{ROW_ID}`)`
-    -   It MUST update the display instantly without a page refresh.
+        -   **Fetch All Rows:** `api.get(`/custom-data/public/rows/${schemaId}`)`
+        -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })`
+        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`
+        -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}?sitemember_id={MEMBER_ID}`)`
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
-**OUTPUT:** A single, valid JSON object that follows all rules.
-""".strip()
+**OUTPUT:** A single, valid JSON object.
 
+**Example Prompt:** "A contact list table with fields for name and email."
+**Example `unique_class_name`:** `.ai-contact-list-12345`
+**Example Output:**
+{
+  "name": "Contact List",
+  "schema": [
+    { "id": "name", "label": "Name", "type": "text" },
+    { "id": "email", "label": "Email", "type": "email" }
+  ],
+  "aiTemplate": "<style>...CSS rules prefixed with .ai-contact-list-12345...</style><div>...HTML structure...<template id='displayTemplate'>...</template></div>",
+  "properties": { "title": "Contact List", "addButtonText": "Add Contact", "formTitle": "Contact Details", "borderColor": "#e5e7eb", "buttonBgColor": "#3b82f6" },
+  "editableProps": [
+    { "key": "title", "label": "Title", "type": "text" },
+    { "key": "addButtonText", "label": "Add Button Text", "type": "text" },
+    { "key": "formTitle", "label": "Form Title", "type": "text" },
+    { "key": "borderColor", "label": "Border Color", "type": "color" },
+    { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
+  ],
+  "script": "const tbody = container.querySelector('.data-tbody'); const formContainer = container.querySelector('.form-container'); const form = container.querySelector('.data-form'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let editingRowId = null; const renderRow = (row) => { const tr = document.createElement('tr'); tr.innerHTML = Mustache.render(displayTemplate, row); tr.dataset.rowId = row.row_id; tbody.appendChild(tr); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/public/rows/${schemaId}`); tbody.innerHTML = ''; response.data.forEach(renderRow); } catch (err) { console.error('Failed to fetch data:', err); } }; addButton.addEventListener('click', () => { editingRowId = null; form.reset(); form.querySelector('button[type=submit]').textContent = 'Save'; formContainer.style.display = 'block'; }); form.addEventListener('submit', async (e) => { e.preventDefault(); const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); form.reset(); formContainer.style.display = 'none'; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }); tbody.addEventListener('click', async (e) => { const editButton = e.target.closest('.edit-btn'); const deleteButton = e.target.closest('.delete-btn'); if (editButton) { const rowId = editButton.dataset.rowId; const row = [...tbody.querySelectorAll('tr')].find(tr => tr.dataset.rowId === rowId); if (!row) return; // Logic to find data and populate form } if (deleteButton) { const rowId = deleteButton.dataset.rowId; const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); if (confirm('Are you sure?')) { try { await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id}`); await fetchAndRenderRows(); } catch (err) { console.error('Failed to delete row:', err); } } } }); fetchAndRenderRows();"
+}
+
+
+""".strip()
 
 # ✅ 2. ADD THESE NEW PYDANTIC MODELS
 class GenerateDataAppRequest(BaseModel):
