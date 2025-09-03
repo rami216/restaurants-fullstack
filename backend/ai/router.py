@@ -926,7 +926,7 @@ Your output MUST be a valid JSON object with SEVEN keys: "name", "schema", "aiTe
     -   It is executed in a function that receives `(container, api, schemaId)`.
     -   It MUST handle fetching, rendering, adding, updating, AND deleting data.
     -   API Calls to Use:
-        -   Fetch: `api.get(`/custom-data/rows/${schemaId}`)`
+        -   Fetch all rows: `api.get(`/custom-data/rows/${schemaId}`)`
         -   Add: `api.post(`/custom-data/rows/${schemaId}`, { data })`
         -   Update: `api.put(`/custom-data/rows/{ROW_ID}`, { data })`
         -   Delete: `api.delete(`/custom-data/rows/{ROW_ID}`)`
