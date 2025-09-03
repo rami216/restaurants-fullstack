@@ -108,7 +108,16 @@ async def get_rows_for_schema(
         .where(CustomDataRow.schema_id == schema_id)
         .order_by(CustomDataRow.created_at.desc())
     )
-    return result.scalars().all()
+    rows = result.scalars().all()
+    return [
+        {
+            "row_id": row.row_id,
+            "schema_id": row.schema_id,
+            "data": row.data,
+            "created_at": row.created_at
+        }
+        for row in rows
+    ]
     
 # =======================================================
 # === SITE MEMBER Endpoints (PUBLIC with internal checks) ===
