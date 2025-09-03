@@ -114,7 +114,7 @@ async def get_rows_for_schema(
             "row_id": row.row_id,
             "schema_id": row.schema_id,
             "data": row.data,
-            "created_at": row.created_at
+            "created_at": row.created_at.isoformat()
         }
         for row in rows
     ]
