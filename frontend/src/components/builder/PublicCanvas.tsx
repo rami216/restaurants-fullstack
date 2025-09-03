@@ -1952,7 +1952,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           {element.element_type === "AI" ? (
             <AiElementRunner
               element={element}
-              isPreview={false} // <-- This is the crucial part
+              isPreview={true} // <-- This is the crucial part
             />
           ) : (
             <div className="rounded-lg overflow-hidden shadow">
@@ -2029,7 +2029,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               <div className="relative">
                 <AiElementRunner
                   element={element}
-                  isPreview={false} // <-- This is the crucial part
+                  isPreview={true} // <-- This is the crucial part
                 />
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
@@ -2133,7 +2133,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         >
           <AiElementRunner
             element={element}
-            isPreview={false} // <-- This is the crucial part
+            isPreview={true} // <-- This is the crucial part
           />
 
           {showWA && (

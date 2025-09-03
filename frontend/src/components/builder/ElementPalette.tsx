@@ -386,11 +386,15 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
     if (!aiDataAppPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setIsGeneratingDataApp(true);
     try {
+      // Generate a unique class name for CSS scoping
+      const unique_class_name = `ai-data-app-${Date.now()}`;
+
       const { data: aiPayload } = await api.post(
         "/ai/generate-data-app-element",
         {
           prompt: aiDataAppPrompt,
           website_id: websiteId,
+          unique_class_name: unique_class_name, // Send the class name to the backend
         }
       );
 
@@ -402,6 +406,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         aiPayload: aiPayload,
       };
 
+      // Add the new element to the selected subsection
       const updatedPage = {
         ...activePage,
         sections: activePage.sections.map((sec) => ({

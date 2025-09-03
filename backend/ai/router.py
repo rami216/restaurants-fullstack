@@ -901,51 +901,58 @@ async def generate_ai_section(
 
 # ✅ 1. ADD THIS NEW, ADVANCED PROMPT FOR THE DATA APP GENERATOR
 DATA_APP_GENERATOR_PROMPT = """
-You are an expert full-stack developer. Your task is to generate a complete JSON object for a self-contained, interactive data table element based on a user's prompt.
+You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element.
 
-Your output MUST be a valid JSON object with FIVE keys: "name", "schema", "displayTemplate", "formTemplate", and "script".
+Your output MUST be a valid JSON object with SEVEN keys: "name", "schema", "aiTemplate", "properties", "editableProps", "script", and "displayTemplate".
 
-**CRITICAL RULES FOR YOUR OUTPUT:**
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
 
 1.  **`name`**: A short, human-readable name for this data table (e.g., "Team Members").
 
-2.  **`schema`**: An array of objects defining the database fields. Each object must have `id`, `label`, and `type` (`text`, `textarea`, `image`, `number`).
+2.  **`schema`**: An array of objects defining the database fields. Each object must have `id`, `label`, and `type`.
 
-3.  **`displayTemplate`**: A Mustache/HTML template for displaying the rows of data. It must include an edit and delete button with a `data-row-id="{{row_id}}"` attribute.
+3.  **`aiTemplate`**: The main HTML structure. It MUST include a `<style>` tag, a container for the data rows, a container for the form, and an "Add New" button. It must also contain a `<template id="displayTemplate">` tag which will hold the `displayTemplate`.
 
-4.  **`formTemplate`**: A Mustache/HTML template for the form used to add or edit a row. The `<input>` elements must have a `name` attribute matching the `id` from your schema.
+4.  **`displayTemplate`**: A Mustache/HTML template for ONE data row. It MUST be a `<tr>` element and include edit/delete buttons with a `data-row-id="{{row_id}}"`.
 
-5.  **`script`**: A complete, raw JavaScript string to make the element interactive.
-    - It will be executed in a function that receives FOUR arguments: `(container, api, schemaId, properties)`.
-    - `container`: The main `<div>` for the element.
-    - `api`: An `axios` instance for making API requests.
-    - `schemaId`: The unique ID for this table's schema.
-    - `properties`: The JSON object of the element's saved properties.
-    - **The script MUST be robust:** It must check if elements exist with `querySelector` before trying to use them (e.g., `if (!displayDiv) return;`).
-    - **The script MUST use function expressions (arrow functions), NOT function declarations.**
-    - The script must handle:
-        - Fetching initial data: `api.get(`/custom-data/rows/${schemaId}`)`.
-        - Rendering the initial data.
-        - Handling form submission to add new rows: `api.post(`/custom-data/rows/${schemaId}`, { data })`.
-        - Deleting rows: `api.delete(`/custom-data/rows/{row_id}`)`.
-        - Updating the display instantly without a page refresh.
+5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+    -   You MUST make the component's styling fully editable (colors, fonts, borders, spacing).
+    -   All style values in the `<style>` tag and all user-facing text in the `aiTemplate` and `formTemplate` MUST use mustache tokens (e.g., `{{buttonTextColor}}`, `{{formTitle}}`).
+    -   For EVERY token, you MUST add a corresponding entry in both the `properties` object (with a default value) and the `editableProps` array (with a key, label, and type).
+    -   **CRITICAL SCOPING RULE:** You will be given a `unique_class_name`. **Every single CSS rule** in the `<style>` tag **MUST** be prefixed with this class name to prevent styles from leaking.
+
+6.  **`script`**: A complete, raw JavaScript string to make the element interactive.
+    -   It is executed in a function that receives `(container, api, schemaId)`.
+    -   It MUST handle fetching, rendering, adding, updating, AND deleting data.
+    -   API Calls to Use:
+        -   Fetch: `api.get(`/custom-data/rows/${schemaId}`)`
+        -   Add: `api.post(`/custom-data/rows/${schemaId}`, { data })`
+        -   Update: `api.put(`/custom-data/rows/{ROW_ID}`, { data })`
+        -   Delete: `api.delete(`/custom-data/rows/{ROW_ID}`)`
+    -   It MUST update the display instantly without a page refresh.
+    -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A single, valid JSON object that follows all rules.
 """.strip()
-
 
 
 # ✅ 2. ADD THESE NEW PYDANTIC MODELS
 class GenerateDataAppRequest(BaseModel):
     prompt: str
     website_id: UUID
+    unique_class_name: str
 
 class AIResponseSchema(BaseModel):
     name: str
     schema_fields: List[SchemaField] = Field(..., alias="schema")
-    display_template: str = Field(..., alias="displayTemplate")
-    form_template: str = Field(..., alias="formTemplate")
+    ai_template: str = Field(..., alias="aiTemplate")
+    properties: Dict[str, Any]
+    editable_props: List[Dict[str, Any]] = Field(..., alias="editableProps")
     script: str
 
-# ✅ 3. ADD THIS NEW API ENDPOINT
 @router.post("/generate-data-app-element")
 async def generate_data_app_element(
     body: GenerateDataAppRequest,
@@ -953,22 +960,31 @@ async def generate_data_app_element(
     user: User = Depends(get_current_active_user)
 ):
     try:
-        # Step A: Call OpenAI to get the application "packet"
+        user_content = (
+            f'PROMPT: "{body.prompt}"\n\n'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+        )
+
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
                 {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
-                {"role": "user", "content": body.prompt},
+                {"role": "user", "content": user_content},
             ],
-            temperature=0.4,
+            temperature=0.5,
             max_tokens=4096,
         )
         
-        ai_json = json.loads(resp.choices[0].message.content)
-        ai_response = AIResponseSchema(**ai_json)
+        payload = json.loads(resp.choices[0].message.content)
 
-        # Step B: Immediately create the database schema from the AI's response
+        if isinstance(payload.get("script"), str):
+            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+            if m:
+                payload["script"] = m.group(1).strip()
+        
+        ai_response = AIResponseSchema(**payload)
+
         new_schema = CustomDataSchema(
             website_id=body.website_id,
             name=ai_response.name,
@@ -977,31 +993,18 @@ async def generate_data_app_element(
         db.add(new_schema)
         await db.commit()
         await db.refresh(new_schema)
+        
+        final_properties = ai_response.properties.copy()
+        final_properties["schema_id"] = str(new_schema.schema_id)
+        final_properties["originalType"] = "DATA_TABLE"
 
-        # Step C: Create the final AI Payload for the frontend
-        # This now includes the real schema_id from our database
         final_payload = {
-            "aiTemplate": f"""
-                <div class="p-4 border rounded-lg bg-white">
-                    <div class="flex justify-between items-center mb-4">
-                        <h3 class="text-lg font-semibold">{ai_response.name}</h3>
-                        <button class="add-new-btn bg-blue-500 text-white px-3 py-1 rounded text-sm">Add New</button>
-                    </div>
-                    <div class="form-container mb-4" style="display:none;">{ai_response.form_template}</div>
-                    <div class="data-display"></div>
-                    <template id="displayTemplate">{ai_response.display_template}</template>
-                </div>
-            """,
-            "properties": {
-                "schema_id": str(new_schema.schema_id),
-                "schema_name": new_schema.name,
-                "originalType": "DATA_TABLE" # A new type for the renderer
-            },
-            "editableProps": [], # Editable props are handled by the generated form
+            "aiTemplate": f"<div class=\"{body.unique_class_name}\">{ai_response.ai_template}</div>",
+            "properties": final_properties,
+            "editableProps": ai_response.editable_props,
             "script": ai_response.script,
         }
-
-        # Step D: Track AI usage
+        
         usage = getattr(resp, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
@@ -1023,4 +1026,6 @@ async def generate_data_app_element(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
+
+
 
