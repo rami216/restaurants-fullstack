@@ -56,7 +56,8 @@ PUBLIC_RULES = [
     ("/menu-item-extras/", {"GET", "OPTIONS"}),
     ("/menu-item-options/", {"GET", "OPTIONS"}),
     ("/uploads/", {"GET", "OPTIONS"}),
-    ("/custom-data/rows/", {"POST", "OPTIONS"})
+    ("/custom-data/rows/", {"POST", "GET", "OPTIONS"})
+    
 ]
 
 def _is_has_purchase(path: str) -> bool:
