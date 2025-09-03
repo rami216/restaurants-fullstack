@@ -950,15 +950,23 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 
 2.  **`schema`**: An array of objects defining the database fields. Each must have `id` (lowercase, no spaces), `label`, and `type`.
 
-3.  **`aiTemplate`**: The main HTML structure. It MUST include a `<style>` tag, a container for rows with class `data-display`, a form container with class `form-container`, an "Add New" button with class `add-new-btn`, and a `<template id="displayTemplate">`.
+3.  **`aiTemplate`**: The main HTML structure. It MUST include:
+    - A `<style>` tag for all CSS.
+    - A main container for the data with a class of `data-display`. **You should choose the best layout for the data** (e.g., a CSS grid for cards, a flex container for a list, or a table).
+    - A form container with a class of `form-container`.
+    - An "Add New" button with a class of `add-new-btn`.
+    - A `<template id="displayTemplate">` tag.
+    
+4.  **`displayTemplate`**: A Mustache/HTML template for displaying ONE data row. You should choose the best HTML for the job (e.g., a `<div>` for a card, a `<li>` for a list item). It MUST include edit/delete buttons with `data-row-id="{{row_id}}"`.
+    - **CRITICAL DATA ACCESS RULE:** The row data is nested. You **MUST** use `{{data.field_id}}` to access the values (e.g., `{{data.job_title}}`).
 
-4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   You MUST make the component's styling fully editable (colors, fonts, borders, spacing).
     -   All style values in the `<style>` tag and all user-facing text in the `aiTemplate` (like the main title and button text) MUST use mustache tokens (e.g., `{{buttonTextColor}}`, `{{formTitle}}`).
     -   For EVERY token, you MUST add a corresponding entry in both the `properties` object (with a default value) and the `editableProps` array (with a key, label, and type).
     -   **CRITICAL SCOPING RULE:** You will be given a `unique_class_name`. **Every single CSS rule** in the `<style>` tag **MUST** be prefixed with this class name.
 
-5.  **`script`**: A complete, raw JavaScript string to make the element interactive.
+6.  **`script`**: A complete, raw JavaScript string to make the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId)`.
     -   It MUST handle fetching, rendering, adding, updating, AND deleting data.
     -   API Calls to Use:
