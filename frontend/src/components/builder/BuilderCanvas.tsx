@@ -114,14 +114,18 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       try {
         const schemaId = element.properties?.schema_id;
         const apiClient = isPreview ? saasApi : api;
+        // ✅ ADD "Mustache" as the 5th argument
         const fn = new Function(
           "container",
           "api",
           "schemaId",
           "properties",
+          "Mustache",
           jsBody
         );
-        fn(ref.current, apiClient, schemaId, element.properties);
+
+        // ✅ PASS the Mustache library into the script's scope
+        fn(ref.current, apiClient, schemaId, element.properties, Mustache);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
