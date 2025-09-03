@@ -97,13 +97,12 @@ async def get_schemas_for_website(
 async def get_rows_for_schema(
     schema_id: UUID,
     db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    # NO current_user dependency here
 ):
     """
     Gets all the data rows (submissions) for a specific schema.
-    Only the owner of the schema's website can do this.
+    This is public so the live site can display the data.
     """
-    await get_schema_and_check_ownership(schema_id, current_user, db)
     result = await db.execute(
         select(CustomDataRow)
         .where(CustomDataRow.schema_id == schema_id)
