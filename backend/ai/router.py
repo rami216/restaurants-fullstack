@@ -1080,7 +1080,7 @@ async def generate_data_app_element(
             "properties": final_properties,
             "editableProps": ai_response.editable_props,
             # We use the raw script from the AI, which now knows how to find the schema.
-            "script": ai_response.script.replace("Mustache.render(displayTemplate, row)", "Mustache.render(displayTemplate, { ...row, ...row.data })"),
+            "script": ai_response.script,
         }
         
         usage = getattr(resp, "usage", None)
