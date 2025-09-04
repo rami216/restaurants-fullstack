@@ -287,6 +287,9 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   const [aiDataAppPrompt, setAiDataAppPrompt] = useState("");
   const [isGeneratingDataApp, setIsGeneratingDataApp] = useState(false);
 
+  const [aiDataViewPrompt, setAiDataViewPrompt] = useState("");
+  const [isGeneratingDataView, setIsGeneratingDataView] = useState(false);
+
   // const handleGenerateAi = async () => {
   //   if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
   //   setLoadingAi(true);
@@ -425,6 +428,52 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       alert("AI Data App generation failed. Please check the console.");
     } finally {
       setIsGeneratingDataApp(false);
+    }
+  };
+  const handleGenerateDataView = async () => {
+    if (!aiDataViewPrompt.trim() || !selectedSubsectionId || !activePage)
+      return;
+    setIsGeneratingDataView(true);
+    try {
+      const unique_class_name = `ai-data-view-${Date.now()}`;
+
+      const { data: aiPayload } = await api.post(
+        "/ai/generate-view-only-element", // Call the new endpoint
+        {
+          prompt: aiDataViewPrompt, // Use the new state
+          website_id: websiteId,
+          unique_class_name: unique_class_name,
+        }
+      );
+
+      const newElement: ElementType = {
+        element_id: `data_view_${Date.now()}`,
+        element_type: "AI",
+        position: 999,
+        properties: aiPayload.properties,
+        aiPayload: aiPayload,
+      };
+
+      const updatedPage = {
+        ...activePage,
+        sections: activePage.sections.map((sec) => ({
+          ...sec,
+          subsections: sec.subsections.map((sub) =>
+            sub.subsection_id === selectedSubsectionId
+              ? { ...sub, elements: [...sub.elements, newElement] }
+              : sub
+          ),
+        })),
+      };
+      onUpdate(updatedPage);
+      setAiDataViewPrompt(""); // Reset the new state
+    } catch (err: any) {
+      console.error("AI Data View generation failed:", err);
+      const errorMsg =
+        err.response?.data?.detail || "An unexpected error occurred.";
+      alert(`AI Data View generation failed: ${errorMsg}`);
+    } finally {
+      setIsGeneratingDataView(false);
     }
   };
 
@@ -575,6 +624,37 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
               className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
             >
               {isGeneratingDataApp ? "Generating..." : "Generate Data App"}
+            </button>
+            {!isSubscribed && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                Please subscribe to use AI features.
+              </p>
+            )}
+          </div>
+          {/* ✅ **3. ADD NEW UI for the View-Only generator** */}
+          <div className="mb-4">
+            <label className="text-sm font-semibold text-gray-700">
+              Generate a Read-Only View
+            </label>
+            <textarea
+              rows={3}
+              className="w-full border rounded p-2 mt-1 text-sm"
+              placeholder="e.g., 'Show a public list of our team members...'"
+              value={aiDataViewPrompt}
+              onChange={(e) => setAiDataViewPrompt(e.target.value)}
+            />
+            <button
+              onClick={handleGenerateDataView}
+              disabled={
+                isGeneratingDataView ||
+                !aiDataViewPrompt.trim() ||
+                !isSubscribed
+              }
+              className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {isGeneratingDataView
+                ? "Generating..."
+                : "Generate Read-Only View"}
             </button>
             {!isSubscribed && (
               <p className="mt-2 text-sm text-red-600 text-center">

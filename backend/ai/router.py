@@ -6,6 +6,8 @@ from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from typing import Dict, Any, List, Optional
 import re
+
+from sqlalchemy import select
 from config import AI_DEFAULT_MODEL
 from ai.billing import track_ai_usage
 from auth.auth_handler import get_current_active_user
@@ -1107,6 +1109,143 @@ async def generate_data_app_element(
 
 
 
+VIEW_ONLY_GENERATOR_PROMPT = """
+You are an expert front-end developer creating a READ-ONLY component to display data from an existing data source.
+
+Your output MUST be a valid JSON object with FIVE keys: "name_to_find", "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+1.  **`name_to_find`**: The EXACT name of the data schema to find and display, extracted from the user's prompt (e.g., "User Management System").
+
+2.  **`aiTemplate`**: The main HTML structure. It MUST include:
+    -   A `<style>` tag for all CSS.
+    -   A static main title `<h3>` or `<h2>`.
+    -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`).
+    -   A `<template id="displayTemplate">`.
+    -   **DO NOT** include an "Add New" button or a form container.
+
+3.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values. **DO NOT** include edit or delete buttons.
+
+4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+    -   Make the component's styling fully editable.
+    -   All style values and user-facing text (like titles) MUST use mustache tokens.
+    -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
+    -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
+
+5.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+    -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+    -   It must ONLY fetch and render data.
+    -   API Calls to Use:
+        -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
+    -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A single, valid JSON object.
+
+**Example Prompt:** "Show a list of our contacts."
+**Example `unique_class_name`:** `.ai-contact-view-12345`
+**Example Output:**
+{
+  "name_to_find": "Contact List",
+  "aiTemplate": "<style>.ai-contact-view-12345 h3 { color: {{titleColor}}; }</style><h3>{{title}}</h3><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div><span><strong>{{data.name}}</strong> ({{data.email}})</span></div></template>",
+  "properties": { "title": "Our Contacts", "titleColor": "#333333" },
+  "editableProps": [ { "key": "title", "label": "Title", "type": "text" }, { "key": "titleColor", "label": "Title Color", "type": "color" } ],
+  "script": "const dataDisplay = container.querySelector('.data-display'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); dataDisplay.innerHTML = ''; response.data.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); } catch (err) { console.error('Failed to fetch data:', err); } }; fetchAndRenderRows();"
+}
+""".strip()
+
+# --- NEW PYDANTIC MODELS AND ENDPOINT FOR VIEW-ONLY ---
+class GenerateViewOnlyRequest(BaseModel):
+    prompt: str
+    website_id: UUID
+    unique_class_name: str
+
+class AIViewOnlyResponseSchema(BaseModel):
+    name_to_find: str
+    ai_template: str = Field(..., alias="aiTemplate")
+    properties: Dict[str, Any]
+    editable_props: List[Dict[str, Any]] = Field(..., alias="editableProps")
+    script: str
+
+@router.post("/generate-view-only-element")
+async def generate_view_only_element(
+    body: GenerateViewOnlyRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user)
+):
+    try:
+        user_content = (
+            f'PROMPT: "{body.prompt}"\n\n'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+        )
+
+        resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": VIEW_ONLY_GENERATOR_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.5,
+            max_tokens=4096,
+        )
+        
+        payload = json.loads(resp.choices[0].message.content)
+
+        if isinstance(payload.get("script"), str):
+            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+            if m:
+                payload["script"] = m.group(1).strip()
+        
+        ai_response = AIViewOnlyResponseSchema(**payload)
+
+        # Find the existing schema in the database by name
+        result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
+            .where(CustomDataSchema.name == ai_response.name_to_find)
+        )
+        existing_schema = result.scalars().first()
+
+        if not existing_schema:
+            raise HTTPException(status_code=404, detail=f"Data source '{ai_response.name_to_find}' not found.")
+
+        final_properties = ai_response.properties
+        final_properties["schema_id"] = str(existing_schema.schema_id)
+        final_properties["originalType"] = "DATA_VIEW"
+
+        final_payload = {
+            "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
+            "properties": final_properties,
+            "editableProps": ai_response.editable_props,
+            "script": ai_response.script,
+        }
+        
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="generate_data_app_view_only",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"prompt_len": len(body.prompt)}
+        )
+        
+        
+        return final_payload
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"AI View-Only generation failed: {e}")
 
 
 
