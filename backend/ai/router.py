@@ -958,10 +958,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
     -   A `<template id="displayTemplate">`.
 
-4.  `displayTemplate`: Create a Mustache/HTML template for ONE data row.
-    -   The API provides a `row` object like `{ "row_id": "...", "data": { "job_title": "Engineer" } }`.
-    -   Therefore, to display values, you **MUST** use the nested `{{data.id}}` syntax, where `id` matches the field `id` from your schema. Example: `<h3>{{data.job_title}}</h3>`.
-    -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
+4.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values (e.g., `<h3>{{data.job_title}}</h3>`). Include edit/delete buttons with `data-row-id="{{row_id}}"`.
+
 
 5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   Make the component's styling fully editable.
@@ -1082,7 +1080,7 @@ async def generate_data_app_element(
             "properties": final_properties,
             "editableProps": ai_response.editable_props,
             # We use the raw script from the AI, which now knows how to find the schema.
-            "script": ai_response.script,
+            "script": ai_response.script.replace("Mustache.render(displayTemplate, row)", "Mustache.render(displayTemplate, { ...row, ...row.data })"),
         }
         
         usage = getattr(resp, "usage", None)
