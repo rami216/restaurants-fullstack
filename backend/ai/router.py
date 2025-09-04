@@ -940,174 +940,317 @@ async def generate_ai_section(
 # **OUTPUT:** A single, valid JSON object that follows all rules.
 # """.strip()
 
-DATA_APP_GENERATOR_PROMPT = """
-You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element.
+# DATA_APP_GENERATOR_PROMPT = """
+# You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element.
 
-Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
+# Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
 
----
-### **CRITICAL RULES FOR YOUR OUTPUT**
+# ---
+# ### **CRITICAL RULES FOR YOUR OUTPUT**
 
-1.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
+# 1.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
 
-2.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key.
+# 2.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key.
 
-3.  **`aiTemplate`**: The main HTML structure. It MUST include:
-    -   A `<style>` tag for all CSS.
-    -   A static main title `<h3>` or `<h2>`.
-    -   A static "Add New" button with a class of `add-new-btn`.
-    -   An **EMPTY** container for the form (e.g., `<div class="form-container"></div>`). The script will build the form here.
-    -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
-    -   A `<template id="displayTemplate">`.
+# 3.  **`aiTemplate`**: The main HTML structure. It MUST include:
+#     -   A `<style>` tag for all CSS.
+#     -   A static main title `<h3>` or `<h2>`.
+#     -   A static "Add New" button with a class of `add-new-btn`.
+#     -   An **EMPTY** container for the form (e.g., `<div class="form-container"></div>`). The script will build the form here.
+#     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
+#     -   A `<template id="displayTemplate">`.
 
-4.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values (e.g., `<h3>{{data.job_title}}</h3>`). Include edit/delete buttons with `data-row-id="{{row_id}}"`.
-
-
-5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
-    -   Make the component's styling fully editable.
-    -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
-    -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
-    -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
-
-6.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
-    -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
-    -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
-    -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container` by looping through the `properties.schema_fields` array.
-    -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
-    -   API Calls to Use:
-        -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
-        -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`(where `sitemember_id` can be null)
-        -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
-    -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
-
----
-**INPUT:** A user's prompt and a `unique_class_name`.
-**OUTPUT:** A single, valid JSON object.
-
-**Example Prompt:** "A contact list table with fields for name and email."
-**Example `unique_class_name`:** `.ai-contact-list-12345`
-**Example Output:**
-{
-  "name": "Contact List",
-  "schema": [
-    { "id": "name", "label": "Name", "type": "text" },
-    { "id": "email", "label": "Email", "type": "email" }
-  ],
-  "aiTemplate": "<style>.ai-contact-list-12345 h3 { color: {{titleColor}}; } .ai-contact-list-12345 .data-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid {{borderColor}}; } .ai-contact-list-12345 .form-container { padding: 16px; border: 1px solid {{borderColor}}; border-radius: 8px; margin-top: 16px; display: none; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; color: #fff; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 16px; }</style><h3>{{title}}</h3><button class=\\"add-new-btn\\">{{addButtonText}}</button><div class=\\"form-container\\"></div><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div class=\\"data-row\\"><span><strong>{{data.name}}</strong> ({{data.email}})</span><div><button class=\\"edit-btn\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
-  "properties": {
-    "title": "Contact List",
-    "addButtonText": "Add Contact",
-    "titleColor": "#111827",
-    "borderColor": "#e5e7eb",
-    "buttonBgColor": "#3b82f6"
-  },
-  "editableProps": [
-    { "key": "title", "label": "Title", "type": "text" },
-    { "key": "addButtonText", "label": "Add Button Text", "type": "text" },
-    { "key": "titleColor", "label": "Title Color", "type": "color" },
-    { "key": "borderColor", "label": "Border Color", "type": "color" },
-    { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
-  ],
-"script": "const formContainer = container.querySelector('.form-container'); const dataDisplay = container.querySelector('.data-display'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let allRows = []; let editingRowId = null; const schema = properties.schema_fields; const generateForm = (initialData = {}) => { formContainer.style.display = 'block'; formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'data-form space-y-3'; schema.forEach(field => { const label = document.createElement('label'); label.className = 'block text-sm font-medium'; label.textContent = field.label; const input = field.type === 'textarea' ? document.createElement('textarea') : document.createElement('input'); input.name = field.id; input.type = field.type; input.required = true; input.className = 'w-full border rounded p-2 mt-1'; input.value = initialData[field.id] || ''; form.appendChild(label); form.appendChild(input); }); const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.textContent = editingRowId ? 'Update Contact' : 'Save Contact'; submitBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded mt-2'; form.appendChild(submitBtn); form.addEventListener('submit', handleFormSubmit); formContainer.appendChild(form); }; const handleFormSubmit = async (e) => { e.preventDefault(); const form = e.target; const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); formContainer.innerHTML = ''; formContainer.style.display = 'none'; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }; const renderRows = () => { dataDisplay.innerHTML = ''; allRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); allRows = response.data; renderRows(); } catch (err) { console.error('Failed to fetch data:', err); } }; dataDisplay.addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const rowToEdit = allRows.find(r => r.row_id === editingRowId); if (rowToEdit) { generateForm(rowToEdit.data); } } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { const rowId = deleteBtn.dataset.rowId; if (confirm('Are you sure you want to delete this contact?')) { const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id}`).then(fetchAndRenderRows); } } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); fetchAndRenderRows();"
-}
-""".strip()
+# 4.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values (e.g., `<h3>{{data.job_title}}</h3>`). Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
 
-# --- THE CORRECTED FUNCTION AND MODELS ---
-class GenerateDataAppRequest(BaseModel):
-    prompt: str
-    website_id: UUID
-    unique_class_name: str
+# 5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+#     -   Make the component's styling fully editable.
+#     -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
+#     -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
+#     -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
 
-class AIResponseSchema(BaseModel):
-    name: str
-    schema_fields: List[SchemaField] = Field(..., alias="schema")
-    ai_template: str = Field(..., alias="aiTemplate")
-    properties: Dict[str, Any]
-    editable_props: List[Dict[str, Any]] = Field(..., alias="editableProps")
-    script: str
+# 6.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+#     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+#     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
+#     -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container` by looping through the `properties.schema_fields` array.
+#     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
+#     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
+#     -   API Calls to Use:
+#         -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
+#         -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
+#         -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`(where `sitemember_id` can be null)
+#         -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
+#     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
-@router.post("/generate-data-app-element")
-async def generate_data_app_element(
-    body: GenerateDataAppRequest,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_user)
-):
-    try:
-        user_content = (
-            f'PROMPT: "{body.prompt}"\n\n'
-            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
-        )
+# ---
+# **INPUT:** A user's prompt and a `unique_class_name`.
+# **OUTPUT:** A single, valid JSON object.
 
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.5,
-            max_tokens=4096,
-        )
+# **Example Prompt:** "A contact list table with fields for name and email."
+# **Example `unique_class_name`:** `.ai-contact-list-12345`
+# **Example Output:**
+# {
+#   "name": "Contact List",
+#   "schema": [
+#     { "id": "name", "label": "Name", "type": "text" },
+#     { "id": "email", "label": "Email", "type": "email" }
+#   ],
+#   "aiTemplate": "<style>.ai-contact-list-12345 h3 { color: {{titleColor}}; } .ai-contact-list-12345 .data-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid {{borderColor}}; } .ai-contact-list-12345 .form-container { padding: 16px; border: 1px solid {{borderColor}}; border-radius: 8px; margin-top: 16px; display: none; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; color: #fff; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 16px; }</style><h3>{{title}}</h3><button class=\\"add-new-btn\\">{{addButtonText}}</button><div class=\\"form-container\\"></div><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div class=\\"data-row\\"><span><strong>{{data.name}}</strong> ({{data.email}})</span><div><button class=\\"edit-btn\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
+#   "properties": {
+#     "title": "Contact List",
+#     "addButtonText": "Add Contact",
+#     "titleColor": "#111827",
+#     "borderColor": "#e5e7eb",
+#     "buttonBgColor": "#3b82f6"
+#   },
+#   "editableProps": [
+#     { "key": "title", "label": "Title", "type": "text" },
+#     { "key": "addButtonText", "label": "Add Button Text", "type": "text" },
+#     { "key": "titleColor", "label": "Title Color", "type": "color" },
+#     { "key": "borderColor", "label": "Border Color", "type": "color" },
+#     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
+#   ],
+# "script": "const formContainer = container.querySelector('.form-container'); const dataDisplay = container.querySelector('.data-display'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let allRows = []; let editingRowId = null; const schema = properties.schema_fields; const generateForm = (initialData = {}) => { formContainer.style.display = 'block'; formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'data-form space-y-3'; schema.forEach(field => { const label = document.createElement('label'); label.className = 'block text-sm font-medium'; label.textContent = field.label; const input = field.type === 'textarea' ? document.createElement('textarea') : document.createElement('input'); input.name = field.id; input.type = field.type; input.required = true; input.className = 'w-full border rounded p-2 mt-1'; input.value = initialData[field.id] || ''; form.appendChild(label); form.appendChild(input); }); const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.textContent = editingRowId ? 'Update Contact' : 'Save Contact'; submitBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded mt-2'; form.appendChild(submitBtn); form.addEventListener('submit', handleFormSubmit); formContainer.appendChild(form); }; const handleFormSubmit = async (e) => { e.preventDefault(); const form = e.target; const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); formContainer.innerHTML = ''; formContainer.style.display = 'none'; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }; const renderRows = () => { dataDisplay.innerHTML = ''; allRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); allRows = response.data; renderRows(); } catch (err) { console.error('Failed to fetch data:', err); } }; dataDisplay.addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const rowToEdit = allRows.find(r => r.row_id === editingRowId); if (rowToEdit) { generateForm(rowToEdit.data); } } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { const rowId = deleteBtn.dataset.rowId; if (confirm('Are you sure you want to delete this contact?')) { const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id}`).then(fetchAndRenderRows); } } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); fetchAndRenderRows();"
+# }
+# """.strip()
+
+
+# # --- THE CORRECTED FUNCTION AND MODELS ---
+# class GenerateDataAppRequest(BaseModel):
+#     prompt: str
+#     website_id: UUID
+#     unique_class_name: str
+
+# class AIResponseSchema(BaseModel):
+#     name: str
+#     schema_fields: List[SchemaField] = Field(..., alias="schema")
+#     ai_template: str = Field(..., alias="aiTemplate")
+#     properties: Dict[str, Any]
+#     editable_props: List[Dict[str, Any]] = Field(..., alias="editableProps")
+#     script: str
+
+# @router.post("/generate-data-app-element")
+# async def generate_data_app_element(
+#     body: GenerateDataAppRequest,
+#     db: AsyncSession = Depends(get_db),
+#     user: User = Depends(get_current_active_user)
+# ):
+#     try:
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+#         )
+
+#         resp = openai.chat.completions.create(
+#             model=AI_DEFAULT_MODEL,
+#             response_format={"type": "json_object"},
+#             messages=[
+#                 {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
+#                 {"role": "user", "content": user_content},
+#             ],
+#             temperature=0.5,
+#             max_tokens=4096,
+#         )
         
-        payload = json.loads(resp.choices[0].message.content)
+#         payload = json.loads(resp.choices[0].message.content)
 
-        if isinstance(payload.get("script"), str):
-            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if m:
-                payload["script"] = m.group(1).strip()
+#         if isinstance(payload.get("script"), str):
+#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if m:
+#                 payload["script"] = m.group(1).strip()
         
-        ai_response = AIResponseSchema(**payload)
+#         ai_response = AIResponseSchema(**payload)
 
-        new_schema = CustomDataSchema(
-            website_id=body.website_id,
-            name=ai_response.name,
-            fields=[field.model_dump() for field in ai_response.schema_fields]
-        )
-        db.add(new_schema)
-        await db.commit()
-        await db.refresh(new_schema)
+#         new_schema = CustomDataSchema(
+#             website_id=body.website_id,
+#             name=ai_response.name,
+#             fields=[field.model_dump() for field in ai_response.schema_fields]
+#         )
+#         db.add(new_schema)
+#         await db.commit()
+#         await db.refresh(new_schema)
         
-        final_properties = ai_response.properties.copy()
-        final_properties["schema_id"] = str(new_schema.schema_id)
-        final_properties["originalType"] = "DATA_TABLE"
+#         final_properties = ai_response.properties.copy()
+#         final_properties["schema_id"] = str(new_schema.schema_id)
+#         final_properties["originalType"] = "DATA_TABLE"
 
-        # ✅ **THE FIX: ADD THE SCHEMA TO THE PROPERTIES OBJECT**
-        final_properties["schema_fields"] = [field.model_dump() for field in ai_response.schema_fields]
+#         # ✅ **THE FIX: ADD THE SCHEMA TO THE PROPERTIES OBJECT**
+#         final_properties["schema_fields"] = [field.model_dump() for field in ai_response.schema_fields]
 
-        final_payload = {
-            "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
-            "properties": final_properties,
-            "editableProps": ai_response.editable_props,
-            # We use the raw script from the AI, which now knows how to find the schema.
-            "script": ai_response.script,
-        }
+#         final_payload = {
+#             "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
+#             "properties": final_properties,
+#             "editableProps": ai_response.editable_props,
+#             # We use the raw script from the AI, which now knows how to find the schema.
+#             "script": ai_response.script,
+#         }
         
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+#         usage = getattr(resp, "usage", None)
+#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
         
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="generate_data_app",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"prompt_len": len(body.prompt)}
-        )
+#         await track_ai_usage(
+#             db=db,
+#             website_id=body.website_id,
+#             user_id=user.id,
+#             model=model_used,
+#             feature="generate_data_app",
+#             prompt_tokens=prompt_tokens,
+#             completion_tokens=completion_tokens,
+#             meta={"prompt_len": len(body.prompt)}
+#         )
 
-        return final_payload
+#         return final_payload
 
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
+#     except Exception as e:
+#         import traceback; traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
 
 
+
+# VIEW_ONLY_GENERATOR_PROMPT = """
+# You are an expert front-end developer creating a READ-ONLY component to display data from an existing data source.
+
+# Your output MUST be a valid JSON object with FIVE keys: "name_to_find", "aiTemplate", "properties", "editableProps", and "script".
+
+# ---
+# ### **CRITICAL RULES FOR YOUR OUTPUT**
+
+# 1.  **`name_to_find`**: The EXACT name of the data schema to find and display, extracted from the user's prompt (e.g., "User Management System").
+
+# 2.  **`aiTemplate`**: The main HTML structure. It MUST include:
+#     -   A `<style>` tag for all CSS.
+#     -   A static main title `<h3>` or `<h2>`.
+#     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`).
+#     -   A `<template id="displayTemplate">`.
+#     -   **DO NOT** include an "Add New" button or a form container.
+
+# 3.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values. **DO NOT** include edit or delete buttons.
+
+# 4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+#     -   Make the component's styling fully editable.
+#     -   All style values and user-facing text (like titles) MUST use mustache tokens.
+#     -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
+#     -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
+
+# 5.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+#     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+#     -   It must ONLY fetch and render data.
+#     -   API Calls to Use:
+#         -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
+#     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
+# ---
+# **INPUT:** A user's prompt and a `unique_class_name`.
+# **OUTPUT:** A single, valid JSON object.
+
+# **Example Prompt:** "Show a list of our contacts."
+# **Example `unique_class_name`:** `.ai-contact-view-12345`
+# **Example Output:**
+# {
+#   "name_to_find": "Contact List",
+#   "aiTemplate": "<style>.ai-contact-view-12345 h3 { color: {{titleColor}}; }</style><h3>{{title}}</h3><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div><span><strong>{{data.name}}</strong> ({{data.email}})</span></div></template>",
+#   "properties": { "title": "Our Contacts", "titleColor": "#333333" },
+#   "editableProps": [ { "key": "title", "label": "Title", "type": "text" }, { "key": "titleColor", "label": "Title Color", "type": "color" } ],
+#   "script": "const dataDisplay = container.querySelector('.data-display'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); dataDisplay.innerHTML = ''; response.data.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); } catch (err) { console.error('Failed to fetch data:', err); } }; fetchAndRenderRows();"
+# }
+# """.strip()
+
+# # --- NEW PYDANTIC MODELS AND ENDPOINT FOR VIEW-ONLY ---
+# class GenerateViewOnlyRequest(BaseModel):
+#     prompt: str
+#     website_id: UUID
+#     unique_class_name: str
+
+# class AIViewOnlyResponseSchema(BaseModel):
+#     name_to_find: str
+#     ai_template: str = Field(..., alias="aiTemplate")
+#     properties: Dict[str, Any]
+#     editable_props: List[Dict[str, Any]] = Field(..., alias="editableProps")
+#     script: str
+
+# @router.post("/generate-view-only-element")
+# async def generate_view_only_element(
+#     body: GenerateViewOnlyRequest,
+#     db: AsyncSession = Depends(get_db),
+#     user: User = Depends(get_current_active_user)
+# ):
+#     try:
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+#         )
+
+#         resp = openai.chat.completions.create(
+#             model=AI_DEFAULT_MODEL,
+#             response_format={"type": "json_object"},
+#             messages=[
+#                 {"role": "system", "content": VIEW_ONLY_GENERATOR_PROMPT},
+#                 {"role": "user", "content": user_content},
+#             ],
+#             temperature=0.5,
+#             max_tokens=4096,
+#         )
+        
+#         payload = json.loads(resp.choices[0].message.content)
+
+#         if isinstance(payload.get("script"), str):
+#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if m:
+#                 payload["script"] = m.group(1).strip()
+        
+#         ai_response = AIViewOnlyResponseSchema(**payload)
+
+#         # Find the existing schema in the database by name
+#         result = await db.execute(
+#             select(CustomDataSchema)
+#             .where(CustomDataSchema.website_id == body.website_id)
+#             .where(CustomDataSchema.name == ai_response.name_to_find)
+#         )
+#         existing_schema = result.scalars().first()
+
+#         if not existing_schema:
+#             raise HTTPException(status_code=404, detail=f"Data source '{ai_response.name_to_find}' not found.")
+
+#         final_properties = ai_response.properties
+#         final_properties["schema_id"] = str(existing_schema.schema_id)
+#         final_properties["originalType"] = "DATA_VIEW"
+
+#         final_payload = {
+#             "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
+#             "properties": final_properties,
+#             "editableProps": ai_response.editable_props,
+#             "script": ai_response.script,
+#         }
+        
+#         usage = getattr(resp, "usage", None)
+#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        
+#         await track_ai_usage(
+#             db=db,
+#             website_id=body.website_id,
+#             user_id=user.id,
+#             model=model_used,
+#             feature="generate_data_app_view_only",
+#             prompt_tokens=prompt_tokens,
+#             completion_tokens=completion_tokens,
+#             meta={"prompt_len": len(body.prompt)}
+#         )
+
+        
+#         return final_payload
+
+#     except Exception as e:
+#         import traceback; traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"AI View-Only generation failed: {e}")
+
+
+
+
+#region new generateview
 
 VIEW_ONLY_GENERATOR_PROMPT = """
 You are an expert front-end developer creating a READ-ONLY component to display data from an existing data source.
@@ -1177,11 +1320,41 @@ async def generate_view_only_element(
     user: User = Depends(get_current_active_user)
 ):
     try:
+        # Step 1: Find the schema name and the schema itself from the database.
+        # This part requires a preliminary AI call to extract the name.
+        name_finder_prompt = f"From the following prompt, extract the exact name of the data source the user wants to display. For example, if the prompt is 'show a list of our Team Members', you must extract 'Team Members'. Respond with JSON with a single key 'name_to_find'.\n\nPROMPT: \"{body.prompt}\""
+        
+        name_resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[{"role": "system", "content": "You are a helpful assistant that extracts information."}, {"role": "user", "content": name_finder_prompt}],
+            temperature=0.0
+        )
+        name_payload = json.loads(name_resp.choices[0].message.content)
+        name_to_find = name_payload.get("name_to_find")
+
+        if not name_to_find:
+            raise HTTPException(status_code=400, detail="Could not determine the data source name from your prompt.")
+
+        result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
+            .where(CustomDataSchema.name == name_to_find)
+        )
+        existing_schema = result.scalars().first()
+
+        if not existing_schema:
+            raise HTTPException(status_code=404, detail=f"Data source '{name_to_find}' not found.")
+            
+        # ✅ **THE FIX YOU REQUESTED**
+        # Step 2: Create the user_content for the main AI call, now including the schema.
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
-            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
+            f'SCHEMA_OF_DATA_TO_DISPLAY: {json.dumps(existing_schema.fields)}'
         )
 
+        # Step 3: Call the main generator with the complete information.
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
@@ -1202,17 +1375,7 @@ async def generate_view_only_element(
         
         ai_response = AIViewOnlyResponseSchema(**payload)
 
-        # Find the existing schema in the database by name
-        result = await db.execute(
-            select(CustomDataSchema)
-            .where(CustomDataSchema.website_id == body.website_id)
-            .where(CustomDataSchema.name == ai_response.name_to_find)
-        )
-        existing_schema = result.scalars().first()
-
-        if not existing_schema:
-            raise HTTPException(status_code=404, detail=f"Data source '{ai_response.name_to_find}' not found.")
-
+        # Step 4: Assemble the final payload.
         final_properties = ai_response.properties
         final_properties["schema_id"] = str(existing_schema.schema_id)
         final_properties["originalType"] = "DATA_VIEW"
@@ -1240,12 +1403,14 @@ async def generate_view_only_element(
             meta={"prompt_len": len(body.prompt)}
         )
         
-        
         return final_payload
 
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"AI View-Only generation failed: {e}")
+
+
+
 
 
 
