@@ -56,7 +56,7 @@ PUBLIC_RULES = [
     ("/menu-item-extras/", {"GET", "OPTIONS"}),
     ("/menu-item-options/", {"GET", "OPTIONS"}),
     ("/uploads/", {"GET", "OPTIONS"}),
-    ("/custom-data/rows/", {"POST", "GET", "OPTIONS"})
+    ("/custom-data/rows/", {"POST", "GET", "PUT", "DELETE", "OPTIONS"})
     
 ]
 

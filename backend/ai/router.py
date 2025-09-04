@@ -976,8 +976,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   API Calls to Use:
         -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
         -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`
-        -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}?sitemember_id={MEMBER_ID}`)`
+        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`(where `sitemember_id` can be null)
+        -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}?sitemember_id={MEMBER_ID}`)`(where `sitemember_id` can be null)
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
 ---

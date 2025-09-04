@@ -150,8 +150,10 @@ async def update_data_row(
         raise HTTPException(status_code=404, detail="Row not found.")
     
     # SECURITY CHECK: Only allow update if the sitemember_id matches
-    if row_to_update.sitemember_id != row_data.sitemember_id:
-        raise HTTPException(status_code=403, detail="You do not have permission to update this row.")
+    if row_to_update.sitemember_id is not None:
+        # ...then the sitemember_id from the request must match.
+        if row_to_update.sitemember_id != row_data.sitemember_id:
+            raise HTTPException(status_code=403, detail="You do not have permission to update this row.")
     
     row_to_update.data = row_data.data
     await db.commit()
@@ -161,7 +163,7 @@ async def update_data_row(
 @router.delete("/rows/{row_id}", status_code=204)
 async def delete_data_row(
     row_id: UUID,
-    sitemember_id: UUID, # The frontend must provide the ID of the user trying to delete
+    sitemember_id: Optional[UUID] = None, # Make it an optional query param
     db: AsyncSession = Depends(get_db)
 ):
     result = await db.execute(select(CustomDataRow).where(CustomDataRow.row_id == row_id))
@@ -170,8 +172,10 @@ async def delete_data_row(
         raise HTTPException(status_code=404, detail="Row not found.")
     
     # SECURITY CHECK: Only allow deletion if the sitemember_id matches
-    if row_to_delete.sitemember_id != sitemember_id:
-        raise HTTPException(status_code=403, detail="You do not have permission to delete this row.")
+    if row_to_delete.sitemember_id is not None:
+        # ...then the provided sitemember_id must match the owner's ID.
+        if row_to_delete.sitemember_id != sitemember_id:
+            raise HTTPException(status_code=403, detail="You do not have permission to delete this row.")
     
     await db.delete(row_to_delete)
     await db.commit()
