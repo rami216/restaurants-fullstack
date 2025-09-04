@@ -35,7 +35,7 @@ class RowCreate(BaseModel):
     
 class RowUpdate(BaseModel):
     data: Dict[str, Any]
-    sitemember_id: UUID # Required to verify ownership
+    sitemember_id: Optional[UUID] = None
 
 
 class RowResponse(BaseModel):
@@ -151,10 +151,10 @@ async def update_data_row(
     
     # SECURITY CHECK: Only allow update if the sitemember_id matches
     if row_to_update.sitemember_id is not None:
-        # ...then the sitemember_id from the request must match.
         if row_to_update.sitemember_id != row_data.sitemember_id:
-            raise HTTPException(status_code=403, detail="You do not have permission to update this row.")
+            raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
     
+    # If we get here, the update is allowed.
     row_to_update.data = row_data.data
     await db.commit()
     await db.refresh(row_to_update)
@@ -173,9 +173,8 @@ async def delete_data_row(
     
     # SECURITY CHECK: Only allow deletion if the sitemember_id matches
     if row_to_delete.sitemember_id is not None:
-        # ...then the provided sitemember_id must match the owner's ID.
         if row_to_delete.sitemember_id != sitemember_id:
-            raise HTTPException(status_code=403, detail="You do not have permission to delete this row.")
+            raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
     
     await db.delete(row_to_delete)
     await db.commit()
