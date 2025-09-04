@@ -957,8 +957,9 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     - An "Add New" button with a class of `add-new-btn`.
     - A `<template id="displayTemplate">` tag.
     
-4.  **`displayTemplate`**: A Mustache/HTML template for displaying ONE data row. You should choose the best HTML for the job (e.g., a `<div>` for a card, a `<li>` for a list item). It MUST include edit/delete buttons with `data-row-id="{{row_id}}"`.
-    - **CRITICAL DATA ACCESS RULE:** The row data is nested. You **MUST** use `{{data.field_id}}` to access the values (e.g., `{{data.job_title}}`).
+4.  **`displayTemplate`**: Create a Mustache/HTML template for ONE data row.
+    -   **DATA ACCESS IS NESTED:** You **MUST** use the `{{data.field_id}}` syntax to display values. For example: `<td>{{data.job_title}}</td>`.
+    -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
 5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   You MUST make the component's styling fully editable (colors, fonts, borders, spacing).
