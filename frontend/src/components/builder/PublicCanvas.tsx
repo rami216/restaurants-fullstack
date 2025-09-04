@@ -1040,6 +1040,63 @@ interface AiElementRunnerProps {
   isPreview: boolean;
 }
 
+// const AiElementRunner: React.FC<AiElementRunnerProps> = ({
+//   element,
+//   isPreview,
+// }) => {
+//   const { aiPayload } = element;
+//   const ref = useRef<HTMLDivElement>(null);
+
+//   useLayoutEffect(() => {
+//     if (!aiPayload || !ref.current) return;
+//     const processedProps = { ...(aiPayload.properties || {}) };
+
+//     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
+//       if (processedProps[key])
+//         processedProps[key] = resolveImageSrc(processedProps[key]);
+//     }
+
+//     let htmlOnly = (aiPayload.aiTemplate || "").replace(
+//       /<script[\s\S]*?<\/script>/g,
+//       ""
+//     );
+//     const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
+//     loopMatches.forEach(([fullMatch, arrKey]) => {
+//       htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
+//       htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
+//     });
+//     htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+//     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
+
+//     if (aiPayload.script) {
+//       const jsBody = aiPayload.script
+//         .replace(/^\s*<script[^>]*>/, "")
+//         .replace(/<\/script>\s*$/, "");
+//       try {
+//         const schemaId = element.properties?.schema_id;
+//         const apiClient = isPreview ? saasApi : api;
+
+//         // ✅ ADD "Mustache" as the 5th argument
+//         const fn = new Function(
+//           "container",
+//           "api",
+//           "schemaId",
+//           "properties",
+//           "Mustache",
+//           jsBody
+//         );
+
+//         // ✅ PASS the Mustache library into the script's scope
+//         fn(ref.current, apiClient, schemaId, element.properties, Mustache);
+//       } catch (jsErr) {
+//         console.error("Error running AI script:", jsErr);
+//       }
+//     }
+//   }, [aiPayload, element.properties, isPreview]);
+
+//   return <div ref={ref} />;
+// };
+
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   element,
   isPreview,
@@ -1060,14 +1117,34 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       /<script[\s\S]*?<\/script>/g,
       ""
     );
-    const loopMatches = [...htmlOnly.matchAll(/{{#each\s+([\w$]+)}}/g)];
-    loopMatches.forEach(([fullMatch, arrKey]) => {
-      htmlOnly = htmlOnly.replace(fullMatch, `{{#${arrKey}}}`);
-      htmlOnly = htmlOnly.replace(/{{\/each}}/, `{{/${arrKey}}}`);
-    });
-    htmlOnly = htmlOnly.replace(/{{\s*this\s*}}/g, "{{.}}");
+
+    // ✅ THE FIX: Protect the displayTemplate from the first render pass
+    const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
+    const templateMatch = htmlOnly.match(templateRegex);
+    const templateContent = templateMatch ? templateMatch[0] : '';
+    
+    // Temporarily replace the template with a placeholder
+    if (templateContent) {
+        htmlOnly = htmlOnly.replace(templateContent, '<div id="displayTemplate-placeholder"></div>');
+    }
+
+    // Now, render the main container. This is safe and will not destroy the template's {{...}} tags.
     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
+    // Put the original, untouched template back into the DOM where the placeholder was.
+    if (templateContent) {
+        const placeholder = ref.current.querySelector('#displayTemplate-placeholder');
+        if (placeholder) {
+            const tempDiv = document.createElement('div');
+            tempDiv.innerHTML = templateContent;
+            const templateElement = tempDiv.firstChild;
+            if (templateElement) {
+                placeholder.replaceWith(templateElement);
+            }
+        }
+    }
+    
+    // Now the script can run and find the fully intact template.
     if (aiPayload.script) {
       const jsBody = aiPayload.script
         .replace(/^\s*<script[^>]*>/, "")
@@ -1075,8 +1152,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       try {
         const schemaId = element.properties?.schema_id;
         const apiClient = isPreview ? saasApi : api;
-
-        // ✅ ADD "Mustache" as the 5th argument
         const fn = new Function(
           "container",
           "api",
@@ -1085,8 +1160,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "Mustache",
           jsBody
         );
-
-        // ✅ PASS the Mustache library into the script's scope
         fn(ref.current, apiClient, schemaId, element.properties, Mustache);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
