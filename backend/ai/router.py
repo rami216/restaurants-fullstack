@@ -957,8 +957,9 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     - An "Add New" button with a class of `add-new-btn`.
     - A `<template id="displayTemplate">` tag.
     
-4.  **`displayTemplate`**: Create a Mustache/HTML template for ONE data row.
-    -   **DATA ACCESS IS NESTED:** You **MUST** use the `{{data.field_id}}` syntax to display values. For example: `<td>{{data.job_title}}</td>`.
+4.  `displayTemplate`: Create a Mustache/HTML template for ONE data row.
+    -   The API will provide a `row` object like `{ "row_id": "...", "data": { "field_id": "value" } }`.
+    -   Therefore, to display values, you **MUST** use the nested `{{data.field_id}}` syntax. Example: `<td>{{data.job_title}}</td>`.
     -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
 5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
