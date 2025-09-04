@@ -163,19 +163,30 @@ async def update_data_row(
 @router.delete("/rows/{row_id}", status_code=204)
 async def delete_data_row(
     row_id: UUID,
-    sitemember_id: Optional[UUID] = None, # Make it an optional query param
+    sitemember_id: Optional[str] = None, # Temporarily accept a string
     db: AsyncSession = Depends(get_db)
 ):
+    # Convert "null" or empty strings to None, and valid strings to UUID
+    member_id_or_none: Optional[UUID] = None
+    if sitemember_id and sitemember_id != "null":
+        try:
+            member_id_or_none = UUID(sitemember_id)
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Invalid sitemember_id format.")
+
     result = await db.execute(select(CustomDataRow).where(CustomDataRow.row_id == row_id))
     row_to_delete = result.scalars().first()
+    
     if not row_to_delete:
-        raise HTTPException(status_code=404, detail="Row not found.")
+        return None
     
-    # SECURITY CHECK: Only allow deletion if the sitemember_id matches
+    # SECURITY CHECK: If the row has an owner...
     if row_to_delete.sitemember_id is not None:
-        if row_to_delete.sitemember_id != sitemember_id:
-            raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
+        # ...the provided member ID must match.
+        if row_to_delete.sitemember_id != member_id_or_none:
+            raise HTTPException(status_code=403, detail="Permission denied to delete this row.")
     
+    # If the row has no owner, or if the correct owner ID was provided, proceed.
     await db.delete(row_to_delete)
     await db.commit()
     return None
