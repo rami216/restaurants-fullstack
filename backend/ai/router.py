@@ -959,28 +959,29 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   A `<template id="displayTemplate">`.
 
 4.  `displayTemplate`: Create a Mustache/HTML template for ONE data row.
-    -   The API provides a `row` object like `{ "row_id": "...", "data": { "field_id": "value" } }`.
-    -   Therefore, to display values, you **MUST** use the nested `{{data.field_id}}` syntax. Example: `<td>{{data.job_title}}</td>`.
+    -   The API provides a `row` object like `{ "row_id": "...", "data": { "job_title": "Engineer" } }`.
+    -   Therefore, to display values, you **MUST** use the nested `{{data.id}}` syntax, where `id` matches the field `id` from your schema. Example: `<h3>{{data.job_title}}</h3>`.
     -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
 5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
-    -   Make the component's styling fully editable (colors, fonts, borders, spacing).
+    -   Make the component's styling fully editable.
     -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
     -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
     -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
 
 6.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
-    -   **Accessing the Schema:** The `properties` object passed to your script will contain a `schema_fields` array. You **MUST** use `properties.schema_fields` to get the schema for building the form.
-    -   **Form Generation:** The script **MUST** dynamically generate a `<form>` element and its input fields inside the `form-container` by looping through the `properties.schema_fields` array.
+    -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
+    -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container` by looping through the `properties.schema_fields` array.
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   It MUST handle the full CRUD lifecycle.
+    -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
         -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
         -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })` (where `sitemember_id` can be null)
+        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`
         -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}?sitemember_id={MEMBER_ID}`)`
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A single, valid JSON object.
@@ -994,7 +995,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "id": "name", "label": "Name", "type": "text" },
     { "id": "email", "label": "Email", "type": "email" }
   ],
-  "aiTemplate": "<style>.ai-contact-list-12345 h3 { color: {{titleColor}}; } .ai-contact-list-12345 .data-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid {{borderColor}}; } .ai-contact-list-12345 .form-container { padding: 16px; border: 1px solid {{borderColor}}; border-radius: 8px; margin-top: 16px; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; color: #fff; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 16px; }</style><h3>{{title}}</h3><button class=\"add-new-btn\">{{addButtonText}}</button><div class=\"form-container\"></div><div class=\"data-display\"></div><template id=\"displayTemplate\"><div class=\"data-row\"><span><strong>{{data.name}}</strong> ({{data.email}})</span><div><button class=\"edit-btn\" data-row-id=\"{{row_id}}\">Edit</button><button class=\"delete-btn\" data-row-id=\"{{row_id}}\">Delete</button></div></div></template>",
+  "aiTemplate": "<style>.ai-contact-list-12345 h3 { color: {{titleColor}}; } .ai-contact-list-12345 .data-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid {{borderColor}}; } .ai-contact-list-12345 .form-container { padding: 16px; border: 1px solid {{borderColor}}; border-radius: 8px; margin-top: 16px; display: none; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; color: #fff; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 16px; }</style><h3>{{title}}</h3><button class=\\"add-new-btn\\">{{addButtonText}}</button><div class=\\"form-container\\"></div><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div class=\\"data-row\\"><span><strong>{{data.name}}</strong> ({{data.email}})</span><div><button class=\\"edit-btn\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
   "properties": {
     "title": "Contact List",
     "addButtonText": "Add Contact",
@@ -1009,12 +1010,12 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const formContainer = container.querySelector('.form-container'); const dataDisplay = container.querySelector('.data-display'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let allRows = []; let editingRowId = null; const schema = properties.schema_fields; const generateForm = (initialData = {}) => { formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'data-form space-y-3'; schema.forEach(field => { const label = document.createElement('label'); label.className = 'block text-sm font-medium'; label.textContent = field.label; const input = document.createElement('input'); input.name = field.id; input.type = field.type; input.required = true; input.className = 'w-full border rounded p-2 mt-1'; input.value = initialData[field.id] || ''; form.appendChild(label); form.appendChild(input); }); const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.textContent = editingRowId ? 'Update Contact' : 'Save Contact'; submitBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded mt-2'; form.appendChild(submitBtn); form.addEventListener('submit', handleFormSubmit); formContainer.appendChild(form); }; const handleFormSubmit = async (e) => { e.preventDefault(); const form = e.target; const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); formContainer.innerHTML = ''; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }; const renderRows = () => { dataDisplay.innerHTML = ''; allRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); allRows = response.data; renderRows(); } catch (err) { console.error('Failed to fetch data:', err); } }; dataDisplay.addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const rowToEdit = allRows.find(r => r.row_id === editingRowId); if (rowToEdit) { generateForm(rowToEdit.data); } } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { const rowId = deleteBtn.dataset.rowId; if (confirm('Are you sure you want to delete this contact?')) { const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id}`).then(fetchAndRenderRows); } } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); fetchAndRenderRows();"
+  "script": "const formContainer = container.querySelector('.form-container'); const dataDisplay = container.querySelector('.data-display'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let allRows = []; let editingRowId = null; const schema = properties.schema_fields; const generateForm = (initialData = {}) => { formContainer.style.display = 'block'; formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'data-form space-y-3'; schema.forEach(field => { const label = document.createElement('label'); label.className = 'block text-sm font-medium'; label.textContent = field.label; const input = field.type === 'textarea' ? document.createElement('textarea') : document.createElement('input'); input.name = field.id; input.type = field.type; input.required = true; input.className = 'w-full border rounded p-2 mt-1'; input.value = initialData[field.id] || ''; form.appendChild(label); form.appendChild(input); }); const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.textContent = editingRowId ? 'Update Contact' : 'Save Contact'; submitBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded mt-2'; form.appendChild(submitBtn); form.addEventListener('submit', handleFormSubmit); formContainer.appendChild(form); }; const handleFormSubmit = async (e) => { e.preventDefault(); const form = e.target; const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); formContainer.innerHTML = ''; formContainer.style.display = 'none'; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }; const renderRows = () => { dataDisplay.innerHTML = ''; allRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); allRows = response.data; renderRows(); } catch (err) { console.error('Failed to fetch data:', err); } }; dataDisplay.addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const rowToEdit = allRows.find(r => r.row_id === editingRowId); if (rowToEdit) { generateForm(rowToEdit.data); } } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { const rowId = deleteBtn.dataset.rowId; if (confirm('Are you sure you want to delete this contact?')) { const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id}`).then(fetchAndRenderRows); } } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); fetchAndRenderRows();"
 }
-
 """.strip()
 
-# ✅ 2. ADD THESE NEW PYDANTIC MODELS
+
+# --- THE CORRECTED FUNCTION AND MODELS ---
 class GenerateDataAppRequest(BaseModel):
     prompt: str
     website_id: UUID
@@ -1074,7 +1075,6 @@ async def generate_data_app_element(
         final_properties["originalType"] = "DATA_TABLE"
 
         # ✅ **THE FIX: ADD THE SCHEMA TO THE PROPERTIES OBJECT**
-        # The frontend script will access this via `properties.schema_fields`.
         final_properties["schema_fields"] = [field.model_dump() for field in ai_response.schema_fields]
 
         final_payload = {
@@ -1106,8 +1106,6 @@ async def generate_data_app_element(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
-
-
 
 
 
