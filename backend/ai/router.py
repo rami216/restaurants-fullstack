@@ -946,7 +946,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 ---
 ### **CRITICAL RULES FOR YOUR OUTPUT**
 
-1.  **`name`**: A short, human-readable name for this data table (e.g., "Job Listings").
+1.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
 
 2.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key.
 
