@@ -218,6 +218,7 @@ export type VisibilityRule = {
 
   /** ✅ NEW: Hide the element if the user HAS purchased this product */
   forbidden_product_id?: string;
+  admin_emails?: string[];
 };
 
 export interface WebsiteOrder {

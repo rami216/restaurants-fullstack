@@ -771,6 +771,22 @@ const GatedContent: React.FC<{
         setVisibility("hidden");
         return;
       }
+      // ✅ ADD THIS NEW RULE: Admin Emails Required
+      const adminEmails = v.admin_emails || [];
+      if (adminEmails.length > 0) {
+        if (!isLoggedIn) {
+          setVisibility("hidden"); // Must be logged in to be an admin
+          return;
+        }
+        // Get the current member's email from localStorage
+        const currentUserEmail = localStorage.getItem(
+          `siteMemberEmail:${websiteData?.subdomain}`
+        );
+        if (!currentUserEmail || !adminEmails.includes(currentUserEmail)) {
+          setVisibility("hidden"); // Hide if the current user's email is not in the list
+          return;
+        }
+      }
 
       // Helper function to check purchase status & use cache
       const checkPurchase = async (productId: string): Promise<boolean> => {
@@ -1121,11 +1137,14 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
     // ✅ THE FIX: Protect the displayTemplate from the first render pass
     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
     const templateMatch = htmlOnly.match(templateRegex);
-    const templateContent = templateMatch ? templateMatch[0] : '';
-    
+    const templateContent = templateMatch ? templateMatch[0] : "";
+
     // Temporarily replace the template with a placeholder
     if (templateContent) {
-        htmlOnly = htmlOnly.replace(templateContent, '<div id="displayTemplate-placeholder"></div>');
+      htmlOnly = htmlOnly.replace(
+        templateContent,
+        '<div id="displayTemplate-placeholder"></div>'
+      );
     }
 
     // Now, render the main container. This is safe and will not destroy the template's {{...}} tags.
@@ -1133,17 +1152,19 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
     // Put the original, untouched template back into the DOM where the placeholder was.
     if (templateContent) {
-        const placeholder = ref.current.querySelector('#displayTemplate-placeholder');
-        if (placeholder) {
-            const tempDiv = document.createElement('div');
-            tempDiv.innerHTML = templateContent;
-            const templateElement = tempDiv.firstChild;
-            if (templateElement) {
-                placeholder.replaceWith(templateElement);
-            }
+      const placeholder = ref.current.querySelector(
+        "#displayTemplate-placeholder"
+      );
+      if (placeholder) {
+        const tempDiv = document.createElement("div");
+        tempDiv.innerHTML = templateContent;
+        const templateElement = tempDiv.firstChild;
+        if (templateElement) {
+          placeholder.replaceWith(templateElement);
         }
+      }
     }
-    
+
     // Now the script can run and find the fully intact template.
     if (aiPayload.script) {
       const jsBody = aiPayload.script

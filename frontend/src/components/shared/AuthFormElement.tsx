@@ -95,6 +95,7 @@ export default function AuthFormElement({
       if (kind === "login" && data?.access_token) {
         localStorage.setItem(`siteToken:${site}`, data.access_token);
         localStorage.setItem(`siteMemberId:${site}`, data.member_id);
+        localStorage.setItem(`siteMemberEmail:${site}`, data.email);
       }
 
       onSuccess?.();
