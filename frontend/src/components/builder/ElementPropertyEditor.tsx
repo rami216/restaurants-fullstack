@@ -646,12 +646,27 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               </p>
               <VisibilityEditor
                 value={activePage.properties}
-                onChange={(nextProperties) => {
+                // ✅ REPLACE THIS ENTIRE onChange PROP
+                onChange={async (nextProperties) => {
+                  if (!activePage) return;
+
+                  // First, update the state locally for instant UI feedback
                   const updatedActivePage = {
                     ...activePage,
                     properties: nextProperties,
                   };
                   onUpdate(updatedActivePage);
+
+                  // Next, save the change to the database
+                  try {
+                    await api.put(`/builder/pages/${activePage.page_id}`, {
+                      properties: nextProperties,
+                    });
+                  } catch (err) {
+                    console.error("Failed to save page visibility:", err);
+                    alert("Error: Could not save page visibility settings.");
+                    // Optional: you could add logic here to revert the local state change on failure
+                  }
                 }}
                 onBecameProtected={async () => {
                   await api.post(

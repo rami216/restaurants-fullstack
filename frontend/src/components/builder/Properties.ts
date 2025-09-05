@@ -212,7 +212,7 @@ export type VisibilityRule = {
   requiresAnonymous?: boolean;
   /** Optional role restriction (applies only when logged in) */
   roles?: string[];
-
+  
   /** Only show if the user HAS purchased this product */
   required_product_id?: string;
 
