@@ -742,59 +742,221 @@ const normalizeBackground = (bg?: string) => {
 };
 // frontend/src/components/builder/PublicCanvas.tsx
 
+// const GatedContent: React.FC<{
+//   elementProps: any;
+//   children: React.ReactNode;
+//   isLoggedIn: boolean;
+//   websiteData: PublicWebsiteData;
+//   isPageGate?: boolean; // ✅ 1. ADD A NEW PROP to identify page-level checks
+// }> = ({
+//   elementProps,
+//   children,
+//   isLoggedIn,
+//   websiteData,
+//   isPageGate = false,
+// }) => {
+//   const [visibility, setVisibility] = useState<
+//     "loading" | "visible" | "hidden"
+//   >("loading");
+//   const [hiddenReason, setHiddenReason] = useState<"auth" | "purchase" | null>(
+//     null
+//   );
+//   const purchaseCacheRef = useRef<Record<string, boolean>>({});
+
+//   useEffect(() => {
+//     const checkVisibility = async () => {
+//       const v = elementProps?.visibility || {};
+
+//       // Rule: Anonymous Only
+//       if (v.requiresAnonymous && isLoggedIn) {
+//         setVisibility("hidden");
+//         return;
+//       }
+
+//       // Rule: Login Required
+//       if (v.requiresAuth && !isLoggedIn) {
+//         setVisibility("hidden");
+//         return;
+//       }
+//       // ✅ ADD THIS NEW RULE: Admin Emails Required
+//       const adminEmails = v.admin_emails || [];
+//       if (adminEmails.length > 0) {
+//         if (!isLoggedIn) {
+//           setVisibility("hidden"); // Must be logged in to be an admin
+//           return;
+//         }
+//         // Get the current member's email from localStorage
+//         const currentUserEmail = localStorage.getItem(
+//           `siteMemberEmail:${websiteData?.subdomain}`
+//         );
+//         if (!currentUserEmail || !adminEmails.includes(currentUserEmail)) {
+//           setVisibility("hidden"); // Hide if the current user's email is not in the list
+//           return;
+//         }
+//       }
+
+//       // Helper function to check purchase status & use cache
+//       const checkPurchase = async (productId: string): Promise<boolean> => {
+//         const memberId = localStorage.getItem(
+//           `siteMemberId:${websiteData?.subdomain}`
+//         );
+//         if (!isLoggedIn || !memberId) return false;
+
+//         const cacheKey = `${memberId}_${productId}`;
+//         if (typeof purchaseCacheRef.current[cacheKey] !== "undefined") {
+//           return purchaseCacheRef.current[cacheKey];
+//         }
+//         try {
+//           const params = new URLSearchParams({
+//             website_id: String(websiteData.website_id),
+//             member_id: memberId,
+//             product_id: productId,
+//           });
+//           const { data: hasPurchase } = await saasApi.get<boolean>(
+//             `/users-stripe-account/${
+//               websiteData.subdomain
+//             }/has-purchase?${params.toString()}`
+//           );
+//           purchaseCacheRef.current[cacheKey] = !!hasPurchase;
+//           return !!hasPurchase;
+//         } catch {
+//           purchaseCacheRef.current[cacheKey] = false;
+//           return false;
+//         }
+//       };
+
+//       // Rule: Must have purchased a product
+//       if (v.required_product_id) {
+//         const hasRequiredProduct = await checkPurchase(v.required_product_id);
+//         if (!hasRequiredProduct) {
+//           setVisibility("hidden");
+//           return;
+//         }
+//       }
+
+//       // ✅ NEW: Rule: Must NOT have purchased a product
+//       if (v.forbidden_product_id) {
+//         const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
+//         if (hasForbiddenProduct) {
+//           setVisibility("hidden");
+//           return;
+//         }
+//       }
+
+//       // If no rules hide the content, show it
+//       setVisibility("visible");
+//     };
+
+//     checkVisibility();
+//   }, [
+//     JSON.stringify(elementProps?.visibility || {}),
+//     isLoggedIn,
+//     websiteData?.subdomain,
+//     websiteData?.website_id,
+//   ]);
+
+//   if (visibility === "loading") {
+//     return (
+//       <div className="p-4 text-center text-gray-400">Loading Content...</div>
+//     );
+//   }
+//   if (visibility === "hidden") {
+//     const isContainer =
+//       elementProps?.padding || elementProps?.display || elementProps?.style;
+//     if (isContainer) {
+//       return (
+//         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
+//           <h4 className="font-semibold">Content Locked</h4>
+//           <p className="text-sm mt-1">
+//             This content is not available for your account.
+//           </p>
+//         </div>
+//       );
+//     }
+//     return null;
+//   }
+//   return <>{children}</>;
+// };
+
 const GatedContent: React.FC<{
   elementProps: any;
   children: React.ReactNode;
   isLoggedIn: boolean;
   websiteData: PublicWebsiteData;
-}> = ({ elementProps, children, isLoggedIn, websiteData }) => {
+  isPageGate?: boolean; // Prop to identify page-level checks
+}> = ({
+  elementProps,
+  children,
+  isLoggedIn,
+  websiteData,
+  isPageGate = false,
+}) => {
+  const router = useRouter(); // Use the router hook
   const [visibility, setVisibility] = useState<
     "loading" | "visible" | "hidden"
   >("loading");
-  const [hiddenReason, setHiddenReason] = useState<"auth" | "purchase" | null>(
-    null
-  );
   const purchaseCacheRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     const checkVisibility = async () => {
       const v = elementProps?.visibility || {};
 
-      // Rule: Anonymous Only
-      if (v.requiresAnonymous && isLoggedIn) {
-        setVisibility("hidden");
-        return;
-      }
+      // Helper for creating the correct redirect path based on domain
+      const getRedirectPath = (slug: string) => {
+        if (typeof window === "undefined") return slug;
+        const isMainHost =
+          window.location.hostname === "zygoflow.com" ||
+          window.location.hostname === "www.zygoflow.com";
+        const base = isMainHost ? `/${websiteData.subdomain}` : "";
+        return `${base}${slug}`;
+      };
 
-      // Rule: Login Required
-      if (v.requiresAuth && !isLoggedIn) {
-        setVisibility("hidden");
-        return;
-      }
-      // ✅ ADD THIS NEW RULE: Admin Emails Required
+      // --- Rule: Admin Emails Required ---
       const adminEmails = v.admin_emails || [];
       if (adminEmails.length > 0) {
-        if (!isLoggedIn) {
-          setVisibility("hidden"); // Must be logged in to be an admin
-          return;
-        }
-        // Get the current member's email from localStorage
         const currentUserEmail = localStorage.getItem(
           `siteMemberEmail:${websiteData?.subdomain}`
         );
-        if (!currentUserEmail || !adminEmails.includes(currentUserEmail)) {
-          setVisibility("hidden"); // Hide if the current user's email is not in the list
+        if (
+          !isLoggedIn ||
+          !currentUserEmail ||
+          !adminEmails.includes(currentUserEmail)
+        ) {
+          if (isPageGate) {
+            router.push(getRedirectPath("/login")); // Redirect if it's a page gate
+            return;
+          }
+          setVisibility("hidden");
           return;
         }
       }
 
-      // Helper function to check purchase status & use cache
+      // --- Rule: Login Required (for any member) ---
+      if (v.requiresAuth && !isLoggedIn) {
+        if (isPageGate) {
+          router.push(getRedirectPath("/login")); // Redirect if it's a page gate
+          return;
+        }
+        setVisibility("hidden");
+        return;
+      }
+
+      // --- Rule: Anonymous Only ---
+      if (v.requiresAnonymous && isLoggedIn) {
+        if (isPageGate) {
+          router.push(getRedirectPath("/")); // Redirect to home if a logged-in user tries to access
+          return;
+        }
+        setVisibility("hidden");
+        return;
+      }
+
+      // --- Your existing purchase logic remains the same ---
       const checkPurchase = async (productId: string): Promise<boolean> => {
         const memberId = localStorage.getItem(
           `siteMemberId:${websiteData?.subdomain}`
         );
         if (!isLoggedIn || !memberId) return false;
-
         const cacheKey = `${memberId}_${productId}`;
         if (typeof purchaseCacheRef.current[cacheKey] !== "undefined") {
           return purchaseCacheRef.current[cacheKey];
@@ -818,7 +980,6 @@ const GatedContent: React.FC<{
         }
       };
 
-      // Rule: Must have purchased a product
       if (v.required_product_id) {
         const hasRequiredProduct = await checkPurchase(v.required_product_id);
         if (!hasRequiredProduct) {
@@ -827,7 +988,6 @@ const GatedContent: React.FC<{
         }
       }
 
-      // ✅ NEW: Rule: Must NOT have purchased a product
       if (v.forbidden_product_id) {
         const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
         if (hasForbiddenProduct) {
@@ -846,6 +1006,8 @@ const GatedContent: React.FC<{
     isLoggedIn,
     websiteData?.subdomain,
     websiteData?.website_id,
+    isPageGate,
+    router,
   ]);
 
   if (visibility === "loading") {
@@ -856,7 +1018,8 @@ const GatedContent: React.FC<{
   if (visibility === "hidden") {
     const isContainer =
       elementProps?.padding || elementProps?.display || elementProps?.style;
-    if (isContainer) {
+    if (isContainer && !isPageGate) {
+      // Don't show "Content Locked" for a full page, as it's redirecting
       return (
         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
           <h4 className="font-semibold">Content Locked</h4>
@@ -870,7 +1033,6 @@ const GatedContent: React.FC<{
   }
   return <>{children}</>;
 };
-
 const MainContent = ({
   currentPage,
   activeCategory,
