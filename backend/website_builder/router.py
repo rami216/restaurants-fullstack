@@ -388,43 +388,43 @@ async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate,
     if not db_item:
         raise HTTPException(status_code=404, detail="Navbar item not found")
 
-    # Get the original slug to find the page
+    # Get the original slug to check if it's the homepage
     old_link_url = db_item.link_url
     is_home = (old_link_url == "/")
 
     update_payload = item_data.model_dump(exclude_unset=True)
 
-    # Find the associated page BEFORE changing the slug
+    # ✅ Find the associated page using its relationship to the navbar, not the old slug
     page_to_update = None
     if old_link_url:
-        page_q = await db.execute(
+        # This query is more robust
+        result = await db.execute(
             select(Page)
             .join(NavbarItem, Page.slug == NavbarItem.link_url)
             .where(NavbarItem.item_id == item_id)
         )
-        page_to_update = page_q.scalars().first()
+        page_to_update = result.scalars().first()
 
-    # Apply updates to the NavbarItem
+    # Apply updates to the NavbarItem text and position
     if "text" in update_payload:
         db_item.text = update_payload["text"]
     if "position" in update_payload:
         db_item.position = update_payload["position"]
     
-    # Apply slug update, but not for the homepage
+    # Apply slug (link_url) update, but never for the homepage
     if "link_url" in update_payload and not is_home:
         new_slug = _normalize_slug(update_payload["link_url"])
         db_item.link_url = new_slug
         if page_to_update:
             page_to_update.slug = new_slug
 
-    # Update the page title if it exists
+    # Update the page's title to match the navbar item's text
     if page_to_update and "text" in update_payload:
         page_to_update.title = update_payload["text"]
 
     await db.commit()
     await db.refresh(db_item)
     return db_item
-
 @router.delete("/navbar-items/{item_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     """

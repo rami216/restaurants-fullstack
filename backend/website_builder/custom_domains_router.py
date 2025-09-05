@@ -218,7 +218,7 @@ async def refresh_custom_domain_status(
         )
         if r.status_code >= 400:
             return cd
-        
+        #asdasdsad
         updated_cf_data = r.json().get("result", {})
 
     cd.status = updated_cf_data.get("status")
