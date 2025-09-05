@@ -1335,7 +1335,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       try {
         const schemaId = element.properties?.schema_id;
         const apiClient = isPreview ? saasApi : api;
-        debugger;
+
         const fn = new Function(
           "container",
           "api",
