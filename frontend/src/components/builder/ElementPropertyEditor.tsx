@@ -88,6 +88,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const [editedStandaloneTitle, setEditedStandaloneTitle] = useState("");
   const [editedStandaloneSlug, setEditedStandaloneSlug] = useState("");
 
+  const [editedItemSlug, setEditedItemSlug] = useState(""); // <-- ADD THIS
+
   const [products, setProducts] = React.useState<
     { product_id: string; name: string }[]
   >([]);
@@ -217,14 +219,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const handleUpdateNavbarItem = async () => {
     if (!editingItemId || !editedItemText) return;
 
-    const slug = `/${editedItemText
-      .toLowerCase()
-      .replace(/\s+/g, "-")
-      .replace(/[?#]/g, "")}`;
+    const slug = editedItemSlug.trim()
+      ? slugify(editedItemSlug)
+      : slugify(editedItemText); // Fallback to title if slug is empty
 
     try {
       await api.put(`/builder/navbar-items/${editingItemId}`, {
-        text: editedItemText,
+        text: editedItemText.trim(),
         link_url: slug,
       });
       alert("Link updated successfully!");
@@ -441,13 +442,26 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="p-2 border rounded bg-gray-50 flex items-center justify-between"
               >
                 {editingItemId === item.item_id ? (
+                  // ✅ 3. UPDATE THE EDITING UI
                   <>
-                    <input
-                      type="text"
-                      value={editedItemText}
-                      onChange={(e) => setEditedItemText(e.target.value)}
-                      className="flex-grow border-gray-300 rounded-md shadow-sm p-1 text-sm"
-                    />
+                    <div className="flex-grow grid grid-cols-1 gap-2 mr-2">
+                      <input
+                        type="text"
+                        value={editedItemText}
+                        onChange={(e) => setEditedItemText(e.target.value)}
+                        placeholder="Page Title"
+                        className="border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                      />
+                      {item.link_url !== "/" && ( // Don't allow editing slug for homepage
+                        <input
+                          type="text"
+                          value={editedItemSlug}
+                          onChange={(e) => setEditedItemSlug(e.target.value)}
+                          placeholder="Page URL Slug (e.g., /about-us)"
+                          className="border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                        />
+                      )}
+                    </div>
                     <div className="flex items-center ml-2">
                       <button
                         onClick={handleUpdateNavbarItem}
@@ -471,6 +485,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         onClick={() => {
                           setEditingItemId(item.item_id);
                           setEditedItemText(item.text);
+                          setEditedItemSlug(item.link_url); // <-- POPULATE THE SLUG
                         }}
                         className="p-1 text-blue-600 hover:bg-blue-100 rounded-full"
                       >

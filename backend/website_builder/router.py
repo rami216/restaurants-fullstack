@@ -388,30 +388,38 @@ async def update_navbar_item(item_id: UUID, item_data: schemas.NavbarItemUpdate,
     if not db_item:
         raise HTTPException(status_code=404, detail="Navbar item not found")
 
-    old_link_url = db_item.link_url or "/"
+    # Get the original slug to find the page
+    old_link_url = db_item.link_url
     is_home = (old_link_url == "/")
 
-    update = item_data.model_dump(exclude_unset=True)
+    update_payload = item_data.model_dump(exclude_unset=True)
 
-    # Apply text/position directly
-    if "text" in update:
-        db_item.text = update["text"]
-    if "position" in update:
-        db_item.position = update["position"]
+    # Find the associated page BEFORE changing the slug
+    page_to_update = None
+    if old_link_url:
+        page_q = await db.execute(
+            select(Page)
+            .join(NavbarItem, Page.slug == NavbarItem.link_url)
+            .where(NavbarItem.item_id == item_id)
+        )
+        page_to_update = page_q.scalars().first()
 
-    # Normalize requested link
-    new_link = _normalize_slug(update.get("link_url", db_item.link_url))
+    # Apply updates to the NavbarItem
+    if "text" in update_payload:
+        db_item.text = update_payload["text"]
+    if "position" in update_payload:
+        db_item.position = update_payload["position"]
+    
+    # Apply slug update, but not for the homepage
+    if "link_url" in update_payload and not is_home:
+        new_slug = _normalize_slug(update_payload["link_url"])
+        db_item.link_url = new_slug
+        if page_to_update:
+            page_to_update.slug = new_slug
 
-    # If this was the home item, freeze it at "/"
-    db_item.link_url = "/" if is_home else new_link
-
-    # Update the corresponding page title, and slug only if not home
-    page_q = await db.execute(select(Page).where(Page.slug == old_link_url))
-    page_to_update = page_q.scalars().first()
-    if page_to_update:
-        page_to_update.title = db_item.text or page_to_update.title
-        if not is_home:
-            page_to_update.slug = db_item.link_url
+    # Update the page title if it exists
+    if page_to_update and "text" in update_payload:
+        page_to_update.title = update_payload["text"]
 
     await db.commit()
     await db.refresh(db_item)
