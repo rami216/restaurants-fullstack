@@ -56,6 +56,7 @@ interface PropertyEditorProps {
   onMoveSection: (sectionId: string, direction: "up" | "down") => void; // <-- ADD THIS
   onRefineSection: (prompt: string) => void;
   onRefineElement: (prompt: string) => void; // <-- ADD THIS
+  onRefineDataAppElement: (prompt: string) => Promise<void>; // <-- ADD THIS
   onCreateStandalonePage: (title: string) => void; // <-- ADD THIS
 }
 
@@ -77,6 +78,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onMoveSection,
   onRefineSection,
   onRefineElement,
+  onRefineDataAppElement, // <-- Add this
   onCreateStandalonePage,
 }) => {
   const [isSyncing, setIsSyncing] = React.useState(false);
@@ -141,6 +143,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const [elementRefinePrompt, setElementRefinePrompt] = useState("");
   const [isRefiningElement, setIsRefiningElement] = useState(false);
 
+  // --- START: ADD STATE FOR DATA APP REFINING ---
+  const [dataAppRefinePrompt, setDataAppRefinePrompt] = useState("");
+  const [isRefiningDataApp, setIsRefiningDataApp] = useState(false);
+  // --- END: ADD STATE FOR DATA APP REFINING ---
+
   // 2. Add state and a handler for the new UI
   const [isAddingStandalonePage, setIsAddingStandalonePage] = useState(false);
   const [newStandalonePageTitle, setNewStandalonePageTitle] = useState("");
@@ -160,7 +167,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     if (!elementRefinePrompt.trim()) return;
     setIsRefiningElement(true);
     try {
-      await onRefineElement(elementRefinePrompt);
+      // --- START: MODIFICATION ---
+      const originalType = selectedItem?.properties?.originalType;
+      if (originalType === "DATA_TABLE" || originalType === "DATA_VIEW") {
+        await onRefineDataAppElement(elementRefinePrompt);
+      } else {
+        await onRefineElement(elementRefinePrompt);
+      }
+      // --- END: MODIFICATION ---
       setElementRefinePrompt("");
     } finally {
       setIsRefiningElement(false);
@@ -3337,7 +3351,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               {/* --- Element-Specific Editor --- */}
               {selectionType === "element" && (
                 <>
-                  {/* START: RE-ADDED REFINE ELEMENT UI */}
+                  {/* START: MODIFIED REFINE ELEMENT UI */}
                   <div>
                     <h4 className="text-md font-medium text-gray-800 mb-2">
                       Refine Element with AI
@@ -3369,7 +3383,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     </div>
                   </div>
                   <hr className="my-4" />
-                  {/* END: RE-ADDED REFINE ELEMENT UI */}
+                  {/* END: MODIFIED REFINE ELEMENT UI */}
 
                   {renderElementEditor()}
                 </>

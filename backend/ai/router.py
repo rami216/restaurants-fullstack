@@ -1274,3 +1274,71 @@ async def generate_view_only_element(
 
 
 
+#region refine_data_app
+REFINE_DATA_APP_PROMPT = """
+You are an expert full-stack developer, and your task is to refine an interactive data-driven component based on user feedback.
+You will be given the user's prompt and the current JSON state of the component.
+
+Your output MUST be a single, complete, valid JSON object representing the fully updated state.
+
+**CRITICAL RULES:**
+1.  **Analyze the `originalType`**: The `properties.originalType` will be either `DATA_TABLE` (full CRUD) or `DATA_VIEW` (read-only). Your response MUST respect this. Do not add editing features to a `DATA_VIEW` unless explicitly asked to convert it.
+2.  **Preserve Core Structure**: DO NOT change the `schema_id` or the `schema_fields` in the `properties` object. The database schema is fixed.
+3.  **Apply User's Prompt**:
+    -   For visual changes (colors, fonts, layout), modify the CSS in the `aiTemplate` and update the corresponding values in the `properties` object.
+    -   For functional changes (e.g., "change the edit button to an icon"), modify the `aiTemplate` and the `script` accordingly.
+    -   For text changes (e.g., "change the title to 'Manage Employees'"), update the value in the `properties` object.
+4.  **Return the Complete Object**: Your final output must be the entire, valid JSON object for the component, including `aiTemplate`, `properties`, `editableProps`, and `script`.
+""".strip()
+
+@router.post("/refine-data-app-element", response_model=Dict[str, Any])
+async def refine_data_app_element(
+    body: RefineStateRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    try:
+        if not body.website_id:
+            raise HTTPException(status_code=400, detail="website_id is required")
+
+        user_content = (
+            f'USER_PROMPT: "{body.prompt}"\n\n'
+            f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
+        )
+
+        resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": REFINE_DATA_APP_PROMPT},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=0.2,
+        )
+
+        payload = json.loads(resp.choices[0].message.content)
+        
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="refine_data_app",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"state_keys": list((body.currentState or {}).keys())[:10]},
+        )
+
+        return payload
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Data App refinement failed: {e}")
+
+
+

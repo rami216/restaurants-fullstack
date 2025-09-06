@@ -877,6 +877,61 @@ const CreateWebsitePage = () => {
       alert("AI element refinement failed.");
     }
   };
+  const handleRefineDataAppElement = async (prompt: string) => {
+    if (
+      !selectedItem ||
+      selection.type !== "element" ||
+      !activePage ||
+      !websiteData
+    )
+      return;
+
+    try {
+      // The current state is simply the aiPayload of the selected element
+      const currentState = (selectedItem as Element).aiPayload;
+      if (!currentState) {
+        alert("This element cannot be refined as it's not an AI component.");
+        return;
+      }
+
+      const { data: refinedPayload } = await api.post(
+        "/ai/refine-data-app-element",
+        {
+          prompt,
+          currentState,
+          website_id: websiteData.website_id,
+        }
+      );
+
+      // Create the updated element
+      const refinedElement: Element = {
+        ...(selectedItem as Element),
+        properties: refinedPayload.properties,
+        aiPayload: refinedPayload,
+      };
+
+      // Update the state
+      const updatedSections = activePage.sections.map((section) => ({
+        ...section,
+        subsections: section.subsections.map((sub) => ({
+          ...sub,
+          elements: sub.elements.map((el) =>
+            // --- ✅ THE FIX IS HERE ---
+            el.element_id === (selectedItem as Element).element_id
+              ? refinedElement
+              : el
+          ),
+        })),
+      }));
+
+      updateWebsiteData({ ...activePage, sections: updatedSections });
+      setSelection({ type: "element", id: refinedElement.element_id });
+    } catch (err) {
+      console.error("AI data app refinement failed:", err);
+      alert("AI data app refinement failed.");
+      throw err; // Re-throw to inform the child component of the failure
+    }
+  };
 
   const handleGeneratePage = async (prompt: string) => {
     if (!activePage || !prompt.trim()) return;
@@ -1111,6 +1166,7 @@ const CreateWebsitePage = () => {
           onRefineSection={handleRefineSection}
           onRefineElement={handleRefineElement} // <-- ADD THIS PROP
           onCreateStandalonePage={handleCreateStandalonePage} // <-- ADD THIS
+          onRefineDataAppElement={handleRefineDataAppElement}
         />
       </aside>
     </div>
