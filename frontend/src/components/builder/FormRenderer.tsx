@@ -106,7 +106,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
 
     setSubmissionStatus("submitting");
     try {
-      await saasApi.post("/builder/form-submissions/", {
+      await saasApi.post("/builder/form-submissions", {
         website_id: websiteData.website_id,
         form_element_id: element.element_id,
         submission_data: submissionData,
