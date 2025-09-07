@@ -1,6 +1,29 @@
 import React from "react";
 
-const MagicCard = () => {
+interface MagicCardProps {
+  children?: React.ReactNode;
+  className?: string;
+  [key: string]: any; // Allow other standard props like onClick, etc.
+}
+
+const MagicCard: React.FC<MagicCardProps> = ({
+  children,
+  className = "",
+  ...props
+}) => {
+  // If children are passed, render it as a flexible container
+  if (children) {
+    const combinedClassName =
+      `p-4 rounded-lg border dark:border-gray-200 ${className}`.trim();
+
+    return (
+      <div className={combinedClassName} {...props}>
+        {children}
+      </div>
+    );
+  }
+
+  // Otherwise, render the original, hardcoded content as a fallback
   return (
     <div className="p-4 w-[300px] rounded-lg border dark:border-gray-800">
       <h1 className="text-2xl font-bold">Simple</h1>
@@ -17,7 +40,6 @@ const MagicCard = () => {
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          {/* use a valid shade */}
           <div className="bg-orange-500 w-20 h-10 rounded" />
           <div className="grid gap-1 text-sm flex-1">
             <h2 className="font-semibold leading-none line-clamp-2">
@@ -29,7 +51,6 @@ const MagicCard = () => {
           </div>
         </div>
         <div className="flex gap-2 items-center">
-          {/* use a valid shade */}
           <div className="bg-green-500 w-20 h-10 rounded" />
           <div className="grid gap-1 text-sm flex-1">
             <h2 className="font-semibold leading-none line-clamp-2">

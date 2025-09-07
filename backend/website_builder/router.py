@@ -541,6 +541,36 @@ async def create_form_submission(
     await db.refresh(new_submission)
     return new_submission
 
+@router.get("/my-submissions", response_model=List[schemas.FormSubmissionResponse])
+async def get_my_form_submissions(
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Gets all form submissions for the currently logged-in user's websites.
+    """
+    # 1. Find the owner and their associated website first
+    owner_result = await db.execute(
+        select(RestaurantOwner)
+        .options(selectinload(RestaurantOwner.website))
+        .where(RestaurantOwner.user_id == current_user.id)
+    )
+    owner = owner_result.scalars().first()
+
+    # 2. If the owner or their website doesn't exist, return an empty list
+    if not owner or not owner.website:
+        return []
+
+    # 3. Fetch all submissions for that single website, newest first
+    submissions_result = await db.execute(
+        select(FormSubmission)
+        .where(FormSubmission.website_id == owner.website.website_id)
+        .order_by(FormSubmission.created_at.desc())
+    )
+    submissions = submissions_result.scalars().all()
+    
+    return submissions
+
 #endregion formsubmission
 
 
