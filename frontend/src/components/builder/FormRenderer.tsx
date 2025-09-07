@@ -7,7 +7,7 @@ import { Element as ElementType, FormField, WebsiteData } from "./Properties";
 import { getMotionConfig } from "./animate";
 import type { Element as BuilderElement } from "./Properties";
 import Mustache from "mustache";
-
+import saasApi from "@/lib/saasApi";
 interface AiElementRunnerProps {
   element: BuilderElement;
 }
@@ -106,7 +106,7 @@ export const FormRenderer: React.FC<FormRendererProps> = ({
 
     setSubmissionStatus("submitting");
     try {
-      await api.post("/builder/form-submissions/", {
+      await saasApi.post("/builder/form-submissions/", {
         website_id: websiteData.website_id,
         form_element_id: element.element_id,
         submission_data: submissionData,
