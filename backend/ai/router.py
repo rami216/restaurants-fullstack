@@ -948,11 +948,19 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 ---
 ### **CRITICAL RULES FOR YOUR OUTPUT**
 
-1.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
+1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
+    -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+    -   When a user's prompt mentions a concept that matches an existing schema (e.g., prompt is "create a list of employees with their department" and a "Departments" schema exists), you **MUST** create a relational field.
+    -   To create a relation, the field in your `schema` output must have:
+        -   `"type": "relation"`
+        -   `"related_schema_id": "the_uuid_of_the_existing_schema"`
+    -   If the prompt describes a new concept with no matching existing schema, you should use standard types like "text", "number", etc.
 
-2.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key.
+2.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
 
-3.  **`aiTemplate`**: The main HTML structure. It MUST include:
+3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key. Use the relationship rule above where applicable.
+
+4.  **`aiTemplate`**: The main HTML structure. It MUST include:
     -   A `<style>` tag for all CSS.
     -   A static main title `<h3>` or `<h2>`.
     -   A static "Add New" button with a class of `add-new-btn`.
@@ -960,16 +968,16 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
     -   A `<template id="displayTemplate">`.
 
-4.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values (e.g., `<h3>{{data.job_title}}</h3>`). Include edit/delete buttons with `data-row-id="{{row_id}}"`.
+5.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values (e.g., `<h3>{{data.job_title}}</h3>`). Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
 
-5.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+6.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   Make the component's styling fully editable.
     -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
     -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
     -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
 
-6.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
     -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container` by looping through the `properties.schema_fields` array.
@@ -1036,11 +1044,27 @@ async def generate_data_app_element(
     user: User = Depends(get_current_active_user)
 ):
     try:
+        # --- STEP 1: FETCH EXISTING SCHEMAS FOR CONTEXT ---
+        schema_result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
+        )
+        existing_schemas = schema_result.scalars().all()
+        
+        # Format the context for the AI
+        schemas_for_prompt = [
+            {"name": s.name, "schema_id": str(s.schema_id)}
+            for s in existing_schemas
+        ]
+        
+        # --- STEP 2: BUILD THE CONTEXT-AWARE USER PROMPT ---
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
-            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
         )
 
+        # --- STEP 3: CALL OPENAI WITH THE NEW PROMPT ---
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
@@ -1073,15 +1097,12 @@ async def generate_data_app_element(
         final_properties = ai_response.properties.copy()
         final_properties["schema_id"] = str(new_schema.schema_id)
         final_properties["originalType"] = "DATA_TABLE"
-
-        # ✅ **THE FIX: ADD THE SCHEMA TO THE PROPERTIES OBJECT**
         final_properties["schema_fields"] = [field.model_dump() for field in ai_response.schema_fields]
 
         final_payload = {
             "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
             "properties": final_properties,
             "editableProps": ai_response.editable_props,
-            # We use the raw script from the AI, which now knows how to find the schema.
             "script": ai_response.script,
         }
         
