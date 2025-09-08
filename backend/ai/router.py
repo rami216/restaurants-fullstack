@@ -968,10 +968,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
     -   A `<template id="displayTemplate">`.
 
-5.  **`displayTemplate`**: A Mustache/HTML template for ONE data item.
+5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
     -   For regular fields, you **MUST** use `{{data.field_id}}` (e.g., `<h3>{{data.job_title}}</h3>`).
-    -   **CRITICAL:** For relational fields (e.g., a field with id 'category'), you **MUST** access the nested data correctly. Look at the `EXISTING_SCHEMAS_ON_WEBSITE` context to find the exact field `id` from the related schema to display (e.g., if the category schema has a field with id `category_name`, you MUST use `{{data.category.data.category_name}}`).
+    -   **CRITICAL:** For relational fields (e.g., a field with id 'project'), you **MUST** access the nested data correctly. Look at the `EXISTING_SCHEMAS_ON_WEBSITE` context to find the exact field `id` from the related schema to display (e.g., if the project schema has a field with id `project_title`, you MUST use `{{data.project.data.project_title}}`).
     -   It **MUST** include edit/delete buttons with a `data-row-id="{{row_id}}"`.
+
 
 
 6.  **Styling & Editable Properties (`properties`, `editableProps`)**:
@@ -986,7 +987,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
         -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
-        -   **CRITICAL SCRIPT RULE:** The text for each `<option>` **MUST** come from the related row's `data` object by finding a name-like key (e.g., `relatedRow.data.name`, `relatedRow.data.title`). The `value` for the `<option>` must be the `row_id`.
+        -   **CRITICAL SCRIPT RULE:** The text for each `<option>` **MUST** come from the related row's `data` object by looking up the correct field `id` from the `EXISTING_SCHEMAS_ON_WEBSITE` context (e.g., `relatedRow.data.project_title`). The `value` for the `<option>` must be the `row_id`.
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
