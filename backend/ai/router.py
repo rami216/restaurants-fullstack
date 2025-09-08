@@ -1044,27 +1044,24 @@ async def generate_data_app_element(
     user: User = Depends(get_current_active_user)
 ):
     try:
-        # --- STEP 1: FETCH EXISTING SCHEMAS FOR CONTEXT ---
+        # --- (The first part of your function is correct and remains the same) ---
         schema_result = await db.execute(
             select(CustomDataSchema)
             .where(CustomDataSchema.website_id == body.website_id)
         )
         existing_schemas = schema_result.scalars().all()
         
-        # Format the context for the AI
         schemas_for_prompt = [
             {"name": s.name, "schema_id": str(s.schema_id)}
             for s in existing_schemas
         ]
         
-        # --- STEP 2: BUILD THE CONTEXT-AWARE USER PROMPT ---
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
             f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
         )
 
-        # --- STEP 3: CALL OPENAI WITH THE NEW PROMPT ---
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
@@ -1085,10 +1082,20 @@ async def generate_data_app_element(
         
         ai_response = AIResponseSchema(**payload)
 
+        # --- ✅ THE FIX IS HERE ---
+        # Convert any UUIDs in the schema fields to strings before saving.
+        sanitized_fields = []
+        for field in ai_response.schema_fields:
+            field_dict = field.model_dump()
+            if 'related_schema_id' in field_dict and isinstance(field_dict['related_schema_id'], UUID):
+                field_dict['related_schema_id'] = str(field_dict['related_schema_id'])
+            sanitized_fields.append(field_dict)
+        
+        # Now, create the schema with the sanitized fields
         new_schema = CustomDataSchema(
             website_id=body.website_id,
             name=ai_response.name,
-            fields=[field.model_dump() for field in ai_response.schema_fields]
+            fields=sanitized_fields # Use the sanitized list
         )
         db.add(new_schema)
         await db.commit()
@@ -1097,7 +1104,7 @@ async def generate_data_app_element(
         final_properties = ai_response.properties.copy()
         final_properties["schema_id"] = str(new_schema.schema_id)
         final_properties["originalType"] = "DATA_TABLE"
-        final_properties["schema_fields"] = [field.model_dump() for field in ai_response.schema_fields]
+        final_properties["schema_fields"] = sanitized_fields # Also use the sanitized list here
 
         final_payload = {
             "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
@@ -1106,6 +1113,7 @@ async def generate_data_app_element(
             "script": ai_response.script,
         }
         
+        # --- (Usage tracking remains the same) ---
         usage = getattr(resp, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
