@@ -99,19 +99,16 @@ async def get_rows_for_schema(
     schema_id: UUID,
     db: AsyncSession = Depends(get_db)
 ):
-    # 1. Get the schema definition itself
     schema = await db.get(CustomDataSchema, schema_id)
     if not schema:
         raise HTTPException(status_code=404, detail="Schema not found.")
     
-    # 2. Identify which fields are relations
     relation_fields = {
         field['id']: UUID(field['related_schema_id'])
         for field in schema.fields
         if field.get('type') == 'relation' and field.get('related_schema_id')
     }
 
-    # 3. Fetch the primary rows
     result = await db.execute(
         select(CustomDataRow)
         .where(CustomDataRow.schema_id == schema_id)
@@ -120,11 +117,8 @@ async def get_rows_for_schema(
     rows = result.scalars().all()
 
     if not relation_fields:
-        # If no relations, return the data as is (fast path)
-        return rows
+        return [RowResponse.from_orm(row) for row in rows]
 
-    # 4. If there are relations, we need to resolve them
-    # Gather all the UUIDs that we need to look up
     ids_to_fetch = set()
     for row in rows:
         for field_id in relation_fields:
@@ -133,26 +127,22 @@ async def get_rows_for_schema(
                 try:
                     ids_to_fetch.add(UUID(related_row_id))
                 except (ValueError, TypeError):
-                    pass # Ignore malformed UUIDs
+                    pass
 
-    # 5. Fetch all related rows in a single, efficient query
     if not ids_to_fetch:
-         return rows # No valid related IDs found
+         return [RowResponse.from_orm(row) for row in rows]
 
     related_rows_result = await db.execute(
         select(CustomDataRow).where(CustomDataRow.row_id.in_(ids_to_fetch))
     )
-    # Create a lookup map for easy access: { "uuid-string": {row_id: ..., data: ...} }
     related_rows_map = { str(row.row_id): RowResponse.from_orm(row).model_dump() for row in related_rows_result.scalars() }
 
-    # 6. Build the final, nested response
     final_response = []
     for row in rows:
         resolved_data = row.data.copy()
         for field_id in relation_fields:
             related_row_id = resolved_data.get(field_id)
             if related_row_id and str(related_row_id) in related_rows_map:
-                # Replace the UUID with the full data object
                 resolved_data[field_id] = related_rows_map[str(related_row_id)]
         
         final_response.append(RowResponse(row_id=row.row_id, data=resolved_data))
