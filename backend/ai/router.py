@@ -968,10 +968,10 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
     -   A `<template id="displayTemplate">`.
 
-5.  **`displayTemplate: A Mustache/HTML template for ONE data item. The API sends a row object like {"row_id": "...", "data": {"field_id": "value"}}`
-        - For regular fields, you MUST use {{data.field_id}} to show values (e.g., <h3>{{data.job_title}}</h3>).
-        - CRITICAL: For relational fields (e.g., a field with id 'category'), the API will send a nested object. You MUST access the nested data correctly to show the display name, like {{data.category.data.name}} or {{data.category.data.title}}. You must look inside the related object's data property to find the correct field to display.
-        - It must include edit/delete buttons with a data-row-id="{{row_id}}".
+5.  **`displayTemplate`**: A Mustache/HTML template for ONE data item.
+    -   For regular fields, you **MUST** use `{{data.field_id}}` (e.g., `<h3>{{data.job_title}}</h3>`).
+    -   **CRITICAL:** For relational fields (e.g., a field with id 'category'), you **MUST** access the nested data correctly. Look at the `EXISTING_SCHEMAS_ON_WEBSITE` context to find the exact field `id` from the related schema to display (e.g., if the category schema has a field with id `category_name`, you MUST use `{{data.category.data.category_name}}`).
+    -   It **MUST** include edit/delete buttons with a `data-row-id="{{row_id}}"`.
 
 
 6.  **Styling & Editable Properties (`properties`, `editableProps`)**:
