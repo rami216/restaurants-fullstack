@@ -980,13 +980,16 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
-    -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container` by looping through the `properties.schema_fields` array.
+    -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
+        -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
+        -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
+        -   **CRITICAL SCRIPT RULE:** The text for each `<option>` **MUST** come from the related row's `data` object by finding a name-like key (e.g., `relatedRow.data.name`, `relatedRow.data.title`). The `value` for the `<option>` must be the `row_id`.
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
         -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
         -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })`(where `sitemember_id` can be null)
+        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })` (where `sitemember_id` can be null)
         -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
