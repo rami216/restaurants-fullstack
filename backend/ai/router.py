@@ -1165,7 +1165,11 @@ Your output MUST be a valid JSON object with FIVE keys: "name_to_find", "aiTempl
     -   A `<template id="displayTemplate">`.
     -   **DO NOT** include an "Add New" button or a form container.
 
-3.  **`displayTemplate`**: A Mustache/HTML template for ONE data item. The API sends a `row` object like `{"row_id": "...", "data": {"field_id": "value"}}`. Therefore, you **MUST** use `{{data.field_id}}` to show values. **DO NOT** include edit or delete buttons.
+3.  displayTemplate: A Mustache/HTML template for ONE data item.
+    - The API sends a row object with this structure: {"row_id": "...", "data": {"field_id": "value"}}.
+    - For regular fields, you MUST use {{data.field_id}}.
+    - CRITICAL: For relational fields (e.g., a field with id 'project'), the data object will contain a nested object. You MUST access this nested data correctly. Look at the SCHEMA_OF_DATA_TO_DISPLAY context to find the exact field id from the related schema to display (e.g., {{data.project.data.project_title}}).
+    - DO NOT include edit or delete buttons.
 
 4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   Make the component's styling fully editable.
@@ -1313,12 +1317,12 @@ async def generate_view_only_element(
 #region refine_data_app
 REFINE_DATA_APP_PROMPT = """
 You are an expert full-stack developer, and your task is to refine an interactive data-driven component based on user feedback.
-You will be given the user's prompt and the current JSON state of the component.
+You will be given the user's prompt, the current JSON state of the component, and a list of all existing schemas on the website.
 
 Your output MUST be a single, complete, valid JSON object representing the fully updated state.
 
 **CRITICAL RULES:**
-1.  **Analyze the `originalType`**: The `properties.originalType` will be either `DATA_TABLE` (full CRUD) or `DATA_VIEW` (read-only). Your response MUST respect this. Do not add editing features to a `DATA_VIEW` unless explicitly asked to convert it.
+1.  **Use Context for Relationships:** When the user's prompt involves a related table (e.g., "show the project's due date"), you **MUST** use the `EXISTING_SCHEMAS_ON_WEBSITE` context to find the exact field IDs of the related schema and modify the `displayTemplate` or `script` accordingly.
 2.  **Preserve Core Structure**: DO NOT change the `schema_id` or the `schema_fields` in the `properties` object. The database schema is fixed.
 3.  **Apply User's Prompt**:
     -   For visual changes (colors, fonts, layout), modify the CSS in the `aiTemplate` and update the corresponding values in the `properties` object.
@@ -1337,11 +1341,22 @@ async def refine_data_app_element(
         if not body.website_id:
             raise HTTPException(status_code=400, detail="website_id is required")
 
+        # --- STEP 1: FETCH EXISTING SCHEMAS FOR CONTEXT ---
+        schema_result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
+        )
+        existing_schemas = schema_result.scalars().all()
+        schemas_for_prompt = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas]
+
+        # --- STEP 2: BUILD THE CONTEXT-AWARE USER PROMPT ---
         user_content = (
             f'USER_PROMPT: "{body.prompt}"\n\n'
-            f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
+            f'CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```\n\n'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
         )
 
+        # --- STEP 3: CALL OPENAI ---
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
@@ -1354,6 +1369,7 @@ async def refine_data_app_element(
 
         payload = json.loads(resp.choices[0].message.content)
         
+        # --- (Usage tracking remains the same) ---
         usage = getattr(resp, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
@@ -1375,6 +1391,5 @@ async def refine_data_app_element(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Data App refinement failed: {e}")
-
 
 
