@@ -987,7 +987,13 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
         -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
-        -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must find the related schema's definition in the `EXISTING_SCHEMAS_ON_WEBSITE` context, find the `id` of the first text-based field (like 'text' or 'email') to use as a dynamic `displayKey`, and use that key to set the `textContent` of the option (e.g., `option.textContent = relatedRow.data[displayKey]`). **DO NOT** use hardcoded `if/else` blocks for this. The logic must be general-purpose. The `value` for the `<option>` must be the `row_id`.
+        -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
+                1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
+                2.  From that schema's `fields` array, find the `id` of the first field that is of `type: "text"` or `type: "email"`. This will be the `displayKey`.
+                3.  Fetch all rows for the `related_schema_id`.
+                4.  When creating each `<option>`, the `textContent` **MUST** be set using the dynamic `displayKey` found in step 2 (e.g., `option.textContent = relatedRow.data[displayKey]`).
+                5.  The `value` for the `<option>` must be the `row_id`.
+                -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic and general-purpose.
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
