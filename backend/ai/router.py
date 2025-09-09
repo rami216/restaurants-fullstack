@@ -1051,30 +1051,124 @@ class AIResponseSchema(BaseModel):
     script: str
 
 @router.post("/generate-data-app-element")
+# async def generate_data_app_element(
+#     body: GenerateDataAppRequest,
+#     db: AsyncSession = Depends(get_db),
+#     user: User = Depends(get_current_active_user)
+# ):
+#     try:
+#         # --- (The first part of your function is correct and remains the same) ---
+#         schema_result = await db.execute(
+#             select(CustomDataSchema)
+#             .where(CustomDataSchema.website_id == body.website_id)
+#         )
+#         existing_schemas = schema_result.scalars().all()
+        
+#         schemas_for_prompt = [
+#             {"name": s.name, "schema_id": str(s.schema_id)}
+#             for s in existing_schemas
+#         ]
+        
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
+#             f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
+#         )
+
+#         resp = openai.chat.completions.create(
+#             model=AI_DEFAULT_MODEL,
+#             response_format={"type": "json_object"},
+#             messages=[
+#                 {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
+#                 {"role": "user", "content": user_content},
+#             ],
+#             temperature=0.5,
+#             max_tokens=4096,
+#         )
+        
+#         payload = json.loads(resp.choices[0].message.content)
+
+#         if isinstance(payload.get("script"), str):
+#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if m:
+#                 payload["script"] = m.group(1).strip()
+        
+#         ai_response = AIResponseSchema(**payload)
+
+#         # --- ✅ THE FIX IS HERE ---
+#         # Convert any UUIDs in the schema fields to strings before saving.
+#         sanitized_fields = []
+#         for field in ai_response.schema_fields:
+#             field_dict = field.model_dump()
+#             if 'related_schema_id' in field_dict and isinstance(field_dict['related_schema_id'], UUID):
+#                 field_dict['related_schema_id'] = str(field_dict['related_schema_id'])
+#             sanitized_fields.append(field_dict)
+        
+#         # Now, create the schema with the sanitized fields
+#         new_schema = CustomDataSchema(
+#             website_id=body.website_id,
+#             name=ai_response.name,
+#             fields=sanitized_fields # Use the sanitized list
+#         )
+#         db.add(new_schema)
+#         await db.commit()
+#         await db.refresh(new_schema)
+        
+#         final_properties = ai_response.properties.copy()
+#         final_properties["schema_id"] = str(new_schema.schema_id)
+#         final_properties["originalType"] = "DATA_TABLE"
+#         final_properties["schema_fields"] = sanitized_fields # Also use the sanitized list here
+
+#         final_payload = {
+#             "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
+#             "properties": final_properties,
+#             "editableProps": ai_response.editable_props,
+#             "script": ai_response.script,
+#         }
+        
+#         # --- (Usage tracking remains the same) ---
+#         usage = getattr(resp, "usage", None)
+#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        
+#         await track_ai_usage(
+#             db=db,
+#             website_id=body.website_id,
+#             user_id=user.id,
+#             model=model_used,
+#             feature="generate_data_app",
+#             prompt_tokens=prompt_tokens,
+#             completion_tokens=completion_tokens,
+#             meta={"prompt_len": len(body.prompt)}
+#         )
+
+#         return final_payload
+
+#     except Exception as e:
+#         import traceback; traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
 async def generate_data_app_element(
     body: GenerateDataAppRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user)
 ):
     try:
-        # --- (The first part of your function is correct and remains the same) ---
+        # Step 1: Fetch existing schemas for the AI's context
         schema_result = await db.execute(
             select(CustomDataSchema)
             .where(CustomDataSchema.website_id == body.website_id)
         )
         existing_schemas = schema_result.scalars().all()
-        
-        schemas_for_prompt = [
-            {"name": s.name, "schema_id": str(s.schema_id)}
-            for s in existing_schemas
-        ]
-        
+        schemas_for_prompt = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas]
+
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
             f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
         )
 
+        # Step 2: Call OpenAI with the full context
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
@@ -1088,45 +1182,76 @@ async def generate_data_app_element(
         
         payload = json.loads(resp.choices[0].message.content)
 
-        if isinstance(payload.get("script"), str):
-            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if m:
-                payload["script"] = m.group(1).strip()
-        
-        ai_response = AIResponseSchema(**payload)
+        # Step 3: Process the AI's instructions to create one or more schemas
+        schemas_to_create = payload.get("schemas_to_create", [])
+        element_to_generate = payload.get("element_to_generate")
 
-        # --- ✅ THE FIX IS HERE ---
-        # Convert any UUIDs in the schema fields to strings before saving.
-        sanitized_fields = []
-        for field in ai_response.schema_fields:
-            field_dict = field.model_dump()
-            if 'related_schema_id' in field_dict and isinstance(field_dict['related_schema_id'], UUID):
-                field_dict['related_schema_id'] = str(field_dict['related_schema_id'])
-            sanitized_fields.append(field_dict)
+        if not element_to_generate or not schemas_to_create:
+            # Fallback for old prompt format for safety
+            if "schema" in payload:
+                 schemas_to_create = [payload]
+                 element_to_generate = payload
+            else:
+                raise HTTPException(status_code=500, detail="AI response was missing required structure.")
+
+        created_schemas_map = {}
+        final_schema_id = None
+        final_schema_data = None
+
+        for schema_data in schemas_to_create:
+            # Handle both old and new schema formats
+            schema_fields = schema_data.get("schema_fields") or schema_data.get("schema", [])
+            for field in schema_fields:
+                if field.get("type") == "relation":
+                    placeholder = field.get("related_schema_id")
+                    if placeholder in created_schemas_map:
+                        field["related_schema_id"] = created_schemas_map[placeholder]
+            
+            sanitized_fields = []
+            for field in schema_fields:
+                field_dict = field
+                if 'related_schema_id' in field_dict and isinstance(field_dict.get('related_schema_id'), UUID):
+                    field_dict['related_schema_id'] = str(field_dict['related_schema_id'])
+                sanitized_fields.append(field_dict)
+
+            new_schema = CustomDataSchema(
+                website_id=body.website_id,
+                name=schema_data["name"],
+                fields=sanitized_fields
+            )
+            db.add(new_schema)
+            await db.commit()
+            await db.refresh(new_schema)
+            
+            placeholder_key = f"PLACEHOLDER_FOR_{schema_data['name']}"
+            created_schemas_map[placeholder_key] = str(new_schema.schema_id)
+            final_schema_id = new_schema.schema_id
+            final_schema_data = schema_data
         
-        # Now, create the schema with the sanitized fields
-        new_schema = CustomDataSchema(
-            website_id=body.website_id,
-            name=ai_response.name,
-            fields=sanitized_fields # Use the sanitized list
+        # Step 4: Prepare the final properties, including the 'all_schemas' context
+        all_schemas_result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
         )
-        db.add(new_schema)
-        await db.commit()
-        await db.refresh(new_schema)
-        
-        final_properties = ai_response.properties.copy()
-        final_properties["schema_id"] = str(new_schema.schema_id)
+        all_schemas = all_schemas_result.scalars().all()
+        all_schemas_for_script = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas]
+
+        final_properties = element_to_generate["properties"]
+        final_properties["schema_id"] = str(final_schema_id)
         final_properties["originalType"] = "DATA_TABLE"
-        final_properties["schema_fields"] = sanitized_fields # Also use the sanitized list here
+        
+        final_schema_fields = final_schema_data.get("schema_fields") or final_schema_data.get("schema", [])
+        final_properties["schema_fields"] = final_schema_fields
+        final_properties["all_schemas"] = all_schemas_for_script
 
         final_payload = {
-            "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
+            "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
             "properties": final_properties,
-            "editableProps": ai_response.editable_props,
-            "script": ai_response.script,
+            "editableProps": element_to_generate["editableProps"],
+            "script": element_to_generate["script"],
         }
         
-        # --- (Usage tracking remains the same) ---
+        # Step 5: Track usage
         usage = getattr(resp, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
@@ -1148,6 +1273,14 @@ async def generate_data_app_element(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
+
+
+
+
+
+
+
+
 
 
 
