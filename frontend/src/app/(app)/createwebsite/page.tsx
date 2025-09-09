@@ -381,63 +381,78 @@ const CreateWebsitePage = () => {
   };
 
   const selectedItem = findSelectedItem();
-
   const handleDeleteItem = async (
     itemToDelete: any,
     type: Selection["type"]
   ) => {
     if (!itemToDelete || !type) return;
 
-    // --- 1. If it's an image or video, delete the file from storage FIRST ---
-    if (
+    // --- 1. PROMPT USER FOR CONFIRMATION ---
+    const isDataApp =
       type === "element" &&
-      ["IMAGE", "VIDEO"].includes(itemToDelete.element_type)
-    ) {
-      const props = itemToDelete.properties || {};
-      // Use 'src' for images/videos, but also check 'image_url' as a fallback
-      const fileUrl = props.src || props.image_url;
+      (itemToDelete.properties?.originalType === "DATA_TABLE" ||
+        itemToDelete.properties?.originalType === "DATA_VIEW");
+    const confirmMessage = isDataApp
+      ? "Are you sure? Deleting this element will also permanently delete its data table and all submitted data."
+      : `Are you sure you want to delete this ${type}?`;
 
-      if (fileUrl && fileUrl.includes("/storage/v1/object/public/")) {
-        try {
-          // Extract the path and bucket from the full URL
+    if (!confirm(confirmMessage)) {
+      return; // User cancelled the action
+    }
+
+    // --- 2. PERFORM DELETION LOGIC (IMMEDIATE ACTIONS) ---
+    try {
+      // A. If it's a Data App, delete its schema from the DB immediately.
+      if (isDataApp && itemToDelete.properties?.schema_id) {
+        await api.delete(
+          `/custom-data/schemas/by-element/${itemToDelete.element_id}`
+        );
+      }
+
+      // B. If it's an Image/Video, delete its file from storage immediately.
+      if (
+        type === "element" &&
+        ["IMAGE", "VIDEO"].includes(itemToDelete.element_type)
+      ) {
+        const fileUrl =
+          itemToDelete.properties?.src || itemToDelete.properties?.image_url;
+        if (fileUrl && fileUrl.includes("/storage/v1/object/public/")) {
           const url = new URL(fileUrl);
           const pathParts = url.pathname.split("/public/");
           const [bucket, ...objectPathParts] = pathParts[1].split("/");
           const objectPath = objectPathParts.join("/");
-
-          // Call the backend endpoint to securely delete the file
-          // This will trigger your Supabase webhook to update the storage count
           await api.post("/uploads/delete-object", {
             bucket,
             path: objectPath,
           });
-        } catch (error) {
-          console.error(
-            "Failed to delete file from storage, but proceeding to delete database record.",
-            error
-          );
-          // You can decide if you want to stop here or continue if file deletion fails
         }
       }
+    } catch (error) {
+      console.error(
+        "An error occurred during immediate deletion of associated resources:",
+        error
+      );
+      alert(
+        "An error occurred while trying to delete associated data. The element will be removed from the page, but please save your work to ensure everything is synced."
+      );
     }
 
-    // --- 2. Remove the item from the local React state (your existing logic) ---
+    // --- 3. ADD THE UI ELEMENT TO THE LIST TO BE DELETED ON SAVE ---
     const idKey = `${type}_id` as keyof typeof itemToDelete;
     const idToDelete = itemToDelete[idKey];
+    if (!isTempId(idToDelete)) {
+      setDeletedItems((prev) => [
+        ...prev,
+        { type: type as any, id: idToDelete },
+      ]);
+    }
 
-    if (type === "navbar_item" && websiteData?.navbar) {
-      const newNavbar = {
-        ...websiteData.navbar,
-        items: websiteData.navbar.items.filter(
-          (item) => item.item_id !== idToDelete
-        ),
-      };
-      setWebsiteData({ ...websiteData, navbar: newNavbar });
-    } else if (activePage) {
+    // --- 4. REMOVE ITEM FROM LOCAL REACT STATE ---
+    if (activePage) {
       let updatedSections = activePage.sections;
       if (type === "section") {
         updatedSections = activePage.sections.filter(
-          (s) => s.section_id !== idToDelete
+          (s) => s.section_id !== itemToDelete.section_id
         );
       } else {
         updatedSections = activePage.sections.map((s) => ({
@@ -446,24 +461,16 @@ const CreateWebsitePage = () => {
             .map((sub) => ({
               ...sub,
               elements: sub.elements.filter(
-                (el) => el.element_id !== idToDelete
+                (el) => el.element_id !== itemToDelete.element_id
               ),
             }))
-            .filter((sub) => sub.subsection_id !== idToDelete),
+            .filter((sub) => sub.subsection_id !== itemToDelete.subsection_id),
         }));
       }
       updateWebsiteData({ ...activePage, sections: updatedSections });
     }
 
-    // --- 3. Add the database ID to the list of items to be deleted on save ---
-    if (!isTempId(idToDelete)) {
-      setDeletedItems((prev) => [
-        ...prev,
-        { type: type as any, id: idToDelete },
-      ]);
-    }
-
-    // --- 4. Clear the selection ---
+    // --- 5. CLEAR SELECTION ---
     setSelection({ type: null, id: null });
   };
 

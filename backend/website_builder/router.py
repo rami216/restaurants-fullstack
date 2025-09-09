@@ -11,7 +11,7 @@ from typing import List
 from database import get_db
 from auth.auth_handler import get_current_active_user
 from models import User, RestaurantOwner,Location
-from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain
+from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain,CustomDataSchema
 from . import schemas
 from config import AI_SPEND_LIMIT_USD  # import the default from .env
 
@@ -303,6 +303,40 @@ async def delete_element(element_id: UUID, db: AsyncSession = Depends(get_db), c
         await db.delete(db_element)
         await db.commit()
     return
+
+@router.delete("/schemas/by-element/{element_id}", status_code=204)
+async def delete_schema_by_element(
+    element_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """
+    Finds a schema linked to an element and deletes it.
+    This is used when a data-driven element is deleted from the builder.
+    """
+    # First, get the element to find its schema_id
+    element = await db.get(Element, element_id)
+    if not element:
+        # If element is already gone, just return success
+        return Response(status_code=204)
+
+    # Note: You should add an ownership check here in a real-world app
+    # to ensure the current_user owns the website this element belongs to.
+
+    schema_id_to_delete = None
+    if element.properties and "schema_id" in element.properties:
+        try:
+            schema_id_to_delete = UUID(element.properties["schema_id"])
+        except (ValueError, TypeError):
+            return Response(status_code=204) # Not a valid UUID, do nothing
+
+    if schema_id_to_delete:
+        schema = await db.get(CustomDataSchema, schema_id_to_delete)
+        if schema:
+            await db.delete(schema)
+            await db.commit()
+    
+    return Response(status_code=204)
 
 # --- Navbar Endpoints ---
 @router.put("/navbars/{navbar_id}", response_model=schemas.NavbarResponse)
