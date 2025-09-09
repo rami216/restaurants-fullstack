@@ -315,21 +315,18 @@ async def delete_schema_by_element(
     Finds a schema linked to an element and deletes it.
     This is used when a data-driven element is deleted from the builder.
     """
-    # First, get the element to find its schema_id
     element = await db.get(Element, element_id)
     if not element:
-        # If element is already gone, just return success
         return Response(status_code=204)
 
-    # Note: You should add an ownership check here in a real-world app
-    # to ensure the current_user owns the website this element belongs to.
+    # Note: Add an ownership check here in a real-world app.
 
     schema_id_to_delete = None
     if element.properties and "schema_id" in element.properties:
         try:
             schema_id_to_delete = UUID(element.properties["schema_id"])
         except (ValueError, TypeError):
-            return Response(status_code=204) # Not a valid UUID, do nothing
+            return Response(status_code=204)
 
     if schema_id_to_delete:
         schema = await db.get(CustomDataSchema, schema_id_to_delete)

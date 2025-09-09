@@ -392,6 +392,7 @@ const CreateWebsitePage = () => {
       type === "element" &&
       (itemToDelete.properties?.originalType === "DATA_TABLE" ||
         itemToDelete.properties?.originalType === "DATA_VIEW");
+
     const confirmMessage = isDataApp
       ? "Are you sure? Deleting this element will also permanently delete its data table and all submitted data."
       : `Are you sure you want to delete this ${type}?`;
@@ -400,12 +401,12 @@ const CreateWebsitePage = () => {
       return; // User cancelled the action
     }
 
-    // --- 2. PERFORM DELETION LOGIC (IMMEDIATE ACTIONS) ---
+    // --- 2. PERFORM IMMEDIATE DELETION OF ASSOCIATED DATA (YOUR IDEA) ---
     try {
       // A. If it's a Data App, delete its schema from the DB immediately.
       if (isDataApp && itemToDelete.properties?.schema_id) {
         await api.delete(
-          `/custom-data/schemas/by-element/${itemToDelete.element_id}`
+          `/builder/schemas/by-element/${itemToDelete.element_id}`
         );
       }
 
@@ -432,12 +433,13 @@ const CreateWebsitePage = () => {
         "An error occurred during immediate deletion of associated resources:",
         error
       );
+      // We can alert the user but still proceed to remove the item from the UI
       alert(
-        "An error occurred while trying to delete associated data. The element will be removed from the page, but please save your work to ensure everything is synced."
+        "An error occurred while trying to delete associated data. The element will be removed from the page, but please save your work to finalize all changes."
       );
     }
 
-    // --- 3. ADD THE UI ELEMENT TO THE LIST TO BE DELETED ON SAVE ---
+    // --- 3. QUEUE THE UI ELEMENT FOR DELETION ON SAVE (YOUR EXISTING LOGIC) ---
     const idKey = `${type}_id` as keyof typeof itemToDelete;
     const idToDelete = itemToDelete[idKey];
     if (!isTempId(idToDelete)) {
@@ -452,7 +454,7 @@ const CreateWebsitePage = () => {
       let updatedSections = activePage.sections;
       if (type === "section") {
         updatedSections = activePage.sections.filter(
-          (s) => s.section_id !== itemToDelete.section_id
+          (s) => s.section_id !== idToDelete
         );
       } else {
         updatedSections = activePage.sections.map((s) => ({
@@ -461,10 +463,10 @@ const CreateWebsitePage = () => {
             .map((sub) => ({
               ...sub,
               elements: sub.elements.filter(
-                (el) => el.element_id !== itemToDelete.element_id
+                (el) => el.element_id !== idToDelete
               ),
             }))
-            .filter((sub) => sub.subsection_id !== itemToDelete.subsection_id),
+            .filter((sub) => sub.subsection_id !== idToDelete),
         }));
       }
       updateWebsiteData({ ...activePage, sections: updatedSections });
