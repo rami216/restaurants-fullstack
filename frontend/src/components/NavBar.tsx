@@ -88,6 +88,20 @@ export default function NavBar() {
               </li>
               <li>
                 <Link
+                  href="/ai-database"
+                  className={cn(
+                    "...",
+                    pathname === "/ai-database"
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-gray-900"
+                  )}
+                >
+                  ai database
+                </Link>
+              </li>
+
+              <li>
+                <Link
                   href="/orders"
                   className={cn(
                     "...",
