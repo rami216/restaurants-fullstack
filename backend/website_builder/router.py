@@ -10,8 +10,9 @@ from typing import List
 
 from database import get_db
 from auth.auth_handler import get_current_active_user
-from models import User, RestaurantOwner,Location
-from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain,CustomDataSchema
+from models import User, RestaurantOwner,Location,CustomDataSchema
+from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain
+
 from . import schemas
 from config import AI_SPEND_LIMIT_USD  # import the default from .env
 
