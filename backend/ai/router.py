@@ -966,6 +966,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   A static "Add New" button with a class of `add-new-btn`.
     -   An **EMPTY** container for the form (e.g., `<div class="form-container"></div>`). The script will build the form here.
     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`). The script will render rows here.
+    -   An **EMPTY** container for pagination controls (e.g., `<div class="pagination-controls"></div>`).
     -   A `<template id="displayTemplate">`.
 
 5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
@@ -983,6 +984,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 
 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+    -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
     -   **Form Generation:** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
         -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
@@ -997,10 +999,15 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
-        -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
+        -   **Fetch Paginated Rows:** `api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`)`. The response is `{ "rows": [], "total": 0 }`.
         -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
         -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })` (where `sitemember_id` can be null)
         -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
+    -   Pagination Logic:
+        -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
+        -  Buttons MUST be disabled when on the first or last page.
+        -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
+        
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
 ---
@@ -1016,7 +1023,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "id": "name", "label": "Name", "type": "text" },
     { "id": "email", "label": "Email", "type": "email" }
   ],
-  "aiTemplate": "<style>.ai-contact-list-12345 h3 { color: {{titleColor}}; } .ai-contact-list-12345 .data-row { display: flex; justify-content: space-between; align-items: center; padding: 8px; border-bottom: 1px solid {{borderColor}}; } .ai-contact-list-12345 .form-container { padding: 16px; border: 1px solid {{borderColor}}; border-radius: 8px; margin-top: 16px; display: none; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; color: #fff; padding: 8px 12px; border: none; border-radius: 4px; cursor: pointer; margin-bottom: 16px; }</style><h3>{{title}}</h3><button class=\\"add-new-btn\\">{{addButtonText}}</button><div class=\\"form-container\\"></div><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div class=\\"data-row\\"><span><strong>{{data.name}}</strong> ({{data.email}})</span><div><button class=\\"edit-btn\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
+  "aiTemplate": "<style>.ai-contact-list-12345 h3 { color: {{titleColor}}; } .ai-contact-list-12345 .pagination-controls button { margin: 0 5px; cursor: pointer; } .ai-contact-list-12345 .pagination-controls button:disabled { cursor: not-allowed; opacity: 0.5; }</style><h3>{{title}}</h3><button class=\\"add-new-btn\\">{{addButtonText}}</button><div class=\\"form-container\\"></div><div class=\\"data-display\\"></div><div class=\\"pagination-controls\\"></div><template id=\\"displayTemplate\\"><div class=\\"data-row\\"><span><strong>{{data.name}}</strong> ({{data.email}})</span><div><button class=\\"edit-btn\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
   "properties": {
     "title": "Contact List",
     "addButtonText": "Add Contact",
@@ -1031,7 +1038,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-"script": "const formContainer = container.querySelector('.form-container'); const dataDisplay = container.querySelector('.data-display'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let allRows = []; let editingRowId = null; const schema = properties.schema_fields; const generateForm = (initialData = {}) => { formContainer.style.display = 'block'; formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'data-form space-y-3'; schema.forEach(field => { const label = document.createElement('label'); label.className = 'block text-sm font-medium'; label.textContent = field.label; const input = field.type === 'textarea' ? document.createElement('textarea') : document.createElement('input'); input.name = field.id; input.type = field.type; input.required = true; input.className = 'w-full border rounded p-2 mt-1'; input.value = initialData[field.id] || ''; form.appendChild(label); form.appendChild(input); }); const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.textContent = editingRowId ? 'Update Contact' : 'Save Contact'; submitBtn.className = 'bg-blue-600 text-white px-4 py-2 rounded mt-2'; form.appendChild(submitBtn); form.addEventListener('submit', handleFormSubmit); formContainer.appendChild(form); }; const handleFormSubmit = async (e) => { e.preventDefault(); const form = e.target; const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); formContainer.innerHTML = ''; formContainer.style.display = 'none'; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }; const renderRows = () => { dataDisplay.innerHTML = ''; allRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); allRows = response.data; renderRows(); } catch (err) { console.error('Failed to fetch data:', err); } }; dataDisplay.addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const rowToEdit = allRows.find(r => r.row_id === editingRowId); if (rowToEdit) { generateForm(rowToEdit.data); } } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { const rowId = deleteBtn.dataset.rowId; if (confirm('Are you sure you want to delete this contact?')) { const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id}`).then(fetchAndRenderRows); } } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); fetchAndRenderRows();"
+  "script": "const formContainer = container.querySelector('.form-container'); const dataDisplay = container.querySelector('.data-display'); const paginationControls = container.querySelector('.pagination-controls'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let currentRows = []; let editingRowId = null; const schema = properties.schema_fields; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0; const generateForm = async (initialData = {}) => { formContainer.style.display = 'block'; formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'data-form'; for (const field of schema) { const label = document.createElement('label'); label.textContent = field.label; form.appendChild(label); if (field.type === 'relation') { const select = document.createElement('select'); select.name = field.id; select.required = true; const defaultOption = document.createElement('option'); defaultOption.textContent = `Select ${field.label}`; defaultOption.value = ''; select.appendChild(defaultOption); const relatedSchemaId = field.related_schema_id; const allSchemas = properties.all_schemas; const relatedSchema = allSchemas.find(s => s.schema_id === relatedSchemaId); if (relatedSchema) { const displayKey = relatedSchema.fields.find(f => f.type === 'text' || f.type === 'email')?.id || relatedSchema.fields[0].id; const res = await api.get(`/custom-data/rows/${relatedSchemaId}?limit=1000`); res.data.rows.forEach(relatedRow => { const option = document.createElement('option'); option.value = relatedRow.row_id; option.textContent = relatedRow.data[displayKey] || relatedRow.row_id; select.appendChild(option); }); } select.value = initialData[field.id] || ''; form.appendChild(select); } else { const input = document.createElement('input'); input.name = field.id; input.type = field.type; input.required = true; input.value = initialData[field.id] || ''; form.appendChild(input); } } const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.textContent = editingRowId ? 'Update' : 'Save'; form.appendChild(submitBtn); form.addEventListener('submit', handleFormSubmit); formContainer.appendChild(form); }; const handleFormSubmit = async (e) => { e.preventDefault(); const form = e.target; const formData = new FormData(form); const data = Object.fromEntries(formData.entries()); const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); } await fetchAndRenderRows(); formContainer.innerHTML = ''; formContainer.style.display = 'none'; editingRowId = null; } catch (err) { console.error('Failed to save data:', err); } }; const renderRows = () => { dataDisplay.innerHTML = ''; currentRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); }; const renderPagination = () => { paginationControls.innerHTML = ''; const totalPages = Math.ceil(totalRows / rowsPerPage); if (totalPages <= 1) return; const prevButton = document.createElement('button'); prevButton.textContent = 'Previous'; prevButton.disabled = currentPage === 0; prevButton.addEventListener('click', () => { if (currentPage > 0) { currentPage--; fetchAndRenderRows(); } }); const nextButton = document.createElement('button'); nextButton.textContent = 'Next'; nextButton.disabled = currentPage >= totalPages - 1; nextButton.addEventListener('click', () => { if (currentPage < totalPages - 1) { currentPage++; fetchAndRenderRows(); } }); paginationControls.appendChild(prevButton); paginationControls.appendChild(nextButton); }; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); const { rows, total } = response.data; currentRows = rows; totalRows = total; renderRows(); renderPagination(); } catch (err) { console.error('Failed to fetch data:', err); } }; dataDisplay.addEventListener('click', async (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const rowToEdit = currentRows.find(r => r.row_id === editingRowId); if (rowToEdit) { await generateForm(rowToEdit.data); } } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { const rowId = deleteBtn.dataset.rowId; if (confirm('Are you sure?')) { const sitemember_id = localStorage.getItem(`siteMemberId:your-subdomain`); let url = `/custom-data/rows/${rowId}`; if (sitemember_id) { url += `?sitemember_id=${sitemember_id}`; } await api.delete(url); fetchAndRenderRows(); } } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); fetchAndRenderRows();"
 }
 """.strip()
 
@@ -1051,103 +1058,6 @@ class AIResponseSchema(BaseModel):
     script: str
 
 @router.post("/generate-data-app-element")
-# async def generate_data_app_element(
-#     body: GenerateDataAppRequest,
-#     db: AsyncSession = Depends(get_db),
-#     user: User = Depends(get_current_active_user)
-# ):
-#     try:
-#         # --- (The first part of your function is correct and remains the same) ---
-#         schema_result = await db.execute(
-#             select(CustomDataSchema)
-#             .where(CustomDataSchema.website_id == body.website_id)
-#         )
-#         existing_schemas = schema_result.scalars().all()
-        
-#         schemas_for_prompt = [
-#             {"name": s.name, "schema_id": str(s.schema_id)}
-#             for s in existing_schemas
-#         ]
-        
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
-#             f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
-#         )
-
-#         resp = openai.chat.completions.create(
-#             model=AI_DEFAULT_MODEL,
-#             response_format={"type": "json_object"},
-#             messages=[
-#                 {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
-#                 {"role": "user", "content": user_content},
-#             ],
-#             temperature=0.5,
-#             max_tokens=4096,
-#         )
-        
-#         payload = json.loads(resp.choices[0].message.content)
-
-#         if isinstance(payload.get("script"), str):
-#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-#             if m:
-#                 payload["script"] = m.group(1).strip()
-        
-#         ai_response = AIResponseSchema(**payload)
-
-#         # --- ✅ THE FIX IS HERE ---
-#         # Convert any UUIDs in the schema fields to strings before saving.
-#         sanitized_fields = []
-#         for field in ai_response.schema_fields:
-#             field_dict = field.model_dump()
-#             if 'related_schema_id' in field_dict and isinstance(field_dict['related_schema_id'], UUID):
-#                 field_dict['related_schema_id'] = str(field_dict['related_schema_id'])
-#             sanitized_fields.append(field_dict)
-        
-#         # Now, create the schema with the sanitized fields
-#         new_schema = CustomDataSchema(
-#             website_id=body.website_id,
-#             name=ai_response.name,
-#             fields=sanitized_fields # Use the sanitized list
-#         )
-#         db.add(new_schema)
-#         await db.commit()
-#         await db.refresh(new_schema)
-        
-#         final_properties = ai_response.properties.copy()
-#         final_properties["schema_id"] = str(new_schema.schema_id)
-#         final_properties["originalType"] = "DATA_TABLE"
-#         final_properties["schema_fields"] = sanitized_fields # Also use the sanitized list here
-
-#         final_payload = {
-#             "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
-#             "properties": final_properties,
-#             "editableProps": ai_response.editable_props,
-#             "script": ai_response.script,
-#         }
-        
-#         # --- (Usage tracking remains the same) ---
-#         usage = getattr(resp, "usage", None)
-#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
-        
-#         await track_ai_usage(
-#             db=db,
-#             website_id=body.website_id,
-#             user_id=user.id,
-#             model=model_used,
-#             feature="generate_data_app",
-#             prompt_tokens=prompt_tokens,
-#             completion_tokens=completion_tokens,
-#             meta={"prompt_len": len(body.prompt)}
-#         )
-
-#         return final_payload
-
-#     except Exception as e:
-#         import traceback; traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
 async def generate_data_app_element(
     body: GenerateDataAppRequest,
     db: AsyncSession = Depends(get_db),
@@ -1301,6 +1211,7 @@ Your output MUST be a valid JSON object with FIVE keys: "name_to_find", "aiTempl
     -   A `<style>` tag for all CSS.
     -   A static main title `<h3>` or `<h2>`.
     -   An **EMPTY** container for displaying the data (e.g., `<div class="data-display"></div>`).
+    -   An EMPTY container for pagination controls (e.g., <div class="pagination-controls"></div>).
     -   A `<template id="displayTemplate">`.
     -   **DO NOT** include an "Add New" button or a form container.
 
@@ -1318,9 +1229,14 @@ Your output MUST be a valid JSON object with FIVE keys: "name_to_find", "aiTempl
 
 5.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+    -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
     -   It must ONLY fetch and render data.
     -   API Calls to Use:
-        -   **Fetch All Rows:** `api.get(`/custom-data/rows/${schemaId}`)`
+        -   Fetch Paginated Rows: api.get(/custom-data/rows/schemaId?skip={currentPage * rowsPerPage}&limit=${rowsPerPage}). The response is { "rows": [], "total": 0 }.
+    -   Pagination Logic:
+            - It MUST render "Previous" and "Next" buttons inside the .pagination-controls container.
+            - Buttons MUST be disabled when on the first or last page.
+            - Clicking the buttons MUST update the currentPage state and re-fetch the data.
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
 ---
@@ -1332,11 +1248,12 @@ Your output MUST be a valid JSON object with FIVE keys: "name_to_find", "aiTempl
 **Example Output:**
 {
   "name_to_find": "Contact List",
-  "aiTemplate": "<style>.ai-contact-view-12345 h3 { color: {{titleColor}}; }</style><h3>{{title}}</h3><div class=\\"data-display\\"></div><template id=\\"displayTemplate\\"><div><span><strong>{{data.name}}</strong> ({{data.email}})</span></div></template>",
+  "aiTemplate": "<style>.ai-contact-view-12345 h3 { color: {{titleColor}}; } .ai-contact-view-12345 .pagination-controls button { margin: 0 5px; }</style><h3>{{title}}</h3><div class=\\"data-display\\"></div><div class=\\"pagination-controls\\"></div><template id=\\"displayTemplate\\"><div><span><strong>{{data.name}}</strong> ({{data.email}})</span></div></template>",
   "properties": { "title": "Our Contacts", "titleColor": "#333333" },
   "editableProps": [ { "key": "title", "label": "Title", "type": "text" }, { "key": "titleColor", "label": "Title Color", "type": "color" } ],
-  "script": "const dataDisplay = container.querySelector('.data-display'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}`); dataDisplay.innerHTML = ''; response.data.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); } catch (err) { console.error('Failed to fetch data:', err); } }; fetchAndRenderRows();"
+  "script": "const dataDisplay = container.querySelector('.data-display'); const paginationControls = container.querySelector('.pagination-controls'); const displayTemplate = container.querySelector('#displayTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0; const fetchAndRenderRows = async () => { try { const response = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); const { rows, total } = response.data; totalRows = total; dataDisplay.innerHTML = ''; rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate, row); dataDisplay.appendChild(div); }); renderPagination(); } catch (err) { console.error('Failed to fetch data:', err); } }; const renderPagination = () => { paginationControls.innerHTML = ''; const totalPages = Math.ceil(totalRows / rowsPerPage); if (totalPages <= 1) return; const prevButton = document.createElement('button'); prevButton.textContent = 'Previous'; prevButton.disabled = currentPage === 0; prevButton.addEventListener('click', () => { if (currentPage > 0) { currentPage--; fetchAndRenderRows(); } }); const nextButton = document.createElement('button'); nextButton.textContent = 'Next'; nextButton.disabled = currentPage >= totalPages - 1; nextButton.addEventListener('click', () => { if (currentPage < totalPages - 1) { currentPage++; fetchAndRenderRows(); } }); paginationControls.appendChild(prevButton); paginationControls.appendChild(nextButton); }; fetchAndRenderRows();"
 }
+
 """.strip()
 
 # --- NEW PYDANTIC MODELS AND ENDPOINT FOR VIEW-ONLY ---

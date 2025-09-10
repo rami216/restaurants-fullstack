@@ -1,7 +1,7 @@
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException,Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select,func
 from uuid import UUID
 from typing import List, Dict, Any, Optional
 
@@ -42,6 +42,11 @@ class RowResponse(BaseModel):
     row_id: UUID
     data: Dict[str, Any] # This will now contain resolved nested data
     class Config: from_attributes = True
+    
+class PaginatedRowResponse(BaseModel):
+    rows: List[RowResponse]
+    total: int
+
 
 # --- Helper for Ownership Check ---
 async def get_schema_and_check_ownership(schema_id: UUID, user: User, db: AsyncSession) -> CustomDataSchema:
@@ -94,31 +99,106 @@ async def get_schemas_for_website(
 
 
 # --- THE NEW, MORE POWERFUL get_rows_for_schema ---
-@router.get("/rows/{schema_id}", response_model=List[RowResponse])
+# @router.get("/rows/{schema_id}", response_model=List[RowResponse])
+# async def get_rows_for_schema(
+#     schema_id: UUID,
+#     db: AsyncSession = Depends(get_db)
+# ):
+#     schema = await db.get(CustomDataSchema, schema_id)
+#     if not schema:
+#         raise HTTPException(status_code=404, detail="Schema not found.")
+    
+#     relation_fields = {
+#         field['id']: UUID(field['related_schema_id'])
+#         for field in schema.fields
+#         if field.get('type') == 'relation' and field.get('related_schema_id')
+#     }
+
+#     result = await db.execute(
+#         select(CustomDataRow)
+#         .where(CustomDataRow.schema_id == schema_id)
+#         .order_by(CustomDataRow.created_at.desc())
+#     )
+#     rows = result.scalars().all()
+
+#     if not relation_fields:
+#         return [RowResponse.from_orm(row) for row in rows]
+
+#     ids_to_fetch = set()
+#     for row in rows:
+#         for field_id in relation_fields:
+#             related_row_id = row.data.get(field_id)
+#             if related_row_id:
+#                 try:
+#                     ids_to_fetch.add(UUID(related_row_id))
+#                 except (ValueError, TypeError):
+#                     pass
+
+#     if not ids_to_fetch:
+#          return [RowResponse.from_orm(row) for row in rows]
+
+#     related_rows_result = await db.execute(
+#         select(CustomDataRow).where(CustomDataRow.row_id.in_(ids_to_fetch))
+#     )
+#     related_rows_map = { str(row.row_id): RowResponse.from_orm(row).model_dump() for row in related_rows_result.scalars() }
+
+#     final_response = []
+#     for row in rows:
+#         resolved_data = row.data.copy()
+#         for field_id in relation_fields:
+#             related_row_id = resolved_data.get(field_id)
+#             if related_row_id and str(related_row_id) in related_rows_map:
+#                 resolved_data[field_id] = related_rows_map[str(related_row_id)]
+        
+#         final_response.append(RowResponse(row_id=row.row_id, data=resolved_data))
+
+#     return final_response
+
+@router.get("/rows/{schema_id}", response_model=PaginatedRowResponse)
 async def get_rows_for_schema(
     schema_id: UUID,
-    db: AsyncSession = Depends(get_db)
+    db: AsyncSession = Depends(get_db),
+    skip: int = Query(0, ge=0, description="Number of rows to skip"),
+    limit: int = Query(20, ge=1, le=100, description="Number of rows to return")
 ):
+    """
+    Fetches rows for a given schema with pagination.
+    """
     schema = await db.get(CustomDataSchema, schema_id)
     if not schema:
         raise HTTPException(status_code=404, detail="Schema not found.")
-    
+
+    # 1. Get the total count of rows for the frontend to calculate pages
+    count_query = select(func.count(CustomDataRow.row_id)).where(CustomDataRow.schema_id == schema_id)
+    total_result = await db.execute(count_query)
+    total_rows = total_result.scalar_one()
+
+    # 2. Get the paginated subset of rows
+    result = await db.execute(
+        select(CustomDataRow)
+        .where(CustomDataRow.schema_id == schema_id)
+        .order_by(CustomDataRow.created_at.desc())
+        .offset(skip)
+        .limit(limit)
+    )
+    rows = result.scalars().all()
+
+    # 3. Identify which fields are relations to resolve them
     relation_fields = {
         field['id']: UUID(field['related_schema_id'])
         for field in schema.fields
         if field.get('type') == 'relation' and field.get('related_schema_id')
     }
 
-    result = await db.execute(
-        select(CustomDataRow)
-        .where(CustomDataRow.schema_id == schema_id)
-        .order_by(CustomDataRow.created_at.desc())
-    )
-    rows = result.scalars().all()
-
+    # If there are no relations, we can return early and efficiently
     if not relation_fields:
-        return [RowResponse.from_orm(row) for row in rows]
+        return PaginatedRowResponse(
+            rows=[RowResponse.from_orm(row) for row in rows],
+            total=total_rows
+        )
 
+    
+    # 4. Collect all related row IDs that need to be fetched
     ids_to_fetch = set()
     for row in rows:
         for field_id in relation_fields:
@@ -127,27 +207,42 @@ async def get_rows_for_schema(
                 try:
                     ids_to_fetch.add(UUID(related_row_id))
                 except (ValueError, TypeError):
-                    pass
+                    pass # Ignore invalid UUIDs in data
 
     if not ids_to_fetch:
-         return [RowResponse.from_orm(row) for row in rows]
+        # No valid related IDs were found, so we can return
+        return PaginatedRowResponse(
+            rows=[RowResponse.from_orm(row) for row in rows],
+            total=total_rows
+        )
 
+    # 5. Fetch all the related rows in a single, efficient query
     related_rows_result = await db.execute(
         select(CustomDataRow).where(CustomDataRow.row_id.in_(ids_to_fetch))
     )
-    related_rows_map = { str(row.row_id): RowResponse.from_orm(row).model_dump() for row in related_rows_result.scalars() }
+    # Create a mapping from ID to the full row object for easy lookup
+    related_rows_map = { 
+        str(row.row_id): RowResponse.from_orm(row).model_dump() 
+        for row in related_rows_result.scalars() 
+    }
 
-    final_response = []
+    # 6. Build the final response, replacing relation IDs with the full nested objects
+    final_response_rows = []
     for row in rows:
         resolved_data = row.data.copy()
         for field_id in relation_fields:
             related_row_id = resolved_data.get(field_id)
             if related_row_id and str(related_row_id) in related_rows_map:
+                
                 resolved_data[field_id] = related_rows_map[str(related_row_id)]
         
-        final_response.append(RowResponse(row_id=row.row_id, data=resolved_data))
+        final_response_rows.append(RowResponse(row_id=row.row_id, data=resolved_data))
 
-    return final_response
+    return PaginatedRowResponse(rows=final_response_rows, total=total_rows)
+
+
+
+
 
 # --- SITE MEMBER Endpoints (No changes needed below) ---
 
