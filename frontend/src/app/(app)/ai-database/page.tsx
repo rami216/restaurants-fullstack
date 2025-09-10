@@ -38,10 +38,10 @@ export default function AiDatabasePage() {
   const [rows, setRows] = useState<DataRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
 
-  // ✅ NEW: State for pagination
+  // State for pagination
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
-  const ROWS_PER_PAGE = 15; // You can adjust this value
+  const ROWS_PER_PAGE = 15;
 
   // State for the Add/Edit Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -51,7 +51,7 @@ export default function AiDatabasePage() {
   const [error, setError] = useState<string | null>(null);
   const [websiteId, setWebsiteId] = useState<string | null>(null);
 
-  // 1. Fetch the main website data to get the website_id on initial load
+  // 1. Fetch website_id on initial load
   useEffect(() => {
     const fetchWebsite = async () => {
       try {
@@ -80,7 +80,18 @@ export default function AiDatabasePage() {
         const response = await api.get(
           `/custom-data/schemas/website/${websiteId}`
         );
-        setSchemas(response.data);
+        // DEBUG: Check the shape of the schemas response
+        console.log("Schemas API response:", response.data);
+        // Ensure the response is an array before setting state
+        if (Array.isArray(response.data)) {
+          setSchemas(response.data);
+        } else {
+          console.error(
+            "Error: Schemas API did not return an array.",
+            response.data
+          );
+          setError("Received invalid data for schemas.");
+        }
       } catch (err) {
         setError("Failed to load data schemas.");
         console.error(err);
@@ -91,7 +102,7 @@ export default function AiDatabasePage() {
     fetchSchemas();
   }, [websiteId]);
 
-  // 3. ✅ MODIFIED: Fetch rows whenever the selected schema OR the current page changes
+  // 3. Fetch rows whenever the selected schema OR the current page changes
   useEffect(() => {
     if (!selectedSchema) return;
 
@@ -105,9 +116,20 @@ export default function AiDatabasePage() {
           `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
         );
 
-        // ✅ THE FIX: Access the .rows property from the response object
-        setRows(response.data.rows);
-        setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
+        // DEBUG: Check the shape of the rows response
+        console.log("Rows API response:", response.data);
+
+        // THE FIX: Check that the response is the expected object before setting state
+        if (response.data && Array.isArray(response.data.rows)) {
+          setRows(response.data.rows);
+          setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
+        } else {
+          console.error(
+            "Error: Rows API did not return a paginated object.",
+            response.data
+          );
+          setError("Received invalid data for rows.");
+        }
       } catch (err) {
         setError(`Failed to load data for ${selectedSchema.name}.`);
         console.error(err);
@@ -116,7 +138,7 @@ export default function AiDatabasePage() {
       }
     };
     fetchRows();
-  }, [selectedSchema, currentPage]); // Also add currentPage here
+  }, [selectedSchema, currentPage]);
 
   // Reset to page 0 when a new schema is selected
   useEffect(() => {
@@ -141,16 +163,24 @@ export default function AiDatabasePage() {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
   };
 
-  // ✅ MODIFIED: Refetch the current page of data after saving
   const refetchCurrentPage = async () => {
     if (!selectedSchema) return;
+    setLoadingRows(true);
     const skip = currentPage * ROWS_PER_PAGE;
     const limit = ROWS_PER_PAGE;
-    const response = await api.get(
-      `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
-    );
-    setRows(response.data.rows);
-    setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
+    try {
+      const response = await api.get(
+        `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
+      );
+      if (response.data && Array.isArray(response.data.rows)) {
+        setRows(response.data.rows);
+        setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
+      }
+    } catch (err) {
+      setError(`Failed to reload data for ${selectedSchema.name}.`);
+    } finally {
+      setLoadingRows(false);
+    }
   };
 
   const handleSaveRow = async (e: React.FormEvent) => {
@@ -167,16 +197,7 @@ export default function AiDatabasePage() {
           data: formData,
         });
       }
-
-      // ✅ THE FIX: Refetch the *current* page correctly
-      const skip = currentPage * ROWS_PER_PAGE;
-      const limit = ROWS_PER_PAGE;
-      const response = await api.get(
-        `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
-      );
-      setRows(response.data.rows);
-      setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
-
+      await refetchCurrentPage();
       handleCloseModal();
     } catch (err) {
       setError("Failed to save data.");
@@ -204,7 +225,6 @@ export default function AiDatabasePage() {
 
   return (
     <div className="flex h-[calc(100vh-64px)] bg-gray-100">
-      {/* Left Column */}
       <aside className="w-1/4 bg-white border-r p-4 overflow-y-auto">
         <h2 className="text-lg font-semibold mb-4">Data Tables</h2>
         {loadingSchemas ? (
@@ -228,7 +248,6 @@ export default function AiDatabasePage() {
         )}
       </aside>
 
-      {/* Right Column */}
       <main className="w-3/4 p-6 flex flex-col">
         {selectedSchema ? (
           <>
@@ -248,7 +267,6 @@ export default function AiDatabasePage() {
 
               <div className="bg-white rounded-lg shadow overflow-hidden">
                 <table className="min-w-full divide-y divide-gray-200">
-                  {/* ... table thead ... */}
                   <thead className="bg-gray-50">
                     <tr>
                       {selectedSchema.fields.map((field) => (
@@ -307,10 +325,9 @@ export default function AiDatabasePage() {
               </div>
             </div>
 
-            {/* ✅ NEW: Pagination Controls */}
             <div className="flex-shrink-0 pt-4 flex justify-end items-center space-x-4">
               <span className="text-sm text-gray-600">
-                Page {currentPage + 1} of {totalPages}
+                Page {currentPage + 1} of {totalPages || 1}
               </span>
               <button
                 onClick={() => setCurrentPage((p) => p - 1)}
@@ -337,9 +354,7 @@ export default function AiDatabasePage() {
         )}
       </main>
 
-      {/* Modal */}
       {isModalOpen && selectedSchema && (
-        // ... your modal code remains the same
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
