@@ -1,10 +1,8 @@
-// rami216/restaurants-fullstack/restaurants-fullstack-ai-good/frontend/src/app/(app)/ai-database/page.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
 import api from "@/lib/axios";
-import { Plus, Edit, Trash2, X } from "lucide-react";
+import { Plus, Edit, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react";
 
 // --- TypeScript Interfaces for our Data ---
 
@@ -39,6 +37,11 @@ export default function AiDatabasePage() {
   // State for managing rows (right column)
   const [rows, setRows] = useState<DataRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
+
+  // ✅ NEW: State for pagination
+  const [currentPage, setCurrentPage] = useState(0);
+  const [totalPages, setTotalPages] = useState(0);
+  const ROWS_PER_PAGE = 15; // You can adjust this value
 
   // State for the Add/Edit Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -88,7 +91,7 @@ export default function AiDatabasePage() {
     fetchSchemas();
   }, [websiteId]);
 
-  // 3. Fetch rows whenever a new schema is selected
+  // 3. ✅ MODIFIED: Fetch rows whenever the selected schema OR the current page changes
   useEffect(() => {
     if (!selectedSchema) return;
 
@@ -96,10 +99,16 @@ export default function AiDatabasePage() {
       setLoadingRows(true);
       setError(null);
       try {
+        // Construct the URL with pagination parameters
+        const skip = currentPage * ROWS_PER_PAGE;
+        const limit = ROWS_PER_PAGE;
         const response = await api.get(
-          `/custom-data/rows/${selectedSchema.schema_id}`
+          `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
         );
-        setRows(response.data);
+
+        // ✅ THE FIX: The API now returns an object { rows: [], total: 0 }
+        setRows(response.data.rows);
+        setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
       } catch (err) {
         setError(`Failed to load data for ${selectedSchema.name}.`);
         console.error(err);
@@ -108,6 +117,11 @@ export default function AiDatabasePage() {
       }
     };
     fetchRows();
+  }, [selectedSchema, currentPage]); // Dependency array now includes currentPage
+
+  // Reset to page 0 when a new schema is selected
+  useEffect(() => {
+    setCurrentPage(0);
   }, [selectedSchema]);
 
   // --- Handlers for CRUD Operations ---
@@ -128,28 +142,33 @@ export default function AiDatabasePage() {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
   };
 
+  // ✅ MODIFIED: Refetch the current page of data after saving
+  const refetchCurrentPage = async () => {
+    if (!selectedSchema) return;
+    const skip = currentPage * ROWS_PER_PAGE;
+    const limit = ROWS_PER_PAGE;
+    const response = await api.get(
+      `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
+    );
+    setRows(response.data.rows);
+    setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
+  };
+
   const handleSaveRow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSchema) return;
 
     try {
       if (editingRow) {
-        // Update existing row
         await api.put(`/custom-data/rows/${editingRow.row_id}`, {
           data: formData,
         });
       } else {
-        // Create new row
         await api.post(`/custom-data/rows/${selectedSchema.schema_id}`, {
           data: formData,
         });
       }
-
-      // Refresh the data and close modal
-      const response = await api.get(
-        `/custom-data/rows/${selectedSchema.schema_id}`
-      );
-      setRows(response.data);
+      await refetchCurrentPage();
       handleCloseModal();
     } catch (err) {
       setError("Failed to save data.");
@@ -161,8 +180,7 @@ export default function AiDatabasePage() {
     if (window.confirm("Are you sure you want to delete this item?")) {
       try {
         await api.delete(`/custom-data/rows/${rowId}`);
-        // Refresh data by filtering out the deleted row
-        setRows((prev) => prev.filter((row) => row.row_id !== rowId));
+        await refetchCurrentPage();
       } catch (err) {
         setError("Failed to delete data.");
         console.error(err);
@@ -170,13 +188,15 @@ export default function AiDatabasePage() {
     }
   };
 
+  // --- Render Method ---
+
   if (error) {
     return <div className="text-center text-red-500 p-8">{error}</div>;
   }
 
   return (
     <div className="flex h-[calc(100vh-64px)] bg-gray-100">
-      {/* Left Column: List of Schemas */}
+      {/* Left Column */}
       <aside className="w-1/4 bg-white border-r p-4 overflow-y-auto">
         <h2 className="text-lg font-semibold mb-4">Data Tables</h2>
         {loadingSchemas ? (
@@ -200,83 +220,106 @@ export default function AiDatabasePage() {
         )}
       </aside>
 
-      {/* Right Column: Data Viewer and Editor */}
-      <main className="w-3/4 p-6 overflow-y-auto">
+      {/* Right Column */}
+      <main className="w-3/4 p-6 flex flex-col">
         {selectedSchema ? (
-          <div>
-            <div className="flex justify-between items-center mb-6">
-              <h1 className="text-2xl font-bold text-gray-800">
-                {selectedSchema.name}
-              </h1>
-              <button
-                onClick={() => handleOpenModal(null)}
-                className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
-              >
-                <Plus size={16} className="mr-2" />
-                Add New
-              </button>
-            </div>
+          <>
+            <div className="flex-grow overflow-y-auto">
+              <div className="flex justify-between items-center mb-6">
+                <h1 className="text-2xl font-bold text-gray-800">
+                  {selectedSchema.name}
+                </h1>
+                <button
+                  onClick={() => handleOpenModal(null)}
+                  className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                >
+                  <Plus size={16} className="mr-2" />
+                  Add New
+                </button>
+              </div>
 
-            {/* Data Table */}
-            <div className="bg-white rounded-lg shadow overflow-hidden">
-              <table className="min-w-full divide-y divide-gray-200">
-                <thead className="bg-gray-50">
-                  <tr>
-                    {selectedSchema.fields.map((field) => (
-                      <th
-                        key={field.id}
-                        className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
-                      >
-                        {field.label}
-                      </th>
-                    ))}
-                    <th className="relative px-6 py-3">
-                      <span className="sr-only">Actions</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="bg-white divide-y divide-gray-200">
-                  {loadingRows ? (
+              <div className="bg-white rounded-lg shadow overflow-hidden">
+                <table className="min-w-full divide-y divide-gray-200">
+                  {/* ... table thead ... */}
+                  <thead className="bg-gray-50">
                     <tr>
-                      <td
-                        colSpan={selectedSchema.fields.length + 1}
-                        className="text-center p-4"
-                      >
-                        Loading data...
-                      </td>
+                      {selectedSchema.fields.map((field) => (
+                        <th
+                          key={field.id}
+                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                        >
+                          {field.label}
+                        </th>
+                      ))}
+                      <th className="relative px-6 py-3">
+                        <span className="sr-only">Actions</span>
+                      </th>
                     </tr>
-                  ) : (
-                    rows.map((row) => (
-                      <tr key={row.row_id}>
-                        {selectedSchema.fields.map((field) => (
-                          <td
-                            key={field.id}
-                            className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
-                          >
-                            {String(row.data[field.id] || "")}
-                          </td>
-                        ))}
-                        <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
-                          <button
-                            onClick={() => handleOpenModal(row)}
-                            className="text-indigo-600 hover:text-indigo-900"
-                          >
-                            <Edit size={16} />
-                          </button>
-                          <button
-                            onClick={() => handleDeleteRow(row.row_id)}
-                            className="text-red-600 hover:text-red-900"
-                          >
-                            <Trash2 size={16} />
-                          </button>
+                  </thead>
+                  <tbody className="bg-white divide-y divide-gray-200">
+                    {loadingRows ? (
+                      <tr>
+                        <td
+                          colSpan={selectedSchema.fields.length + 1}
+                          className="text-center p-4"
+                        >
+                          Loading data...
                         </td>
                       </tr>
-                    ))
-                  )}
-                </tbody>
-              </table>
+                    ) : (
+                      rows.map((row) => (
+                        <tr key={row.row_id}>
+                          {selectedSchema.fields.map((field) => (
+                            <td
+                              key={field.id}
+                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                            >
+                              {String(row.data[field.id] || "")}
+                            </td>
+                          ))}
+                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                            <button
+                              onClick={() => handleOpenModal(row)}
+                              className="text-indigo-600 hover:text-indigo-900"
+                            >
+                              <Edit size={16} />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteRow(row.row_id)}
+                              className="text-red-600 hover:text-red-900"
+                            >
+                              <Trash2 size={16} />
+                            </button>
+                          </td>
+                        </tr>
+                      ))
+                    )}
+                  </tbody>
+                </table>
+              </div>
             </div>
-          </div>
+
+            {/* ✅ NEW: Pagination Controls */}
+            <div className="flex-shrink-0 pt-4 flex justify-end items-center space-x-4">
+              <span className="text-sm text-gray-600">
+                Page {currentPage + 1} of {totalPages}
+              </span>
+              <button
+                onClick={() => setCurrentPage((p) => p - 1)}
+                disabled={currentPage === 0}
+                className="p-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                <ChevronLeft size={20} />
+              </button>
+              <button
+                onClick={() => setCurrentPage((p) => p + 1)}
+                disabled={currentPage >= totalPages - 1}
+                className="p-2 rounded-md disabled:opacity-50 disabled:cursor-not-allowed hover:bg-gray-100"
+              >
+                <ChevronRight size={20} />
+              </button>
+            </div>
+          </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500">
             <p>
@@ -286,8 +329,9 @@ export default function AiDatabasePage() {
         )}
       </main>
 
-      {/* Add/Edit Modal */}
+      {/* Modal */}
       {isModalOpen && selectedSchema && (
+        // ... your modal code remains the same
         <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
           <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
             <div className="flex justify-between items-center mb-4">
