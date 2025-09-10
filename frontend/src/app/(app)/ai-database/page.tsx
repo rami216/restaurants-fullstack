@@ -4,7 +4,7 @@ import React, { useState, useEffect } from "react";
 import api from "@/lib/axios";
 import { Plus, Edit, Trash2, X, ChevronLeft, ChevronRight } from "lucide-react";
 
-// --- TypeScript Interfaces for our Data ---
+// --- TypeScript Interfaces ---
 
 interface SchemaField {
   id: string;
@@ -27,129 +27,83 @@ interface DataRow {
 // --- Main Page Component ---
 
 export default function AiDatabasePage() {
-  // State for managing schemas (left column)
   const [schemas, setSchemas] = useState<CustomSchema[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<CustomSchema | null>(
     null
   );
   const [loadingSchemas, setLoadingSchemas] = useState(true);
-
-  // State for managing rows (right column)
   const [rows, setRows] = useState<DataRow[]>([]);
   const [loadingRows, setLoadingRows] = useState(false);
-
-  // State for pagination
   const [currentPage, setCurrentPage] = useState(0);
   const [totalPages, setTotalPages] = useState(0);
   const ROWS_PER_PAGE = 15;
-
-  // State for the Add/Edit Modal
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingRow, setEditingRow] = useState<DataRow | null>(null);
   const [formData, setFormData] = useState<Record<string, any>>({});
-
   const [error, setError] = useState<string | null>(null);
   const [websiteId, setWebsiteId] = useState<string | null>(null);
 
-  // 1. Fetch website_id on initial load
+  // --- Data Fetching Hooks ---
   useEffect(() => {
-    const fetchWebsite = async () => {
-      try {
-        const response = await api.get("/builder/website");
-        if (response.data?.website_id) {
-          setWebsiteId(response.data.website_id);
-        } else {
-          setError("Could not find a website associated with your account.");
-        }
-      } catch (err) {
-        setError("Failed to load website data.");
-        console.error(err);
-      }
-    };
-    fetchWebsite();
+    api
+      .get("/builder/website")
+      .then((res) => setWebsiteId(res.data?.website_id))
+      .catch(() => setError("Failed to load website data."));
   }, []);
 
-  // 2. Fetch all schemas once we have the website_id
   useEffect(() => {
     if (!websiteId) return;
-
-    const fetchSchemas = async () => {
-      setLoadingSchemas(true);
-      setError(null);
-      try {
-        const response = await api.get(
-          `/custom-data/schemas/website/${websiteId}`
-        );
-        // DEBUG: Check the shape of the schemas response
-        console.log("Schemas API response:", response.data);
-        // Ensure the response is an array before setting state
-        if (Array.isArray(response.data)) {
-          setSchemas(response.data);
-        } else {
-          console.error(
-            "Error: Schemas API did not return an array.",
-            response.data
-          );
-          setError("Received invalid data for schemas.");
-        }
-      } catch (err) {
-        setError("Failed to load data schemas.");
-        console.error(err);
-      } finally {
-        setLoadingSchemas(false);
-      }
-    };
-    fetchSchemas();
+    setLoadingSchemas(true);
+    api
+      .get(`/custom-data/schemas/website/${websiteId}`)
+      .then((res) => setSchemas(Array.isArray(res.data) ? res.data : []))
+      .catch(() => setError("Failed to load data schemas."))
+      .finally(() => setLoadingSchemas(false));
   }, [websiteId]);
 
-  // 3. Fetch rows whenever the selected schema OR the current page changes
-  useEffect(() => {
-    if (!selectedSchema) return;
-
-    const fetchRows = async () => {
-      setLoadingRows(true);
-      setError(null);
-      try {
-        const skip = currentPage * ROWS_PER_PAGE;
-        const limit = ROWS_PER_PAGE;
-        const response = await api.get(
-          `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
-        );
-
-        // DEBUG: Check the shape of the rows response
-        console.log("Rows API response:", response.data);
-
-        // THE FIX: Check that the response is the expected object before setting state
-        if (response.data && Array.isArray(response.data.rows)) {
-          setRows(response.data.rows);
-          setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
-        } else {
-          console.error(
-            "Error: Rows API did not return a paginated object.",
-            response.data
-          );
-          setError("Received invalid data for rows.");
-        }
-      } catch (err) {
-        setError(`Failed to load data for ${selectedSchema.name}.`);
-        console.error(err);
-      } finally {
-        setLoadingRows(false);
+  const fetchRowsForSchema = async (schemaId: string, page: number) => {
+    setLoadingRows(true);
+    try {
+      const skip = page * ROWS_PER_PAGE;
+      const response = await api.get(
+        `/custom-data/rows/${schemaId}?skip=${skip}&limit=${ROWS_PER_PAGE}`
+      );
+      if (response.data && Array.isArray(response.data.rows)) {
+        setRows(response.data.rows);
+        setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
       }
-    };
-    fetchRows();
+    } catch (err) {
+      setError(`Failed to load data for ${selectedSchema?.name}.`);
+    } finally {
+      setLoadingRows(false);
+    }
+  };
+
+  useEffect(() => {
+    if (selectedSchema) {
+      fetchRowsForSchema(selectedSchema.schema_id, currentPage);
+    }
   }, [selectedSchema, currentPage]);
 
-  // Reset to page 0 when a new schema is selected
   useEffect(() => {
     setCurrentPage(0);
   }, [selectedSchema]);
 
-  // --- Handlers for CRUD Operations ---
-
+  // --- CRUD and Modal Handlers ---
   const handleOpenModal = (row: DataRow | null) => {
     setEditingRow(row);
-    setFormData(row ? row.data : {});
+    // When editing, we need to store the ID of the related object, not the whole object
+    const initialFormData = row
+      ? Object.entries(row.data).reduce((acc, [key, value]) => {
+          if (typeof value === "object" && value !== null && value.row_id) {
+            acc[key] = value.row_id;
+          } else {
+            acc[key] = value;
+          }
+          return acc;
+        }, {} as Record<string, any>)
+      : {};
+    setFormData(initialFormData);
     setIsModalOpen(true);
   };
 
@@ -163,30 +117,9 @@ export default function AiDatabasePage() {
     setFormData((prev) => ({ ...prev, [fieldId]: value }));
   };
 
-  const refetchCurrentPage = async () => {
-    if (!selectedSchema) return;
-    setLoadingRows(true);
-    const skip = currentPage * ROWS_PER_PAGE;
-    const limit = ROWS_PER_PAGE;
-    try {
-      const response = await api.get(
-        `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
-      );
-      if (response.data && Array.isArray(response.data.rows)) {
-        setRows(response.data.rows);
-        setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
-      }
-    } catch (err) {
-      setError(`Failed to reload data for ${selectedSchema.name}.`);
-    } finally {
-      setLoadingRows(false);
-    }
-  };
-
   const handleSaveRow = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!selectedSchema) return;
-
     try {
       if (editingRow) {
         await api.put(`/custom-data/rows/${editingRow.row_id}`, {
@@ -197,38 +130,62 @@ export default function AiDatabasePage() {
           data: formData,
         });
       }
-      await refetchCurrentPage();
+      await fetchRowsForSchema(selectedSchema.schema_id, currentPage);
       handleCloseModal();
     } catch (err) {
       setError("Failed to save data.");
-      console.error(err);
     }
   };
 
   const handleDeleteRow = async (rowId: string) => {
-    if (window.confirm("Are you sure you want to delete this item?")) {
+    // ✅ THE FIX: Add a check for selectedSchema before using it.
+    if (!selectedSchema) {
+      setError("Cannot delete row: no schema selected.");
+      return;
+    }
+
+    if (window.confirm("Are you sure?")) {
       try {
         await api.delete(`/custom-data/rows/${rowId}`);
-        await refetchCurrentPage();
+        await fetchRowsForSchema(selectedSchema.schema_id, currentPage);
       } catch (err) {
         setError("Failed to delete data.");
-        console.error(err);
       }
     }
   };
 
-  // --- Render Method ---
+  // --- ✅ NEW: Helper function to display cell data correctly ---
+  const getDisplayValue = (cellData: any, field: SchemaField) => {
+    if (typeof cellData === "object" && cellData !== null && cellData.data) {
+      // It's a resolved relation object
+      const relatedSchema = schemas.find(
+        (s) => s.schema_id === field.related_schema_id
+      );
+      if (relatedSchema) {
+        // Find the first text-like field to display (e.g., name, title, email)
+        const displayField = relatedSchema.fields.find(
+          (f) => f.type === "text" || f.type === "email"
+        );
+        if (displayField) {
+          return cellData.data[displayField.id] || `(No ${displayField.label})`;
+        }
+      }
+      // Fallback to showing the ID if no suitable display field is found
+      return cellData.row_id;
+    }
+    // It's a normal value, return as a string
+    return String(cellData || "");
+  };
 
-  if (error) {
-    return <div className="text-center text-red-500 p-8">{error}</div>;
-  }
+  // --- RENDER ---
+  if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
   return (
     <div className="flex h-[calc(100vh-64px)] bg-gray-100">
-      <aside className="w-1/4 bg-white border-r p-4 overflow-y-auto">
-        <h2 className="text-lg font-semibold mb-4">Data Tables</h2>
+      <aside className="w-1/4 p-4 overflow-y-auto bg-white border-r">
+        <h2 className="mb-4 text-lg font-semibold">Data Tables</h2>
         {loadingSchemas ? (
-          <p>Loading tables...</p>
+          <p>Loading...</p>
         ) : (
           <nav className="space-y-1">
             {schemas.map((schema) => (
@@ -248,31 +205,29 @@ export default function AiDatabasePage() {
         )}
       </aside>
 
-      <main className="w-3/4 p-6 flex flex-col">
+      <main className="flex flex-col w-3/4 p-6">
         {selectedSchema ? (
           <>
             <div className="flex-grow overflow-y-auto">
-              <div className="flex justify-between items-center mb-6">
+              <div className="flex items-center justify-between mb-6">
                 <h1 className="text-2xl font-bold text-gray-800">
                   {selectedSchema.name}
                 </h1>
                 <button
                   onClick={() => handleOpenModal(null)}
-                  className="flex items-center bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700 transition-colors"
+                  className="flex items-center px-4 py-2 text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
                 >
-                  <Plus size={16} className="mr-2" />
-                  Add New
+                  <Plus size={16} className="mr-2" /> Add New
                 </button>
               </div>
-
-              <div className="bg-white rounded-lg shadow overflow-hidden">
+              <div className="overflow-hidden bg-white rounded-lg shadow">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
                       {selectedSchema.fields.map((field) => (
                         <th
                           key={field.id}
-                          className="px-6 py-3 text-left text-xs font-medium text-gray-500 uppercase tracking-wider"
+                          className="px-6 py-3 text-xs font-medium tracking-wider text-left text-gray-500 uppercase"
                         >
                           {field.label}
                         </th>
@@ -287,9 +242,9 @@ export default function AiDatabasePage() {
                       <tr>
                         <td
                           colSpan={selectedSchema.fields.length + 1}
-                          className="text-center p-4"
+                          className="p-4 text-center"
                         >
-                          Loading data...
+                          Loading...
                         </td>
                       </tr>
                     ) : (
@@ -298,12 +253,13 @@ export default function AiDatabasePage() {
                           {selectedSchema.fields.map((field) => (
                             <td
                               key={field.id}
-                              className="px-6 py-4 whitespace-nowrap text-sm text-gray-700"
+                              className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap"
                             >
-                              {String(row.data[field.id] || "")}
+                              {/* ✅ MODIFIED: Use the helper function here */}
+                              {getDisplayValue(row.data[field.id], field)}
                             </td>
                           ))}
-                          <td className="px-6 py-4 whitespace-nowrap text-right text-sm font-medium space-x-2">
+                          <td className="px-6 py-4 space-x-2 text-sm font-medium text-right whitespace-nowrap">
                             <button
                               onClick={() => handleOpenModal(row)}
                               className="text-indigo-600 hover:text-indigo-900"
@@ -324,8 +280,7 @@ export default function AiDatabasePage() {
                 </table>
               </div>
             </div>
-
-            <div className="flex-shrink-0 pt-4 flex justify-end items-center space-x-4">
+            <div className="flex items-center justify-end flex-shrink-0 pt-4 space-x-4">
               <span className="text-sm text-gray-600">
                 Page {currentPage + 1} of {totalPages || 1}
               </span>
@@ -347,17 +302,15 @@ export default function AiDatabasePage() {
           </>
         ) : (
           <div className="flex items-center justify-center h-full text-gray-500">
-            <p>
-              Select a data table from the left to view and manage its content.
-            </p>
+            <p>Select a data table to view its content.</p>
           </div>
         )}
       </main>
 
       {isModalOpen && selectedSchema && (
-        <div className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center z-50">
-          <div className="bg-white rounded-lg shadow-xl p-6 w-full max-w-md">
-            <div className="flex justify-between items-center mb-4">
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black bg-opacity-50">
+          <div className="w-full max-w-md p-6 bg-white rounded-lg shadow-xl">
+            <div className="flex items-center justify-between mb-4">
               <h2 className="text-xl font-bold">
                 {editingRow
                   ? `Edit ${selectedSchema.name}`
@@ -376,27 +329,39 @@ export default function AiDatabasePage() {
                   >
                     {field.label}
                   </label>
-                  <input
-                    id={field.id}
-                    type={field.type === "date" ? "date" : "text"}
-                    value={formData[field.id] || ""}
-                    onChange={(e) => handleFormChange(field.id, e.target.value)}
-                    className="mt-1 block w-full px-3 py-2 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
-                    required
-                  />
+                  {field.type === "relation" ? (
+                    <RelationDropdown
+                      api={api}
+                      schemas={schemas}
+                      field={field}
+                      value={formData[field.id] || ""}
+                      onChange={(value) => handleFormChange(field.id, value)}
+                    />
+                  ) : (
+                    <input
+                      id={field.id}
+                      type={field.type === "date" ? "date" : "text"}
+                      value={formData[field.id] || ""}
+                      onChange={(e) =>
+                        handleFormChange(field.id, e.target.value)
+                      }
+                      className="block w-full px-3 py-2 mt-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      required
+                    />
+                  )}
                 </div>
               ))}
-              <div className="flex justify-end space-x-3 pt-4">
+              <div className="flex justify-end pt-4 space-x-3">
                 <button
                   type="button"
                   onClick={handleCloseModal}
-                  className="bg-gray-200 text-gray-700 px-4 py-2 rounded-md hover:bg-gray-300"
+                  className="px-4 py-2 text-gray-700 bg-gray-200 rounded-md hover:bg-gray-300"
                 >
                   Cancel
                 </button>
                 <button
                   type="submit"
-                  className="bg-indigo-600 text-white px-4 py-2 rounded-md hover:bg-indigo-700"
+                  className="px-4 py-2 text-white bg-indigo-600 rounded-md hover:bg-indigo-700"
                 >
                   Save
                 </button>
@@ -408,3 +373,71 @@ export default function AiDatabasePage() {
     </div>
   );
 }
+
+// --- ✅ NEW: A dedicated component for relation dropdowns ---
+interface RelationDropdownProps {
+  api: any;
+  schemas: CustomSchema[];
+  field: SchemaField;
+  value: string;
+  onChange: (value: string) => void;
+}
+
+const RelationDropdown: React.FC<RelationDropdownProps> = ({
+  api,
+  schemas,
+  field,
+  value,
+  onChange,
+}) => {
+  const [options, setOptions] = useState<DataRow[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    if (!field.related_schema_id) return;
+
+    const fetchOptions = async () => {
+      setLoading(true);
+      try {
+        const response = await api.get(
+          `/custom-data/rows/${field.related_schema_id}?limit=1000`
+        );
+        if (response.data && Array.isArray(response.data.rows)) {
+          setOptions(response.data.rows);
+        }
+      } catch (error) {
+        console.error(`Failed to fetch options for ${field.label}`, error);
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    fetchOptions();
+  }, [field.related_schema_id, api]);
+
+  const relatedSchema = schemas.find(
+    (s) => s.schema_id === field.related_schema_id
+  );
+  const displayField = relatedSchema?.fields.find(
+    (f) => f.type === "text" || f.type === "email"
+  );
+
+  return (
+    <select
+      id={field.id}
+      value={value}
+      onChange={(e) => onChange(e.target.value)}
+      className="block w-full px-3 py-2 mt-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+      required
+    >
+      <option value="">
+        {loading ? "Loading..." : `Select ${field.label}`}
+      </option>
+      {options.map((option) => (
+        <option key={option.row_id} value={option.row_id}>
+          {displayField ? option.data[displayField.id] : option.row_id}
+        </option>
+      ))}
+    </select>
+  );
+};
