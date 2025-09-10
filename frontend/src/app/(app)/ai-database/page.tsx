@@ -99,14 +99,13 @@ export default function AiDatabasePage() {
       setLoadingRows(true);
       setError(null);
       try {
-        // Construct the URL with pagination parameters
         const skip = currentPage * ROWS_PER_PAGE;
         const limit = ROWS_PER_PAGE;
         const response = await api.get(
           `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
         );
 
-        // ✅ THE FIX: The API now returns an object { rows: [], total: 0 }
+        // ✅ THE FIX: Access the .rows property from the response object
         setRows(response.data.rows);
         setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
       } catch (err) {
@@ -117,7 +116,7 @@ export default function AiDatabasePage() {
       }
     };
     fetchRows();
-  }, [selectedSchema, currentPage]); // Dependency array now includes currentPage
+  }, [selectedSchema, currentPage]); // Also add currentPage here
 
   // Reset to page 0 when a new schema is selected
   useEffect(() => {
@@ -168,7 +167,16 @@ export default function AiDatabasePage() {
           data: formData,
         });
       }
-      await refetchCurrentPage();
+
+      // ✅ THE FIX: Refetch the *current* page correctly
+      const skip = currentPage * ROWS_PER_PAGE;
+      const limit = ROWS_PER_PAGE;
+      const response = await api.get(
+        `/custom-data/rows/${selectedSchema.schema_id}?skip=${skip}&limit=${limit}`
+      );
+      setRows(response.data.rows);
+      setTotalPages(Math.ceil(response.data.total / ROWS_PER_PAGE));
+
       handleCloseModal();
     } catch (err) {
       setError("Failed to save data.");
