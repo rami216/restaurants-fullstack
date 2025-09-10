@@ -159,7 +159,8 @@ async def get_rows_for_schema(
     schema_id: UUID,
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of rows to skip"),
-    limit: int = Query(20, ge=1, le=100, description="Number of rows to return")
+    # ✅ THE FIX: Increased the maximum limit to 1000
+    limit: int = Query(20, ge=1, le=1000, description="Number of rows to return")
 ):
     """
     Fetches rows for a given schema with pagination.
