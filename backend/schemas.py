@@ -59,6 +59,7 @@ class LocationCreate(BaseModel):
     end_date: Optional[datetime.datetime] = None
     delivery_available: bool = False
     dine_in: bool = False
+    business_info_only: bool = False # <-- ADDED
 
 class LocationResponse(BaseModel):
     location_id: UUID
@@ -75,6 +76,7 @@ class LocationResponse(BaseModel):
     end_date: Optional[datetime.datetime]
     delivery_available: bool
     dine_in: bool
+    business_info_only: bool # <-- ADDED
 
     class Config:
         from_attributes = True
@@ -87,6 +89,7 @@ class LocationUpdate(BaseModel):
     location_owner_email: Optional[str] = None
     delivery_available: Optional[bool] = None
     dine_in: Optional[bool] = None
+    business_info_only: Optional[bool] = None # <-- ADDED
         
 class CategoryCreate(BaseModel):
     name: str

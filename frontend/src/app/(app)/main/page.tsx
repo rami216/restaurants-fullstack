@@ -270,6 +270,7 @@ const MainPage = () => {
         maps_link: "",
         location_owner_email: locationEmail,
         restaurant_id: restaurantId,
+        business_info_only: false, // <-- ADDED: Default to false
       });
       await checkLocations();
     } catch (error) {

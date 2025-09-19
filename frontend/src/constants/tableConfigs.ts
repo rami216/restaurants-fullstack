@@ -45,6 +45,12 @@ export const tableConfigs: Record<string, TableConfig> = {
         dataType: "boolean",
         renderAs: { type: "boolean" },
       },
+      {
+        key: "business_info_only",
+        label: "Business Info Only",
+        dataType: "boolean",
+        renderAs: { type: "boolean" },
+      },
     ],
     updateApi: "/locations/locations/${location_id}",
   },

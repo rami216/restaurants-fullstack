@@ -74,6 +74,7 @@ class Location(Base):
     location_name = Column(String, nullable=False)
     address = Column(String, nullable=True)
     phone_number = Column(String, nullable=True)
+    business_info_only = Column(Boolean, nullable=False, default=False) # <-- ADD THIS LINE
     maps_link = Column(String, nullable=True)
     location_owner_email = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
