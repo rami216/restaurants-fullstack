@@ -15,7 +15,10 @@ import {
   useStripe,
   useElements,
 } from "@stripe/react-stripe-js";
-
+const withUnit = (v: any) =>
+  typeof v === "number" || (typeof v === "string" && /^\d+$/.test(v))
+    ? `${v}px`
+    : v;
 import React, { useState, useEffect, useRef, useLayoutEffect } from "react";
 import {
   Page,
@@ -1086,10 +1089,7 @@ const MainContent = ({
           const p = sec.properties || {};
           const styleProps = p.style || {};
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
-          const withUnit = (v: any) =>
-            typeof v === "number" || (typeof v === "string" && /^\d+$/.test(v))
-              ? `${v}px`
-              : v;
+
           let backgroundImage: string | undefined;
           if (typeof rawBg === "string" && rawBg.trim()) {
             backgroundImage = rawBg.startsWith("linear-gradient")
@@ -2157,6 +2157,9 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   const withUnit = (v: any) => (typeof v === "number" ? `${v}px` : v);
 
   const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
+    const userStyle = subProps.style || {};
+
+    // 1. Define the base layout (Grid or Flex)
     const base: React.CSSProperties =
       subProps.display === "grid"
         ? {
@@ -2174,20 +2177,28 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             alignItems: subProps.alignItems ?? "stretch",
           };
 
-    const user: React.CSSProperties = { ...(subProps.style || {}) };
+    // 2. Build the final style object
+    const finalStyle: React.CSSProperties = {
+      ...base,
+      ...userStyle, // Spread user styles to allow specific overrides (like padding)
 
-    // normalize offsets if provided
-    if (user.top !== undefined) user.top = withUnit(user.top);
-    if (user.left !== undefined) user.left = withUnit(user.left);
-    if (user.right !== undefined) user.right = withUnit(user.right);
-    if (user.bottom !== undefined) user.bottom = withUnit(user.bottom);
+      // POSITIONING LOGIC (Synchronized with withUnit)
+      position: userStyle.position || "static",
+      top: withUnit(userStyle.top),
+      left: withUnit(userStyle.left),
+      right: withUnit(userStyle.right),
+      bottom: withUnit(userStyle.bottom),
 
-    const merged = { ...base, ...user };
+      // CLIPPING & VISIBILITY
+      // Match the Builder's p-4 class if no specific padding is set
+      padding: userStyle.padding || "1rem",
+      // Crucial: Allow relative items to move outside their box without disappearing
+      overflow: userStyle.position === "relative" ? "visible" : "hidden",
+      // Lift relative items above standard layout flow
+      zIndex: userStyle.position === "relative" ? 50 : "auto",
+    };
 
-    // avoid clipping relative offsets
-    if (merged.overflow === undefined) merged.overflow = "visible";
-
-    return merged;
+    return finalStyle;
   };
   const openWhatsApp = (phone: string, msg?: string) => {
     if (!phone) return;
