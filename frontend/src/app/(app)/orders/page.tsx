@@ -176,10 +176,17 @@ export default function OrdersPage() {
                               ${(item.unitPrice * item.quantity).toFixed(2)}
                             </strong>
                             <div className="text-xs text-gray-500 pl-4">
+                              {/* Updated display logic in OrdersPage */}
                               {Object.entries(item.selectedOptions).map(
                                 ([group, choice]) => (
-                                  <span key={group} className="mr-2">
-                                    {String(choice)}
+                                  <span
+                                    key={group}
+                                    className="mr-2 font-medium"
+                                  >
+                                    <span className="capitalize">{group}</span>:{" "}
+                                    <span className="text-gray-500 font-normal">
+                                      {String(choice)}
+                                    </span>
                                   </span>
                                 )
                               )}

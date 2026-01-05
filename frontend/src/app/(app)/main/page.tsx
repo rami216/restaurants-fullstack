@@ -738,10 +738,12 @@ const MainPage = () => {
                       </span>
                     </p>
                   </div>
-                  <Link href="/billingPage">
-                    <a className="text-white underline hover:text-pink-200">
-                      Manage Subscription & Billing
-                    </a>
+
+                  <Link
+                    href="/billingPage"
+                    className="text-white underline hover:text-pink-200"
+                  >
+                    Manage Subscription & Billing
                   </Link>
                 </div>
                 {hasLocations ? (
