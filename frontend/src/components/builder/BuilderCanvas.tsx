@@ -21,6 +21,11 @@ import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
 import saasApi from "@/lib/saasApi";
+
+const withUnit = (v: any) =>
+  typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v))
+    ? `${v}px`
+    : v;
 // Standard Accordion
 const Accordion: React.FC<{ items: AccordionItem[]; style: any }> = ({
   items,
@@ -669,19 +674,36 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 }}
               >
                 {section.subsections.map((sub) => {
-                  // --- FIX: Provide a default empty object for properties if it's missing ---
                   const subProps = sub.properties || {};
+                  const userStyle = subProps.style || {};
 
+                  // 1. Build the Style Object (Synchronized with PublicCanvas)
                   const subsectionStyle: React.CSSProperties = {
-                    // Safely access properties from subProps
+                    // Positioning
+                    position: userStyle.position || "static",
+                    top: withUnit(userStyle.top),
+                    left: withUnit(userStyle.left),
+                    right: withUnit(userStyle.right),
+                    bottom: withUnit(userStyle.bottom),
+                    zIndex: userStyle.position === "relative" ? 50 : "auto",
+
+                    // Layout Base
                     display: subProps.display || "flex",
                     gap: subProps.gap || "1rem",
-                    ...(subProps.style || {}),
+
+                    // Essential: Prevent clipping when using relative offsets
+                    overflow:
+                      userStyle.position === "relative" ? "visible" : "hidden",
+
+                    // Spread user styles last so they can override if needed
+                    ...userStyle,
                   };
 
+                  // 2. Handle Grid vs Flex Specifics
                   if (subProps.display === "grid") {
                     subsectionStyle.gridTemplateColumns =
-                      subProps.gridTemplateColumns || "repeat(2, 1fr)";
+                      subProps.gridTemplateColumns ||
+                      `repeat(${subProps.gridColumns || 2}, 1fr)`;
                   } else {
                     subsectionStyle.flexDirection =
                       subProps.flexDirection || "column";
@@ -691,8 +713,9 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                       subProps.alignItems || "stretch";
                   }
 
+                  // 3. Animation Configuration
                   const { initial, animate, transition } = getMotionConfig(
-                    subProps.animation // Also use subProps here
+                    subProps.animation
                   );
 
                   return (
@@ -705,7 +728,12 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                         e.stopPropagation();
                         onSelect({ type: "subsection", id: sub.subsection_id });
                       }}
-                      className={`p-4 border-2 rounded-lg min-h-[100px] flex-1 transition-all ${
+                      /* FIX: Removed 'flex-1'. 
+         In the Builder, flex-1 forces the box to stretch to fill the row.
+         In Public view, the box only takes the space it needs. 
+         Removing this ensures the "origin" of your -100px is the same in both.
+      */
+                      className={`p-4 border-2 rounded-lg min-h-[100px] transition-all ${
                         selection.type === "subsection" &&
                         selection.id === sub.subsection_id
                           ? "border-green-500"
