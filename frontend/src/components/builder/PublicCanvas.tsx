@@ -1086,6 +1086,10 @@ const MainContent = ({
           const p = sec.properties || {};
           const styleProps = p.style || {};
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
+          const withUnit = (v: any) =>
+            typeof v === "number" || (typeof v === "string" && /^\d+$/.test(v))
+              ? `${v}px`
+              : v;
           let backgroundImage: string | undefined;
           if (typeof rawBg === "string" && rawBg.trim()) {
             backgroundImage = rawBg.startsWith("linear-gradient")
@@ -1096,6 +1100,15 @@ const MainContent = ({
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             padding: p.padding ?? styleProps.padding,
             ...(styleProps || {}),
+            // ADD THESE TO SYNC WITH THE BUILDER
+            top: withUnit(styleProps.top),
+            left: withUnit(styleProps.left),
+            right: withUnit(styleProps.right),
+            bottom: withUnit(styleProps.bottom),
+            position: styleProps.position || "static",
+            // Crucial: allow relative items to float outside the container boundaries
+            overflow: styleProps.position === "relative" ? "visible" : "hidden",
+            // ... rest of your logic
             ...(backgroundImage ? { backgroundImage } : {}),
             ...(backgroundImage && backgroundImage.startsWith("url(")
               ? { backgroundSize: "cover", backgroundPosition: "center" }

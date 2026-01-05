@@ -188,6 +188,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
     const newPage = websiteData?.pages.find((p) => p.page_id === pageId);
     if (newPage) setCurrentPage(newPage);
   };
+  const withUnit = (v: any) =>
+    typeof v === "number" || (typeof v === "string" && /^\d+$/.test(v))
+      ? `${v}px`
+      : v;
 
   const handleAddSection = () => {
     if (!page) return;
@@ -619,6 +623,15 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             alignItems: properties.alignItems ?? styleProps.alignItems,
             gap: properties.gap ?? styleProps.gap,
             ...styleProps,
+            // ADD THESE LINES TO FIX POSITIONING
+            top: withUnit(styleProps.top),
+            left: withUnit(styleProps.left),
+            position: styleProps.position || "static",
+            overflow:
+              styleProps.position === "relative"
+                ? "visible"
+                : styleProps.overflow,
+            // ... rest of your bg logic
             ...(backgroundImage ? { backgroundImage } : {}),
             ...(backgroundImage && backgroundImage.startsWith("url(")
               ? { backgroundSize: "cover", backgroundPosition: "center" }
