@@ -1045,7 +1045,7 @@ const MainContent = ({
   renderElement,
   isLoggedIn,
   buildSubsectionStyle,
-  addToCart, // ✅ ADD THIS PROP
+  addToCart,
 }: {
   currentPage: Page | undefined;
   activeCategory: string | null;
@@ -1055,7 +1055,7 @@ const MainContent = ({
   renderElement: (element: ElementType) => React.ReactNode;
   isLoggedIn: boolean;
   buildSubsectionStyle: (props: any) => React.CSSProperties;
-  addToCart: (item: CartItem) => void; // ✅ DEFINE THE PROP TYPE
+  addToCart: (item: CartItem) => void;
 }) => {
   if (activeCategory) {
     return (
@@ -1071,7 +1071,7 @@ const MainContent = ({
         <CategoryMenuInCanvas
           locations={websiteData.locations}
           categoryId={activeCategory}
-          onAddToCart={addToCart} // ✅ PASS THE PROP DOWNCategoryMenuInCanvas
+          onAddToCart={addToCart}
         />
       </>
     );
@@ -1088,57 +1088,35 @@ const MainContent = ({
           const isLast = idx === currentPage.sections.length - 1;
           const p = sec.properties || {};
           const styleProps = p.style || {};
+
+          // 1. Get the background from the correct source
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
 
+          // 2. Normalize it correctly (handling gradients vs images)
           let backgroundImage: string | undefined;
           if (typeof rawBg === "string" && rawBg.trim()) {
             backgroundImage = rawBg.startsWith("linear-gradient")
               ? rawBg
               : normalizeBackground(rawBg);
           }
+
           const containerStyle: React.CSSProperties = {
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             padding: p.padding ?? styleProps.padding,
-            ...(styleProps || {}),
-            // ADD THESE TO SYNC WITH THE BUILDER
-            top: withUnit(styleProps.top),
-            left: withUnit(styleProps.left),
-            right: withUnit(styleProps.right),
-            bottom: withUnit(styleProps.bottom),
-            position: styleProps.position || "static",
-            // Crucial: allow relative items to float outside the container boundaries
-            overflow: styleProps.position === "relative" ? "visible" : "hidden",
-            // ... rest of your logic
+            display: p.display ?? styleProps.display,
+            flexDirection: p.flexDirection ?? styleProps.flexDirection,
+            justifyContent: p.justifyContent ?? styleProps.justifyContent,
+            alignItems: p.alignItems ?? styleProps.alignItems,
+            gap: p.gap ?? styleProps.gap,
+            ...styleProps,
             ...(backgroundImage ? { backgroundImage } : {}),
+            // Ensure image covers the full section
             ...(backgroundImage && backgroundImage.startsWith("url(")
               ? { backgroundSize: "cover", backgroundPosition: "center" }
               : {}),
             ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
           };
-          if (isLast) {
-            if (
-              (containerStyle as any).minHeight &&
-              String((containerStyle as any).minHeight).includes("vh")
-            ) {
-              (containerStyle as any).minHeight = "auto";
-            }
-            if (
-              (containerStyle as any).height &&
-              String((containerStyle as any).height).includes("vh")
-            ) {
-              (containerStyle as any).height = "auto";
-            }
-          }
-          if (
-            containerStyle.backgroundImage &&
-            !String(containerStyle.backgroundImage).includes("gradient")
-          ) {
-            containerStyle.backgroundImage = resolveImageSrc(
-              containerStyle.backgroundImage
-            );
-            containerStyle.backgroundSize = "cover";
-            containerStyle.backgroundPosition = "center";
-          }
+
           return (
             <GatedContent
               key={sec.section_id}
@@ -1162,7 +1140,6 @@ const MainContent = ({
                     justifyContent: p.justifyContent,
                     alignItems: p.alignItems,
                     gap: p.gap,
-                    ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
                   }}
                 >
                   {sec.subsections.map((sub) => {
@@ -1170,26 +1147,8 @@ const MainContent = ({
                     const { initial, animate, transition } = getMotionConfig(
                       subProps.animation
                     );
-                    const subsectionStyle = {
-                      ...buildSubsectionStyle(subProps),
-                      ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
-                    };
-                    if (isLast) {
-                      if (
-                        (subsectionStyle as any).minHeight &&
-                        String((subsectionStyle as any).minHeight).includes(
-                          "vh"
-                        )
-                      ) {
-                        (subsectionStyle as any).minHeight = "auto";
-                      }
-                      if (
-                        (subsectionStyle as any).height &&
-                        String((subsectionStyle as any).height).includes("vh")
-                      ) {
-                        (subsectionStyle as any).height = "auto";
-                      }
-                    }
+                    const subsectionStyle = buildSubsectionStyle(subProps);
+
                     return (
                       <GatedContent
                         key={sub.subsection_id}
