@@ -68,25 +68,29 @@ export default function BuilderPaymentsPage() {
       setLoading(true);
       setError(null);
       try {
-        // 1. FETCH WEBSITE DATA
-        // This retrieves the general website settings, including the saved payment_method
-        const websiteRes = await api.get(`/builder/websites/${websiteId}`);
+        // 1. Separate fetch for Payment Method so it doesn't break the page if 404s
+        api
+          .get(`/builder/websites/${websiteId}`)
+          .then((res) => {
+            if (res.data?.payment_method) {
+              setPaymentMethod(res.data.payment_method);
+            }
+          })
+          .catch((err) => {
+            console.warn(
+              "Website settings not found, using default display mode.",
+              err
+            );
+          });
 
-        // 2. INITIALIZE PAYMENT METHOD STATE
-        // If the database has a method saved, use it; otherwise, default to "display"
-        if (websiteRes.data?.payment_method) {
-          setPaymentMethod(websiteRes.data.payment_method);
-        } else {
-          setPaymentMethod("display");
-        }
-
-        // 3. FETCH STRIPE CONFIG (Existing Logic)
+        // 2. Main fetch for Stripe Config
         const { data } = await api.get(
           `/users-stripe-account/builder/websites/${websiteId}/stripe-config`
         );
+
         setView(data as StripeConfigView);
 
-        // 4. LOAD PRODUCTS IF STRIPE EXISTS (Existing Logic)
+        // 3. Load Products if Stripe is configured
         if (data?.exists) {
           await loadProducts();
         }
@@ -98,7 +102,7 @@ export default function BuilderPaymentsPage() {
         setError(
           err?.response?.data?.detail ||
             err?.message ||
-            "Failed to load settings or Stripe config"
+            "Failed to load Stripe config"
         );
       } finally {
         setLoading(false);
@@ -106,8 +110,6 @@ export default function BuilderPaymentsPage() {
     };
 
     run();
-    // Adding paymentMethod to dependencies is not needed here
-    // as we only want to fetch the initial value on mount.
   }, [websiteId, router]);
 
   const loadProducts = async () => {
