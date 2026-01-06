@@ -1501,14 +1501,12 @@ const MenuItemDetails = ({
         </div>
       </div>
 
-      {item.is_shippable && (
-        <button
-          onClick={handleAddToCartClick}
-          className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700"
-        >
-          Add to Cart
-        </button>
-      )}
+      <button
+        onClick={handleAddToCartClick}
+        className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700"
+      >
+        Add to Cart
+      </button>
     </div>
   );
 };
@@ -2253,7 +2251,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const { initial, animate, transition } = getMotionConfig(props.animation);
 
       return (
-        <div>
+        <div key={element.element_id}>
           {/* Main Card */}
           <div
             onClick={(e) => {
@@ -2272,23 +2270,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           >
             {element.element_type === "AI" ? (
               <div className="relative">
-                <AiElementRunner
-                  element={element}
-                  isPreview={true} // <-- This is the crucial part
-                />
+                <AiElementRunner element={element} isPreview={true} />
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
                     type="button"
                     aria-label="Chat on WhatsApp"
-                    title="Chat on WhatsApp"
                     className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
                     onClick={(e) => {
                       e.stopPropagation();
-                      openWhatsApp(
-                        props.whatsappNumber,
-                        props.chatMessage ||
-                          `Hi! I'm interested in ${props.item_name}`
-                      );
+                      openWhatsApp(props.whatsappNumber, props.chatMessage);
                     }}
                   >
                     <FaWhatsapp size={20} />
@@ -2319,24 +2309,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 <p className="font-semibold text-gray-600 text-right">
                   ${Number(props.base_price).toFixed(2)}
                 </p>
-                {props.chatEnabled && props.whatsappNumber && (
-                  <button
-                    type="button"
-                    aria-label="Chat on WhatsApp"
-                    title="Chat on WhatsApp"
-                    className="absolute top-3 right-3 z-10 w-12 h-12 rounded-full flex items-center justify-center bg-[#25D366] text-white shadow-lg hover:scale-105 transition-transform"
-                    onClick={(e) => {
-                      e.stopPropagation();
-                      openWhatsApp(
-                        props.whatsappNumber,
-                        props.chatMessage ||
-                          `Hi! I'm interested in ${props.item_name}`
-                      );
-                    }}
-                  >
-                    <FaWhatsapp size={28} />
-                  </button>
-                )}
               </motion.div>
             )}
           </div>
@@ -2348,19 +2320,17 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             }`}
           >
             <div onClick={(e) => e.stopPropagation()}>
-              {/* ✅ FIX: Show loading indicator specifically for this component */}
               {isLoadingDetails && isExpanded ? (
                 <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50">
                   <p className="text-sm text-slate-500">Loading details...</p>
                 </div>
               ) : (
-                // ✅ FIX: Only render MenuItemDetails if it is expanded to ensure data is ready
                 isExpanded && (
                   <MenuItemDetails
                     item={props as MenuItem}
                     itemExtras={itemExtras}
                     itemOptions={itemOptions}
-                    onAddToCart={addToCart}
+                    onAddToCart={addToCart} // Button will now always show inside here
                   />
                 )
               )}
