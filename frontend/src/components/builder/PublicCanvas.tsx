@@ -447,7 +447,6 @@ const CartView = ({
   const [editingItemId, setEditingItemId] = useState<string | null>(null);
   const [piError, setPiError] = useState<string | null>(null);
 
-  // State for the Cash on Delivery form
   const [codDetails, setCodDetails] = useState({
     name: "",
     email: "",
@@ -456,7 +455,7 @@ const CartView = ({
   });
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  // This useEffect only runs if Stripe is the selected payment method
+  // Initialize Stripe only if explicitly selected
   useEffect(() => {
     if (websiteData.payment_method === "stripe") {
       saasApi
@@ -467,26 +466,17 @@ const CartView = ({
           if (res.data.publishableKey) {
             setStripePromise(loadStripe(res.data.publishableKey));
           } else {
-            setPiError(
-              "This site has not configured Stripe payments correctly."
-            );
+            setPiError("Stripe is not configured correctly for this site.");
           }
         })
-        .catch((err) => {
-          console.error("Could not load Stripe key.", err);
-          setPiError("Could not connect to the payment service.");
-        });
+        .catch(() => setPiError("Failed to connect to the payment provider."));
     }
   }, [websiteData.website_id, websiteData.payment_method]);
 
-  // This useEffect also only runs if Stripe is selected
+  // Create Payment Intent only for Stripe
   useEffect(() => {
     setPiError(null);
-    if (
-      cart.length === 0 ||
-      !websiteData ||
-      websiteData.payment_method !== "stripe"
-    ) {
+    if (cart.length === 0 || websiteData.payment_method !== "stripe") {
       setClientSecret("");
       return;
     }
@@ -496,20 +486,17 @@ const CartView = ({
         website_id: websiteData.website_id,
       })
       .then((res) => setClientSecret(res.data.clientSecret || ""))
-      .catch((err) => {
-        console.error("Failed to create payment intent", err);
-        setClientSecret("");
-        setPiError("Could not start checkout. Please try again.");
-      });
-  }, [cart, cartTotal, websiteData]);
+      .catch(() =>
+        setPiError("Could not initialize checkout. Please try again.")
+      );
+  }, [cart, websiteData]);
 
-  // Handler for submitting a Cash on Delivery order
   const handleCodSubmit = async (event: React.FormEvent) => {
     event.preventDefault();
     setIsSubmitting(true);
     try {
       await saasApi.post("/checkout/submit-cod-order", {
-        cart: cart,
+        cart,
         website_id: websiteData.website_id,
         customer_name: codDetails.name,
         customer_email: codDetails.email,
@@ -517,18 +504,12 @@ const CartView = ({
         customer_phone: codDetails.phone,
       });
       clearCart();
-      // You must have a /thank-you page for this to work
       window.location.href = `/thank-you`;
-    } catch (error) {
-      alert("There was an error placing your order. Please try again.");
+    } catch {
+      alert("Error placing your order. Please try again.");
     } finally {
       setIsSubmitting(false);
     }
-  };
-
-  const options: StripeElementsOptions = {
-    clientSecret,
-    appearance: { theme: "stripe" },
   };
 
   if (cart.length === 0) {
@@ -537,7 +518,7 @@ const CartView = ({
         <h1 className="text-3xl font-bold">Your Cart is Empty</h1>
         <button
           onClick={() => setCurrentView("page")}
-          className="text-indigo-600 hover:underline mt-4 inline-block"
+          className="text-indigo-600 hover:underline mt-4"
         >
           ← Continue Shopping
         </button>
@@ -549,11 +530,12 @@ const CartView = ({
     <div className="container mx-auto p-4 md:p-8">
       <button
         onClick={() => setCurrentView("page")}
-        className="text-indigo-600 hover:underline mb-8 inline-block"
+        className="text-indigo-600 hover:underline mb-8"
       >
         ← Back to Shop
       </button>
       <h1 className="text-3xl font-bold mb-8">Your Cart</h1>
+
       <div className="grid grid-cols-1 lg:grid-cols-3 gap-12">
         <div className="lg:col-span-2 space-y-4">
           {cart.map((item) => {
@@ -565,11 +547,10 @@ const CartView = ({
               >
                 {isEditing ? (
                   <EditableCartItem
-                    key={`${item.cartItemId}-${item.quantity}-${item.unitPrice}`}
                     item={item}
                     onCancel={() => setEditingItemId(null)}
-                    onSave={(cartItemId, updates) => {
-                      updateCartItem(cartItemId, updates);
+                    onSave={(id, updates) => {
+                      updateCartItem(id, updates);
                       setEditingItemId(null);
                     }}
                   />
@@ -583,13 +564,11 @@ const CartView = ({
                     <div className="ml-4 flex-grow">
                       <h2 className="font-semibold text-lg">{item.name}</h2>
                       <div className="text-sm text-gray-600">
-                        {Object.entries(item.selectedOptions).map(
-                          ([group, choice]) => (
-                            <p key={group}>
-                              <strong>{group}:</strong> {choice}
-                            </p>
-                          )
-                        )}
+                        {Object.entries(item.selectedOptions).map(([g, c]) => (
+                          <p key={g}>
+                            <strong>{g}:</strong> {c}
+                          </p>
+                        ))}
                         {item.selectedExtras.length > 0 && (
                           <p>
                             <strong>Extras:</strong>{" "}
@@ -626,18 +605,17 @@ const CartView = ({
         </div>
 
         <div className="lg:col-span-1">
-          {/* --- ✅ CONDITIONAL RENDER based on payment_method --- */}
-
-          {websiteData.payment_method === "stripe" && (
-            <>
+          {/* ✅ UPDATED CONDITIONAL LOGIC */}
+          {websiteData.payment_method === "stripe" ? (
+            <div className="space-y-4">
               {piError && (
-                <div className="mb-4 p-3 rounded bg-red-50 text-red-600 text-sm">
+                <div className="p-3 rounded bg-red-50 text-red-600 text-sm">
                   {piError}
                 </div>
               )}
               {clientSecret && stripePromise ? (
                 <Elements
-                  options={options}
+                  options={{ clientSecret, appearance: { theme: "stripe" } }}
                   stripe={stripePromise}
                   key={clientSecret}
                 >
@@ -650,17 +628,15 @@ const CartView = ({
                   </div>
                 )
               )}
-            </>
-          )}
-
-          {websiteData.payment_method === "cod" && (
+            </div>
+          ) : websiteData.payment_method === "cod" ? (
             <form
               onSubmit={handleCodSubmit}
               className="space-y-6 bg-white p-6 rounded-lg shadow-md"
             >
               <h3 className="text-lg font-semibold">Contact & Shipping</h3>
               <p className="text-sm text-gray-600">
-                You will pay with cash upon delivery.
+                Pay with cash upon delivery.
               </p>
               <div className="grid grid-cols-1 gap-y-4">
                 <input
@@ -699,7 +675,7 @@ const CartView = ({
                   onChange={(e) =>
                     setCodDetails({ ...codDetails, phone: e.target.value })
                   }
-                  placeholder="Phone Number (Optional)"
+                  placeholder="Phone Number"
                   className="p-3 border rounded-md"
                 />
               </div>
@@ -711,15 +687,15 @@ const CartView = ({
                 {isSubmitting ? "Placing Order..." : "Place Order"}
               </button>
             </form>
-          )}
-
-          {websiteData.payment_method === "display" && (
-            <div className="p-6 border rounded-lg bg-gray-50 text-center">
+          ) : (
+            /* DEFAULT FALLBACK: Display Only */
+            <div className="p-6 border rounded-lg bg-gray-50 text-center space-y-4">
               <h3 className="font-semibold text-lg">Order Summary</h3>
-              <p className="text-gray-600 mt-2">
-                To place an order, please contact the restaurant directly.
+              <p className="text-gray-600 text-sm">
+                This store is for display only. Please contact us directly to
+                finalize your order.
               </p>
-              <div className="text-left mt-4 border-t pt-4">
+              <div className="text-left border-t pt-4">
                 <div className="flex justify-between font-bold text-xl">
                   <span>Total:</span>
                   <span>${cartTotal.toFixed(2)}</span>
