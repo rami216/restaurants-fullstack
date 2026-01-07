@@ -1,8 +1,8 @@
 // frontend/src/app/createwebsite/page.tsx
 
 "use client";
-
-import React, { useState, useEffect } from "react";
+export const dynamic = "force-dynamic"; // Add this line here!
+import React, { useState, useEffect, Suspense } from "react";
 import api from "@/lib/axios";
 import ElementPalette from "@/components/builder/ElementPalette";
 import BuilderCanvas from "@/components/builder/BuilderCanvas";
@@ -992,193 +992,203 @@ const CreateWebsitePage = () => {
       })
     : "#";
 
-  if (loading)
-    return (
-      <div className="flex justify-center items-center h-screen">
-        Loading Builder...
-      </div>
-    );
-  if (!websiteData) {
-    return (
-      <div className="flex flex-col justify-center items-center h-screen bg-gray-100 text-gray-800">
-        <div className="bg-white p-8 rounded-lg shadow-md text-center">
-          <h2 className="text-2xl font-bold mb-4">Create Your Website</h2>
-          <p className="mb-6">
-            Choose a subdomain to get started. This will be your site's address.
-          </p>
-          <div className="flex items-center border rounded-lg overflow-hidden">
-            <input
-              type="text"
-              placeholder="your-site-name"
-              value={subdomain}
-              onChange={(e) => setSubdomain(e.target.value)}
-              className="p-3 w-full outline-none"
-            />
-            <span className="bg-gray-200 p-3 text-gray-600">
-              www.zygoflow.com/yourdomainname
-            </span>
-          </div>
-          <button
-            onClick={handleCreateWebsite}
-            className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg mt-4 w-full"
-          >
-            Create My Website
-          </button>
-        </div>
-      </div>
-    );
-  }
+  // ... all your big functions (handleSaveChangesToDB, etc.) stay exactly where they are ...
 
   return (
-    <div className="flex h-screen bg-gray-200 font-sans">
-      <aside
-        className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${
-          isPaletteExpanded ? "w-64 p-4" : "w-16 p-2"
-        }`}
-      >
-        <ElementPalette
-          isExpanded={isPaletteExpanded}
-          onToggle={() => setIsPaletteExpanded(!isPaletteExpanded)}
-          selectedSubsectionId={
-            selection.type === "subsection" ? selection.id : null
-          }
-          activePage={activePage || null}
-          onUpdate={updateWebsiteData}
-          locations={locations}
-          selectedLocationId={selectedLocationId}
-          onLocationChange={setSelectedLocationId}
-          categories={categories}
-          websiteId={websiteData.website_id} // <-- add this line
-        />
-      </aside>
-      <div className="flex-1 flex flex-col">
-        <header className="bg-gray-800 text-white p-4 flex items-center justify-between gap-4">
-          <div className="flex items-center gap-4">
-            <h1 className="text-xl font-bold">Website Builder</h1>
-
-            {/* Credits badge */}
-            {websiteData && (
-              <div className="flex items-center gap-3 bg-white/10 rounded-md px-3 py-2">
-                {(() => {
-                  const limitUsd = Number(websiteData.ai_spend_limit_usd ?? 0);
-                  const spentUsd = Number(websiteData.monthly_spend_usd ?? 0);
-
-                  const totalCredits = Math.round(limitUsd * 1000);
-                  const usedCredits = Math.min(
-                    totalCredits,
-                    Math.round(spentUsd * 1000)
-                  );
-                  const remaining = Math.max(0, totalCredits - usedCredits);
-
-                  const pct =
-                    totalCredits > 0
-                      ? Math.round((usedCredits / totalCredits) * 100)
-                      : 0;
-
-                  return (
-                    <div className="flex items-center gap-3">
-                      <div className="text-sm font-medium">
-                        Credits:{" "}
-                        <span className="font-semibold">{remaining}</span> /{" "}
-                        {totalCredits}
-                      </div>
-                      <div className="w-40 h-2 bg-white/20 rounded">
-                        <div
-                          className="h-2 bg-green-400 rounded"
-                          style={{ width: `${pct}%` }}
-                          title={`${pct}% used`}
-                        />
-                      </div>
-                    </div>
-                  );
-                })()}
-              </div>
-            )}
-          </div>
-
-          {/* Right-side actions */}
-          <div className="flex items-center gap-2">
-            {websiteData?.website_id && (
-              <button
-                onClick={() =>
-                  router.push(
-                    `/builder/websites/${websiteData.website_id}/payments`
-                  )
-                }
-                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded"
-              >
-                Payments
-              </button>
-            )}
-            {websiteData?.subdomain && (
-              <>
-                <a
-                  href="/builder/custom-domain"
-                  className="inline-flex items-center px-3 py-1.5 rounded bg-slate-200 text-slate-900 text-sm"
-                >
-                  Custom Domain
-                </a>
-                <a
-                  href={previewHref}
-                  target="_blank"
-                  rel="noopener noreferrer"
-                  className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
-                >
-                  Preview
-                </a>
-              </>
-            )}
+    <Suspense
+      fallback={
+        <div className="flex justify-center items-center h-screen">
+          Loading Application...
+        </div>
+      }
+    >
+      {loading ? (
+        <div className="flex justify-center items-center h-screen">
+          Loading Builder...
+        </div>
+      ) : !websiteData ? (
+        <div className="flex flex-col justify-center items-center h-screen bg-gray-100 text-gray-800">
+          <div className="bg-white p-8 rounded-lg shadow-md text-center">
+            <h2 className="text-2xl font-bold mb-4">Create Your Website</h2>
+            <p className="mb-6">
+              Choose a subdomain to get started. This will be your site's
+              address.
+            </p>
+            <div className="flex items-center border rounded-lg overflow-hidden">
+              <input
+                type="text"
+                placeholder="your-site-name"
+                value={subdomain}
+                onChange={(e) => setSubdomain(e.target.value)}
+                className="p-3 w-full outline-none"
+              />
+              <span className="bg-gray-200 p-3 text-gray-600">
+                www.zygoflow.com/yourdomainname
+              </span>
+            </div>
             <button
-              onClick={handleSaveChangesToDB}
-              disabled={isSaving}
-              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded disabled:bg-gray-400"
+              onClick={handleCreateWebsite}
+              className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-3 px-6 rounded-lg mt-4 w-full"
             >
-              {isSaving ? "Saving..." : "Save All Changes"}
+              Create My Website
             </button>
           </div>
-        </header>
+        </div>
+      ) : (
+        <div className="flex h-screen bg-gray-200 font-sans">
+          {/* --- LEFT ASIDE: Palette --- */}
+          <aside
+            className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${
+              isPaletteExpanded ? "w-64 p-4" : "w-16 p-2"
+            }`}
+          >
+            <ElementPalette
+              isExpanded={isPaletteExpanded}
+              onToggle={() => setIsPaletteExpanded(!isPaletteExpanded)}
+              selectedSubsectionId={
+                selection.type === "subsection" ? selection.id : null
+              }
+              activePage={activePage || null}
+              onUpdate={updateWebsiteData}
+              locations={locations}
+              selectedLocationId={selectedLocationId}
+              onLocationChange={setSelectedLocationId}
+              categories={categories}
+              websiteId={websiteData.website_id}
+            />
+          </aside>
 
-        <main className="flex-1 p-4 overflow-y-auto">
-          <BuilderCanvas
-            page={activePage}
-            navbar={navbar}
-            websiteData={websiteData}
-            selection={selection}
-            onSelect={setSelection}
-            onUpdate={updateWebsiteData}
-            onPageSwitch={setActivePageId}
-            onGeneratePage={handleGeneratePage} // <-- ADD THIS PROP
-          />
-        </main>
-      </div>
-      <aside
-        className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${
-          isPropertiesExpanded ? "w-80 p-4" : "w-16 p-2"
-        }`}
-      >
-        <PropertyEditor
-          isExpanded={isPropertiesExpanded}
-          onToggle={() => setIsPropertiesExpanded(!isPropertiesExpanded)}
-          selectedItem={selectedItem}
-          selectionType={selection.type}
-          activePage={activePage || null}
-          websiteData={websiteData}
-          onUpdate={updateWebsiteData}
-          onUpdateWebsite={(updatedWebsite) => setWebsiteData(updatedWebsite)}
-          onDelete={handleDeleteItem}
-          onCreatePage={handleCreatePage}
-          clipboard={clipboard}
-          onCopy={handleCopyElement}
-          onPaste={handlePasteElement}
-          onGenerateSection={handleGenerateSection}
-          onMoveSection={handleMoveSection} // <-- ADD THIS PROP
-          onRefineSection={handleRefineSection}
-          onRefineElement={handleRefineElement} // <-- ADD THIS PROP
-          onCreateStandalonePage={handleCreateStandalonePage} // <-- ADD THIS
-          onRefineDataAppElement={handleRefineDataAppElement}
-        />
-      </aside>
-    </div>
+          {/* --- CENTER COLUMN: Canvas --- */}
+          <div className="flex-1 flex flex-col">
+            <header className="bg-gray-800 text-white p-4 flex items-center justify-between gap-4">
+              <div className="flex items-center gap-4">
+                <h1 className="text-xl font-bold">Website Builder</h1>
+
+                {/* Credits badge logic */}
+                <div className="flex items-center gap-3 bg-white/10 rounded-md px-3 py-2">
+                  {(() => {
+                    const limitUsd = Number(
+                      websiteData.ai_spend_limit_usd ?? 0
+                    );
+                    const spentUsd = Number(websiteData.monthly_spend_usd ?? 0);
+                    const totalCredits = Math.round(limitUsd * 1000);
+                    const usedCredits = Math.min(
+                      totalCredits,
+                      Math.round(spentUsd * 1000)
+                    );
+                    const remaining = Math.max(0, totalCredits - usedCredits);
+                    const pct =
+                      totalCredits > 0
+                        ? Math.round((usedCredits / totalCredits) * 100)
+                        : 0;
+
+                    return (
+                      <div className="flex items-center gap-3">
+                        <div className="text-sm font-medium">
+                          Credits:{" "}
+                          <span className="font-semibold">{remaining}</span> /{" "}
+                          {totalCredits}
+                        </div>
+                        <div className="w-40 h-2 bg-white/20 rounded">
+                          <div
+                            className="h-2 bg-green-400 rounded"
+                            style={{ width: `${pct}%` }}
+                            title={`${pct}% used`}
+                          />
+                        </div>
+                      </div>
+                    );
+                  })()}
+                </div>
+              </div>
+
+              {/* Actions */}
+              <div className="flex items-center gap-2">
+                <button
+                  onClick={() =>
+                    router.push(
+                      `/builder/websites/${websiteData.website_id}/payments`
+                    )
+                  }
+                  className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded"
+                >
+                  Payments
+                </button>
+                {websiteData.subdomain && (
+                  <>
+                    <a
+                      href="/builder/custom-domain"
+                      className="inline-flex items-center px-3 py-1.5 rounded bg-slate-200 text-slate-900 text-sm"
+                    >
+                      Custom Domain
+                    </a>
+                    <a
+                      href={previewHref}
+                      target="_blank"
+                      rel="noopener noreferrer"
+                      className="bg-gray-600 hover:bg-gray-700 text-white font-bold py-2 px-3 rounded"
+                    >
+                      Preview
+                    </a>
+                  </>
+                )}
+                <button
+                  onClick={handleSaveChangesToDB}
+                  disabled={isSaving}
+                  className="bg-blue-500 hover:bg-blue-600 text-white font-bold py-2 px-3 rounded disabled:bg-gray-400"
+                >
+                  {isSaving ? "Saving..." : "Save All Changes"}
+                </button>
+              </div>
+            </header>
+
+            <main className="flex-1 p-4 overflow-y-auto">
+              <BuilderCanvas
+                page={activePage}
+                navbar={navbar}
+                websiteData={websiteData}
+                selection={selection}
+                onSelect={setSelection}
+                onUpdate={updateWebsiteData}
+                onPageSwitch={setActivePageId}
+                onGeneratePage={handleGeneratePage}
+              />
+            </main>
+          </div>
+
+          {/* --- RIGHT ASIDE: Properties --- */}
+          <aside
+            className={`bg-white shadow-lg transition-all duration-300 ease-in-out ${
+              isPropertiesExpanded ? "w-80 p-4" : "w-16 p-2"
+            }`}
+          >
+            <PropertyEditor
+              isExpanded={isPropertiesExpanded}
+              onToggle={() => setIsPropertiesExpanded(!isPropertiesExpanded)}
+              selectedItem={selectedItem}
+              selectionType={selection.type}
+              activePage={activePage || null}
+              websiteData={websiteData}
+              onUpdate={updateWebsiteData}
+              onUpdateWebsite={(updatedWebsite) =>
+                setWebsiteData(updatedWebsite)
+              }
+              onDelete={handleDeleteItem}
+              onCreatePage={handleCreatePage}
+              clipboard={clipboard}
+              onCopy={handleCopyElement}
+              onPaste={handlePasteElement}
+              onGenerateSection={handleGenerateSection}
+              onMoveSection={handleMoveSection}
+              onRefineSection={handleRefineSection}
+              onRefineElement={handleRefineElement}
+              onCreateStandalonePage={handleCreateStandalonePage}
+              onRefineDataAppElement={handleRefineDataAppElement}
+            />
+          </aside>
+        </div>
+      )}
+    </Suspense>
   );
 };
 
