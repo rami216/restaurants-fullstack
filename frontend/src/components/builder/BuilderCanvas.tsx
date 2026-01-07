@@ -21,7 +21,6 @@ import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
 import saasApi from "@/lib/saasApi";
-const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>({});
 const withUnit = (v: any) =>
   typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v))
     ? `${v}px`
@@ -185,6 +184,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   isPreview = false,
   onGeneratePage,
 }) => {
+  const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>(
+    {}
+  );
+
   const [pageAiPrompt, setPageAiPrompt] = useState("");
   const [isGeneratingPage, setIsGeneratingPage] = useState(false);
   // --- State for preview navigation ---

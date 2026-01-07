@@ -40,7 +40,6 @@ import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 import { useCart, CartItem } from "@/context/CartContext";
-const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>({});
 const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
   const stripe = useStripe();
   const elements = useElements();
@@ -1674,6 +1673,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   initialPage,
   websiteData,
 }) => {
+  const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>(
+    {}
+  );
+
   const { cartCount, addToCart } = useCart(); // ✅ Get addToCart from the hook here
 
   const [currentView, setCurrentView] = useState("page"); // 'page' or 'cart'
