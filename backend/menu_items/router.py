@@ -82,3 +82,18 @@ async def delete_menu_item(
     await db.commit()
 
     return None # Return None for 204 No Content response
+
+
+@router.get("/batch-prices")
+async def get_batch_prices(ids: str, db: AsyncSession = Depends(get_db)):
+    # ids will be a string like "uuid1,uuid2,uuid3"
+    id_list = ids.split(',')
+    
+    # We only select the two columns we need to save bandwidth
+    result = await db.execute(
+        select(MenuItem.item_id, MenuItem.base_price)
+        .where(MenuItem.item_id.in_(id_list))
+    )
+    
+    # Return a simple mapping: { "item_id": price }
+    return {str(row.item_id): float(row.base_price) for row in result.all()}
