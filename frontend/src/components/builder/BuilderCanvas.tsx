@@ -21,7 +21,7 @@ import Mustache from "mustache";
 import AuthFormElement from "@/components/shared/AuthFormElement";
 import { resolveImageSrc } from "@/lib/imageUrl";
 import saasApi from "@/lib/saasApi";
-
+const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>({});
 const withUnit = (v: any) =>
   typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v))
     ? `${v}px`
@@ -243,11 +243,19 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   };
 
   function renderElement(element: ElementType) {
-    const props = element.properties || {};
+    // 1. INITIALIZE DATA
+    let props = { ...(element.properties || {}) };
+
+    // 2. THE LIVE SYNC CHECK (Add this part!)
+    const itemId = props.item_id || element.aiPayload?.properties?.item_id;
+    if (itemId && priceRegistry[itemId] !== undefined) {
+      props.base_price = priceRegistry[itemId];
+    }
+
+    // 3. YOUR ORIGINAL VARIABLES
     const style = props.style || {};
     const BACKEND_URL = api.defaults.baseURL || "";
     const { initial, animate, transition } = getMotionConfig(props.animation);
-
     // This wrap function is specific to BuilderCanvas
     const wrap = (children: React.ReactNode) => (
       <motion.div
@@ -305,13 +313,15 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         );
       }
-    } else if (effectiveType === "MENU_ITEM") {
+    }
+    if (effectiveType === "MENU_ITEM") {
       if (element.element_type === "AI") {
         return wrap(
           <AiElementRunner
             key={element.aiPayload?.id || element.element_id}
-            element={element}
-            isPreview={isPreview} // ✅ Pass down the isPreview prop
+            // We pass the FRESH props to the AI runner
+            element={{ ...element, properties: props }}
+            isPreview={isPreview}
           />
         );
       } else {
@@ -321,22 +331,14 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               <img
                 src={resolveImageSrc(props.image_url)}
                 alt={props.item_name}
-                className="w-full object-cover rounded-md mb-4"
-                onError={(e) => {
-                  (e.currentTarget as HTMLImageElement).src =
-                    "https://placehold.co/60x60/fecaca/991b1b?text=Error";
-                }}
+                className="w-full h-40 object-cover rounded-md mb-4"
               />
             )}
-
             <h4 className="font-bold text-lg text-gray-800">
-              {props.item_name || "Menu Item"}
+              {props.item_name}
             </h4>
-            <p className="text-sm text-gray-600 my-2">
-              {props.description || "No description available."}
-            </p>
             <p className="font-semibold text-right text-gray-800">
-              ${props.base_price?.toFixed(2) || "0.00"}
+              ${Number(props.base_price || 0).toFixed(2)}
             </p>
           </div>
         );
@@ -511,6 +513,33 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       );
     }
   }
+  useEffect(() => {
+    if (!currentPage) return;
+
+    // 1. Find every item_id present on the current page
+    const usedIds = new Set<string>();
+    currentPage.sections.forEach((sec) => {
+      sec.subsections.forEach((sub) => {
+        sub.elements.forEach((el) => {
+          // Check both standard properties and aiPayload properties
+          const id =
+            el.properties?.item_id || el.aiPayload?.properties?.item_id;
+          if (id) usedIds.add(id);
+        });
+      });
+    });
+
+    // 2. Fetch only the prices for these specific IDs
+    if (usedIds.size > 0) {
+      const idList = Array.from(usedIds).join(",");
+      api
+        .get(`/menu-items/batch-prices?ids=${idList}`)
+        .then((res) => {
+          setPriceRegistry(res.data); // Updates the UI with live prices
+        })
+        .catch((err) => console.error("Price sync failed", err));
+    }
+  }, [currentPage]);
 
   if (!page) {
     return (

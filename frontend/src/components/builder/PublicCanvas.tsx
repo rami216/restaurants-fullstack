@@ -40,7 +40,7 @@ import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 import { useCart, CartItem } from "@/context/CartContext";
-
+const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>({});
 const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
   const stripe = useStripe();
   const elements = useElements();
@@ -1728,6 +1728,27 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     Record<string, boolean>
   >({});
 
+  React.useEffect(() => {
+    if (!currentPage) return;
+    const usedIds = new Set<string>();
+    currentPage.sections.forEach((sec) => {
+      sec.subsections.forEach((sub) => {
+        sub.elements.forEach((el) => {
+          const id =
+            el.properties?.item_id || el.aiPayload?.properties?.item_id;
+          if (id) usedIds.add(id);
+        });
+      });
+    });
+
+    if (usedIds.size > 0) {
+      const idList = Array.from(usedIds).join(",");
+      api
+        .get(`/menu-items/batch-prices?ids=${idList}`)
+        .then((res) => setPriceRegistry(res.data))
+        .catch((err) => console.error("Public Sync Error", err));
+    }
+  }, [currentPage]);
   useEffect(() => {
     // Function to check login status
     const checkAuthStatus = () => {
@@ -2144,12 +2165,18 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   };
 
   function renderElement(element: ElementType) {
-    const props = element.properties || {};
+    // 1. INITIALIZE
+    let props = { ...(element.properties || {}) };
+
+    // 2. LIVE PRICE CHECK
+    const itemId = props.item_id || element.aiPayload?.properties?.item_id;
+    if (itemId && priceRegistry[itemId] !== undefined) {
+      props.base_price = priceRegistry[itemId];
+    }
+
+    // 3. YOUR ORIGINAL VARIABLES
     const style = props.style || {};
     const { initial, animate, transition } = getMotionConfig(props.animation);
-    const BACKEND = api.defaults.baseURL || "";
-
-    // Determine the element's true purpose for functional logic
     const effectiveType = props.originalType || element.element_type;
 
     // --- RENDER LOGIC USING if/else if ---
@@ -2219,10 +2246,20 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         </div>
       );
     } else if (effectiveType === "MENU_ITEM") {
-      const isExpanded = expandedMenuItemId === element.properties.item_id;
-      const itemExtras = extras[element.properties.item_id] || [];
-      const itemOptions = options[element.properties.item_id] || [];
-      const props = element.properties || {};
+      // 1. DATA INITIALIZATION
+      let props = { ...(element.properties || {}) };
+      const itemId = props.item_id || element.aiPayload?.properties?.item_id;
+
+      // 2. THE LIVE SYNC (Hydration)
+      // This ensures 'props.base_price' is always the latest from the database
+      if (itemId && priceRegistry[itemId] !== undefined) {
+        props.base_price = priceRegistry[itemId];
+      }
+
+      // 3. YOUR ORIGINAL VARIABLES
+      const isExpanded = expandedMenuItemId === itemId;
+      const itemExtras = extras[itemId] || [];
+      const itemOptions = options[itemId] || [];
       const style = props.style || {};
       const { initial, animate, transition } = getMotionConfig(props.animation);
 
@@ -2233,20 +2270,24 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             onClick={(e) => {
               e.preventDefault();
               e.stopPropagation();
-              handleMenuItemClick(element.properties.item_id);
+              handleMenuItemClick(itemId);
             }}
             role="button"
             tabIndex={0}
             onKeyDown={(e) => {
               if (e.key === "Enter" || e.key === " ") {
                 e.preventDefault();
-                handleMenuItemClick(element.properties.item_id);
+                handleMenuItemClick(itemId);
               }
             }}
           >
             {element.element_type === "AI" ? (
               <div className="relative">
-                <AiElementRunner element={element} isPreview={true} />
+                {/* ✅ Pass the element with UPDATED props to the AI runner */}
+                <AiElementRunner
+                  element={{ ...element, properties: props }}
+                  isPreview={true}
+                />
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
                     type="button"
@@ -2283,7 +2324,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   {props.description}
                 </p>
                 <p className="font-semibold text-gray-600 text-right">
-                  ${Number(props.base_price).toFixed(2)}
+                  {/* ✅ Uses the hydrated live price */}$
+                  {Number(props.base_price || 0).toFixed(2)}
                 </p>
               </motion.div>
             )}
@@ -2303,10 +2345,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               ) : (
                 isExpanded && (
                   <MenuItemDetails
+                    // ✅ Passes hydrated price into the details view
                     item={props as MenuItem}
                     itemExtras={itemExtras}
                     itemOptions={itemOptions}
-                    onAddToCart={addToCart} // Button will now always show inside here
+                    onAddToCart={addToCart}
                   />
                 )
               )}
