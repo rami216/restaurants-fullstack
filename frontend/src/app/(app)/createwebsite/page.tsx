@@ -35,7 +35,7 @@ type DeletedItem = {
   id: string;
 };
 
-const CreateWebsitePage = () => {
+function BuilderManager() {
   const router = useRouter(); // ⬅️ add this
   const [subdomain, setSubdomain] = useState(""); // ✅ 1. Add state for the subdomain input
 
@@ -1190,6 +1190,15 @@ const CreateWebsitePage = () => {
       )}
     </Suspense>
   );
-};
-
-export default CreateWebsitePage;
+}
+export default function CreateWebsitePage() {
+  return (
+    // This boundary catches the hooks during pre-rendering and
+    // prevents the 'null reading useState' error.
+    <Suspense
+      fallback={<div className="p-10 text-center">Initialing Builder...</div>}
+    >
+      <BuilderManager />
+    </Suspense>
+  );
+}
