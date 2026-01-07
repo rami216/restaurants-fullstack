@@ -1,6 +1,6 @@
 // frontend/src/components/builder/Properties.ts
 
-import { UUID } from "crypto";
+// import { UUID } from "crypto";
 import { CartItem } from "@/context/CartContext"; // Reuse the CartItem type
 
 // New, strongly-typed interface for element properties
@@ -117,7 +117,7 @@ export interface WebsiteData {
   // custom domain preview helpers
   primary_custom_domain?: string | null;
   primary_custom_domain_status?: string | null; // <-- New
-  primary_custom_domain_id?: UUID | null;
+  primary_custom_domain_id?: string | null;
 }
 
 export type Selection = {
@@ -212,7 +212,7 @@ export type VisibilityRule = {
   requiresAnonymous?: boolean;
   /** Optional role restriction (applies only when logged in) */
   roles?: string[];
-  
+
   /** Only show if the user HAS purchased this product */
   required_product_id?: string;
 
