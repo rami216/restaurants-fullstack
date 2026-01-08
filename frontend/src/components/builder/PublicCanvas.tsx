@@ -2274,16 +2274,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const itemId = props.item_id || element.aiPayload?.properties?.item_id;
 
       // 2. THE LIVE SYNC (Hydration)
-      // This ensures 'props.base_price' is always the latest from the database
       if (itemId && priceRegistry[itemId] !== undefined) {
         props.base_price = priceRegistry[itemId];
       }
 
-      // 3. YOUR ORIGINAL VARIABLES
+      // 3. VARIABLES
       const isExpanded = expandedMenuItemId === itemId;
       const itemExtras = extras[itemId] || [];
       const itemOptions = options[itemId] || [];
-      const style = props.style || {};
+      const style = props.style || {}; // Contains the beige background & brown border
       const { initial, animate, transition } = getMotionConfig(props.animation);
 
       return (
@@ -2305,12 +2304,20 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             }}
           >
             {element.element_type === "AI" ? (
-              <div className="relative">
-                {/* ✅ Pass the element with UPDATED props to the AI runner */}
+              /* ✅ THE FIX: Use motion.div and style={style} to match the builder design */
+              <motion.div
+                className="relative overflow-hidden"
+                style={style}
+                initial={initial}
+                animate={animate}
+                transition={transition}
+              >
                 <AiElementRunner
+                  // Passes hydrated props to Mustache
                   element={{ ...element, properties: props }}
-                  isPreview={true}
+                  isPreview={false}
                 />
+
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
                     type="button"
@@ -2324,8 +2331,9 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                     <FaWhatsapp size={20} />
                   </button>
                 )}
-              </div>
+              </motion.div>
             ) : (
+              /* Standard Card logic */
               <motion.div
                 className="relative border rounded-lg p-4 bg-white shadow cursor-pointer"
                 style={style}
@@ -2347,8 +2355,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   {props.description}
                 </p>
                 <p className="font-semibold text-gray-600 text-right">
-                  {/* ✅ Uses the hydrated live price */}$
-                  {Number(props.base_price || 0).toFixed(2)}
+                  ${Number(props.base_price || 0).toFixed(2)}
                 </p>
               </motion.div>
             )}
@@ -2368,7 +2375,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               ) : (
                 isExpanded && (
                   <MenuItemDetails
-                    // ✅ Passes hydrated price into the details view
                     item={props as MenuItem}
                     itemExtras={itemExtras}
                     itemOptions={itemOptions}
