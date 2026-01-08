@@ -397,17 +397,23 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
     }
     if (effectiveType === "MENU_ITEM") {
       if (element.element_type === "AI") {
+        // ✅ DESIGN 1: THE AI DESIGN
+        // The wrap() function applies the dynamic 'style' (beige bg, brown border).
+        // No hardcoded classes here so the AI design looks clean.
         return wrap(
           <AiElementRunner
             key={element.aiPayload?.id || element.element_id}
-            // We pass the FRESH props to the AI runner
+            // Passes live hydrated props to the AI runner
             element={{ ...element, properties: props }}
             isPreview={isPreview}
           />
         );
       } else {
+        // ✅ DESIGN 2: THE STANDARD DESIGN
+        // Standard card with hardcoded white background and shadow.
+        // We remove style={style} from the inner div because wrap() already applies it.
         return wrap(
-          <div className="border rounded-lg p-4 bg-white shadow" style={style}>
+          <div className="border rounded-lg p-4 bg-white shadow">
             {props.image_url && (
               <img
                 src={resolveImageSrc(props.image_url)}
@@ -416,10 +422,11 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               />
             )}
             <h4 className="font-bold text-lg text-gray-800">
-              {props.item_name}
+              {props.item_name || "Menu Item"}
             </h4>
             <p className="font-semibold text-right text-gray-800">
-              ${Number(props.base_price || 0).toFixed(2)}
+              {/* Uses the hydrated price from priceRegistry */}$
+              {Number(props.base_price || 0).toFixed(2)}
             </p>
           </div>
         );

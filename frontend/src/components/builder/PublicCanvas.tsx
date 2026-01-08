@@ -2274,6 +2274,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const itemId = props.item_id || element.aiPayload?.properties?.item_id;
 
       // 2. THE LIVE SYNC (Hydration)
+      // Ensures the price is pulled from the live database registry
       if (itemId && priceRegistry[itemId] !== undefined) {
         props.base_price = priceRegistry[itemId];
       }
@@ -2282,12 +2283,12 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const isExpanded = expandedMenuItemId === itemId;
       const itemExtras = extras[itemId] || [];
       const itemOptions = options[itemId] || [];
-      const style = props.style || {}; // Contains the beige background & brown border
+      const style = props.style || {};
       const { initial, animate, transition } = getMotionConfig(props.animation);
 
       return (
         <div key={element.element_id}>
-          {/* Main Card */}
+          {/* Main Clickable Card Container */}
           <div
             onClick={(e) => {
               e.preventDefault();
@@ -2295,16 +2296,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               handleMenuItemClick(itemId);
             }}
             role="button"
-            tabIndex={0}
-            onKeyDown={(e) => {
-              if (e.key === "Enter" || e.key === " ") {
-                e.preventDefault();
-                handleMenuItemClick(itemId);
-              }
-            }}
+            className="cursor-pointer"
           >
             {element.element_type === "AI" ? (
-              /* ✅ THE FIX: Use motion.div and style={style} to match the builder design */
+              /* ✅ DESIGN 1: THE AI DESIGN */
+              /* Applies the dynamic style object without hardcoded white card classes */
               <motion.div
                 className="relative overflow-hidden"
                 style={style}
@@ -2313,16 +2309,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 transition={transition}
               >
                 <AiElementRunner
-                  // Passes hydrated props to Mustache
                   element={{ ...element, properties: props }}
                   isPreview={false}
                 />
 
+                {/* WhatsApp button logic */}
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
                     type="button"
-                    aria-label="Chat on WhatsApp"
-                    className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
+                    className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow"
                     onClick={(e) => {
                       e.stopPropagation();
                       openWhatsApp(props.whatsappNumber, props.chatMessage);
@@ -2333,9 +2328,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 )}
               </motion.div>
             ) : (
-              /* Standard Card logic */
+              /* ✅ DESIGN 2: THE STANDARD DESIGN */
+              /* Hardcoded white background, border, and shadow */
               <motion.div
-                className="relative border rounded-lg p-4 bg-white shadow cursor-pointer"
+                className="relative border rounded-lg p-4 bg-white shadow"
                 style={style}
                 initial={initial}
                 animate={animate}
@@ -2349,10 +2345,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   />
                 )}
                 <h4 className="font-bold text-gray-600 text-lg">
-                  {props.item_name}
+                  {props.item_name || "Menu Item"}
                 </h4>
                 <p className="text-sm text-gray-600 my-2">
-                  {props.description}
+                  {props.description || "No description available."}
                 </p>
                 <p className="font-semibold text-gray-600 text-right">
                   ${Number(props.base_price || 0).toFixed(2)}
@@ -2375,6 +2371,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               ) : (
                 isExpanded && (
                   <MenuItemDetails
+                    // Pass hydrated props into the details view
                     item={props as MenuItem}
                     itemExtras={itemExtras}
                     itemOptions={itemOptions}
