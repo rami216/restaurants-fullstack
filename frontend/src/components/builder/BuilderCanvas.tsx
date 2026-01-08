@@ -83,6 +83,83 @@ interface AiElementRunnerProps {
   isPreview: boolean;
 }
 
+// const AiElementRunner: React.FC<AiElementRunnerProps> = ({
+//   element,
+//   isPreview,
+// }) => {
+//   const { aiPayload } = element;
+//   const ref = useRef<HTMLDivElement>(null);
+
+//   useLayoutEffect(() => {
+//     if (!aiPayload || !ref.current) return;
+//     const processedProps = { ...(aiPayload.properties || {}) };
+
+//     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
+//       if (processedProps[key])
+//         processedProps[key] = resolveImageSrc(processedProps[key]);
+//     }
+
+//     let htmlOnly = (aiPayload.aiTemplate || "").replace(
+//       /<script[\s\S]*?<\/script>/g,
+//       ""
+//     );
+
+//     // ✅ THE FIX: Protect the displayTemplate from the first render pass
+//     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
+//     const templateMatch = htmlOnly.match(templateRegex);
+//     const templateContent = templateMatch ? templateMatch[0] : "";
+
+//     // Temporarily replace the template with a placeholder
+//     if (templateContent) {
+//       htmlOnly = htmlOnly.replace(
+//         templateContent,
+//         '<div id="displayTemplate-placeholder"></div>'
+//       );
+//     }
+
+//     // Now, render the main container. This is safe and will not destroy the template's {{...}} tags.
+//     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
+
+//     // Put the original, untouched template back into the DOM where the placeholder was.
+//     if (templateContent) {
+//       const placeholder = ref.current.querySelector(
+//         "#displayTemplate-placeholder"
+//       );
+//       if (placeholder) {
+//         const tempDiv = document.createElement("div");
+//         tempDiv.innerHTML = templateContent;
+//         const templateElement = tempDiv.firstChild;
+//         if (templateElement) {
+//           placeholder.replaceWith(templateElement);
+//         }
+//       }
+//     }
+
+//     // Now the script can run and find the fully intact template.
+//     if (aiPayload.script) {
+//       const jsBody = aiPayload.script
+//         .replace(/^\s*<script[^>]*>/, "")
+//         .replace(/<\/script>\s*$/, "");
+//       try {
+//         const schemaId = element.properties?.schema_id;
+//         const apiClient = isPreview ? saasApi : api;
+//         const fn = new Function(
+//           "container",
+//           "api",
+//           "schemaId",
+//           "properties",
+//           "Mustache",
+//           jsBody
+//         );
+//         fn(ref.current, apiClient, schemaId, element.properties, Mustache);
+//       } catch (jsErr) {
+//         console.error("Error running AI script:", jsErr);
+//       }
+//     }
+//   }, [aiPayload, element.properties, isPreview]);
+
+//   return <div ref={ref} />;
+// };
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   element,
   isPreview,
@@ -92,7 +169,10 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
-    const processedProps = { ...(aiPayload.properties || {}) };
+
+    // ✅ THE FIX: Use element.properties instead of aiPayload.properties
+    // This ensures the Mustache template receives the live price from your registry.
+    const processedProps = { ...(element.properties || {}) };
 
     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
       if (processedProps[key])
@@ -104,12 +184,11 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       ""
     );
 
-    // ✅ THE FIX: Protect the displayTemplate from the first render pass
+    // Protect the displayTemplate from the first render pass
     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
     const templateMatch = htmlOnly.match(templateRegex);
     const templateContent = templateMatch ? templateMatch[0] : "";
 
-    // Temporarily replace the template with a placeholder
     if (templateContent) {
       htmlOnly = htmlOnly.replace(
         templateContent,
@@ -117,10 +196,9 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       );
     }
 
-    // Now, render the main container. This is safe and will not destroy the template's {{...}} tags.
+    // Render using the LIVE properties
     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
-    // Put the original, untouched template back into the DOM where the placeholder was.
     if (templateContent) {
       const placeholder = ref.current.querySelector(
         "#displayTemplate-placeholder"
@@ -135,7 +213,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       }
     }
 
-    // Now the script can run and find the fully intact template.
     if (aiPayload.script) {
       const jsBody = aiPayload.script
         .replace(/^\s*<script[^>]*>/, "")
@@ -151,16 +228,17 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "Mustache",
           jsBody
         );
+        // Pass live properties into the script context as well
         fn(ref.current, apiClient, schemaId, element.properties, Mustache);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
     }
+    // Dependency array includes element.properties to trigger updates
   }, [aiPayload, element.properties, isPreview]);
 
   return <div ref={ref} />;
 };
-
 interface BuilderCanvasProps {
   page: Page | undefined;
   navbar: Navbar | null;
