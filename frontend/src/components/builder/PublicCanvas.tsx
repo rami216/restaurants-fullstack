@@ -2299,25 +2299,24 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             className="cursor-pointer"
           >
             {element.element_type === "AI" ? (
-              /* ✅ DESIGN 1: THE AI DESIGN */
-              /* Applies the dynamic style object without hardcoded white card classes */
+              /* ✅ THE FIX: Remove style={style} from this container */
+              /* Let the AiElementRunner's internal template handle the design */
               <motion.div
-                className="relative overflow-hidden"
-                style={style}
+                className="relative"
                 initial={initial}
                 animate={animate}
                 transition={transition}
+                style={{}} // 👈 KEEP THIS EMPTY
               >
                 <AiElementRunner
                   element={{ ...element, properties: props }}
                   isPreview={false}
                 />
 
-                {/* WhatsApp button logic */}
                 {props.chatEnabled && props.whatsappNumber && (
                   <button
                     type="button"
-                    className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow"
+                    className="absolute bottom-3 right-3 rounded-full p-2 bg-green-500 text-white shadow hover:opacity-90"
                     onClick={(e) => {
                       e.stopPropagation();
                       openWhatsApp(props.whatsappNumber, props.chatMessage);
