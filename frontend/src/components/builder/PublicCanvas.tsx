@@ -1254,9 +1254,11 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
 
-    // ✅ THE FIX: Point to the hydrated element.properties
-    // This allows the public site to display live prices on AI cards.
-    const processedProps = { ...(element.properties || {}) };
+    // ✅ THE FIX: Point to merged properties to handle both new and live elements
+    const processedProps = {
+      ...(aiPayload.properties || {}),
+      ...(element.properties || {}),
+    };
 
     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
       if (processedProps[key])
@@ -1279,7 +1281,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       );
     }
 
-    // Inject live data into the Mustache template
+    // Inject merged data into the Mustache template
     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
     if (templateContent) {
@@ -1290,9 +1292,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = templateContent;
         const templateElement = tempDiv.firstChild;
-        if (templateElement) {
-          placeholder.replaceWith(templateElement);
-        }
+        if (templateElement) placeholder.replaceWith(templateElement);
       }
     }
 
@@ -1312,7 +1312,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "Mustache",
           jsBody
         );
-        fn(ref.current, apiClient, schemaId, element.properties, Mustache);
+        fn(ref.current, apiClient, schemaId, processedProps, Mustache);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }

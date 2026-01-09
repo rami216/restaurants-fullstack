@@ -170,10 +170,15 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
 
-    // ✅ THE FIX: Use element.properties instead of aiPayload.properties
-    // This ensures the Mustache template receives the live price from your registry.
-    const processedProps = { ...(element.properties || {}) };
+    // ✅ THE FIX: Merge sources to prevent empty displays on new elements
+    // 1. aiPayload.properties provides the base (titles, content, etc.)
+    // 2. element.properties provides the live overrides (price registry, manual edits)
+    const processedProps = {
+      ...(aiPayload.properties || {}),
+      ...(element.properties || {}),
+    };
 
+    // Process image URLs for both content and style
     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
       if (processedProps[key])
         processedProps[key] = resolveImageSrc(processedProps[key]);
@@ -196,7 +201,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       );
     }
 
-    // Render using the LIVE properties
+    // ✅ Render using the MERGED properties
     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
     if (templateContent) {
@@ -207,9 +212,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = templateContent;
         const templateElement = tempDiv.firstChild;
-        if (templateElement) {
-          placeholder.replaceWith(templateElement);
-        }
+        if (templateElement) placeholder.replaceWith(templateElement);
       }
     }
 
@@ -228,13 +231,13 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "Mustache",
           jsBody
         );
-        // Pass live properties into the script context as well
-        fn(ref.current, apiClient, schemaId, element.properties, Mustache);
+        // Pass merged properties to the script so it can interact with live data
+        fn(ref.current, apiClient, schemaId, processedProps, Mustache);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
     }
-    // Dependency array includes element.properties to trigger updates
+    // Dependency on element.properties ensures it re-renders on price updates
   }, [aiPayload, element.properties, isPreview]);
 
   return <div ref={ref} />;
