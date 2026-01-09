@@ -168,31 +168,33 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - The HTML must be wrapped in a single container `<div>`.
     - This container will have the unique class name you are given applied to it.
 
-**2.  Styling:**
+**2. Styling:**
     - All CSS must be in a single <style> tag.
     - Use mustache tokens {{...}} for all editable style values.
     - **OUTER CONTAINER RULES (CRITICAL):**
-    - The main container <div> (the one using the `unique_class_name`) MUST have `background: transparent;` by default.
-    - For individual elements like buttons, icons, or badges, apply `width: fit-content;` and `margin: 0 auto;` (if centering is needed) so the container doesn't create a giant background box stretching 100% width.
-    - Only apply a background color to the main container <div> if the user explicitly asks for a "card", "container", "hero section", or "background box". Otherwise, apply the primary background color (e.g., {{buttonBgColor}}) directly to the specific internal element (e.g., the <button> or <a> tag) instead.
-    - **You MUST expose editables for the following visual controls (when relevant to the element):**
-        - **Colors:** element/item background color, text color, link color, hover/active/focus color accents, border color.
-        - **Borders:** border width, border style, border radius (outer), and (if applicable) inner section radii.
-        - **Spacing:** padding and/or gap for containers and key sections (titles/headers vs content/body).
-        - **Typography:** font size(s) for titles and content, font weight(s), line-height, text alignment.
-        - **Effects & Motion:** box-shadow (at least one), transition speed/easing used by hover/focus/expand effects.
-    - If the element has **distinct sections** (e.g., title/header vs. content/body), provide **separate tokens** for their backgrounds and text colors and, where useful, their padding and radii (e.g., `titleBgColor`, `titleTextColor`, `contentBgColor`, `contentTextColor`, `titlePadding`, `contentPadding`, `titleRadius`, `contentRadius`).
-    - **CRITICAL SCOPING SUB-RULE:** You will be given a `unique_class_name`. **Every single CSS rule** you write **MUST** be prefixed with this class name to prevent styles from leaking.
+        - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
+        - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
+        - DO NOT apply borders, backgrounds, or shadows to this main container <div> unless the user specifically asks for a "card" or "box". 
+        - Apply the primary design (e.g., {{buttonBgColor}}, borders, shadows) directly to the specific internal element (e.g., the <button> or <a> tag) so the element looks like it is floating naturally on the section background.
+    - **You MUST expose editables for the following visual controls (when relevant):**
+        - **Colors:** element background color, text color, link color, hover/active accents, border color.
+        - **Borders:** border width, border style, border radius.
+        - **Spacing:** padding and/or gap for internal elements.
+        - **Typography:** font size(s), font weight(s), line-height, text alignment.
+        - **Effects & Motion:** box-shadow (at least one), transition speed/easing.
+    - If the element has distinct sections, provide separate tokens (e.g., `titleBgColor`, `contentBgColor`).
+    - **CRITICAL SCOPING SUB-RULE:** Every single CSS rule MUST be prefixed with the `unique_class_name` to prevent styles from leaking.
         - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
         - **Incorrect:** `button { background-color: {{buttonColor}}; }`
         - **Incorrect:** `:root { ... }`
-    - CSS must be concise and scoped, but visually polished by default.
+    - CSS must be concise, scoped, and visually polished by default.
 
 **3.  Interactivity (`script` key):**
     - Provide a JavaScript string that adds event listeners to the HTML.
     - The script will be executed inside a function that receives `container` as an argument.
     - Use `container.querySelector('.your-class')` to find and manipulate elements.
     - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+    - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups. If no specific logic is requested, the script key should be an empty string "".
     - **IMPORTANT JAVASCRIPT SYNTAX RULE:** If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
       - **Correct:** `const myFunc = () => { /* logic */ };`
       - **Incorrect:** `function myFunc() { /* logic */ };`
