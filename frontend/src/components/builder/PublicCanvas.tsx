@@ -2446,14 +2446,23 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         </motion.div>
       );
     } else if (effectiveType === "BUTTON") {
+      const interObject = props.interactivity || {};
       // 1. Map your DB properties to the format performInteractivity expects
       const compatibleProps = {
         ...props,
         interactivity: {
-          // Normalize "LINK" to "link" and "PURCHASE" to "purchase"
-          action: props.action_type ? props.action_type.toLowerCase() : "none",
-          href: props.action_value || "",
-          product_id: props.product_id || "",
+          // If 'interObject.action' exists (like "link"), use it.
+          // Otherwise, fall back to 'action_type'
+          action: (
+            interObject.action ||
+            props.action_type ||
+            "none"
+          ).toLowerCase(),
+
+          // CRITICAL: Prioritize 'href' from the object over the top-level 'action_value'
+          href: interObject.href || props.action_value || "",
+
+          product_id: interObject.product_id || props.product_id || "",
         },
       };
 
