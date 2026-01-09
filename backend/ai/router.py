@@ -946,6 +946,80 @@ async def generate_ai_section(
 # **OUTPUT:** A single, valid JSON object that follows all rules.
 # """.strip()
 
+TEST_1_DATA_APP_GENERATOR_PROMPT = """
+You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
+
+Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+1. **Analyze Existing Schemas for Relationships:**
+    - You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+    - When a prompt mentions a concept matching an existing schema, you MUST create a field with `"type": "relation"` and `"related_schema_id": "UUID"`.
+
+2. **`name`**: A short, human-readable name based directly on the user's prompt.
+
+3. **`schema`**: An array of objects defining database fields (id, label, type). Use lowercase single-word IDs.
+
+4. **`aiTemplate` Rules (Modes & Visibility):**
+    - The HTML MUST be wrapped in a container with the `unique_class_name`.
+    - You MUST determine if this is a "Full CRUD" or "Submit-Only" element based on the prompt. 
+    - If the user asks to "hide data", "form only", or "don't load", you MUST apply the Tailwind `hidden` class to the `.data-display` and `.pagination-controls` containers by default in the HTML string.
+    - Main container: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
+    - Form container: `<div class="form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden"></div>`.
+    - Data container: `<div class="data-display space-y-3 w-full overflow-x-auto"></div>`.
+    - Pagination: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
+
+5. **`displayTemplate`**: 
+    - Mustache template for ONE row: `<div class="flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow">`.
+    - MUST include edit/delete buttons with `data-row-id="{{row_id}}"`.
+
+6. **Styling & Editable Properties:**
+    - Use mustache tokens for colors, titles, and button text.
+    - **CRITICAL:** You MUST add a property `"hideData": true/false` based on whether the prompt requested to hide the loaded list.
+
+7. **`script` Rules (Interactivity & API):**
+    - The script receives `(container, api, schemaId, properties, Mustache)`.
+    - **Mode Logic:** The script MUST check `properties.hideData`. If true, it MUST NOT call `fetchAndRenderRows()` on page load.
+    - **Success Message:** If `hideData` is true, after a successful `api.post`, the script should display a "Success" message in the `form-container` instead of refreshing a list that doesn't exist.
+    - **Form Generation:** Dynamically generate `<form>` inside `.form-container`.
+        - Labels: `block text-sm font-semibold text-gray-700 mb-1`.
+        - Inputs/Selects: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+        - Submit Button: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+    - **Relational Dropdowns:** Find the `displayKey` (first text/email field) in `properties.all_schemas` for the related table. Fetch rows and populate options dynamically.
+    - **API Calls (DO NOT MISS):**
+        - Fetch: `api.get(\`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}\`)`. 
+        - Add: `api.post(\`/custom-data/rows/${schemaId}\`, { data, sitemember_id })`.
+        - Update: `api.put(\`/custom-data/rows/{ROW_ID}\`, { data, sitemember_id })`.
+        - Delete: `api.delete(\`/custom-data/rows/{ROW_ID}\`)`. (Append `?sitemember_id={ID}` if sitemember_id is not null).
+
+---
+**INPUT:** Prompt and `unique_class_name`.
+**OUTPUT:** Valid JSON.
+
+**Example Prompt:** "Inquiry form. Don't load existing data."
+**Example Output:**
+{
+  "name": "Inquiry Form",
+  "schema": [
+    { "id": "name", "label": "Full Name", "type": "text" },
+    { "id": "message", "label": "Message", "type": "text" }
+  ],
+  "aiTemplate": "<style>.{{unique_class}} h3 { color: {{titleColor}}; }</style><div class=\\"p-6 bg-white rounded-xl shadow-lg border border-gray-100\\"><div class=\\"flex justify-between items-center mb-6\\"><h3 class=\\"text-2xl font-bold\\">{{title}}</h3><button class=\\"add-new-btn px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold\\">{{addButtonText}}</button></div><div class=\\"form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden\\"></div><div class=\\"data-display space-y-3 hidden\\"></div><div class=\\"pagination-controls hidden\\"></div></div><template id=\\"displayTemplate\\"><div class=\\"p-4 border-b\\">{{data.name}}</div></template>",
+  "properties": {
+    "title": "Send Inquiry",
+    "addButtonText": "Start Inquiry",
+    "hideData": true,
+    "titleColor": "#1f2937"
+  },
+  "editableProps": [
+    { "key": "title", "label": "Title", "type": "text" },
+    { "key": "hideData", "label": "Hide Data List", "type": "boolean" }
+  ],
+  "script": "const formCont = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const fetchAndRenderRows = async () => { if(properties.hideData) return; try { const res = await api.get(\`/custom-data/rows/${schemaId}?skip=0&limit=20\`); /* render logic... */ } catch(e) {} }; const handleFormSubmit = async (e) => { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); try { await api.post(\`/custom-data/rows/${schemaId}\`, { data, sitemember_id: null }); if(properties.hideData) { formCont.innerHTML = '<div class=\\"text-green-600 font-bold\\">Submitted successfully!</div>'; } else { fetchAndRenderRows(); formCont.classList.add('hidden'); } } catch(err) {} }; addButton.addEventListener('click', () => { formCont.classList.remove('hidden'); /* generate form logic... */ }); if(!properties.hideData) fetchAndRenderRows();"
+}
+""".strip()
 DATA_APP_GENERATOR_PROMPT = """
 You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
 
@@ -1094,7 +1168,7 @@ async def generate_data_app_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
+                {"role": "system", "content": TEST_1_DATA_APP_GENERATOR_PROMPT},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.5,
