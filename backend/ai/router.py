@@ -169,10 +169,14 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - This container will have the unique class name you are given applied to it.
 
 **2.  Styling:**
-    - All CSS must be in a single `<style>` tag.
-    - Use mustache tokens `{{...}}` for all editable style values.
+    - All CSS must be in a single <style> tag.
+    - Use mustache tokens {{...}} for all editable style values.
+    - **OUTER CONTAINER RULES (CRITICAL):**
+    - The main container <div> (the one using the `unique_class_name`) MUST have `background: transparent;` by default.
+    - For individual elements like buttons, icons, or badges, apply `width: fit-content;` and `margin: 0 auto;` (if centering is needed) so the container doesn't create a giant background box stretching 100% width.
+    - Only apply a background color to the main container <div> if the user explicitly asks for a "card", "container", "hero section", or "background box". Otherwise, apply the primary background color (e.g., {{buttonBgColor}}) directly to the specific internal element (e.g., the <button> or <a> tag) instead.
     - **You MUST expose editables for the following visual controls (when relevant to the element):**
-        - **Colors:** global/background color, text color, link color, hover/active/focus color accents, border color.
+        - **Colors:** element/item background color, text color, link color, hover/active/focus color accents, border color.
         - **Borders:** border width, border style, border radius (outer), and (if applicable) inner section radii.
         - **Spacing:** padding and/or gap for containers and key sections (titles/headers vs content/body).
         - **Typography:** font size(s) for titles and content, font weight(s), line-height, text alignment.
