@@ -294,23 +294,31 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   //   if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
   //   setLoadingAi(true);
   //   try {
+  //     // --- FIX 1: Generate a unique ID and class name BEFORE the API call ---
+  //     const newElementId = `ai_${Date.now()}`;
+  //     // Create a short, unique class name from the ID
+  //     const uniqueClassName = `ai-element-${newElementId.substring(3, 10)}`;
+
+  //     // --- FIX 2: Send the unique_class_name in the request body ---
   //     const { data } = await api.post("/ai/generate-ai-element", {
   //       prompt: aiPrompt,
+  //       unique_class_name: uniqueClassName, // Pass the class name (without a dot)
+  //       website_id: websiteId,
   //     });
 
-  //     // build the new element *with* its aiPayload
+  //     // Use the pre-generated ID for the new element
   //     const aiEl: ElementType = {
-  //       element_id: `ai_${Date.now()}`,
+  //       element_id: newElementId,
   //       element_type: "AI",
   //       position: 999,
-  //       properties: {}, // or `{}` if you have no static props
+  //       properties: {},
   //       aiPayload: {
   //         ...data,
-  //         id: `ai_payload_${Date.now()}`, // Add the unique ID here
+  //         id: `ai_payload_${Date.now()}`,
   //       },
   //     };
 
-  //     // inject it (a one‑off rather than using handleAddElement)
+  //     // The rest of your state update logic is correct
   //     if (!selectedSubsectionId || !activePage) return;
   //     const updatedPage = {
   //       ...activePage,
@@ -333,37 +341,42 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   //   }
   // };
 
-  // end for ai generated element
   const handleGenerateAi = async () => {
     if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setLoadingAi(true);
     try {
-      // --- FIX 1: Generate a unique ID and class name BEFORE the API call ---
       const newElementId = `ai_${Date.now()}`;
-      // Create a short, unique class name from the ID
       const uniqueClassName = `ai-element-${newElementId.substring(3, 10)}`;
 
-      // --- FIX 2: Send the unique_class_name in the request body ---
       const { data } = await api.post("/ai/generate-ai-element", {
         prompt: aiPrompt,
-        unique_class_name: uniqueClassName, // Pass the class name (without a dot)
+        unique_class_name: uniqueClassName,
         website_id: websiteId,
       });
 
-      // Use the pre-generated ID for the new element
+      // --- SAFETY STRIPPER: Remove unwanted alerts if GPT ignores instructions ---
+      let cleanScript = data.script || "";
+      if (cleanScript.includes("alert(")) {
+        console.warn("Stripped placeholder alert from AI script.");
+        cleanScript = "";
+      }
+
       const aiEl: ElementType = {
         element_id: newElementId,
         element_type: "AI",
         position: 999,
-        properties: {},
+        // Sync initial AI data to master properties so it's not empty
+        properties: {
+          ...data.properties,
+          bgColor: "transparent", // Ensure the outer box is transparent
+        },
         aiPayload: {
           ...data,
+          script: cleanScript,
           id: `ai_payload_${Date.now()}`,
         },
       };
 
-      // The rest of your state update logic is correct
-      if (!selectedSubsectionId || !activePage) return;
       const updatedPage = {
         ...activePage,
         sections: activePage.sections.map((sec) => ({
@@ -375,6 +388,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
           ),
         })),
       };
+
       onUpdate(updatedPage);
       setAiPrompt("");
     } catch (err) {
@@ -384,7 +398,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       setLoadingAi(false);
     }
   };
-
   const handleGenerateDataApp = async () => {
     if (!aiDataAppPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setIsGeneratingDataApp(true);
