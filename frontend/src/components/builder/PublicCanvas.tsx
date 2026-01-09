@@ -2446,24 +2446,37 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         </motion.div>
       );
     } else if (effectiveType === "BUTTON") {
+      // 1. Map your DB properties to the format performInteractivity expects
       const compatibleProps = {
-        ...props, // Copy existing props like text, style, etc.
+        ...props,
         interactivity: {
-          action: props.action_value ? "link" : "none", // If action_value exists, it's a link
-          href: props.action_value || "", // Map action_value to href
+          // Normalize "LINK" to "link" and "PURCHASE" to "purchase"
+          action: props.action_type ? props.action_type.toLowerCase() : "none",
+          href: props.action_value || "",
+          product_id: props.product_id || "",
         },
       };
+
+      const handleButtonClick = (e: React.MouseEvent) => {
+        e.preventDefault();
+        e.stopPropagation();
+
+        // 2. Call your existing function with the mapped data
+        performInteractivity(compatibleProps);
+      };
+
       return (
-        <motion.div
-          style={style}
+        <motion.button
+          key={element.element_id}
+          style={style} // Background, borders, etc. from sidebar
           initial={initial}
           animate={animate}
           transition={transition}
+          onClick={handleButtonClick}
+          className="cursor-pointer hover:opacity-90 transition-all shadow-sm px-6 py-2 rounded-md border-none outline-none"
         >
-          <button onClick={() => performInteractivity(compatibleProps)}>
-            {props.text || "Button"}
-          </button>
-        </motion.div>
+          {props.text || "Button"}
+        </motion.button>
       );
     } else if (effectiveType === "LIST") {
       return (
