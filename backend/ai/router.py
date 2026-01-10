@@ -1361,7 +1361,7 @@ async def generate_data_app_element(
             "name": payload.get("name", "Data App"), # Uses the name the AI created
             "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
             "properties": final_properties,
-            "editableProps": element_to_generate["editableProps"],
+            "editableProps": element_to_generate.get("editableProps", []),
             "script": element_to_generate["script"],
         }
         
