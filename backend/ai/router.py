@@ -1061,6 +1061,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 
 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+    -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector. You MUST only use container.querySelector so multiple forms on one page do not conflict.
+    -   Initial Load Guard: The script MUST check if (properties.hideData) return; at the very beginning of the fetchAndRenderRows function to prevent private data from loading.
     -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
     -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
@@ -1072,19 +1074,19 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
         -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
                 1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
-                2.  From that schema's `fields` array, find the `id` of the first field that is of `type: "text"` or `type: "email"`. This will be the `displayKey`.
+                2.  Identify the displayKey as a fallback, but prioritize the SMART CONCATENATION logic in step 4 for fields like names or time ranges.
                 3.  Fetch all rows for the `related_schema_id`.
-                4. When creating each <option>, the script MUST determine the textContent dynamically: 
-                    - Scan the related row data for multiple descriptive fields (e.g., 'first_name' and 'last_name', or 'start_time' and 'end_time'). 
-                    - If multiple relevant fields exist, concatenate them (e.g., `textContent = r.data.field1 + " - " + r.data.field2`). 
-                    - Otherwise, use the identified `displayKey`.
+                4.  **SMART CONCATENATION (MANDATORY):** When setting textContent, the script MUST prioritize combining fields. If the row contains multiple relevant fields (e.g., start_time and end_time), it MUST concatenate them (e.g., r.data.start_time + " - " + r.data.end_time) regardless of the displayKey.
                 5.  The `value` for the `<option>` must be the `row_id`.
                 -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic and general-purpose.
-    -  **DYNAMIC HIERARCHY LOGIC:** If the prompt implies a dependency (e.g., "A for each B"):
-            1. Identify the 'Parent' field ID and the 'Child' field ID from the schema.
-            2. The script MUST fetch the Child data once and store it in a variable.
-            3. Add a 'change' listener to the Parent <select> using its ID: `parentSelect.addEventListener('change', () => { ... })`.
-            4. On change, the script MUST filter the stored Child data where the Child's property matches the Parent's selected textContent, then instantly re-populate the Child <select>.
+    -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
+            1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
+            2- The script MUST fetch the Child relational data once and store it in a constant variable.
+            3- Add a change event listener to the Parent <select> dropdown.
+            4- STRICT FILTERING: Whenever the Parent changes, the script MUST:
+                - Clear the Child dropdown completely.
+                - Use .filter() on the stored Child data to find only rows where the linking field matches the Parent's options[selectedIndex].textContent.
+                - Re-populate the Child dropdown with these filtered results using the SMART CONCATENATION logic.
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
@@ -1128,8 +1130,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const generateForm = async () => { ... /* Identify dependency from prompt */ const parentField = schema.find(f => f.id === 'parent_id'); const childField = schema.find(f => f.id === 'child_id'); if (parentField && childField) { const parentSelect = form.querySelector(`select[name='${parentField.id}']`); const childSelect = form.querySelector(`select[name='${childField.id}']`); /* Fetch child rows once */ const res = await api.get(`/custom-data/rows/${childField.related_schema_id}?limit=1000`); const childRows = res.data.rows; parentSelect.addEventListener('change', () => { const val = parentSelect.options[parentSelect.selectedIndex].textContent; childSelect.innerHTML = '<option value=\"\">Select...</option>'; childRows.filter(r => Object.values(r.data).includes(val)).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; /* Dynamic label concatenation */ opt.textContent = Object.values(r.data).join(' - '); childSelect.appendChild(opt); }); }); } ... };"
-  }
+  "script": "const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const fetchAndRenderRows = async () => { if (properties.hideData) return; /* ... Rendering Logic ... */ }; const generateForm = async (initialData = {}) => { formContainer.style.display = 'block'; formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; /* Smart Relation Logic */ for (const field of schema) { if (field.type === 'relation') { const sel = document.createElement('select'); sel.name = field.id; selects[field.id] = sel; const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows; relRows.forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; /* SMART CONCATENATION */ opt.textContent = Object.values(r.data).slice(0, 3).join(' - '); sel.appendChild(opt); }); } } /* DYNAMIC HIERARCHY LOGIC */ if (selects['day'] && selects['time']) { const timeRows = (await api.get(`/custom-data/rows/${schema.find(f => f.id === 'time').related_schema_id}?limit=1000`)).data.rows; selects['day'].addEventListener('change', () => { const day = selects['day'].options[selects['day'].selectedIndex].textContent; selects['time'].innerHTML = ''; timeRows.filter(r => Object.values(r.data).includes(day)).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = `${r.data.start_time} - ${r.data.end_time}`; selects['time'].appendChild(opt); }); }); } formContainer.appendChild(form); }; addButton.addEventListener('click', () => generateForm()); if (!properties.hideData) fetchAndRenderRows();"
+}
 """.strip()
 
 
