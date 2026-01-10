@@ -945,76 +945,6 @@ async def generate_ai_section(
 # **INPUT:** A user's prompt and a `unique_class_name`.
 # **OUTPUT:** A single, valid JSON object that follows all rules.
 # """.strip()
-TEST_2_DATA_APP_GENERATOR_PROMPT = """
-You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
-
-Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
-
----
-### **CRITICAL RULES FOR YOUR OUTPUT**
-
-1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
-    -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
-    -   When a user's prompt mentions a concept that matches an existing schema, you **MUST** create a relational field.
-    -   To create a relation, the field in your `schema` output must have: `"type": "relation"` and `"related_schema_id": "the_uuid_of_the_existing_schema"`.
-
-2.  **`name`**: A short, human-readable name for this data table based directly on the user's prompt.
-
-3.  **`schema`**: An array of objects defining the database fields (id, label, type). The `id` must be a single lowercase word.
-
-4.  **`aiTemplate`**: The main HTML structure. It MUST include:
-    -   A `<style>` tag for all CSS, scoped using the `unique_class_name`.
-    -   A main container: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
-    -   Header `div` with class `flex justify-between items-center mb-6`.
-    -   Containers for form (`.form-container`), data (`.data-display`), and pagination (`.pagination-controls`).
-    -   **Visibility Mode:** If the user prompt asks to "hide data", "not load data", "private", or "form only", you MUST add the Tailwind class `hidden` to the `.data-display` and `.pagination-controls` containers inside the `aiTemplate` string.
-
-5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
-    -   Use `{{data.field_id}}` for regular fields and `{{data.related.data.field}}` for relations.
-    -   Include Edit/Delete buttons with `data-row-id="{{row_id}}"`.
-
-6.  **Styling & Editable Properties**:
-    -   All style values and user-facing text MUST use mustache tokens.
-    -   **Mode Toggle:** You MUST add a property `"hideData": true` to the `properties` object if the user asked to hide the list, otherwise set it to `false`.
-
-7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
-    -   **HOISTING & SCOPE:** Define all helper functions (`fetchAndRenderRows`, `generateForm`) at the very top. Use **ONLY** `container.querySelector` (never `document`) to avoid multi-element conflicts.
-    -   **INITIAL LOAD GUARD:** The script MUST check `if (properties.hideData) return;` at the start of `fetchAndRenderRows` and before the final initialization call.
-    -   **ACCESSING SCHEMA:** Use `properties.schema_fields` and `properties.all_schemas`.
-    -   **FORM GENERATION (STYLING):** Generate `<form>` with class `grid grid-cols-1 md:grid-cols-2 gap-4`. Labels: `block text-sm font-semibold text-gray-700 mb-1`. Inputs/Selects: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
-    -   **SMART RELATIONAL DROPDOWNS:** -   **RELATION EXCEPTION:** Relation data fetching MUST execute even if `hideData` is true.
-        -   **SMART DISPLAY KEY:** Do not just pick the first text field. Scan the related schema for descriptive IDs like `name`, `title`, or `label`.
-        -   **COMPLEX CONCATENATION:** If a field implies a range (like "Time"), concatenate fields: `option.textContent = \`\${row.data.start_time} - \${row.data.end_time}\``.
-    -   **HIERARCHICAL (DEPENDENT) FILTERING:** If the prompt implies a dependency (e.g., "Time for a Day"):
-        1. Add a `change` event listener to the Parent dropdown.
-        2. On change, the script MUST clear the Child dropdown and re-populate it with rows where the Child's linking data matches the Parent's value.
-    -   **DATA SUBMISSION:** Use `new FormData(form)`. After `api.post` success:
-        -   If `hideData` is true, replace `form-container` with: `<div class="p-4 text-green-600 font-bold text-center">Thank you! Your submission was successful.</div>`.
-        -   If `false`, hide the form and re-fetch rows.
-    -   **TEMPLATE RENDERING:** MUST use Mustache: `const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id })`.
-    -   **API CALLS:** -   Fetch: `api.get(\`/custom-data/rows/${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`)`.
-        -   Add: `api.post(\`/custom-data/rows/${schemaId}\`, { data, sitemember_id })`.
-    -   **SYNTAX:** Use function expressions (e.g., `const myFunc = () => {}`).
-
----
-**INPUT:** Prompt and `unique_class_name`.
-**OUTPUT:** Valid JSON.
-
-**Example Prompt:** "Private Booking form. Link Time to Day from Available Slots."
-**Example Output:**
-{
-  "name": "Private Booking Form",
-  "schema": [
-    { "id": "client_name", "label": "Name", "type": "text" },
-    { "id": "day", "label": "Day", "type": "relation", "related_schema_id": "slot-uuid" },
-    { "id": "time_slot", "label": "Time", "type": "relation", "related_schema_id": "slot-uuid" }
-  ],
-  "aiTemplate": "<div class=\\"ai-app-123\\">...[standard structure with .data-display hidden]...</div>",
-  "properties": { "hideData": true, "title": "Book Now" },
-  "script": "const fetchAndRenderRows = async () => { if (properties.hideData) return; ... }; const generateForm = async () => { ... const daySel = selects['day']; const timeSel = selects['time_slot']; daySel.addEventListener('change', async () => { const selected = daySel.options[daySel.selectedIndex].textContent; const res = await api.get(\`/custom-data/rows/\${timeSchemaId}\`); timeSel.innerHTML = ''; res.data.rows.filter(r => r.data.day === selected).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = \`\${r.data.start_time} - \${r.data.end_time}\`; timeSel.appendChild(opt); }); }); ... };"
-}
-""".strip()
-
 TEST_1_DATA_APP_GENERATOR_PROMPT = """
 You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
 
@@ -1074,6 +1004,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
         -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
+                -  SMART DISPLAY KEY: If the field implies a range (e.g., "Time"), the script MUST concatenate fields like start_time and end_time for the textContent (e.g., opt.textContent = row.data.start_time + " - " + row.data.end_time).
+                - HIERARCHICAL FILTERING: If the prompt implies a dependency (e.g., "Time for a Day"), the script MUST add a change event listener to the "Parent" dropdown. On change, it MUST filter the child dropdown options to only show rows matching the parent's value.
                 1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
                 2.  From that schema's `fields` array, find the `id` of the first field that is of `type: "text"` or `type: "email"`. This will be the `displayKey`.
                 3.  Fetch all rows for the `related_schema_id`.
@@ -1127,7 +1059,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "title", "label": "Title", "type": "text" },
     { "key": "hideData", "label": "Hide Data List", "type": "boolean" }
   ],
-  "script": "const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const schema = properties.schema_fields; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(\`/custom-data/rows/\${schemaId}?skip=0&limit=20\`); /* render rows... */ } catch (err) {} }; const generateForm = async (initialData = {}) => { formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; for (const field of schema) { const fieldWrapper = document.createElement('div'); const label = document.createElement('label'); label.className = 'block text-sm font-semibold text-gray-700 mb-1'; label.textContent = field.label; fieldWrapper.appendChild(label); if (field.type === 'relation') { const select = document.createElement('select'); select.className = 'w-full p-2 border rounded-lg'; select.name = field.id; const relatedSchemaId = field.related_schema_id; const allSchemas = properties.all_schemas; const relatedSchema = allSchemas.find(s => s.schema_id === relatedSchemaId); if (relatedSchema) { const displayKey = relatedSchema.fields.find(f => f.type === 'text' || f.type === 'email')?.id || relatedSchema.fields[0].id; const res = await api.get(\`/custom-data/rows/\${relatedSchemaId}?limit=1000\`); res.data.rows.forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = r.data[displayKey]; select.appendChild(opt); }); } fieldWrapper.appendChild(select); } else { const input = document.createElement('input'); input.className = 'w-full p-2 border rounded-lg'; input.name = field.id; input.type = field.type; input.value = initialData[field.id] || ''; fieldWrapper.appendChild(input); } form.appendChild(fieldWrapper); } const submitBtn = document.createElement('button'); submitBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg'; submitBtn.type = 'submit'; submitBtn.textContent = 'Submit'; form.appendChild(submitBtn); form.addEventListener('submit', async (e) => { e.preventDefault(); const data = Object.fromEntries(new FormData(e.target)); try { await api.post(\`/custom-data/rows/\${schemaId}\`, { data, sitemember_id: null }); if (properties.hideData) { formContainer.innerHTML = '<div class=\\"p-4 text-green-600 font-bold text-center\\">Thank you! Your submission was successful.</div>'; } else { await fetchAndRenderRows(); formContainer.classList.add('hidden'); } } catch (err) {} }); formContainer.appendChild(form); }; addButton.addEventListener('click', () => generateForm()); if (!properties.hideData) fetchAndRenderRows();"
+  "script": "const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?skip=0&limit=20`); /* render logic */ } catch (err) {} }; const generateForm = async (initialData = {}) => { formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; schema.forEach(f => { /* generate inputs/selects and store in 'selects' object */ }); if (selects['day'] && selects['time_slot']) { selects['day'].addEventListener('change', async () => { const dayVal = selects['day'].options[selects['day'].selectedIndex].textContent; const res = await api.get(`/custom-data/rows/${selects['time_slot'].dataset.schema}`); selects['time_slot'].innerHTML = ''; res.data.rows.filter(r => r.data.day === dayVal).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = `${r.data.start_time} - ${r.data.end_time}`; selects['time_slot'].appendChild(opt); }); }); } /* Standard submit logic... */ }; addButton.addEventListener('click', () => generateForm()); if (!properties.hideData) fetchAndRenderRows();"
 }
 """.strip()
 DATA_APP_GENERATOR_PROMPT = """
@@ -1278,7 +1210,7 @@ async def generate_data_app_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": TEST_2_DATA_APP_GENERATOR_PROMPT},
+                {"role": "system", "content": TEST_1_DATA_APP_GENERATOR_PROMPT},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.5,
@@ -1349,21 +1281,13 @@ async def generate_data_app_element(
         final_properties["schema_fields"] = final_schema_fields
         final_properties["all_schemas"] = all_schemas_for_script
 
-        # final_payload = {
-        #     "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
-        #     "properties": final_properties,
-        #     "editableProps": element_to_generate["editableProps"],
-        #     "script": element_to_generate["script"],
-        # }
-        # NEW VERSION (Fixes the 422 Save Error)
         final_payload = {
-            "type": "DATA_APP",  # Identifies the element type for the DB
-            "name": payload.get("name", "Data App"), # Uses the name the AI created
             "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
             "properties": final_properties,
             "editableProps": element_to_generate.get("editableProps", []),
             "script": element_to_generate["script"],
         }
+       
         
         
         # Step 5: Track usage
