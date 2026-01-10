@@ -1076,7 +1076,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
                 2.  Identify the displayKey as a fallback, but prioritize the SMART CONCATENATION logic in step 4 for fields like names or time ranges.
                 3.  Fetch all rows for the `related_schema_id`.
-                4.  **SMART CONCATENATION (MANDATORY):** When setting textContent, the script MUST prioritize combining fields. If the row contains multiple relevant fields (e.g., start_time and end_time), it MUST concatenate them (e.g., r.data.start_time + " - " + r.data.end_time) regardless of the displayKey.
+                4.  UNIVERSAL SMART CONCATENATION (MANDATORY): The script MUST intelligently build a descriptive label for relational <option> elements by analyzing the row data structure:
+                    - Detect Descriptive Pairs: The script MUST identify if the related row contains pairs of fields that are logically related (e.g., fields containing "name," "title," "start," "end," "first," "last," "make," or "model").
+                    - Dynamic Join: If two or more such descriptive fields exist, the script MUST concatenate them with a separator (e.g., r.data.field1 + " - " + r.data.field2).
+                    - Auto-Formatting: If a field value is an object (like a Date or Time object), the script MUST convert it to a localized readable string before joining.
+                    - Fallback: If only one descriptive field is found, use it. If zero are found, use the first 2 string values from the object as the label.
                 5.  The `value` for the `<option>` must be the `row_id`.
                 -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic and general-purpose.
     -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
