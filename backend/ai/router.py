@@ -995,6 +995,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
     -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
     -   **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the very beginning of the `fetchAndRenderRows` function and before calling it at the bottom of the script to prevent private data from loading.
+    -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector, document.getElementById, or document.template. You MUST only use container.querySelector or container.querySelectorAll to find elements. This ensures multiple elements on the same page do not conflict.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
     -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
         -   The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
@@ -1013,6 +1014,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -   **Relation Exception:** Even if `properties.hideData` is true, the script **MUST** still execute the code that fetches relational data from other tables to populate dropdowns, otherwise the form will be broken.
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
         -   **Submission Success Feedback:** After a successful `api.post`, the script MUST check `if (properties.hideData)`. If true, replace the `form-container` content with: `'<div class="p-4 text-green-600 font-bold text-center">Thank you! Your submission was successful.</div>'`. If false, hide the form and re-fetch rows as usual.
+    -   TEMPLATE RENDERING: When rendering the list of data, you MUST NOT use cloneNode or manual string concatenation. You MUST use the provided Mustache engine: const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id }).
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
         -   **Fetch Paginated Rows:** `api.get(\`/custom-data/rows/${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`)`. The response is `{ "rows": [], "total": 0 }`.
@@ -1024,7 +1026,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -  Buttons MUST be disabled when on the first or last page.
         -  Pagination buttons MUST use classes: `px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed`.
         -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
-        
+    -   HOISTING SAFETY: You MUST define all helper functions (e.g., fetchAndRenderRows, generateForm) at the very top of the script before attaching any event listeners or executing the initial load call.
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
 
 ---
