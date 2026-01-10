@@ -1349,12 +1349,22 @@ async def generate_data_app_element(
         final_properties["schema_fields"] = final_schema_fields
         final_properties["all_schemas"] = all_schemas_for_script
 
+        # final_payload = {
+        #     "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
+        #     "properties": final_properties,
+        #     "editableProps": element_to_generate["editableProps"],
+        #     "script": element_to_generate["script"],
+        # }
+        # NEW VERSION (Fixes the 422 Save Error)
         final_payload = {
+            "type": "DATA_APP",  # Identifies the element type for the DB
+            "name": payload.get("name", "Data App"), # Uses the name the AI created
             "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
             "properties": final_properties,
             "editableProps": element_to_generate["editableProps"],
             "script": element_to_generate["script"],
         }
+        
         
         # Step 5: Track usage
         usage = getattr(resp, "usage", None)
