@@ -945,7 +945,125 @@ async def generate_ai_section(
 # **INPUT:** A user's prompt and a `unique_class_name`.
 # **OUTPUT:** A single, valid JSON object that follows all rules.
 # """.strip()
-TEST_1_DATA_APP_GENERATOR_PROMPT = """
+# TEST_1_DATA_APP_GENERATOR_PROMPT = """
+# You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
+
+# Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
+
+# ---
+# ### **CRITICAL RULES FOR YOUR OUTPUT**
+
+# 1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
+#     -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+#     -   When a user's prompt mentions a concept that matches an existing schema (e.g., prompt is "create a list of employees with their department" and a "Departments" schema exists), you **MUST** create a relational field.
+#     -   To create a relation, the field in your `schema` output must have:
+#         -   `"type": "relation"`
+#         -   `"related_schema_id": "the_uuid_of_the_existing_schema"`
+#     -   If the prompt describes a new concept with no matching existing schema, you should use standard types like "text", "number", etc.
+
+# 2.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
+
+# 3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key. Use the relationship rule above where applicable.
+
+# 4.  **`aiTemplate`**: The main HTML structure. It MUST include:
+#     -   A `<style>` tag for all CSS, scoped using the `unique_class_name`.
+#     -   A main container with Tailwind classes: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
+#     -   A header `div` with class `flex justify-between items-center mb-6`.
+#     -   A static main title `<h3>` or `<h2>` with class `text-2xl font-bold text-gray-800`.
+#     -   A static "Add New" button with a class of `add-new-btn px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all active:scale-95`.
+#     -   An **EMPTY** container for the form: `<div class="form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden"></div>`.
+#     -   An **EMPTY** container for displaying the data: `<div class="data-display space-y-3 w-full overflow-x-auto"></div>`.
+#     -   An **EMPTY** container for pagination controls: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
+#     -   A `<template id="displayTemplate">`.
+#     -   **Visibility Mode:** If the user prompt asks to "hide data", "not load data", "private", or "form only", you MUST add the Tailwind class `hidden` to the `.data-display` and `.pagination-controls` div containers inside the `aiTemplate` string.
+
+# 5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
+#     -   It MUST be a `div` with class: `flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow`.
+#     -   For regular fields, you **MUST** use `{{data.field_id}}` inside a `div` with class `flex-1`.
+#     -   **CRITICAL:** For relational fields (e.g., a field with id 'project'), you **MUST** access the nested data correctly. Look at the `EXISTING_SCHEMAS_ON_WEBSITE` context to find the exact field `id` from the related schema to display (e.g., if the project schema has a field with id `project_title`, you MUST use `{{data.project.data.project_title}}`).
+#     -   It **MUST** include edit/delete buttons in a `div` with class `flex gap-2`. Buttons must have `data-row-id="{{row_id}}"`. Use classes: `edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded` and `delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded`.
+
+# 6.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+#     -   Make the component's styling fully editable.
+#     -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
+#     -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
+#     -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
+#     -   **Mode Toggle:** You MUST add a property `"hideData": true` to the `properties` object if the user asked to hide the list, otherwise set it to `false`. Add a corresponding entry in `editableProps` with type `boolean`.
+
+# 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+#     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+#     -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
+#     -   **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the very beginning of the `fetchAndRenderRows` function and before calling it at the bottom of the script to prevent private data from loading.
+#     -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector, document.getElementById, or document.template. You MUST only use container.querySelector or container.querySelectorAll to find elements. This ensures multiple elements on the same page do not conflict.
+#     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
+#     -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
+#         -   The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
+#         -   Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
+#         -   Every `<input>` and `<select>` created MUST have class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+#         -   The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+#         -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
+#         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
+#         -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
+#                 -  SMART DISPLAY KEY: If the field implies a range (e.g., "Time"), the script MUST concatenate fields like start_time and end_time for the textContent (e.g., opt.textContent = row.data.start_time + " - " + row.data.end_time).
+#                 - HIERARCHICAL FILTERING: If the prompt implies a dependency (e.g., "Time for a Day"), the script MUST add a change event listener to the "Parent" dropdown. On change, it MUST filter the child dropdown options to only show rows matching the parent's value.
+#                 1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
+#                 2.  From that schema's `fields` array, find the `id` of the first field that is of `type: "text"` or `type: "email"`. This will be the `displayKey`.
+#                 3.  Fetch all rows for the `related_schema_id`.
+#                 4.  When creating each `<option>`, the `textContent` **MUST** be set using the dynamic `displayKey` found in step 2 (e.g., `option.textContent = relatedRow.data[displayKey]`).
+#                 5.  The `value` for the `<option>` must be the `row_id`.
+#                 -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic and general-purpose.
+#         -   **Relation Exception:** Even if `properties.hideData` is true, the script **MUST** still execute the code that fetches relational data from other tables to populate dropdowns, otherwise the form will be broken.
+#         -   DYNAMIC DISPLAY KEYS: When populating a relational dropdown, the script MUST intelligently identify the most descriptive field(s). If the user's prompt implies a combination (e.g., "Full Name," "Address," or "Time Range"), the script MUST concatenate those fields in the textContent (e.g., row.data.first_name + " " + row.data.last_name) instead of just picking the first field.
+#         -   HIERARCHICAL FILTERING: If the user prompt implies a dependency between two fields (e.g., "X for each Y" or "Sub-category based on Category"), the script MUST implement a parent-child relationship:
+#             1- Add a change event listener to the "Parent" dropdown.
+#             2- Whenever the Parent value changes, the script MUST filter the options in the "Child" dropdown so that only rows matching the Parent's current value are displayed.
+#             3- If the Parent is empty, the Child dropdown should be disabled or cleared.
+#     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
+#         -   **Submission Success Feedback:** After a successful `api.post`, the script MUST check `if (properties.hideData)`. If true, replace the `form-container` content with: `'<div class="p-4 text-green-600 font-bold text-center">Thank you! Your submission was successful.</div>'`. If false, hide the form and re-fetch rows as usual.
+#     -   TEMPLATE RENDERING: When rendering the list of data, you MUST NOT use cloneNode or manual string concatenation. You MUST use the provided Mustache engine: const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id }).
+#     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
+#     -   API Calls to Use:
+#         -   **Fetch Paginated Rows:** `api.get(\`/custom-data/rows/${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`)`. The response is `{ "rows": [], "total": 0 }`.
+#         -   **Add New Row:** `api.post(\`/custom-data/rows/${schemaId}\`, { data, sitemember_id })` (where `sitemember_id` can be null)
+#         -   **Update Row:** `api.put(\`/custom-data/rows/{ROW_ID}\`, { data, sitemember_id })` (where `sitemember_id` can be null)
+#         -   **Delete Row:** `api.delete(\`/custom-data/rows/{ROW_ID}\`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
+#     -   Pagination Logic:
+#         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
+#         -  Buttons MUST be disabled when on the first or last page.
+#         -  Pagination buttons MUST use classes: `px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed`.
+#         -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
+#     -   HOISTING SAFETY: You MUST define all helper functions (e.g., fetchAndRenderRows, generateForm) at the very top of the script before attaching any event listeners or executing the initial load call.
+#     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
+# ---
+# **INPUT:** A user's prompt and a `unique_class_name`.
+# **OUTPUT:** A single, valid JSON object.
+
+# **Example Prompt:** "Private Inquiry form. Don't load existing inquiries."
+# **Example `unique_class_name`:** `.ai-inquiry-123`
+# **Example Output:**
+# {
+#   "name": "Private Inquiry Form",
+#   "schema": [
+#     { "id": "name", "label": "Name", "type": "text" },
+#     { "id": "type", "label": "Inquiry Type", "type": "relation", "related_schema_id": "existing-uuid" }
+#   ],
+#   "aiTemplate": "<style>.ai-inquiry-123 h3 { color: {{titleColor}}; }</style><div class=\\"p-6 bg-white rounded-xl shadow-lg border border-gray-100\\"><div class=\\"flex justify-between items-center mb-6\\"><h3 class=\\"text-2xl font-bold\\">{{title}}</h3><button class=\\"add-new-btn px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition\\">{{addButtonText}}</button></div><div class=\\"form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden\\"></div><div class=\\"data-display space-y-3 hidden\\"></div><div class=\\"pagination-controls hidden\\"></div></div><template id=\\"displayTemplate\\"><div>{{data.name}}</div></template>",
+#   "properties": {
+#     "title": "Send Inquiry",
+#     "addButtonText": "Add Inquiry",
+#     "hideData": true,
+#     "titleColor": "#111827"
+#   },
+#   "editableProps": [
+#     { "key": "title", "label": "Title", "type": "text" },
+#     { "key": "hideData", "label": "Hide Data List", "type": "boolean" }
+#   ],
+#   "script": "const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?skip=0&limit=20`); /* render logic */ } catch (err) {} }; const generateForm = async (initialData = {}) => { formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; schema.forEach(f => { /* generate inputs/selects and store in 'selects' object */ }); if (selects['day'] && selects['time_slot']) { selects['day'].addEventListener('change', async () => { const dayVal = selects['day'].options[selects['day'].selectedIndex].textContent; const res = await api.get(`/custom-data/rows/${selects['time_slot'].dataset.schema}`); selects['time_slot'].innerHTML = ''; res.data.rows.filter(r => r.data.day === dayVal).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = `${r.data.start_time} - ${r.data.end_time}`; selects['time_slot'].appendChild(opt); }); }); } /* Standard submit logic... */ }; addButton.addEventListener('click', () => generateForm()); if (!properties.hideData) fetchAndRenderRows();"
+# }
+# """.strip()
+
+NEW_TEST_1_DATA_APP_GENERATOR_PROMPT = """
 You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
 
 Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
@@ -955,111 +1073,63 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 
 1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
     -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
-    -   When a user's prompt mentions a concept that matches an existing schema (e.g., prompt is "create a list of employees with their department" and a "Departments" schema exists), you **MUST** create a relational field.
-    -   To create a relation, the field in your `schema` output must have:
-        -   `"type": "relation"`
-        -   `"related_schema_id": "the_uuid_of_the_existing_schema"`
-    -   If the prompt describes a new concept with no matching existing schema, you should use standard types like "text", "number", etc.
+    -   When a user's prompt mentions a concept that matches an existing schema, you **MUST** create a relational field.
+    -   To create a relation, the field in your `schema` output must have: `"type": "relation"` and `"related_schema_id": "the_uuid_of_the_existing_schema"`.
 
-2.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
+2.  **`name`**: A short, human-readable name for this data table based directly on the user's prompt.
 
-3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key. Use the relationship rule above where applicable.
+3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word.
 
 4.  **`aiTemplate`**: The main HTML structure. It MUST include:
     -   A `<style>` tag for all CSS, scoped using the `unique_class_name`.
     -   A main container with Tailwind classes: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
     -   A header `div` with class `flex justify-between items-center mb-6`.
-    -   A static main title `<h3>` or `<h2>` with class `text-2xl font-bold text-gray-800`.
-    -   A static "Add New" button with a class of `add-new-btn px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition-all active:scale-95`.
-    -   An **EMPTY** container for the form: `<div class="form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden"></div>`.
-    -   An **EMPTY** container for displaying the data: `<div class="data-display space-y-3 w-full overflow-x-auto"></div>`.
-    -   An **EMPTY** container for pagination controls: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
-    -   A `<template id="displayTemplate">`.
-    -   **Visibility Mode:** If the user prompt asks to "hide data", "not load data", "private", or "form only", you MUST add the Tailwind class `hidden` to the `.data-display` and `.pagination-controls` div containers inside the `aiTemplate` string.
+    -   Containers: `.form-container` (hidden), `.data-display`, and `.pagination-controls`.
+    -   **Visibility Mode:** If the user prompt asks to "hide data", "private", or "form only", add `hidden` to the `.data-display` and `.pagination-controls`.
 
 5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
-    -   It MUST be a `div` with class: `flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow`.
-    -   For regular fields, you **MUST** use `{{data.field_id}}` inside a `div` with class `flex-1`.
-    -   **CRITICAL:** For relational fields (e.g., a field with id 'project'), you **MUST** access the nested data correctly. Look at the `EXISTING_SCHEMAS_ON_WEBSITE` context to find the exact field `id` from the related schema to display (e.g., if the project schema has a field with id `project_title`, you MUST use `{{data.project.data.project_title}}`).
-    -   It **MUST** include edit/delete buttons in a `div` with class `flex gap-2`. Buttons must have `data-row-id="{{row_id}}"`. Use classes: `edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded` and `delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded`.
+    -   For regular fields, use `{{data.field_id}}`. For relational fields, use `{{data.related_id.data.display_field}}`.
+    -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
-6.  **Styling & Editable Properties (`properties`, `editableProps`)**:
-    -   Make the component's styling fully editable.
-    -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
-    -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
-    -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
-    -   **Mode Toggle:** You MUST add a property `"hideData": true` to the `properties` object if the user asked to hide the list, otherwise set it to `false`. Add a corresponding entry in `editableProps` with type `boolean`.
+6.  **Styling & Editable Properties**:
+    -   All style values and titles MUST use mustache tokens.
+    -   **Mode Toggle:** Add a property `"hideData": true` if the user asked to hide the list.
 
 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
-    -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
-    -   **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the very beginning of the `fetchAndRenderRows` function and before calling it at the bottom of the script to prevent private data from loading.
-    -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector, document.getElementById, or document.template. You MUST only use container.querySelector or container.querySelectorAll to find elements. This ensures multiple elements on the same page do not conflict.
-    -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
-    -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
-        -   The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
-        -   Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
-        -   Every `<input>` and `<select>` created MUST have class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
-        -   The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
-        -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
-        -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
-        -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
-                -  SMART DISPLAY KEY: If the field implies a range (e.g., "Time"), the script MUST concatenate fields like start_time and end_time for the textContent (e.g., opt.textContent = row.data.start_time + " - " + row.data.end_time).
-                - HIERARCHICAL FILTERING: If the prompt implies a dependency (e.g., "Time for a Day"), the script MUST add a change event listener to the "Parent" dropdown. On change, it MUST filter the child dropdown options to only show rows matching the parent's value.
-                1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
-                2.  From that schema's `fields` array, find the `id` of the first field that is of `type: "text"` or `type: "email"`. This will be the `displayKey`.
-                3.  Fetch all rows for the `related_schema_id`.
-                4.  When creating each `<option>`, the `textContent` **MUST** be set using the dynamic `displayKey` found in step 2 (e.g., `option.textContent = relatedRow.data[displayKey]`).
-                5.  The `value` for the `<option>` must be the `row_id`.
-                -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic and general-purpose.
-        -   **Relation Exception:** Even if `properties.hideData` is true, the script **MUST** still execute the code that fetches relational data from other tables to populate dropdowns, otherwise the form will be broken.
-        -   DYNAMIC DISPLAY KEYS: When populating a relational dropdown, the script MUST intelligently identify the most descriptive field(s). If the user's prompt implies a combination (e.g., "Full Name," "Address," or "Time Range"), the script MUST concatenate those fields in the textContent (e.g., row.data.first_name + " " + row.data.last_name) instead of just picking the first field.
-        -   HIERARCHICAL FILTERING: If the user prompt implies a dependency between two fields (e.g., "X for each Y" or "Sub-category based on Category"), the script MUST implement a parent-child relationship:
-            1- Add a change event listener to the "Parent" dropdown.
-            2- Whenever the Parent value changes, the script MUST filter the options in the "Child" dropdown so that only rows matching the Parent's current value are displayed.
-            3- If the Parent is empty, the Child dropdown should be disabled or cleared.
-    -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-        -   **Submission Success Feedback:** After a successful `api.post`, the script MUST check `if (properties.hideData)`. If true, replace the `form-container` content with: `'<div class="p-4 text-green-600 font-bold text-center">Thank you! Your submission was successful.</div>'`. If false, hide the form and re-fetch rows as usual.
-    -   TEMPLATE RENDERING: When rendering the list of data, you MUST NOT use cloneNode or manual string concatenation. You MUST use the provided Mustache engine: const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id }).
-    -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
-    -   API Calls to Use:
-        -   **Fetch Paginated Rows:** `api.get(\`/custom-data/rows/${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`)`. The response is `{ "rows": [], "total": 0 }`.
-        -   **Add New Row:** `api.post(\`/custom-data/rows/${schemaId}\`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Update Row:** `api.put(\`/custom-data/rows/{ROW_ID}\`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Delete Row:** `api.delete(\`/custom-data/rows/{ROW_ID}\`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
-    -   Pagination Logic:
-        -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
-        -  Buttons MUST be disabled when on the first or last page.
-        -  Pagination buttons MUST use classes: `px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed`.
-        -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
-    -   HOISTING SAFETY: You MUST define all helper functions (e.g., fetchAndRenderRows, generateForm) at the very top of the script before attaching any event listeners or executing the initial load call.
-    -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+    -   **State Management:** It MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (20), and `totalRows`.
+    -   **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the beginning of `fetchAndRenderRows` and before the final init call.
+    -   **STRICT LOCAL SCOPING:** You MUST ONLY use `container.querySelector` or `container.querySelectorAll`. Never use `document`.
+    -   **Accessing the Schema:** You MUST get the schema from `properties.schema_fields`.
+    -   **Form Generation (STYLING CRITICAL):** The script MUST dynamically generate a `<form>` inside `.form-container`.
+        -   `<form>` class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
+        -   `<label>` class: `block text-sm font-semibold text-gray-700 mb-1`.
+        -   `<input>/<select>` class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+        -   `submitBtn` class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+        -   **ULTRA-CRITICAL SCRIPT RULE:** For relations, the script MUST:
+            1. Find the related schema in `properties.all_schemas`.
+            2. **SMART DISPLAY KEY:** If the field implies a range (e.g., "Time"), concatenate fields like `start_time` and `end_time` (e.g., `opt.textContent = r.data.start_time + " - " + r.data.end_time`).
+            3. **HIERARCHICAL FILTERING:** If a dependency is implied (e.g., "Time for a Day"), add a `change` listener to the Parent. On change, filter the Child dropdown to only show matching rows.
+            4. Fetch all rows for the `related_schema_id` and use the first `text`/`email` field as the default `displayKey`.
+        -   **Relation Exception:** Relation data fetching MUST execute even if `hideData` is true.
+    -   **Data Submission:** Use `new FormData(form)` and `Object.fromEntries()`. After success, if `hideData` is true, replace `.form-container` with a success message.
+    -   **TEMPLATE RENDERING:** When rendering rows, you MUST find the `.data-display` container, clear it, and loop through `rows` using: `const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id });`.
+    -   **API Calls:** Use `api.get(\`/custom-data/rows/${schemaId}?skip=...&limit=...\`)`, `api.post`, `api.put`, and `api.delete`.
+    -   **Pagination:** Render "Previous"/"Next" buttons in `.pagination-controls`.
+    -   **HOISTING SAFETY:** Define `fetchAndRenderRows` and `generateForm` at the very top.
 
 ---
-**INPUT:** A user's prompt and a `unique_class_name`.
+**INPUT:** User prompt and `unique_class_name`.
 **OUTPUT:** A single, valid JSON object.
 
-**Example Prompt:** "Private Inquiry form. Don't load existing inquiries."
-**Example `unique_class_name`:** `.ai-inquiry-123`
 **Example Output:**
 {
-  "name": "Private Inquiry Form",
-  "schema": [
-    { "id": "name", "label": "Name", "type": "text" },
-    { "id": "type", "label": "Inquiry Type", "type": "relation", "related_schema_id": "existing-uuid" }
-  ],
-  "aiTemplate": "<style>.ai-inquiry-123 h3 { color: {{titleColor}}; }</style><div class=\\"p-6 bg-white rounded-xl shadow-lg border border-gray-100\\"><div class=\\"flex justify-between items-center mb-6\\"><h3 class=\\"text-2xl font-bold\\">{{title}}</h3><button class=\\"add-new-btn px-4 py-2 bg-blue-600 text-white rounded-lg font-semibold hover:bg-blue-700 transition\\">{{addButtonText}}</button></div><div class=\\"form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden\\"></div><div class=\\"data-display space-y-3 hidden\\"></div><div class=\\"pagination-controls hidden\\"></div></div><template id=\\"displayTemplate\\"><div>{{data.name}}</div></template>",
-  "properties": {
-    "title": "Send Inquiry",
-    "addButtonText": "Add Inquiry",
-    "hideData": true,
-    "titleColor": "#111827"
-  },
-  "editableProps": [
-    { "key": "title", "label": "Title", "type": "text" },
-    { "key": "hideData", "label": "Hide Data List", "type": "boolean" }
-  ],
-  "script": "const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?skip=0&limit=20`); /* render logic */ } catch (err) {} }; const generateForm = async (initialData = {}) => { formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; schema.forEach(f => { /* generate inputs/selects and store in 'selects' object */ }); if (selects['day'] && selects['time_slot']) { selects['day'].addEventListener('change', async () => { const dayVal = selects['day'].options[selects['day'].selectedIndex].textContent; const res = await api.get(`/custom-data/rows/${selects['time_slot'].dataset.schema}`); selects['time_slot'].innerHTML = ''; res.data.rows.filter(r => r.data.day === dayVal).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = `${r.data.start_time} - ${r.data.end_time}`; selects['time_slot'].appendChild(opt); }); }); } /* Standard submit logic... */ }; addButton.addEventListener('click', () => generateForm()); if (!properties.hideData) fetchAndRenderRows();"
+  "name": "Data Management",
+  "schema": [],
+  "aiTemplate": "...",
+  "properties": {},
+  "editableProps": [],
+  "script": "const fetchAndRenderRows = async () => { if (properties.hideData) return; const dataDisplay = container.querySelector('.data-display'); try { const res = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`); dataDisplay.innerHTML = ''; const template = container.querySelector('#displayTemplate').innerHTML; res.data.rows.forEach(row => { dataDisplay.innerHTML += Mustache.render(template, { data: row.data, row_id: row.row_id }); }); /* pagination logic */ } catch (err) {} }; const generateForm = async (initialData = {}) => { const formContainer = container.querySelector('.form-container'); formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; properties.schema_fields.forEach(f => { /* form field logic */ }); /* submit logic */ formContainer.appendChild(form); }; const addButton = container.querySelector('.add-new-btn'); addButton.addEventListener('click', () => generateForm()); let currentPage = 0; const rowsPerPage = 20; if (!properties.hideData) fetchAndRenderRows();"
 }
 """.strip()
 DATA_APP_GENERATOR_PROMPT = """
@@ -1210,7 +1280,7 @@ async def generate_data_app_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": TEST_1_DATA_APP_GENERATOR_PROMPT},
+                {"role": "system", "content": NEW_TEST_1_DATA_APP_GENERATOR_PROMPT},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.5,
