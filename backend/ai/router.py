@@ -1063,75 +1063,75 @@ async def generate_ai_section(
 # }
 # """.strip()
 
-NEW_TEST_1_DATA_APP_GENERATOR_PROMPT = """
-You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
+# NEW_TEST_1_DATA_APP_GENERATOR_PROMPT = """
+# You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
 
-Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
+# Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
 
----
-### **CRITICAL RULES FOR YOUR OUTPUT**
+# ---
+# ### **CRITICAL RULES FOR YOUR OUTPUT**
 
-1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
-    -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
-    -   When a user's prompt mentions a concept that matches an existing schema, you **MUST** create a relational field.
-    -   To create a relation, the field in your `schema` output must have: `"type": "relation"` and `"related_schema_id": "the_uuid_of_the_existing_schema"`.
+# 1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
+#     -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+#     -   When a user's prompt mentions a concept that matches an existing schema, you **MUST** create a relational field.
+#     -   To create a relation, the field in your `schema` output must have: `"type": "relation"` and `"related_schema_id": "the_uuid_of_the_existing_schema"`.
 
-2.  **`name`**: A short, human-readable name for this data table based directly on the user's prompt.
+# 2.  **`name`**: A short, human-readable name for this data table based directly on the user's prompt.
 
-3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word.
+# 3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word.
 
-4.  **`aiTemplate`**: The main HTML structure. It MUST include:
-    -   A `<style>` tag for all CSS, scoped using the `unique_class_name`.
-    -   A main container with Tailwind classes: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
-    -   A header `div` with class `flex justify-between items-center mb-6`.
-    -   Containers: `.form-container` (hidden), `.data-display`, and `.pagination-controls`.
-    -   **Visibility Mode:** If the user prompt asks to "hide data", "private", or "form only", add `hidden` to the `.data-display` and `.pagination-controls`.
+# 4.  **`aiTemplate`**: The main HTML structure. It MUST include:
+#     -   A `<style>` tag for all CSS, scoped using the `unique_class_name`.
+#     -   A main container with Tailwind classes: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
+#     -   A header `div` with class `flex justify-between items-center mb-6`.
+#     -   Containers: `.form-container` (hidden), `.data-display`, and `.pagination-controls`.
+#     -   **Visibility Mode:** If the user prompt asks to "hide data", "private", or "form only", add `hidden` to the `.data-display` and `.pagination-controls`.
 
-5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
-    -   For regular fields, use `{{data.field_id}}`. For relational fields, use `{{data.related_id.data.display_field}}`.
-    -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
+# 5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
+#     -   For regular fields, use `{{data.field_id}}`. For relational fields, use `{{data.related_id.data.display_field}}`.
+#     -   Include edit/delete buttons with `data-row-id="{{row_id}}"`.
 
-6.  **Styling & Editable Properties**:
-    -   All style values and titles MUST use mustache tokens.
-    -   **Mode Toggle:** Add a property `"hideData": true` if the user asked to hide the list.
+# 6.  **Styling & Editable Properties**:
+#     -   All style values and titles MUST use mustache tokens.
+#     -   **Mode Toggle:** Add a property `"hideData": true` if the user asked to hide the list.
 
-7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
-    -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
-    -   **State Management:** It MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (20), and `totalRows`.
-    -   **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the beginning of `fetchAndRenderRows` and before the final init call.
-    -   **STRICT LOCAL SCOPING:** You MUST ONLY use `container.querySelector` or `container.querySelectorAll`. Never use `document`.
-    -   **Accessing the Schema:** You MUST get the schema from `properties.schema_fields`.
-    -   **Form Generation (STYLING CRITICAL):** The script MUST dynamically generate a `<form>` inside `.form-container`.
-        -   `<form>` class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
-        -   `<label>` class: `block text-sm font-semibold text-gray-700 mb-1`.
-        -   `<input>/<select>` class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
-        -   `submitBtn` class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
-        -   **ULTRA-CRITICAL SCRIPT RULE:** For relations, the script MUST:
-            1. Find the related schema in `properties.all_schemas`.
-            2. **SMART DISPLAY KEY:** If the field implies a range (e.g., "Time"), concatenate fields like `start_time` and `end_time` (e.g., `opt.textContent = r.data.start_time + " - " + r.data.end_time`).
-            3. **HIERARCHICAL FILTERING:** If a dependency is implied (e.g., "Time for a Day"), add a `change` listener to the Parent. On change, filter the Child dropdown to only show matching rows.
-            4. Fetch all rows for the `related_schema_id` and use the first `text`/`email` field as the default `displayKey`.
-        -   **Relation Exception:** Relation data fetching MUST execute even if `hideData` is true.
-    -   **Data Submission:** Use `new FormData(form)` and `Object.fromEntries()`. After success, if `hideData` is true, replace `.form-container` with a success message.
-    -   **TEMPLATE RENDERING:** When rendering rows, you MUST find the `.data-display` container, clear it, and loop through `rows` using: `const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id });`.
-    -   **API Calls:** Use `api.get(\`/custom-data/rows/${schemaId}?skip=...&limit=...\`)`, `api.post`, `api.put`, and `api.delete`.
-    -   **Pagination:** Render "Previous"/"Next" buttons in `.pagination-controls`.
-    -   **HOISTING SAFETY:** Define `fetchAndRenderRows` and `generateForm` at the very top.
+# 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+#     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+#     -   **State Management:** It MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (20), and `totalRows`.
+#     -   **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the beginning of `fetchAndRenderRows` and before the final init call.
+#     -   **STRICT LOCAL SCOPING:** You MUST ONLY use `container.querySelector` or `container.querySelectorAll`. Never use `document`.
+#     -   **Accessing the Schema:** You MUST get the schema from `properties.schema_fields`.
+#     -   **Form Generation (STYLING CRITICAL):** The script MUST dynamically generate a `<form>` inside `.form-container`.
+#         -   `<form>` class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
+#         -   `<label>` class: `block text-sm font-semibold text-gray-700 mb-1`.
+#         -   `<input>/<select>` class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+#         -   `submitBtn` class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+#         -   **ULTRA-CRITICAL SCRIPT RULE:** For relations, the script MUST:
+#             1. Find the related schema in `properties.all_schemas`.
+#             2. **SMART DISPLAY KEY:** If the field implies a range (e.g., "Time"), concatenate fields like `start_time` and `end_time` (e.g., `opt.textContent = r.data.start_time + " - " + r.data.end_time`).
+#             3. **HIERARCHICAL FILTERING:** If a dependency is implied (e.g., "Time for a Day"), add a `change` listener to the Parent. On change, filter the Child dropdown to only show matching rows.
+#             4. Fetch all rows for the `related_schema_id` and use the first `text`/`email` field as the default `displayKey`.
+#         -   **Relation Exception:** Relation data fetching MUST execute even if `hideData` is true.
+#     -   **Data Submission:** Use `new FormData(form)` and `Object.fromEntries()`. After success, if `hideData` is true, replace `.form-container` with a success message.
+#     -   **TEMPLATE RENDERING:** When rendering rows, you MUST find the `.data-display` container, clear it, and loop through `rows` using: `const html = Mustache.render(templateString, { data: row.data, row_id: row.row_id });`.
+#     -   **API Calls:** Use `api.get(\`/custom-data/rows/${schemaId}?skip=...&limit=...\`)`, `api.post`, `api.put`, and `api.delete`.
+#     -   **Pagination:** Render "Previous"/"Next" buttons in `.pagination-controls`.
+#     -   **HOISTING SAFETY:** Define `fetchAndRenderRows` and `generateForm` at the very top.
 
----
-**INPUT:** User prompt and `unique_class_name`.
-**OUTPUT:** A single, valid JSON object.
+# ---
+# **INPUT:** User prompt and `unique_class_name`.
+# **OUTPUT:** A single, valid JSON object.
 
-**Example Output:**
-{
-  "name": "Data Management",
-  "schema": [],
-  "aiTemplate": "...",
-  "properties": {},
-  "editableProps": [],
-  "script": "const fetchAndRenderRows = async () => { if (properties.hideData) return; const dataDisplay = container.querySelector('.data-display'); try { const res = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`); dataDisplay.innerHTML = ''; const template = container.querySelector('#displayTemplate').innerHTML; res.data.rows.forEach(row => { dataDisplay.innerHTML += Mustache.render(template, { data: row.data, row_id: row.row_id }); }); /* pagination logic */ } catch (err) {} }; const generateForm = async (initialData = {}) => { const formContainer = container.querySelector('.form-container'); formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; properties.schema_fields.forEach(f => { /* form field logic */ }); /* submit logic */ formContainer.appendChild(form); }; const addButton = container.querySelector('.add-new-btn'); addButton.addEventListener('click', () => generateForm()); let currentPage = 0; const rowsPerPage = 20; if (!properties.hideData) fetchAndRenderRows();"
-}
-""".strip()
+# **Example Output:**
+# {
+#   "name": "Data Management",
+#   "schema": [],
+#   "aiTemplate": "...",
+#   "properties": {},
+#   "editableProps": [],
+#   "script": "const fetchAndRenderRows = async () => { if (properties.hideData) return; const dataDisplay = container.querySelector('.data-display'); try { const res = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${currentPage * rowsPerPage}&limit=\${rowsPerPage}\`); dataDisplay.innerHTML = ''; const template = container.querySelector('#displayTemplate').innerHTML; res.data.rows.forEach(row => { dataDisplay.innerHTML += Mustache.render(template, { data: row.data, row_id: row.row_id }); }); /* pagination logic */ } catch (err) {} }; const generateForm = async (initialData = {}) => { const formContainer = container.querySelector('.form-container'); formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; properties.schema_fields.forEach(f => { /* form field logic */ }); /* submit logic */ formContainer.appendChild(form); }; const addButton = container.querySelector('.add-new-btn'); addButton.addEventListener('click', () => generateForm()); let currentPage = 0; const rowsPerPage = 20; if (!properties.hideData) fetchAndRenderRows();"
+# }
+# """.strip()
 DATA_APP_GENERATOR_PROMPT = """
 You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
 
@@ -1280,7 +1280,7 @@ async def generate_data_app_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_TEST_1_DATA_APP_GENERATOR_PROMPT},
+                {"role": "system", "content": DATA_APP_GENERATOR_PROMPT},
                 {"role": "user", "content": user_content},
             ],
             temperature=0.5,
