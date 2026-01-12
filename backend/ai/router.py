@@ -1214,6 +1214,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
+    -   CONDITIONAL RELATIONAL UPDATES: ONLY IF the user's prompt implies a state change for a related item (e.g., "unavailable after booking", "reduce stock on purchase"):
+        - Identify the relation field representing the "resource" using pattern matching (e.g., id.match(/slot|item|product|room/i)).
+        - After the primary POST/PUT is successful, the script MUST execute a secondary api.put to the related row's endpoint: /custom-data/rows/{RELATED_ROW_ID}.
+        - The payload MUST update the status (e.g., { available: false, status: "booked" } or similar common patterns).
+        
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
         -   **Fetch Paginated Rows:** `api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`)`. The response is `{ "rows": [], "total": 0 }`.
@@ -1353,20 +1358,31 @@ const generateForm = async (initialData = {}) => {
     } 
 
     if (parentField && childField && selects[parentField.id] && selects[childField.id]) { 
-        const pSel = selects[parentField.id]; 
-        const cSel = selects[childField.id]; 
-        const cRows = JSON.parse(cSel.dataset.rows); 
-        pSel.addEventListener('change', () => { 
-            const pText = pSel.options[pSel.selectedIndex].textContent; 
-            cSel.innerHTML = '<option value=\"\">Select Time...</option>'; 
-            cRows.filter(r => Object.values(r.data).includes(pText)).forEach(r => { 
-                const opt = document.createElement('option'); 
-                opt.value = r.row_id; 
-                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && !v.toString().match(/Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i)).join(' - '); 
-                cSel.appendChild(opt); 
-            }); 
+    const pSel = selects[parentField.id]; 
+    const cSel = selects[childField.id]; 
+    const cRows = JSON.parse(cSel.dataset.rows); 
+
+    pSel.addEventListener('change', () => { 
+        const pText = pSel.options[pSel.selectedIndex].textContent; 
+        cSel.innerHTML = `<option value="">Select ${childField.label}...</option>`; 
+        
+        // UNIVERSAL FILTER: Match Parent text AND check if item is available
+        cRows.filter(r => 
+            Object.values(r.data).includes(pText) && 
+            (r.data.available === true || r.data.available === "true" || r.data.available === undefined)
+        ).forEach(r => { 
+            const opt = document.createElement('option'); 
+            opt.value = r.row_id; 
+            
+            // UNIVERSAL LABEL: Join all descriptive values EXCEPT the one that matches the Parent
+            opt.textContent = Object.values(r.data)
+                .filter(v => typeof v !== 'object' && v.toString() !== pText)
+                .join(' - '); 
+                
+            cSel.appendChild(opt); 
         }); 
-    } 
+    }); 
+}
 
     const subBtn = document.createElement('button'); 
     subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold'; 
@@ -1374,16 +1390,45 @@ const generateForm = async (initialData = {}) => {
     form.appendChild(subBtn); 
 
     form.addEventListener('submit', async (e) => { 
-        e.preventDefault(); 
-        const data = Object.fromEntries(new FormData(form)); 
-        try { 
-            if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data }); 
-            else await api.post(`/custom-data/rows/${schemaId}`, { data }); 
-            formContainer.style.display = 'none'; 
-            editingRowId = null; 
-            fetchAndRenderRows(); 
-        } catch (err) { console.error('Save error:', err); } 
-    }); 
+    e.preventDefault(); 
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData); 
+    
+    try { 
+        // 1. Primary Action: Save or Update the main record (e.g., the Booking)
+        if (editingRowId) {
+            await api.put(`/custom-data/rows/${editingRowId}`, { data });
+        } else {
+            await api.post(`/custom-data/rows/${schemaId}`, { data });
+        }
+
+        // 2. UNIVERSAL SIDE-EFFECT: Update the related "resource" status
+        // Pattern match to find the child relation (e.g., 'time', 'slot', 'item', 'room')
+        const childFieldId = Object.keys(data).find(key => 
+            key.toLowerCase().match(/time|slot|item|room|product/i)
+        );
+        const childRowId = data[childFieldId];
+
+        if (childRowId) {
+            // Dynamically find the related schema ID from the current fields
+            const relSchemaId = schema.find(f => f.id === childFieldId)?.related_schema_id;
+            
+            if (relSchemaId) {
+                // Update the related row's status using universal patterns (available/status)
+                await api.put(`/custom-data/rows/${childRowId}`, { 
+                    data: { available: false, status: "booked" } 
+                });
+            }
+        }
+
+        // 3. UI Cleanup
+        formContainer.style.display = 'none'; 
+        editingRowId = null; 
+        fetchAndRenderRows(); 
+    } catch (err) { 
+        console.error('Submission error:', err); 
+    } 
+});
     formContainer.appendChild(form); 
 }; 
 
