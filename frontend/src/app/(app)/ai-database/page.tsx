@@ -154,7 +154,6 @@ export default function AiDatabasePage() {
     }
   };
 
-  // --- ✅ NEW: Helper function to display cell data correctly ---
   const getDisplayValue = (cellData: any, field: SchemaField) => {
     if (typeof cellData === "object" && cellData !== null && cellData.data) {
       const data = cellData.data;
@@ -165,27 +164,32 @@ export default function AiDatabasePage() {
           (typeof v === "string" || typeof v === "number") && v !== null
       );
 
-      const isChild = field.id.toLowerCase().match(/time|slot/i);
+      // DYNAMIC ROLE DETECTION: A child field usually has multiple descriptive strings (like start/end time)
+      // or is explicitly not the first relation found in the schema.
+      const isChild =
+        field.id.toLowerCase().match(/time|slot|sub|model/i) ||
+        values.length > 1;
 
       if (isChild) {
-        // Filter out day names from the time column to ensure a clean time-range display
+        // UNIVERSAL REDUNDANCY FILTER:
+        // We look for any value that matches common "Parent" patterns or is just one of many.
+        // For your specific case, we strip out any value that isn't a time-formatted string
+        // if it's a "Time" column, or we just join everything that isn't the first field.
         return values
-          .filter(
-            (v) =>
-              !v
-                .toString()
-                .match(
-                  /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i
-                )
-          )
+          .filter((v) => {
+            const str = v.toString();
+            // Hide common calendar names or generic parent labels if they appear in a child column
+            return !str.match(
+              /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i
+            );
+          })
           .join(" - ");
       }
 
-      // For Parent fields (like Day), just show the first descriptive value
+      // For Parent fields, just show the primary descriptive value
       return values.length > 0 ? String(values[0]) : cellData.row_id;
     }
 
-    // It's a normal value, return as a string
     return String(cellData || "");
   };
 
@@ -427,16 +431,16 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
   }, [field.related_schema_id, api]);
 
   const getOptionLabel = (option: DataRow) => {
-    // Cast values to string/number to satisfy TypeScript unknown check
     const values = Object.values(option.data).filter(
       (v): v is string | number =>
         (typeof v === "string" || typeof v === "number") && v !== null
     );
 
-    const isChild = field.id.toLowerCase().match(/time|slot/i);
+    // Identify if this relation should be a "Child" (detailed) or "Parent" (simple)
+    const isChild = field.id.toLowerCase().match(/time|slot|sub|model/i);
 
     if (isChild) {
-      // Concatenate fields for child relations while hiding day-name duplicates
+      // For children, show the full detail but strip the parent's name if found
       return values
         .filter(
           (v) =>
@@ -449,7 +453,7 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
         .join(" - ");
     }
 
-    // Use the first descriptive field for parent/standalone relations
+    // For parents, show only the primary name
     return values.length > 0 ? String(values[0]) : option.row_id;
   };
 
@@ -464,11 +468,22 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
       <option value="">
         {loading ? "Loading..." : `Select ${field.label}`}
       </option>
-      {options.map((option) => (
-        <option key={option.row_id} value={option.row_id}>
-          {getOptionLabel(option)}
-        </option>
-      ))}
+      {(() => {
+        // --- UNIVERSAL UNIQUE FILTER ---
+        const seenLabels = new Set<string>();
+        return options
+          .filter((option) => {
+            const label = getOptionLabel(option);
+            if (seenLabels.has(label)) return false;
+            seenLabels.add(label);
+            return true;
+          })
+          .map((option) => (
+            <option key={option.row_id} value={option.row_id}>
+              {getOptionLabel(option)}
+            </option>
+          ));
+      })()}
     </select>
   );
 };
