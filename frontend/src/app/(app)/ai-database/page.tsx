@@ -157,22 +157,34 @@ export default function AiDatabasePage() {
   // --- ✅ NEW: Helper function to display cell data correctly ---
   const getDisplayValue = (cellData: any, field: SchemaField) => {
     if (typeof cellData === "object" && cellData !== null && cellData.data) {
-      // It's a resolved relation object
-      const relatedSchema = schemas.find(
-        (s) => s.schema_id === field.related_schema_id
+      const data = cellData.data;
+
+      // Convert unknown values to strings safely while filtering out nested objects
+      const values = Object.values(data).filter(
+        (v): v is string | number =>
+          (typeof v === "string" || typeof v === "number") && v !== null
       );
-      if (relatedSchema) {
-        // Find the first text-like field to display (e.g., name, title, email)
-        const displayField = relatedSchema.fields.find(
-          (f) => f.type === "text" || f.type === "email"
-        );
-        if (displayField) {
-          return cellData.data[displayField.id] || `(No ${displayField.label})`;
-        }
+
+      const isChild = field.id.toLowerCase().match(/time|slot/i);
+
+      if (isChild) {
+        // Filter out day names from the time column to ensure a clean time-range display
+        return values
+          .filter(
+            (v) =>
+              !v
+                .toString()
+                .match(
+                  /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i
+                )
+          )
+          .join(" - ");
       }
-      // Fallback to showing the ID if no suitable display field is found
-      return cellData.row_id;
+
+      // For Parent fields (like Day), just show the first descriptive value
+      return values.length > 0 ? String(values[0]) : cellData.row_id;
     }
+
     // It's a normal value, return as a string
     return String(cellData || "");
   };
@@ -382,7 +394,6 @@ interface RelationDropdownProps {
   value: string;
   onChange: (value: string) => void;
 }
-
 const RelationDropdown: React.FC<RelationDropdownProps> = ({
   api,
   schemas,
@@ -415,12 +426,32 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
     fetchOptions();
   }, [field.related_schema_id, api]);
 
-  const relatedSchema = schemas.find(
-    (s) => s.schema_id === field.related_schema_id
-  );
-  const displayField = relatedSchema?.fields.find(
-    (f) => f.type === "text" || f.type === "email"
-  );
+  const getOptionLabel = (option: DataRow) => {
+    // Cast values to string/number to satisfy TypeScript unknown check
+    const values = Object.values(option.data).filter(
+      (v): v is string | number =>
+        (typeof v === "string" || typeof v === "number") && v !== null
+    );
+
+    const isChild = field.id.toLowerCase().match(/time|slot/i);
+
+    if (isChild) {
+      // Concatenate fields for child relations while hiding day-name duplicates
+      return values
+        .filter(
+          (v) =>
+            !v
+              .toString()
+              .match(
+                /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i
+              )
+        )
+        .join(" - ");
+    }
+
+    // Use the first descriptive field for parent/standalone relations
+    return values.length > 0 ? String(values[0]) : option.row_id;
+  };
 
   return (
     <select
@@ -435,7 +466,7 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
       </option>
       {options.map((option) => (
         <option key={option.row_id} value={option.row_id}>
-          {displayField ? option.data[displayField.id] : option.row_id}
+          {getOptionLabel(option)}
         </option>
       ))}
     </select>
