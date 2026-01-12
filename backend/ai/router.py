@@ -1262,33 +1262,46 @@ const fetchAndRenderRows = async () => {
     if (properties.hideData) return; 
     try { 
         const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); 
-        const processedRows = res.data.rows.map(row => { 
+        currentRows = res.data.rows;
+
+        // 1. Identify Roles Dynamically
+        const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation');
+        const childField = schema.find(f => f.type === 'relation' && f !== parentField);
+
+        const processedRows = currentRows.map(row => { 
             const rowData = { ...row.data }; 
             schema.forEach(field => { 
                 if (field.type === 'relation' && rowData[field.id]?.data) { 
                     const relData = rowData[field.id].data; 
-                    const values = Object.entries(relData)
-                        .filter(([k, v]) => typeof v !== 'object' && !k.toLowerCase().includes('id'))
-                        .map(([k, v]) => v);
+                    const values = Object.values(relData).filter(v => typeof v !== 'object');
                     
-                    const isTimeField = field.id.toLowerCase().match(/time|slot/i);
-                    // Table View Fix: If it's the Time column, hide the Day name to avoid Tuesday/Tuesday
-                    rowData[field.id].display_label = isTimeField ? 
-                        values.filter(v => !v.toString().match(/Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i)).join(' - ') : 
-                        values[0]; 
+                    const isChild = (childField && field.id === childField.id);
+                    
+                    if (isChild && parentField && rowData[parentField.id]?.data) {
+                        // 2. UNIVERSAL SMART FILTER: 
+                        // Remove whatever text is shown in the Parent column from the Child column
+                        const parentText = Object.values(rowData[parentField.id].data).filter(v => typeof v !== 'object')[0];
+                        rowData[field.id].display_label = values
+                            .filter(v => v.toString() !== parentText.toString())
+                            .join(' - ');
+                    } else {
+                        // Parent or Standalone: Just show the first descriptive field
+                        rowData[field.id].display_label = values[0];
+                    }
                 } 
             }); 
             return { ...row, data: rowData }; 
         }); 
+
         dataDisplay.innerHTML = ''; 
-        const displayTemplate = container.querySelector('#displayTemplate').innerHTML; 
+        const template = container.querySelector('#displayTemplate').innerHTML; 
         processedRows.forEach(row => { 
             const div = document.createElement('div'); 
-            div.innerHTML = Mustache.render(displayTemplate, { data: row.data, row_id: row.row_id }); 
+            div.innerHTML = Mustache.render(template, { data: row.data, row_id: row.row_id }); 
             dataDisplay.appendChild(div); 
         }); 
     } catch (err) { console.error('Fetch error:', err); } 
-}; 
+};
 
 const generateForm = async (initialData = {}) => { 
     formContainer.style.display = 'block'; 
