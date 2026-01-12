@@ -1264,7 +1264,6 @@ const fetchAndRenderRows = async () => {
         const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); 
         currentRows = res.data.rows;
 
-        // 1. Identify Roles Dynamically
         const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation');
         const childField = schema.find(f => f.type === 'relation' && f !== parentField);
 
@@ -1278,14 +1277,11 @@ const fetchAndRenderRows = async () => {
                     const isChild = (childField && field.id === childField.id);
                     
                     if (isChild && parentField && rowData[parentField.id]?.data) {
-                        // 2. UNIVERSAL SMART FILTER: 
-                        // Remove whatever text is shown in the Parent column from the Child column
                         const parentText = Object.values(rowData[parentField.id].data).filter(v => typeof v !== 'object')[0];
                         rowData[field.id].display_label = values
                             .filter(v => v.toString() !== parentText.toString())
                             .join(' - ');
                     } else {
-                        // Parent or Standalone: Just show the first descriptive field
                         rowData[field.id].display_label = values[0];
                     }
                 } 
@@ -1309,7 +1305,7 @@ const generateForm = async (initialData = {}) => {
     const form = document.createElement('form'); 
     form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; 
     const selects = {}; 
-    const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category/i)) || schema.find(f => f.type === 'relation'); 
+    const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation'); 
     const childField = schema.find(f => f.type === 'relation' && f !== parentField); 
 
     for (const field of schema) { 
@@ -1329,26 +1325,21 @@ const generateForm = async (initialData = {}) => {
             
             const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows; 
             if (field === parentField) { 
+                // --- FIX FOR DUPLICATES ---
+                const seenLabels = new Set();
                 relRows.forEach(r => { 
-                    const opt = document.createElement('option'); 
-                    opt.value = r.row_id; 
-                    opt.textContent = Object.values(r.data)[0]; 
-                    sel.appendChild(opt); 
+                    const labelText = Object.values(r.data).filter(v => typeof v !== 'object')[0];
+                    if (!seenLabels.has(labelText)) {
+                        const opt = document.createElement('option'); 
+                        opt.value = r.row_id; 
+                        opt.textContent = labelText; 
+                        sel.appendChild(opt); 
+                        seenLabels.add(labelText);
+                    }
                 }); 
                 if (initialData[field.id]) sel.value = initialData[field.id];
             } else { 
                 sel.dataset.rows = JSON.stringify(relRows); 
-                // If editing, trigger the hierarchy filter immediately
-                if (initialData[parentField.id]) {
-                   const pText = Object.values(relRows.find(r => r.row_id === initialData[parentField.id])?.data || {})[0];
-                   relRows.filter(r => Object.values(r.data).includes(pText)).forEach(r => {
-                       const opt = document.createElement('option');
-                       opt.value = r.row_id;
-                       opt.textContent = Object.values(r.data).filter(v => !v.toString().match(/Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i)).join(' - ');
-                       sel.appendChild(opt);
-                   });
-                   sel.value = initialData[field.id] || '';
-                }
             } 
             wrapper.appendChild(sel); 
         } else { 
@@ -1396,14 +1387,12 @@ const generateForm = async (initialData = {}) => {
     formContainer.appendChild(form); 
 }; 
 
-// CRUD: Event Delegation for Edit and Delete
 dataDisplay.addEventListener('click', async (e) => {
     const editBtn = e.target.closest('.edit-btn');
     const delBtn = e.target.closest('.delete-btn');
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
-        const res = await api.get(`/custom-data/rows/${schemaId}`);
-        const row = res.data.rows.find(r => r.row_id === editingRowId);
+        const row = currentRows.find(r => r.row_id === editingRowId);
         if (row) generateForm(row.data);
     }
     if (delBtn) {
