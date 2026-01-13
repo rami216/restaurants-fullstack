@@ -1214,11 +1214,12 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   UNIVERSAL RELATIONAL UPDATES (STATE CHANGE): The script MUST identify if the user intent implies a state change or resource consumption (e.g., "booking", "claiming", "reserving", "purchasing", "assigning").
-        - Step 1: Identify Target: The script MUST find the row_id of the "resource" field (e.g., time, slot, room, item, task) using the pattern match /time|slot|item|room|product|task/i.
-        - Step 2: Fetch Current State: The script MUST call api.get(\/custom-data/rows/${RELATED_ROW_ID}`)` to retrieve the current full data object.
-        - Step 3: Safe Merge: It MUST merge the update (e.g., { available: false } or { status: "taken" }) with the existing fields: const mergedData = { ...res.data.data, available: false };.
-        - Step 4: Save Full Object: It MUST call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: mergedData })` to finalize the update without wiping existing data.
+    -   SAFE RELATIONAL UPDATES (DATA INTEGRITY): If the prompt implies a state change (e.g., "unavailable after booking"):
+        - The script MUST identify the row_id of the resource (e.g., the Slot) from the submitted data.
+        - It MUST first perform api.get('/custom-data/rows/' + ID) to retrieve the current record.
+        - CRITICAL MERGE LOGIC: To prevent wiping fields, the script MUST extract current fields using const fields = response.data.data || response.data;.
+        - It MUST merge the status: const merged = { ...fields, available: false, status: 'booked' };.
+        - It MUST then api.put('/custom-data/rows/' + ID, { data: merged }) to ensure all existing data is preserved.
         
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
@@ -1270,7 +1271,6 @@ const fetchAndRenderRows = async () => {
         const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); 
         currentRows = res.data.rows;
         
-        // Identify Roles Dynamically
         const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation');
         const childField = schema.find(f => f.type === 'relation' && f !== parentField);
 
@@ -1279,7 +1279,7 @@ const fetchAndRenderRows = async () => {
             schema.forEach(field => { 
                 if (field.type === 'relation' && rowData[field.id]?.data) { 
                     const relData = rowData[field.id].data; 
-                    const values = Object.values(relData).filter(v => typeof v !== 'object' && v !== null);
+                    const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true', 'false'].includes(v.toString().toLowerCase()));
                     const isChild = (childField && field.id === childField.id);
                     
                     if (isChild && parentField && rowData[parentField.id]?.data) {
@@ -1339,14 +1339,13 @@ const generateForm = async (initialData = {}) => {
                 if (initialData[field.id]) sel.value = initialData[field.id];
             } else { 
                 sel.dataset.rows = JSON.stringify(relRows); 
-                // Pre-populate child if editing
                 if (initialData[parentField?.id]) {
                     const pRow = relRows.find(r => r.row_id === initialData[parentField.id]);
                     const pText = pRow ? Object.values(pRow.data).filter(v => typeof v !== 'object')[0] : '';
                     relRows.filter(r => Object.values(r.data).includes(pText)).forEach(r => {
                         const opt = document.createElement('option');
                         opt.value = r.row_id;
-                        opt.textContent = Object.values(r.data).filter(v => v.toString() !== pText).join(' - ');
+                        opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText && !['true', 'false'].includes(v.toString().toLowerCase())).join(' - ');
                         sel.appendChild(opt);
                     });
                     sel.value = initialData[field.id] || '';
@@ -1370,7 +1369,7 @@ const generateForm = async (initialData = {}) => {
             cRows.filter(r => Object.values(r.data).includes(pText) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => { 
                 const opt = document.createElement('option'); 
                 opt.value = r.row_id; 
-                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText).join(' - '); 
+                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText && !['true', 'false'].includes(v.toString().toLowerCase())).join(' - '); 
                 cSel.appendChild(opt); 
             }); 
         }); 
@@ -1378,27 +1377,24 @@ const generateForm = async (initialData = {}) => {
 
     const subBtn = document.createElement('button'); 
     subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold mt-2'; 
-    subBtn.textContent = editingRowId ? 'Update Entry' : 'Submit Entry'; 
+    subBtn.textContent = editingRowId ? 'Update Booking' : 'Confirm Booking'; 
     form.appendChild(subBtn); 
 
     form.addEventListener('submit', async (e) => { 
         e.preventDefault(); 
         const data = Object.fromEntries(new FormData(form)); 
         try { 
-            // 1. Save main record
             if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data }); 
-            else await api.post(`/custom-data/rows/${schemaId}`, { data }); 
-
-            // 2. SAFE RELATIONAL UPDATE: Fetch -> Merge -> Put
-            const resourceKey = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room|task/i));
-            const resourceId = data[resourceKey];
-            if (resourceId && !editingRowId) {
-                const res = await api.get(`/custom-data/rows/${resourceId}`);
-                const existingFields = res.data.data || res.data;
-                const updatedFields = { ...existingFields, available: false, status: 'unavailable' };
-                await api.put(`/custom-data/rows/${resourceId}`, { data: updatedFields });
+            else {
+                await api.post(`/custom-data/rows/${schemaId}`, { data }); 
+                const resourceKey = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room|task/i));
+                const resourceId = data[resourceKey];
+                if (resourceId) {
+                    const res = await api.get(`/custom-data/rows/${resourceId}`);
+                    const fields = res.data.data || res.data;
+                    await api.put(`/custom-data/rows/${resourceId}`, { data: { ...fields, available: false } });
+                }
             }
-
             editingRowId = null; await fetchAndRenderRows(); generateForm(); 
         } catch (err) { console.error('Submission failed:', err); } 
     }); 
