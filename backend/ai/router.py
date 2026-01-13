@@ -1214,20 +1214,22 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY: If the prompt implies a reservation, booking, or "claiming" system (e.g., "update the slot to unavailable"):
-            - Detection: Identify the row_id of the related resource (e.g., slot, time, item) from the submitted form data.
-            - The "Safety Fetch" (Step 1): The script MUST first call api.get(\/custom-data/rows/${RELATED_ROW_ID}`)`.
-            - The "Merge" (Step 2): Extract existing fields using const existing = res.data.row ? res.data.row.data : res.data.data;.
-            - The "Universal Update" (Step 3): Call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: { ...existing, available: false }, sitemember_id })`.
-            - UI Refresh: These calls MUST be await-ed before the script refreshes the UI or clears the form.
+    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol
+            If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
+            - Step 1: Resource Detection: The script MUST identify the row_id of the related resource (e.g., slot, time, item, room) from the submitted form data by using a pattern match like /time|slot|item|room|product/i.
+            - Step 2: Universal Safety Fetch: The script MUST first execute api.get(\/custom-data/rows/${RELATED_ROW_ID}`)` to retrieve the current state of that record.
+            - Step 3: Robust Data Extraction: To prevent script crashes, the script MUST extract the current fields using a triple-check path: const existing = res.data.data || (res.data.row && res.data.row.data) || res.data;.
+            - Step 4: Safe Merge & Universal Update: The script MUST call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: { ...existing, available: false }, sitemember_id }). By spreading ...existing`, you ensure that other fields (like Day or Start Time) are not wiped out.
+            - Step 5: Mandatory Await & UI Refresh: The script MUST await these API calls before calling fetchAndRenderRows() and generateForm(). This ensures the database update is finished before the UI tries to show the new "unavailable" state.
+            - Step 6: Fault Tolerance: Even if the side-effect (Step 4) fails, the script MUST still proceed to refresh the UI so the user's primary booking is visible and the form is cleared.
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use (UNIVERSAL DATABASE ACCESS):
-        -   **Fetch Paginated Rows: api.get(\/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`). Response: { "rows": [], "total": 0 }`.
+        -   **Fetch Paginated Rows: api.get(\/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`). The response is { "rows": [], "total": 0 }`.
         -   **Add New Row: api.post(\/custom-data/rows/${schemaId}`, { data, sitemember_id }). (Note: sitemember_id` can be null).
-        -   **Fetch ANY Row (CRITICAL for side-effects): api.get(\/custom-data/rows/${ANY_ROW_ID}`)`. Use this to get data from a different table before updating it.
-        -   **Update ANY Row (CRITICAL): api.put(\/custom-data/rows/${ANY_ROW_ID}`, { data, sitemember_id }). (Note: sitemember_id` can be null). This endpoint updates any record in any table.
-        -   **Delete Row: api.delete(\/custom-data/rows/${ROW\_ID}\`)` . If a  `sitemember\_id`exists, it MUST be added as a query parameter:`?sitemember\_id=${MEMBER_ID}`.
+        -   **Fetch ANY Row (CRITICAL for side-effects): api.get(\/custom-data/rows/${ANY_ROW_ID}`)`. Use this to retrieve full data from a different table (e.g., Slots) before performing an update.
+        -   **Update ANY Row (CRITICAL): api.put(\/custom-data/rows/${ANY_ROW_ID}`, { data, sitemember_id }). (Note: sitemember_id` can be null). This endpoint is universal and updates any record in any table provided you have the Row ID.
+        -   **Delete Row: api.delete(\/custom-data/rows/${ROW_ID}`). If a sitemember_idexists, it MUST be added as a query parameter:?sitemember_id=${MEMBER_ID}`. Do not add the parameter if the ID is null.
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
@@ -1264,162 +1266,118 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentPage = 0; const rowsPerPage = 20; let currentRows = [];
+  "script": "const schema = properties.schema_fields; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentRows = []; 
 
 const fetchAndRenderRows = async () => { 
-    if (properties.hideData) return; 
     try { 
-        const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); 
-        currentRows = res.data.rows;
-        
-        const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation');
-        const childField = schema.find(f => f.type === 'relation' && f !== parentField);
+        const res = await api.get(`/custom-data/rows/${schemaId}?limit=100`); 
+        currentRows = res.data.rows || [];
+        const parentField = schema.find(f => f.type === 'relation' && f.id === 'day');
+        const childField = schema.find(f => f.type === 'relation' && f.id === 'time');
 
-        const processedRows = currentRows.map(row => { 
-            const rowData = { ...row.data }; 
-            schema.forEach(field => { 
-                if (field.type === 'relation' && rowData[field.id]?.data) { 
-                    const relData = rowData[field.id].data; 
-                    const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true', 'false'].includes(v.toString().toLowerCase()));
-                    const isChild = (childField && field.id === childField.id);
-                    
-                    if (isChild && parentField && rowData[parentField.id]?.data) {
-                        const parentText = Object.values(rowData[parentField.id].data).filter(v => typeof v !== 'object')[0];
-                        rowData[field.id].display_label = values.filter(v => v.toString() !== parentText.toString()).join(' - ');
-                    } else {
-                        rowData[field.id].display_label = values[0] || '---';
-                    }
-                } 
-            }); 
-            return { ...row, data: rowData }; 
-        }); 
-
-        dataDisplay.innerHTML = ''; 
-        const template = container.querySelector('#displayTemplate').innerHTML; 
-        processedRows.forEach(row => { 
-            const div = document.createElement('div'); 
-            div.innerHTML = Mustache.render(template, { data: row.data, row_id: row.row_id }); 
-            dataDisplay.appendChild(div); 
-        }); 
-    } catch (err) { console.error('Fetch error:', err); } 
+        dataDisplay.innerHTML = '';
+        currentRows.forEach(row => {
+            const rowData = { ...row.data };
+            schema.forEach(field => {
+                if (field.type === 'relation' && rowData[field.id]?.data) {
+                    const relData = rowData[field.id].data;
+                    const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true','false'].includes(String(v)));
+                    if (field === childField && parentField && rowData[parentField.id]?.data) {
+                        const pTxt = Object.values(rowData[parentField.id].data)[0];
+                        rowData[field.id].display_label = values.filter(v => String(v) !== String(pTxt)).join(' - ');
+                    } else { rowData[field.id].display_label = values[0] || '---'; }
+                }
+            });
+            const div = document.createElement('div');
+            div.innerHTML = Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: rowData, row_id: row.row_id });
+            dataDisplay.appendChild(div);
+        });
+    } catch (err) { console.error('Refresh error:', err); }
 };
 
-const generateForm = async (initialData = {}) => { 
-    formContainer.style.display = 'block'; 
-    formContainer.innerHTML = ''; 
-    const form = document.createElement('form'); 
-    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; 
-    const selects = {}; 
-    const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation'); 
-    const childField = schema.find(f => f.type === 'relation' && f !== parentField); 
+const generateForm = async (initialData = {}) => {
+    formContainer.innerHTML = '';
+    formContainer.classList.remove('hidden');
+    const form = document.createElement('form');
+    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const selects = {};
+    const parentField = schema.find(f => f.type === 'relation' && f.id === 'day');
+    const childField = schema.find(f => f.type === 'relation' && f.id === 'time');
 
-    for (const field of schema) { 
-        const wrapper = document.createElement('div'); 
-        const label = document.createElement('label'); 
-        label.className = 'block text-sm font-semibold text-gray-700 mb-1'; 
-        label.textContent = field.label; 
-        wrapper.appendChild(label); 
-
-        if (field.type === 'relation') { 
-            const sel = document.createElement('select'); 
-            sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg'; sel.required = true;
-            selects[field.id] = sel; 
-            sel.innerHTML = `<option value=''>Select ${field.label}...</option>`; 
-            
-            const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows; 
-            if (field === parentField) { 
+    for (const field of schema) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `<label class='block text-sm font-semibold mb-1 text-gray-700'>${field.label}</label>`;
+        if (field.type === 'relation') {
+            const sel = document.createElement('select');
+            sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg border-gray-300';
+            sel.required = true;
+            selects[field.id] = sel;
+            const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows;
+            if (field === parentField) {
                 const seen = new Set();
-                relRows.forEach(r => { 
+                relRows.forEach(r => {
                     const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0];
                     if (!seen.has(txt)) {
-                        const opt = document.createElement('option'); 
-                        opt.value = r.row_id; opt.textContent = txt; 
+                        const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = txt;
                         sel.appendChild(opt); seen.add(txt);
                     }
-                }); 
-                if (initialData[field.id]) sel.value = initialData[field.id];
-            } else { 
-                sel.dataset.rows = JSON.stringify(relRows); 
-                if (initialData[parentField?.id]) {
-                    const pRow = relRows.find(r => r.row_id === initialData[parentField.id]);
-                    const pText = pRow ? Object.values(pRow.data).filter(v => typeof v !== 'object')[0] : '';
-                    relRows.filter(r => Object.values(r.data).includes(pText)).forEach(r => {
-                        const opt = document.createElement('option');
-                        opt.value = r.row_id;
-                        opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText && !['true', 'false'].includes(v.toString().toLowerCase())).join(' - ');
-                        sel.appendChild(opt);
-                    });
-                    sel.value = initialData[field.id] || '';
-                }
-            } 
-            wrapper.appendChild(sel); 
-        } else { 
-            const input = document.createElement('input'); 
-            input.name = field.id; input.value = initialData[field.id] || ''; 
-            input.className = 'w-full p-2 border rounded-lg'; wrapper.appendChild(input); 
-        } 
-        form.appendChild(wrapper); 
-    } 
-
-    if (parentField && childField && selects[parentField.id] && selects[childField.id]) { 
-        const pSel = selects[parentField.id]; const cSel = selects[childField.id]; 
-        const cRows = JSON.parse(cSel.dataset.rows); 
-        pSel.addEventListener('change', () => { 
-            const pText = pSel.options[pSel.selectedIndex].textContent; 
-            cSel.innerHTML = '<option value=\"\">Select...</option>'; 
-            cRows.filter(r => Object.values(r.data).includes(pText) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => { 
-                const opt = document.createElement('option'); 
-                opt.value = r.row_id; 
-                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText && !['true', 'false'].includes(v.toString().toLowerCase())).join(' - '); 
-                cSel.appendChild(opt); 
-            }); 
-        }); 
-    } 
-
-    const subBtn = document.createElement('button'); 
-    subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold mt-2'; 
-    subBtn.textContent = editingRowId ? 'Update Booking' : 'Confirm Booking'; 
-    form.appendChild(subBtn); 
-
-    form.addEventListener('submit', async (e) => { 
-    e.preventDefault(); 
-    const formData = new FormData(form);
-    const data = Object.fromEntries(formData); 
-    const sitemember_id = properties.sitemember_id || null; // Parameters you asked for
-
-    try { 
-        // 1. SAVE THE BOOKING (Primary Table)
-        if (editingRowId) {
-            await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
+                });
+            } else { sel.dataset.rows = JSON.stringify(relRows); }
+            wrapper.appendChild(sel);
         } else {
-            await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
+            const input = document.createElement('input');
+            input.name = field.id; input.value = initialData[field.id] || '';
+            input.className = 'w-full p-2 border rounded-lg border-gray-300';
+            wrapper.appendChild(input);
         }
+        form.appendChild(wrapper);
+    }
 
-        // 2. UNIVERSAL SIDE-EFFECT (The "Slots" Table)
-        // Find the field that sounds like a resource/slot
-        const resourceField = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room|task/i));
-        const resourceId = data[resourceField];
-
-        if (resourceId && !editingRowId) {
-            // STEP A: Fetch using the UNIVERSAL GET
-            const res = await api.get(`/custom-data/rows/${resourceId}`);
-            const existing = res.data.row ? res.data.row.data : res.data.data;
-            
-            // STEP B: Update using the UNIVERSAL PUT with full data merge
-            await api.put(`/custom-data/rows/${resourceId}`, { 
-                data: { ...existing, available: false }, 
-                sitemember_id 
+    if (parentField && childField) {
+        selects[parentField.id].addEventListener('change', () => {
+            const pTxt = selects[parentField.id].options[selects[parentField.id].selectedIndex].textContent;
+            const cRows = JSON.parse(selects[childField.id].dataset.rows);
+            selects[childField.id].innerHTML = '<option value=\"\">Select Time...</option>';
+            cRows.filter(r => Object.values(r.data).includes(pTxt) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => {
+                const opt = document.createElement('option'); opt.value = r.row_id;
+                opt.textContent = Object.values(r.data).filter(v => String(v) !== pTxt && !['true','false'].includes(String(v))).join(' - ');
+                selects[childField.id].appendChild(opt);
             });
-        }
+        });
+    }
 
-        // 3. UI Cleanup
-        editingRowId = null; 
-        await fetchAndRenderRows(); 
-        generateForm(); 
-    } catch (err) { console.error('Submission error:', err); } 
-});
-    formContainer.appendChild(form); 
-}; 
+    const btn = document.createElement('button');
+    btn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors';
+    btn.textContent = editingRowId ? 'Update Booking' : 'Confirm Booking';
+    form.appendChild(btn);
+
+    form.addEventListener('submit', async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form));
+        const sitemember_id = properties.sitemember_id || null;
+        try {
+            if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
+            else {
+                await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
+                // SIDE-EFFECT: Update the Slots table row
+                const slotId = data[childField?.id];
+                if (slotId) {
+                    const res = await api.get(`/custom-data/rows/${slotId}`);
+                    // Triple-check the data structure to prevent wipes
+                    const existing = res.data.data || (res.data.row && res.data.row.data) || res.data;
+                    await api.put(`/custom-data/rows/${slotId}`, { 
+                        data: { ...existing, available: false }, 
+                        sitemember_id 
+                    });
+                }
+            }
+        } catch (err) { console.error('Submission failed:', err); }
+        editingRowId = null;
+        await fetchAndRenderRows();
+        generateForm();
+    });
+    formContainer.appendChild(form);
+};
 
 dataDisplay.addEventListener('click', (e) => {
     const editBtn = e.target.closest('.edit-btn');
@@ -1428,14 +1386,12 @@ dataDisplay.addEventListener('click', (e) => {
         const row = currentRows.find(r => r.row_id === editingRowId);
         if (row) generateForm(row.data);
     }
-    const delBtn = e.target.closest('.delete-btn');
-    if (delBtn) {
-        if (confirm('Delete?')) api.delete(`/custom-data/rows/${delBtn.dataset.rowId}`).then(() => fetchAndRenderRows());
+    if (e.target.closest('.delete-btn')) {
+        if (confirm('Delete?')) api.delete(`/custom-data/rows/${e.target.closest('.delete-btn').dataset.rowId}`).then(() => fetchAndRenderRows());
     }
 });
-
-addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); 
-generateForm(); if (!properties.hideData) fetchAndRenderRows();"
+addButton.addEventListener('click', () => { editingRowId = null; generateForm(); });
+generateForm(); fetchAndRenderRows();"
 }
 """.strip()
 
