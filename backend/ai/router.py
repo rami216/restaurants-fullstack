@@ -1225,11 +1225,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use (UNIVERSAL DATABASE ACCESS):
-        -   **Fetch Paginated Rows: api.get(\/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`). The response is { "rows": [], "total": 0 }`.
-        -   **Add New Row: api.post(\/custom-data/rows/${schemaId}`, { data, sitemember_id }). (Note: sitemember_id` can be null).
-        -   **Fetch ANY Row (CRITICAL for side-effects): api.get(\/custom-data/rows/${ANY_ROW_ID}`)`. Use this to retrieve full data from a different table (e.g., Slots) before performing an update.
-        -   **Update ANY Row (CRITICAL): api.put(\/custom-data/rows/${ANY_ROW_ID}`, { data, sitemember_id }). (Note: sitemember_id` can be null). This endpoint is universal and updates any record in any table provided you have the Row ID.
-        -   **Delete Row: api.delete(\/custom-data/rows/${ROW_ID}`). If a sitemember_idexists, it MUST be added as a query parameter:?sitemember_id=${MEMBER_ID}`. Do not add the parameter if the ID is null.
+        -   Fetch Paginated Rows: api.get(\/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`). The response is { "rows": [], "total": 0 }`.
+        -   Add New Row: api.post(\/custom-data/rows/${schemaId}`, { data, sitemember_id }). (Note: sitemember_id` can be null).
+        -   Fetch ANY Row (CRITICAL for cross-table updates): api.get(\/custom-data/rows/${ANY_ROW_ID}`)`. Use this to get data from a different table (like Slots) before updating it.
+        -   Update ANY Row (CRITICAL): api.put(\/custom-data/rows/${ANY_ROW_ID}`, { data, sitemember_id }). (Note: sitemember_idcan be null). This endpoint is **Universal**; it updates any record in any table using only therow_id`.
+        -   Delete Row: api.delete(\/custom-data/rows/${ROW_ID}`). If a sitemember_idexists, it MUST be added as a query parameter:?sitemember_id=${MEMBER_ID}`. Do not add the parameter if the ID is null.
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
