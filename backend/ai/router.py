@@ -1214,13 +1214,12 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   SAFE RELATIONAL UPDATES (DATA INTEGRITY): If the prompt implies a state change (e.g., "unavailable after booking"):
-        - The script MUST identify the row_id of the resource (e.g., the Slot) from the submitted data.
-        - It MUST first perform api.get('/custom-data/rows/' + ID) to retrieve the current record.
-        - CRITICAL MERGE LOGIC: To prevent wiping fields, the script MUST extract current fields using const fields = response.data.data || response.data;.
-        - It MUST merge the status: const merged = { ...fields, available: false, status: 'booked' };.
-        - It MUST then api.put('/custom-data/rows/' + ID, { data: merged }) to ensure all existing data is preserved.
-        
+    -   RELATIONAL INTELLIGENCE (AUTOMATIC SIDE-EFFECTS): If the user's prompt implies a reservation, booking, or claiming system:
+            - Auto-Detect Resource: The script MUST identify which relational field represents the unique "resource" (e.g., the specific Time Slot, Room, or Product).
+            - ID Mapping: It MUST ensure the <select> value for this field is the row_id from the related schema.
+            - The "Safety Update" Pattern: Upon submission, the script MUST automatically fetch the related record, merge the status change (like available: false), and save it back using the row_id found in the form data.
+            - Merge Requirement: To prevent data loss (wiping Day/Time), the script MUST use the pattern const merged = { ...existingData, available: false }.
+            
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
         -   **Fetch Paginated Rows:** `api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`)`. The response is `{ "rows": [], "total": 0 }`.
@@ -1381,23 +1380,35 @@ const generateForm = async (initialData = {}) => {
     form.appendChild(subBtn); 
 
     form.addEventListener('submit', async (e) => { 
-        e.preventDefault(); 
-        const data = Object.fromEntries(new FormData(form)); 
-        try { 
-            if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data }); 
-            else {
-                await api.post(`/custom-data/rows/${schemaId}`, { data }); 
-                const resourceKey = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room|task/i));
-                const resourceId = data[resourceKey];
-                if (resourceId) {
-                    const res = await api.get(`/custom-data/rows/${resourceId}`);
-                    const fields = res.data.data || res.data;
-                    await api.put(`/custom-data/rows/${resourceId}`, { data: { ...fields, available: false } });
-                }
-            }
-            editingRowId = null; await fetchAndRenderRows(); generateForm(); 
-        } catch (err) { console.error('Submission failed:', err); } 
-    }); 
+    e.preventDefault(); 
+    const formData = new FormData(form);
+    const data = Object.fromEntries(formData); 
+    
+    try { 
+        // 1. Create the Booking entry
+        await api.post(`/custom-data/rows/${schemaId}`, { data }); 
+
+        // 2. SMART DETECTION: Find the Slot ID automatically
+        // The script looks for the field that holds the unique Slot/Time ID
+        const slotFieldId = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room/i));
+        const slotRowId = data[slotFieldId];
+
+        if (slotRowId) {
+            // STEP A: Fetch current Slot data so we don't wipe it
+            const res = await api.get(`/custom-data/rows/${slotRowId}`);
+            const currentSlotData = res.data.data || res.data;
+            
+            // STEP B: Update only the 'available' status while keeping everything else
+            await api.put(`/custom-data/rows/${slotRowId}`, { 
+                data: { ...currentSlotData, available: false } 
+            });
+        }
+
+        // Refresh UI instantly
+        await fetchAndRenderRows(); 
+        generateForm(); 
+    } catch (err) { console.error('Auto-update failed:', err); } 
+});
     formContainer.appendChild(form); 
 }; 
 
