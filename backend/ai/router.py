@@ -1214,11 +1214,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   SAFE RELATIONAL UPDATES (DATA LOSS PREVENTION): If the prompt implies a state change (e.g., "unavailable after booking"):
-        - The script MUST find the row_id of the related resource.
-        - It MUST first perform api.get('/custom-data/rows/' + RELATED_ROW_ID) to retrieve all existing fields.
-        - It MUST merge the old data with the new status: const mergedData = { ...oldData, available: false };.
-        - It MUST then perform api.put('/custom-data/rows/' + RELATED_ROW_ID, { data: mergedData }) to save the update without wiping other fields.
+    -   UNIVERSAL RELATIONAL UPDATES (STATE CHANGE): The script MUST identify if the user intent implies a state change or resource consumption (e.g., "booking", "claiming", "reserving", "purchasing", "assigning").
+        - Step 1: Identify Target: The script MUST find the row_id of the "resource" field (e.g., time, slot, room, item, task) using the pattern match /time|slot|item|room|product|task/i.
+        - Step 2: Fetch Current State: The script MUST call api.get(\/custom-data/rows/${RELATED_ROW_ID}`)` to retrieve the current full data object.
+        - Step 3: Safe Merge: It MUST merge the update (e.g., { available: false } or { status: "taken" }) with the existing fields: const mergedData = { ...res.data.data, available: false };.
+        - Step 4: Save Full Object: It MUST call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: mergedData })` to finalize the update without wiping existing data.
         
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use:
@@ -1262,7 +1262,164 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentPage = 0; const rowsPerPage = 20; let currentRows = []; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); currentRows = res.data.rows; const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation'); const childField = schema.find(f => f.type === 'relation' && f !== parentField); const processedRows = currentRows.map(row => { const rowData = { ...row.data }; schema.forEach(field => { if (field.type === 'relation' && rowData[field.id]?.data) { const relData = rowData[field.id].data; const values = Object.values(relData).filter(v => typeof v !== 'object'); const isChild = (childField && field.id === childField.id); if (isChild && parentField && rowData[parentField.id]?.data) { const pText = Object.values(rowData[parentField.id].data).filter(v => typeof v !== 'object')[0]; rowData[field.id].display_label = values.filter(v => v.toString() !== pText).join(' - '); } else { rowData[field.id].display_label = values[0]; } } }); return { ...row, data: rowData }; }); dataDisplay.innerHTML = ''; const template = container.querySelector('#displayTemplate').innerHTML; processedRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(template, { data: row.data, row_id: row.row_id }); dataDisplay.appendChild(div); }); } catch (err) { console.error('Fetch error:', err); } }; const generateForm = async (initialData = {}) => { formContainer.style.display = 'block'; formContainer.classList.remove('hidden'); formContainer.innerHTML = ''; const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation'); const childField = schema.find(f => f.type === 'relation' && f !== parentField); for (const field of schema) { const wrapper = document.createElement('div'); const label = document.createElement('label'); label.className = 'block text-sm font-semibold text-gray-700 mb-1'; label.textContent = field.label; wrapper.appendChild(label); if (field.type === 'relation') { const sel = document.createElement('select'); sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg'; sel.required = true; selects[field.id] = sel; sel.innerHTML = `<option value=''>Select ${field.label}...</option>`; const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows; if (field === parentField) { const seen = new Set(); relRows.forEach(r => { const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0]; if (!seen.has(txt)) { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = txt; sel.appendChild(opt); seen.add(txt); } }); if (initialData[field.id]) sel.value = initialData[field.id]; } else { sel.dataset.rows = JSON.stringify(relRows); if (initialData[parentField?.id]) { const pRow = relRows.find(r => r.row_id === initialData[parentField.id]); const pText = pRow ? Object.values(pRow.data).filter(v => typeof v !== 'object')[0] : ''; relRows.filter(r => Object.values(r.data).includes(pText)).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = Object.values(r.data).filter(v => v.toString() !== pText).join(' - '); sel.appendChild(opt); }); sel.value = initialData[field.id] || ''; } } wrapper.appendChild(sel); } else { const input = document.createElement('input'); input.name = field.id; input.value = initialData[field.id] || ''; input.className = 'w-full p-2 border rounded-lg'; wrapper.appendChild(input); } form.appendChild(wrapper); } if (parentField && childField && selects[parentField.id] && selects[childField.id]) { const pSel = selects[parentField.id]; const cSel = selects[childField.id]; const cRows = JSON.parse(cSel.dataset.rows); pSel.addEventListener('change', () => { const pText = pSel.options[pSel.selectedIndex].textContent; cSel.innerHTML = '<option value=\"\">Select...</option>'; cRows.filter(r => Object.values(r.data).includes(pText) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText).join(' - '); cSel.appendChild(opt); }); }); } const subBtn = document.createElement('button'); subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold mt-2'; subBtn.textContent = editingRowId ? 'Update' : 'Submit'; form.appendChild(subBtn); form.addEventListener('submit', async (e) => { e.preventDefault(); const data = Object.fromEntries(new FormData(form)); try { if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data }); else { await api.post(`/custom-data/rows/${schemaId}`, { data }); const childId = data[childField?.id]; if (childId) { const relRes = await api.get(`/custom-data/rows/${childId}`); const mergedData = { ...relRes.data.data, available: false }; await api.put(`/custom-data/rows/${childId}`, { data: mergedData }); } } editingRowId = null; fetchAndRenderRows(); generateForm(); } catch (err) { console.error('Save error:', err); } }); formContainer.appendChild(form); }; dataDisplay.addEventListener('click', (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const row = currentRows.find(r => r.row_id === editingRowId); if (row) generateForm(row.data); } const delBtn = e.target.closest('.delete-btn'); if (delBtn) { if (confirm('Delete?')) api.delete(`/custom-data/rows/${delBtn.dataset.rowId}`).then(() => fetchAndRenderRows()); } }); addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); generateForm(); if (!properties.hideData) fetchAndRenderRows();"
+  "script": "const schema = properties.schema_fields; const allSchemas = properties.all_schemas; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentPage = 0; const rowsPerPage = 20; let currentRows = [];
+
+const fetchAndRenderRows = async () => { 
+    if (properties.hideData) return; 
+    try { 
+        const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); 
+        currentRows = res.data.rows;
+        
+        // Identify Roles Dynamically
+        const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation');
+        const childField = schema.find(f => f.type === 'relation' && f !== parentField);
+
+        const processedRows = currentRows.map(row => { 
+            const rowData = { ...row.data }; 
+            schema.forEach(field => { 
+                if (field.type === 'relation' && rowData[field.id]?.data) { 
+                    const relData = rowData[field.id].data; 
+                    const values = Object.values(relData).filter(v => typeof v !== 'object' && v !== null);
+                    const isChild = (childField && field.id === childField.id);
+                    
+                    if (isChild && parentField && rowData[parentField.id]?.data) {
+                        const parentText = Object.values(rowData[parentField.id].data).filter(v => typeof v !== 'object')[0];
+                        rowData[field.id].display_label = values.filter(v => v.toString() !== parentText.toString()).join(' - ');
+                    } else {
+                        rowData[field.id].display_label = values[0] || '---';
+                    }
+                } 
+            }); 
+            return { ...row, data: rowData }; 
+        }); 
+
+        dataDisplay.innerHTML = ''; 
+        const template = container.querySelector('#displayTemplate').innerHTML; 
+        processedRows.forEach(row => { 
+            const div = document.createElement('div'); 
+            div.innerHTML = Mustache.render(template, { data: row.data, row_id: row.row_id }); 
+            dataDisplay.appendChild(div); 
+        }); 
+    } catch (err) { console.error('Fetch error:', err); } 
+};
+
+const generateForm = async (initialData = {}) => { 
+    formContainer.style.display = 'block'; 
+    formContainer.innerHTML = ''; 
+    const form = document.createElement('form'); 
+    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; 
+    const selects = {}; 
+    const parentField = schema.find(f => f.type === 'relation' && f.id.match(/day|brand|category|parent/i)) || schema.find(f => f.type === 'relation'); 
+    const childField = schema.find(f => f.type === 'relation' && f !== parentField); 
+
+    for (const field of schema) { 
+        const wrapper = document.createElement('div'); 
+        const label = document.createElement('label'); 
+        label.className = 'block text-sm font-semibold text-gray-700 mb-1'; 
+        label.textContent = field.label; 
+        wrapper.appendChild(label); 
+
+        if (field.type === 'relation') { 
+            const sel = document.createElement('select'); 
+            sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg'; sel.required = true;
+            selects[field.id] = sel; 
+            sel.innerHTML = `<option value=''>Select ${field.label}...</option>`; 
+            
+            const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows; 
+            if (field === parentField) { 
+                const seen = new Set();
+                relRows.forEach(r => { 
+                    const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0];
+                    if (!seen.has(txt)) {
+                        const opt = document.createElement('option'); 
+                        opt.value = r.row_id; opt.textContent = txt; 
+                        sel.appendChild(opt); seen.add(txt);
+                    }
+                }); 
+                if (initialData[field.id]) sel.value = initialData[field.id];
+            } else { 
+                sel.dataset.rows = JSON.stringify(relRows); 
+                // Pre-populate child if editing
+                if (initialData[parentField?.id]) {
+                    const pRow = relRows.find(r => r.row_id === initialData[parentField.id]);
+                    const pText = pRow ? Object.values(pRow.data).filter(v => typeof v !== 'object')[0] : '';
+                    relRows.filter(r => Object.values(r.data).includes(pText)).forEach(r => {
+                        const opt = document.createElement('option');
+                        opt.value = r.row_id;
+                        opt.textContent = Object.values(r.data).filter(v => v.toString() !== pText).join(' - ');
+                        sel.appendChild(opt);
+                    });
+                    sel.value = initialData[field.id] || '';
+                }
+            } 
+            wrapper.appendChild(sel); 
+        } else { 
+            const input = document.createElement('input'); 
+            input.name = field.id; input.value = initialData[field.id] || ''; 
+            input.className = 'w-full p-2 border rounded-lg'; wrapper.appendChild(input); 
+        } 
+        form.appendChild(wrapper); 
+    } 
+
+    if (parentField && childField && selects[parentField.id] && selects[childField.id]) { 
+        const pSel = selects[parentField.id]; const cSel = selects[childField.id]; 
+        const cRows = JSON.parse(cSel.dataset.rows); 
+        pSel.addEventListener('change', () => { 
+            const pText = pSel.options[pSel.selectedIndex].textContent; 
+            cSel.innerHTML = '<option value=\"\">Select...</option>'; 
+            cRows.filter(r => Object.values(r.data).includes(pText) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => { 
+                const opt = document.createElement('option'); 
+                opt.value = r.row_id; 
+                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && v.toString() !== pText).join(' - '); 
+                cSel.appendChild(opt); 
+            }); 
+        }); 
+    } 
+
+    const subBtn = document.createElement('button'); 
+    subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold mt-2'; 
+    subBtn.textContent = editingRowId ? 'Update Entry' : 'Submit Entry'; 
+    form.appendChild(subBtn); 
+
+    form.addEventListener('submit', async (e) => { 
+        e.preventDefault(); 
+        const data = Object.fromEntries(new FormData(form)); 
+        try { 
+            // 1. Save main record
+            if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data }); 
+            else await api.post(`/custom-data/rows/${schemaId}`, { data }); 
+
+            // 2. SAFE RELATIONAL UPDATE: Fetch -> Merge -> Put
+            const resourceKey = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room|task/i));
+            const resourceId = data[resourceKey];
+            if (resourceId && !editingRowId) {
+                const res = await api.get(`/custom-data/rows/${resourceId}`);
+                const existingFields = res.data.data || res.data;
+                const updatedFields = { ...existingFields, available: false, status: 'unavailable' };
+                await api.put(`/custom-data/rows/${resourceId}`, { data: updatedFields });
+            }
+
+            editingRowId = null; await fetchAndRenderRows(); generateForm(); 
+        } catch (err) { console.error('Submission failed:', err); } 
+    }); 
+    formContainer.appendChild(form); 
+}; 
+
+dataDisplay.addEventListener('click', (e) => {
+    const editBtn = e.target.closest('.edit-btn');
+    if (editBtn) {
+        editingRowId = editBtn.dataset.rowId;
+        const row = currentRows.find(r => r.row_id === editingRowId);
+        if (row) generateForm(row.data);
+    }
+    const delBtn = e.target.closest('.delete-btn');
+    if (delBtn) {
+        if (confirm('Delete?')) api.delete(`/custom-data/rows/${delBtn.dataset.rowId}`).then(() => fetchAndRenderRows());
+    }
+});
+
+addButton.addEventListener('click', () => { editingRowId = null; generateForm(); }); 
+generateForm(); if (!properties.hideData) fetchAndRenderRows();"
 }
 """.strip()
 
