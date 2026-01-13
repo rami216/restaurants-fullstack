@@ -1214,18 +1214,20 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   RELATIONAL INTELLIGENCE (AUTOMATIC SIDE-EFFECTS): If the user's prompt implies a reservation, booking, or claiming system:
-            - Auto-Detect Resource: The script MUST identify which relational field represents the unique "resource" (e.g., the specific Time Slot, Room, or Product).
-            - ID Mapping: It MUST ensure the <select> value for this field is the row_id from the related schema.
-            - The "Safety Update" Pattern: Upon submission, the script MUST automatically fetch the related record, merge the status change (like available: false), and save it back using the row_id found in the form data.
-            - Merge Requirement: To prevent data loss (wiping Day/Time), the script MUST use the pattern const merged = { ...existingData, available: false }.
+    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY: If the prompt implies a reservation, booking, or "claiming" system (e.g., "update the slot to unavailable"):
+            - Detection: Identify the row_id of the related resource (e.g., slot, time, item) from the submitted form data.
+            - The "Safety Fetch" (Step 1): The script MUST first call api.get(\/custom-data/rows/${RELATED_ROW_ID}`)`.
+            - The "Merge" (Step 2): Extract existing fields using const existing = res.data.row ? res.data.row.data : res.data.data;.
+            - The "Universal Update" (Step 3): Call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: { ...existing, available: false }, sitemember_id })`.
+            - UI Refresh: These calls MUST be await-ed before the script refreshes the UI or clears the form.
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
-    -   API Calls to Use:
-        -   **Fetch Paginated Rows:** `api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`)`. The response is `{ "rows": [], "total": 0 }`.
-        -   **Add New Row:** `api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Update Row:** `api.put(`/custom-data/rows/{ROW_ID}`, { data, sitemember_id })` (where `sitemember_id` can be null)
-        -   **Delete Row:** `api.delete(`/custom-data/rows/{ROW_ID}`)`. If a `sitemember_id` exists, it MUST be added as a query parameter like `?sitemember_id={MEMBER_ID}`. Do not add the parameter at all if the ID is null.
+    -   API Calls to Use (UNIVERSAL DATABASE ACCESS):
+        -   **Fetch Paginated Rows: api.get(\/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`). Response: { "rows": [], "total": 0 }`.
+        -   **Add New Row: api.post(\/custom-data/rows/${schemaId}`, { data, sitemember_id }). (Note: sitemember_id` can be null).
+        -   **Fetch ANY Row (CRITICAL for side-effects): api.get(\/custom-data/rows/${ANY_ROW_ID}`)`. Use this to get data from a different table before updating it.
+        -   **Update ANY Row (CRITICAL): api.put(\/custom-data/rows/${ANY_ROW_ID}`, { data, sitemember_id }). (Note: sitemember_id` can be null). This endpoint updates any record in any table.
+        -   **Delete Row: api.delete(\/custom-data/rows/${ROW\_ID}\`)` . If a  `sitemember\_id`exists, it MUST be added as a query parameter:`?sitemember\_id=${MEMBER_ID}`.
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
@@ -1383,31 +1385,38 @@ const generateForm = async (initialData = {}) => {
     e.preventDefault(); 
     const formData = new FormData(form);
     const data = Object.fromEntries(formData); 
-    
+    const sitemember_id = properties.sitemember_id || null; // Parameters you asked for
+
     try { 
-        // 1. Create the Booking entry
-        await api.post(`/custom-data/rows/${schemaId}`, { data }); 
+        // 1. SAVE THE BOOKING (Primary Table)
+        if (editingRowId) {
+            await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
+        } else {
+            await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
+        }
 
-        // 2. SMART DETECTION: Find the Slot ID automatically
-        // The script looks for the field that holds the unique Slot/Time ID
-        const slotFieldId = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room/i));
-        const slotRowId = data[slotFieldId];
+        // 2. UNIVERSAL SIDE-EFFECT (The "Slots" Table)
+        // Find the field that sounds like a resource/slot
+        const resourceField = Object.keys(data).find(k => k.toLowerCase().match(/time|slot|item|room|task/i));
+        const resourceId = data[resourceField];
 
-        if (slotRowId) {
-            // STEP A: Fetch current Slot data so we don't wipe it
-            const res = await api.get(`/custom-data/rows/${slotRowId}`);
-            const currentSlotData = res.data.data || res.data;
+        if (resourceId && !editingRowId) {
+            // STEP A: Fetch using the UNIVERSAL GET
+            const res = await api.get(`/custom-data/rows/${resourceId}`);
+            const existing = res.data.row ? res.data.row.data : res.data.data;
             
-            // STEP B: Update only the 'available' status while keeping everything else
-            await api.put(`/custom-data/rows/${slotRowId}`, { 
-                data: { ...currentSlotData, available: false } 
+            // STEP B: Update using the UNIVERSAL PUT with full data merge
+            await api.put(`/custom-data/rows/${resourceId}`, { 
+                data: { ...existing, available: false }, 
+                sitemember_id 
             });
         }
 
-        // Refresh UI instantly
+        // 3. UI Cleanup
+        editingRowId = null; 
         await fetchAndRenderRows(); 
         generateForm(); 
-    } catch (err) { console.error('Auto-update failed:', err); } 
+    } catch (err) { console.error('Submission error:', err); } 
 });
     formContainer.appendChild(form); 
 }; 
