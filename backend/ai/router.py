@@ -1216,20 +1216,29 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
     -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol:
             If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
-            - Step 1: Resource Detection: Identify the row_id of the related resource from the form data.
-            - Step 2: Schema Identification: The script MUST find the related_schema_id for that resource by looking it up in properties.schema_fields.
-            - Step 3: Target Fetching: The script MUST execute api.get(\/custom-data/rows/${RELATED_ROW_ID}`)`.
-            - Step 4: Data Merge & Update: Extract existing fields using the triple-check path and call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: { ...existing, available: false }, sitemember_id })`.
+            -  Step 1: Resource Detection: Identify the row_id of the related resource from the form data.
+            -  Step 2: Schema Identification: The script MUST find the related_schema_id for that resource by looking it up in properties.schema_fields.
+            -  Step 3: Target Fetching: The script MUST execute `await api.get('/custom-data/rows/' + RELATED_ROW_ID)`.
+            -  Step 4: Data Extraction & Update: 
+                * Extract the existing data using these fallback paths in order:
+                    1. res.data.data
+                    2. res.data.row?.data
+                    3. res.data
+                * Merge the update: `const updatedData = { ...existingData, available: false }` (or whatever field needs updating)
+                * Call `await api.put('/custom-data/rows/' + RELATED_ROW_ID, { data: updatedData, sitemember_id })`.
             - UI Refresh: All calls MUST be await-ed before refreshing the UI.
-            
+            - ERROR HANDLING: Wrap the cross-table update in try-catch and log errors without breaking the main flow.
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use (UNIVERSAL DATABASE ACCESS):
-        -   Fetch Paginated Rows: api.get(\/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`). The response is { "rows": [], "total": 0 }`.
-        -   Add New Row: api.post(\/custom-data/rows/${schemaId}`, { data, sitemember_id }). (Note: sitemember_id` can be null).
-        -   Fetch ANY Row (CRITICAL for cross-table updates): api.get(\/custom-data/rows/${ANY_ROW_ID}`)`. Use this to get data from a different table (like Slots) before updating it.
-        -   Update ANY Row (CRITICAL): api.put(\/custom-data/rows/${ANY_ROW_ID}`, { data, sitemember_id }). (Note: sitemember_idcan be null). This endpoint is **Universal**; it updates any record in any table using only therow_id`.
-        -   Delete Row: api.delete(\/custom-data/rows/${ROW_ID}`). If a sitemember_idexists, it MUST be added as a query parameter:?sitemember_id=${MEMBER_ID}`. Do not add the parameter if the ID is null.
+        -   Fetch Paginated Rows: api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage). The response is { "rows": [], "total": 0 }.
+        -   Fetch ALL Rows (for dropdowns): api.get('/custom-data/rows/' + schemaId + '?limit=1000'). Returns { "rows": [], "total": 0 }.
+        -   Add New Row: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }). (Note: sitemember_id can be null).
+        -   Fetch ANY Row (CRITICAL for cross-table updates): api.get('/custom-data/rows/' + ANY_ROW_ID). 
+            Response structure variations: { data: {...}, row_id: "..." } OR { row: { data: {...}, row_id: "..." } }.
+            Always extract using: const rowData = res.data?.data || res.data?.row?.data || res.data || {};
+        -   Update ANY Row (CRITICAL): api.put('/custom-data/rows/' + ANY_ROW_ID, { data, sitemember_id }). (Note: sitemember_id can be null). This endpoint is **Universal**; it updates any record in any table using only the row_id.
+        -   Delete Row: api.delete('/custom-data/rows/' + ROW_ID + (sitemember_id ? '?sitemember_id=' + sitemember_id : '')). Only add the sitemember_id parameter if it exists and is not null.
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
@@ -1266,133 +1275,341 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentRows = []; 
+  "script": "const schema = properties.schema_fields || []; 
+const dataDisplay = container.querySelector('.data-display'); 
+const formContainer = container.querySelector('.form-container'); 
+const paginationControls = container.querySelector('.pagination-controls');
+const addButton = container.querySelector('.add-new-btn'); 
+const displayTemplate = container.querySelector('#displayTemplate');
 
-const fetchAndRenderRows = async () => { 
-    try { 
-        const res = await api.get(`/custom-data/rows/${schemaId}?limit=100`); 
-        currentRows = res.data.rows || [];
-        const parentField = schema.find(f => f.type === 'relation' && f.id === 'day');
-        const childField = schema.find(f => f.type === 'relation' && f.id === 'time');
+let editingRowId = null; 
+let currentRows = []; 
+let currentPage = 0;
+let rowsPerPage = 20;
+let totalRows = 0;
+
+const identifyHierarchy = () => {
+    const relations = schema.filter(f => f.type === 'relation');
+    if (relations.length < 2) return { parent: null, child: null };
+    
+    const parent = relations[0];
+    const child = relations[1];
+    return { parent, child };
+};
+
+const { parent: parentField, child: childField } = identifyHierarchy();
+
+const fetchAndRenderRows = async () => {
+    if (properties.hideData) return;
+    
+    try {
+        const skip = currentPage * rowsPerPage;
+        const url = '/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage;
+        const res = await api.get(url);
+        currentRows = res.data?.rows || res.rows || [];
+        totalRows = res.data?.total || res.total || 0;
 
         dataDisplay.innerHTML = '';
-        currentRows.forEach(row => {
+        
+        for (const row of currentRows) {
             const rowData = { ...row.data };
-            schema.forEach(field => {
-                if (field.type === 'relation' && rowData[field.id]?.data) {
-                    const relData = rowData[field.id].data;
-                    const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true','false'].includes(String(v)));
-                    if (field === childField && parentField && rowData[parentField.id]?.data) {
-                        const pTxt = Object.values(rowData[parentField.id].data)[0];
-                        rowData[field.id].display_label = values.filter(v => String(v) !== String(pTxt)).join(' - ');
-                    } else { rowData[field.id].display_label = values[0] || '---'; }
+            
+            for (const field of schema) {
+                if (field.type === 'relation' && rowData[field.id]) {
+                    const relData = rowData[field.id]?.data || rowData[field.id];
+                    
+                    if (typeof relData === 'object' && relData !== null) {
+                        const values = Object.values(relData).filter(v => 
+                            typeof v !== 'object' && 
+                            v !== null && 
+                            v !== undefined &&
+                            !['true', 'false'].includes(String(v).toLowerCase())
+                        );
+                        
+                        if (field === childField && parentField && rowData[parentField.id]) {
+                            const parentData = rowData[parentField.id]?.data || rowData[parentField.id];
+                            const parentText = typeof parentData === 'object' 
+                                ? Object.values(parentData)[0] 
+                                : String(parentData);
+                            
+                            const childValues = values.filter(v => String(v) !== String(parentText));
+                            rowData[field.id].display_label = childValues.join(' - ') || values[0] || '---';
+                        } else {
+                            rowData[field.id].display_label = values[0] || '---';
+                        }
+                    } else {
+                        rowData[field.id].display_label = String(relData);
+                    }
                 }
-            });
+            }
+            
             const div = document.createElement('div');
-            div.innerHTML = Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: rowData, row_id: row.row_id });
-            dataDisplay.appendChild(div);
-        });
-    } catch (err) { console.error('Refresh error:', err); }
+            div.innerHTML = Mustache.render(displayTemplate.innerHTML, { 
+                data: rowData, 
+                row_id: row.row_id 
+            });
+            dataDisplay.appendChild(div.firstElementChild);
+        }
+        
+        renderPagination();
+    } catch (err) {
+        console.error('Fetch and render error:', err);
+        dataDisplay.innerHTML = '<p class=\"text-red-600 p-4\">Error loading data</p>';
+    }
+};
+
+const renderPagination = () => {
+    paginationControls.innerHTML = '';
+    
+    const totalPages = Math.ceil(totalRows / rowsPerPage);
+    if (totalPages <= 1) return;
+    
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Previous';
+    prevBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.addEventListener('click', () => {
+        if (currentPage > 0) {
+            currentPage--;
+            fetchAndRenderRows();
+        }
+    });
+    
+    const pageInfo = document.createElement('span');
+    pageInfo.className = 'px-3 py-1';
+    pageInfo.textContent = 'Page ' + (currentPage + 1) + ' of ' + totalPages;
+    
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    nextBtn.disabled = currentPage >= totalPages - 1;
+    nextBtn.addEventListener('click', () => {
+        if (currentPage < totalPages - 1) {
+            currentPage++;
+            fetchAndRenderRows();
+        }
+    });
+    
+    paginationControls.appendChild(prevBtn);
+    paginationControls.appendChild(pageInfo);
+    paginationControls.appendChild(nextBtn);
 };
 
 const generateForm = async (initialData = {}) => {
     formContainer.innerHTML = '';
     formContainer.classList.remove('hidden');
+    
     const form = document.createElement('form');
     form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    
     const selects = {};
-    const parentField = schema.find(f => f.type === 'relation' && f.id === 'day');
-    const childField = schema.find(f => f.type === 'relation' && f.id === 'time');
+    const relationalData = {};
 
     for (const field of schema) {
         const wrapper = document.createElement('div');
-        wrapper.innerHTML = `<label class='block text-sm font-semibold mb-1 text-gray-700'>${field.label}</label>`;
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-semibold mb-1 text-gray-700';
+        label.textContent = field.label;
+        wrapper.appendChild(label);
+        
         if (field.type === 'relation') {
-            const sel = document.createElement('select');
-            sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg border-gray-300';
-            sel.required = true;
-            selects[field.id] = sel;
-            // DYNAMICALLY TARGET THE RELATED SCHEMA ID
+            const select = document.createElement('select');
+            select.name = field.id;
+            select.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            select.required = true;
+            selects[field.id] = select;
+            
             const relSchemaId = field.related_schema_id;
-            const relRows = (await api.get(`/custom-data/rows/${relSchemaId}?limit=1000`)).data.rows;
-            if (field === parentField) {
-                const seen = new Set();
-                relRows.forEach(r => {
-                    const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0];
-                    if (!seen.has(txt)) {
-                        const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = txt;
-                        sel.appendChild(opt); seen.add(txt);
+            
+            try {
+                const relUrl = '/custom-data/rows/' + relSchemaId + '?limit=1000';
+                const relRes = await api.get(relUrl);
+                const relRows = relRes.data?.rows || relRes.rows || [];
+                relationalData[field.id] = relRows;
+                
+                if (field === parentField) {
+                    const defaultOpt = document.createElement('option');
+                    defaultOpt.value = '';
+                    defaultOpt.textContent = 'Select ' + field.label + '...';
+                    select.appendChild(defaultOpt);
+                    
+                    const seen = new Set();
+                    for (const r of relRows) {
+                        const values = Object.values(r.data).filter(v => typeof v !== 'object' && v !== null);
+                        const text = String(values[0] || '');
+                        
+                        if (!seen.has(text) && text) {
+                            const opt = document.createElement('option');
+                            opt.value = r.row_id;
+                            opt.textContent = text;
+                            select.appendChild(opt);
+                            seen.add(text);
+                        }
                     }
-                });
-            } else { sel.dataset.rows = JSON.stringify(relRows); }
-            wrapper.appendChild(sel);
+                } else if (field === childField) {
+                    const defaultOpt = document.createElement('option');
+                    defaultOpt.value = '';
+                    defaultOpt.textContent = 'Select ' + field.label + '...';
+                    select.appendChild(defaultOpt);
+                }
+                
+                if (initialData[field.id]) {
+                    select.value = initialData[field.id];
+                }
+            } catch (err) {
+                console.error('Error fetching related data for ' + field.id + ':', err);
+            }
+            
+            wrapper.appendChild(select);
         } else {
             const input = document.createElement('input');
-            input.name = field.id; input.value = initialData[field.id] || '';
-            input.className = 'w-full p-2 border rounded-lg border-gray-300';
+            input.name = field.id;
+            input.type = field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text';
+            input.value = initialData[field.id] || '';
+            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            input.required = true;
             wrapper.appendChild(input);
         }
+        
         form.appendChild(wrapper);
     }
 
-    if (parentField && childField) {
+    if (parentField && childField && selects[parentField.id] && selects[childField.id]) {
         selects[parentField.id].addEventListener('change', () => {
-            const pTxt = selects[parentField.id].options[selects[parentField.id].selectedIndex].textContent;
-            const cRows = JSON.parse(selects[childField.id].dataset.rows);
-            selects[childField.id].innerHTML = '<option value=\"\">Select Time...</option>';
-            cRows.filter(r => Object.values(r.data).includes(pTxt) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => {
-                const opt = document.createElement('option'); opt.value = r.row_id;
-                opt.textContent = Object.values(r.data).filter(v => String(v) !== pTxt && !['true','false'].includes(String(v))).join(' - ');
-                selects[childField.id].appendChild(opt);
-            });
+            const parentSelect = selects[parentField.id];
+            const childSelect = selects[childField.id];
+            const selectedIndex = parentSelect.selectedIndex;
+            
+            if (selectedIndex <= 0) {
+                childSelect.innerHTML = '<option value=\"\">Select ' + childField.label + '...</option>';
+                return;
+            }
+            
+            const parentText = parentSelect.options[selectedIndex].textContent;
+            const childRows = relationalData[childField.id] || [];
+            
+            childSelect.innerHTML = '<option value=\"\">Select ' + childField.label + '...</option>';
+            
+            for (const r of childRows) {
+                const dataValues = Object.values(r.data);
+                const hasParentMatch = dataValues.some(v => String(v) === String(parentText));
+                
+                const isAvailable = r.data.available === true || 
+                                   r.data.available === 'true' || 
+                                   r.data.available === undefined;
+                
+                if (hasParentMatch && isAvailable) {
+                    const values = dataValues.filter(v => 
+                        typeof v !== 'object' && 
+                        String(v) !== String(parentText) &&
+                        !['true', 'false'].includes(String(v).toLowerCase())
+                    );
+                    
+                    const opt = document.createElement('option');
+                    opt.value = r.row_id;
+                    opt.textContent = values.join(' - ') || values[0] || r.row_id;
+                    childSelect.appendChild(opt);
+                }
+            }
         });
+        
+        if (initialData[parentField.id]) {
+            selects[parentField.id].dispatchEvent(new Event('change'));
+            if (initialData[childField.id]) {
+                selects[childField.id].value = initialData[childField.id];
+            }
+        }
     }
 
-    const btn = document.createElement('button');
-    btn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold hover:bg-blue-700 transition-colors';
-    btn.textContent = editingRowId ? 'Update Booking' : 'Confirm Booking';
-    form.appendChild(btn);
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';
+    submitBtn.textContent = editingRowId ? 'Update' : 'Submit';
+    form.appendChild(submitBtn);
 
     form.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const data = Object.fromEntries(new FormData(form));
+        
+        const formData = new FormData(form);
+        const data = Object.fromEntries(formData);
         const sitemember_id = properties.sitemember_id || null;
+        
         try {
-            if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
-            else {
-                await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
-                // SAFE CROSS-TABLE UPDATE
-                const slotId = data[childField?.id];
-                if (slotId) {
-                    const res = await api.get(`/custom-data/rows/${slotId}`);
-                    const existing = res.data.data || (res.data.row && res.data.row.data) || res.data;
-                    await api.put(`/custom-data/rows/${slotId}`, { 
-                        data: { ...existing, available: false }, 
-                        sitemember_id 
-                    });
+            if (editingRowId) {
+                await api.put('/custom-data/rows/' + editingRowId, { data, sitemember_id });
+            } else {
+                await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id });
+                
+                if (childField && data[childField.id]) {
+                    try {
+                        const targetRowId = data[childField.id];
+                        const fetchUrl = '/custom-data/rows/' + targetRowId;
+                        const fetchRes = await api.get(fetchUrl);
+                        
+                        const existingData = fetchRes.data?.data || 
+                                           fetchRes.data?.row?.data || 
+                                           fetchRes.data || 
+                                           {};
+                        
+                        const updatedData = { ...existingData, available: false };
+                        
+                        await api.put('/custom-data/rows/' + targetRowId, { 
+                            data: updatedData, 
+                            sitemember_id 
+                        });
+                    } catch (updateErr) {
+                        console.error('Cross-table update failed:', updateErr);
+                    }
                 }
             }
-        } catch (err) { console.error('Submission failed:', err); }
-        editingRowId = null;
-        await fetchAndRenderRows();
-        generateForm();
+            
+            editingRowId = null;
+            formContainer.classList.add('hidden');
+            await fetchAndRenderRows();
+            
+        } catch (err) {
+            console.error('Form submission error:', err);
+            alert('Error saving data. Please try again.');
+        }
     });
+    
     formContainer.appendChild(form);
 };
 
-dataDisplay.addEventListener('click', (e) => {
+dataDisplay.addEventListener('click', async (e) => {
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
         const row = currentRows.find(r => r.row_id === editingRowId);
-        if (row) generateForm(row.data);
+        if (row) {
+            await generateForm(row.data);
+        }
+        return;
     }
-    if (e.target.closest('.delete-btn')) {
-        if (confirm('Delete?')) api.delete(`/custom-data/rows/${e.target.closest('.delete-btn').dataset.rowId}`).then(() => fetchAndRenderRows());
+    
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+        if (confirm('Are you sure you want to delete this item?')) {
+            try {
+                const rowId = deleteBtn.dataset.rowId;
+                const sitemember_id = properties.sitemember_id || null;
+                const deleteUrl = '/custom-data/rows/' + rowId + (sitemember_id ? '?sitemember_id=' + sitemember_id : '');
+                await api.delete(deleteUrl);
+                await fetchAndRenderRows();
+            } catch (err) {
+                console.error('Delete error:', err);
+                alert('Error deleting item.');
+            }
+        }
     }
 });
-addButton.addEventListener('click', () => { editingRowId = null; generateForm(); });
-generateForm(); fetchAndRenderRows();"
+
+addButton.addEventListener('click', async () => {
+    editingRowId = null;
+    await generateForm();
+});
+
+fetchAndRenderRows();"
 }
 """.strip()
 
