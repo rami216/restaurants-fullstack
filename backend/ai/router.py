@@ -1214,14 +1214,14 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol
+    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol:
             If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
-            - Step 1: Resource Detection: The script MUST identify the row_id of the related resource (e.g., slot, time, item, room) from the submitted form data by using a pattern match like /time|slot|item|room|product/i.
-            - Step 2: Universal Safety Fetch: The script MUST first execute api.get(\/custom-data/rows/${RELATED_ROW_ID}`)` to retrieve the current state of that record.
-            - Step 3: Robust Data Extraction: To prevent script crashes, the script MUST extract the current fields using a triple-check path: const existing = res.data.data || (res.data.row && res.data.row.data) || res.data;.
-            - Step 4: Safe Merge & Universal Update: The script MUST call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: { ...existing, available: false }, sitemember_id }). By spreading ...existing`, you ensure that other fields (like Day or Start Time) are not wiped out.
-            - Step 5: Mandatory Await & UI Refresh: The script MUST await these API calls before calling fetchAndRenderRows() and generateForm(). This ensures the database update is finished before the UI tries to show the new "unavailable" state.
-            - Step 6: Fault Tolerance: Even if the side-effect (Step 4) fails, the script MUST still proceed to refresh the UI so the user's primary booking is visible and the form is cleared.
+            - Step 1: Resource Detection: Identify the row_id of the related resource from the form data.
+            - Step 2: Schema Identification: The script MUST find the related_schema_id for that resource by looking it up in properties.schema_fields.
+            - Step 3: Target Fetching: The script MUST execute api.get(\/custom-data/rows/${RELATED_ROW_ID}`)`.
+            - Step 4: Data Merge & Update: Extract existing fields using the triple-check path and call api.put(\/custom-data/rows/${RELATED_ROW_ID}`, { data: { ...existing, available: false }, sitemember_id })`.
+            - UI Refresh: All calls MUST be await-ed before refreshing the UI.
+            
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use (UNIVERSAL DATABASE ACCESS):
@@ -1312,7 +1312,9 @@ const generateForm = async (initialData = {}) => {
             sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg border-gray-300';
             sel.required = true;
             selects[field.id] = sel;
-            const relRows = (await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`)).data.rows;
+            // DYNAMICALLY TARGET THE RELATED SCHEMA ID
+            const relSchemaId = field.related_schema_id;
+            const relRows = (await api.get(`/custom-data/rows/${relSchemaId}?limit=1000`)).data.rows;
             if (field === parentField) {
                 const seen = new Set();
                 relRows.forEach(r => {
@@ -1359,11 +1361,10 @@ const generateForm = async (initialData = {}) => {
             if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
             else {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
-                // SIDE-EFFECT: Update the Slots table row
+                // SAFE CROSS-TABLE UPDATE
                 const slotId = data[childField?.id];
                 if (slotId) {
                     const res = await api.get(`/custom-data/rows/${slotId}`);
-                    // Triple-check the data structure to prevent wipes
                     const existing = res.data.data || (res.data.row && res.data.row.data) || res.data;
                     await api.put(`/custom-data/rows/${slotId}`, { 
                         data: { ...existing, available: false }, 
