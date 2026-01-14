@@ -1354,7 +1354,7 @@ const fetchAndRenderRows = async () => {
         renderPagination();
     } catch (err) {
         console.error('Fetch and render error:', err);
-        dataDisplay.innerHTML = '<p class=\"text-red-600 p-4\">Error loading data</p>';
+        dataDisplay.innerHTML = '<p class="text-red-600 p-4">Error loading data</p>';
     }
 };
 
@@ -1481,14 +1481,14 @@ const generateForm = async (initialData = {}) => {
             const selectedIndex = parentSelect.selectedIndex;
             
             if (selectedIndex <= 0) {
-                childSelect.innerHTML = '<option value=\"\">Select ' + childField.label + '...</option>';
+                childSelect.innerHTML = '<option value="">Select ' + childField.label + '...</option>';
                 return;
             }
             
             const parentText = parentSelect.options[selectedIndex].textContent;
             const childRows = relationalData[childField.id] || [];
             
-            childSelect.innerHTML = '<option value=\"\">Select ' + childField.label + '...</option>';
+            childSelect.innerHTML = '<option value="">Select ' + childField.label + '...</option>';
             
             for (const r of childRows) {
                 const dataValues = Object.values(r.data);
@@ -1534,32 +1534,50 @@ const generateForm = async (initialData = {}) => {
         const data = Object.fromEntries(formData);
         const sitemember_id = properties.sitemember_id || null;
         
+        console.log('Form submission - Data:', data);
+        console.log('Child field:', childField);
+        
         try {
             if (editingRowId) {
                 await api.put('/custom-data/rows/' + editingRowId, { data, sitemember_id });
+                console.log('Booking updated successfully');
             } else {
                 await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id });
+                console.log('Booking created successfully');
                 
                 if (childField && data[childField.id]) {
                     try {
                         const targetRowId = data[childField.id];
+                        console.log('Updating slot availability. Target row ID:', targetRowId);
+                        
                         const fetchUrl = '/custom-data/rows/' + targetRowId;
                         const fetchRes = await api.get(fetchUrl);
+                        console.log('Fetched slot data:', fetchRes);
                         
                         const existingData = fetchRes.data?.data || 
                                            fetchRes.data?.row?.data || 
                                            fetchRes.data || 
                                            {};
                         
-                        const updatedData = { ...existingData, available: false };
+                        console.log('Existing slot data:', existingData);
                         
-                        await api.put('/custom-data/rows/' + targetRowId, { 
+                        const updatedData = { ...existingData, available: false };
+                        console.log('Updated slot data to send:', updatedData);
+                        
+                        const updateRes = await api.put('/custom-data/rows/' + targetRowId, { 
                             data: updatedData, 
                             sitemember_id 
                         });
+                        
+                        console.log('Slot update response:', updateRes);
+                        console.log('Slot updated successfully to unavailable');
                     } catch (updateErr) {
                         console.error('Cross-table update failed:', updateErr);
+                        console.error('Error details:', updateErr.message);
+                        alert('Booking saved but slot update failed. Please check console for details.');
                     }
+                } else {
+                    console.log('No child field to update or no value provided');
                 }
             }
             
@@ -1569,6 +1587,7 @@ const generateForm = async (initialData = {}) => {
             
         } catch (err) {
             console.error('Form submission error:', err);
+            console.error('Error details:', err.message);
             alert('Error saving data. Please try again.');
         }
     });
