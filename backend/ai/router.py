@@ -1225,11 +1225,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
     -   API Calls to Use (UNIVERSAL TARGETING):
-        -   Fetch Paginated Rows: api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + limit).
+        -   Fetch Paginated/Filtered Rows: api.get('/custom-data/rows/' + schemaId + '?skip=0&limit=1000'). To find a specific row, you can add &row_id=' + ROW_ID.
         -   Add New Row: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }).
-        -   Targeted Row Fetch (Cross-Table): api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID) — CRITICAL: Always include the Schema ID in the path to avoid 404 errors on related tables.
-        -   Targeted Row Update (Cross-Table): api.put('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID, { data, sitemember_id }) — CRITICAL: This endpoint updates ANY row in ANY table provided you include the correct Schema ID and Row ID.
-        -   Delete Row: api.delete('/custom-data/rows/' + ROW_ID + (sitemember_id ? '?sitemember_id=' + sitemember_id : '')).
+        -   Update ANY Row (CRITICAL): api.put('/custom-data/rows/' + TARGET_SCHEMA_ID, { row_id: ROW_ID, data: mergedData, sitemember_id }). Note: The row_id MUST be inside the JSON body, not in the URL path.
+        -   Delete Row: api.delete('/custom-data/rows/' + schemaId + '?row_id=' + ROW_ID + (sitemember_id ? '&sitemember_id=' + sitemember_id : '')).
+        
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
@@ -1268,45 +1268,27 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
   ],
   "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const paginationControls = container.querySelector('.pagination-controls'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate'); let editingRowId = null; let currentRows = []; let currentPage = 0; let rowsPerPage = 20; let totalRows = 0;
 
-const identifyHierarchy = () => {
-    const relations = schema.filter(f => f.type === 'relation');
-    const parent = relations.find(f => f.id.match(/day|brand|category/i)) || relations[0];
-    const child = relations.find(f => f !== parent) || relations[1];
-    return { parent, child };
-};
-const { parent: parentField, child: childField } = identifyHierarchy();
-
 const fetchAndRenderRows = async () => {
     if (properties.hideData) return;
     try {
-        const skip = currentPage * rowsPerPage;
-        const url = '/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage;
+        const url = '/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage;
         const res = await api.get(url);
         currentRows = res.data?.rows || res.rows || [];
         totalRows = res.data?.total || res.total || 0;
         dataDisplay.innerHTML = '';
-
-        for (const row of currentRows) {
+        currentRows.forEach(row => {
             const rowData = { ...row.data };
             schema.forEach(field => {
                 if (field.type === 'relation' && rowData[field.id]) {
                     const relData = rowData[field.id]?.data || rowData[field.id];
-                    if (typeof relData === 'object' && relData !== null) {
-                        const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true', 'false'].includes(String(v).toLowerCase()));
-                        if (field === childField && parentField && rowData[parentField.id]) {
-                            const pData = rowData[parentField.id]?.data || rowData[parentField.id];
-                            const pText = typeof pData === 'object' ? Object.values(pData)[0] : String(pData);
-                            rowData[field.id].display_label = values.filter(v => String(v) !== String(pText)).join(' - ') || values[0];
-                        } else {
-                            rowData[field.id].display_label = values[0] || '---';
-                        }
-                    }
+                    const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true','false'].includes(String(v).toLowerCase()));
+                    rowData[field.id].display_label = values[0] || '---';
                 }
             });
             const div = document.createElement('div');
             div.innerHTML = Mustache.render(displayTemplate.innerHTML, { data: rowData, row_id: row.row_id });
             dataDisplay.appendChild(div.firstElementChild);
-        }
+        });
         renderPagination();
     } catch (err) { console.error('Fetch error:', err); }
 };
@@ -1315,13 +1297,11 @@ const renderPagination = () => {
     paginationControls.innerHTML = '';
     const totalPages = Math.ceil(totalRows / rowsPerPage);
     if (totalPages <= 1) return;
-    const prevBtn = document.createElement('button');
-    prevBtn.textContent = 'Previous';
+    const prevBtn = document.createElement('button'); prevBtn.textContent = 'Previous';
     prevBtn.className = 'px-3 py-1 border rounded bg-white disabled:opacity-50';
     prevBtn.disabled = currentPage === 0;
     prevBtn.onclick = () => { currentPage--; fetchAndRenderRows(); };
-    const nextBtn = document.createElement('button');
-    nextBtn.textContent = 'Next';
+    const nextBtn = document.createElement('button'); nextBtn.textContent = 'Next';
     nextBtn.className = 'px-3 py-1 border rounded bg-white disabled:opacity-50';
     nextBtn.disabled = currentPage >= totalPages - 1;
     nextBtn.onclick = () => { currentPage++; fetchAndRenderRows(); };
@@ -1329,25 +1309,22 @@ const renderPagination = () => {
 };
 
 const generateForm = async (initialData = {}) => {
-    formContainer.innerHTML = '';
-    formContainer.classList.remove('hidden');
-    const form = document.createElement('form');
-    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
-    const selects = {};
-    const relCache = {};
+    formContainer.innerHTML = ''; formContainer.classList.remove('hidden');
+    const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const selects = {}; const relCache = {};
 
     for (const field of schema) {
         const wrapper = document.createElement('div');
         wrapper.innerHTML = `<label class='block text-sm font-semibold mb-1'>${field.label}</label>`;
         if (field.type === 'relation') {
-            const sel = document.createElement('select');
-            sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg';
-            sel.required = true; selects[field.id] = sel;
+            const sel = document.createElement('select'); sel.name = field.id;
+            sel.className = 'w-full p-2 border rounded-lg'; sel.required = true;
+            selects[field.id] = sel;
             const res = await api.get('/custom-data/rows/' + field.related_schema_id + '?limit=1000');
             const relRows = res.data?.rows || res.rows || [];
             relCache[field.id] = relRows;
-            if (field === parentField) {
-                sel.innerHTML = `<option value=''>Select ${field.label}...</option>`;
+            sel.innerHTML = `<option value=''>Select ${field.label}...</option>`;
+            if (field.id === 'day') {
                 const seen = new Set();
                 relRows.forEach(r => {
                     const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0];
@@ -1359,35 +1336,26 @@ const generateForm = async (initialData = {}) => {
             }
             wrapper.appendChild(sel);
         } else {
-            const input = document.createElement('input');
-            input.name = field.id; input.value = initialData[field.id] || '';
-            input.className = 'w-full p-2 border rounded-lg'; input.required = true;
+            const input = document.createElement('input'); input.name = field.id;
+            input.value = initialData[field.id] || ''; input.className = 'w-full p-2 border rounded-lg';
             wrapper.appendChild(input);
         }
         form.appendChild(wrapper);
     }
 
-    if (parentField && childField && selects[parentField.id]) {
-        selects[parentField.id].onchange = () => {
-            const pTxt = selects[parentField.id].options[selects[parentField.id].selectedIndex].textContent;
-            const cSel = selects[childField.id];
-            cSel.innerHTML = `<option value=''>Select ${childField.label}...</option>`;
-            relCache[childField.id].filter(r => Object.values(r.data).includes(pTxt) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => {
-                const opt = document.createElement('option'); opt.value = r.row_id;
-                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && String(v) !== pTxt && !['true','false'].includes(String(v).toLowerCase())).join(' - ');
-                cSel.appendChild(opt);
-            });
-        };
-        if (initialData[parentField.id]) {
-            selects[parentField.id].value = initialData[parentField.id];
-            selects[parentField.id].dispatchEvent(new Event('change'));
-            if (initialData[childField.id]) selects[childField.id].value = initialData[childField.id];
-        }
-    }
+    selects['day'].onchange = () => {
+        const dTxt = selects['day'].options[selects['day'].selectedIndex].textContent;
+        selects['time'].innerHTML = '<option value=\"\">Select Time...</option>';
+        relCache['time'].filter(r => Object.values(r.data).includes(dTxt) && (r.data.available === true || r.data.available === 'true')).forEach(r => {
+            const opt = document.createElement('option'); opt.value = r.row_id;
+            opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && String(v) !== dTxt && !['true','false'].includes(String(v).toLowerCase())).join(' - ');
+            selects['time'].appendChild(opt);
+        });
+    };
 
     const subBtn = document.createElement('button');
-    subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold mt-2';
-    subBtn.textContent = editingRowId ? 'Update Booking' : 'Confirm Booking';
+    subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold';
+    subBtn.textContent = editingRowId ? 'Update' : 'Confirm Booking';
     form.appendChild(subBtn);
 
     form.onsubmit = async (e) => {
@@ -1395,15 +1363,26 @@ const generateForm = async (initialData = {}) => {
         const data = Object.fromEntries(new FormData(form));
         const sitemember_id = properties.sitemember_id || null;
         try {
-            if (editingRowId) await api.put('/custom-data/rows/' + schemaId + '/' + editingRowId, { data, sitemember_id });
-            else {
+            if (editingRowId) {
+                await api.put('/custom-data/rows/' + schemaId, { row_id: editingRowId, data, sitemember_id });
+            } else {
                 await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id });
-                const slotId = data[childField?.id];
-                const slotSchemaId = childField?.related_schema_id;
-                if (slotId && slotSchemaId) {
-                    const res = await api.get('/custom-data/rows/' + slotSchemaId + '/' + slotId);
-                    const existing = res.data?.data || res.data?.row?.data || res.data || {};
-                    await api.put('/custom-data/rows/' + slotSchemaId + '/' + slotId, { data: { ...existing, available: false }, sitemember_id });
+                const slotId = data['time'];
+                const slotField = schema.find(f => f.id === 'time');
+                if (slotId && slotField) {
+                    const slotSchemaId = slotField.related_schema_id;
+                    // FIX: Targeted GET with query param to avoid 404
+                    const res = await api.get('/custom-data/rows/' + slotSchemaId + '?row_id=' + slotId);
+                    const slotRow = (res.data?.rows || res.rows || []).find(r => r.row_id === slotId);
+                    if (slotRow) {
+                        const existing = slotRow.data;
+                        // FIX: PUT to Schema URL with row_id in BODY
+                        await api.put('/custom-data/rows/' + slotSchemaId, { 
+                            row_id: slotId, 
+                            data: { ...existing, available: false }, 
+                            sitemember_id 
+                        });
+                    }
                 }
             }
         } catch (err) { console.error('Submit error:', err); }
@@ -1413,15 +1392,14 @@ const generateForm = async (initialData = {}) => {
 };
 
 container.addEventListener('click', async (e) => {
-    const editBtn = e.target.closest('.edit-btn');
-    const delBtn = e.target.closest('.delete-btn');
-    if (editBtn) {
-        editingRowId = editBtn.dataset.rowId;
-        const row = currentRows.find(r => r.row_id === editingRowId);
+    const btn = e.target.closest('button'); if (!btn) return;
+    const rowId = btn.dataset.rowId;
+    if (btn.classList.contains('edit-btn')) {
+        editingRowId = rowId; const row = currentRows.find(r => r.row_id === rowId);
         if (row) await generateForm(row.data);
-    } else if (delBtn) {
+    } else if (btn.classList.contains('delete-btn')) {
         if (confirm('Delete?')) {
-            await api.delete('/custom-data/rows/' + schemaId + '/' + delBtn.dataset.rowId + (properties.sitemember_id ? '?sitemember_id=' + properties.sitemember_id : ''));
+            await api.delete('/custom-data/rows/' + schemaId + '?row_id=' + rowId + (properties.sitemember_id ? '&sitemember_id=' + properties.sitemember_id : ''));
             await fetchAndRenderRows();
         }
     }
