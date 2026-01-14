@@ -1227,7 +1227,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   API Calls to Use (UNIVERSAL TARGETING):
         -   Fetch Paginated/Filtered Rows: api.get('/custom-data/rows/' + schemaId + '?skip=0&limit=1000'). To find a specific row, you can add &row_id=' + ROW_ID.
         -   Add New Row: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }).
-        -   Update ANY Row (CRITICAL): api.put('/custom-data/rows/' + TARGET_SCHEMA_ID, { row_id: ROW_ID, data: mergedData, sitemember_id }). Note: The row_id MUST be inside the JSON body, not in the URL path.
+        -   Fetch ANY Row (Cross-Table): api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID). CRITICAL: Use this targeted path to retrieve a single row from a related table without 404 errors.
+        -   Update ANY Row (Cross-Table): api.put('/custom-data/rows/' + TARGET_SCHEMA_ID, { row_id: ROW_ID, data: mergedData, sitemember_id }). CRITICAL: The row_id MUST be in the body, NOT in the URL path.
         -   Delete Row: api.delete('/custom-data/rows/' + schemaId + '?row_id=' + ROW_ID + (sitemember_id ? '&sitemember_id=' + sitemember_id : '')).
         
     -   Pagination Logic:
