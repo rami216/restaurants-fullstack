@@ -1214,31 +1214,22 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol:
+    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol: If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
             If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
             -  Step 1: Resource Detection: Identify the row_id of the related resource from the form data.
-            -  Step 2: Schema Identification: The script MUST find the related_schema_id for that resource by looking it up in properties.schema_fields.
-            -  Step 3: Target Fetching: The script MUST execute `await api.get('/custom-data/rows/' + RELATED_ROW_ID)`.
-            -  Step 4: Data Extraction & Update: 
-                * Extract the existing data using these fallback paths in order:
-                    1. res.data.data
-                    2. res.data.row?.data
-                    3. res.data
-                * Merge the update: `const updatedData = { ...existingData, available: false }` (or whatever field needs updating)
-                * Call `await api.put('/custom-data/rows/' + RELATED_ROW_ID, { data: updatedData, sitemember_id })`.
-            - UI Refresh: All calls MUST be await-ed before refreshing the UI.
-            - ERROR HANDLING: Wrap the cross-table update in try-catch and log errors without breaking the main flow.
+            -  Step 2: Schema Identification: The script MUST find the related_schema_id for that specific resource by looking it up in properties.schema_fields.
+            -  Step 3: Targeted Fetch (Prevent 404): The script MUST execute await api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID) to retrieve the current state.
+            -  Step 4: Safe Merge & Targeted Update: Extract existing fields using const existing = res.data?.data || res.data?.row?.data || res.data || {};.
+            -  Step 5: Execute Update: Call await api.put('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID, { data: { ...existing, available: false }, sitemember_id }). Spreading ...existing ensures that other fields like Day or Start Time are preserved.
+            -  Step 6: UI Refresh: These calls MUST be await-ed before refreshing the UI to ensure the database update finishes first.
             
     -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
-    -   API Calls to Use (UNIVERSAL DATABASE ACCESS):
-        -   Fetch Paginated Rows: api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage). The response is { "rows": [], "total": 0 }.
-        -   Fetch ALL Rows (for dropdowns): api.get('/custom-data/rows/' + schemaId + '?limit=1000'). Returns { "rows": [], "total": 0 }.
-        -   Add New Row: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }). (Note: sitemember_id can be null).
-        -   Fetch ANY Row (CRITICAL for cross-table updates): api.get('/custom-data/rows/' + ANY_ROW_ID). 
-            Response structure variations: { data: {...}, row_id: "..." } OR { row: { data: {...}, row_id: "..." } }.
-            Always extract using: const rowData = res.data?.data || res.data?.row?.data || res.data || {};
-        -   Update ANY Row (CRITICAL): api.put('/custom-data/rows/' + ANY_ROW_ID, { data, sitemember_id }). (Note: sitemember_id can be null). This endpoint is **Universal**; it updates any record in any table using only the row_id.
-        -   Delete Row: api.delete('/custom-data/rows/' + ROW_ID + (sitemember_id ? '?sitemember_id=' + sitemember_id : '')). Only add the sitemember_id parameter if it exists and is not null.
+    -   API Calls to Use (UNIVERSAL TARGETING):
+        -   Fetch Paginated Rows: api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + limit).
+        -   Add New Row: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }).
+        -   Targeted Row Fetch (Cross-Table): api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID) — CRITICAL: Always include the Schema ID in the path to avoid 404 errors on related tables.
+        -   Targeted Row Update (Cross-Table): api.put('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID, { data, sitemember_id }) — CRITICAL: This endpoint updates ANY row in ANY table provided you include the correct Schema ID and Row ID.
+        -   Delete Row: api.delete('/custom-data/rows/' + ROW_ID + (sitemember_id ? '?sitemember_id=' + sitemember_id : '')).
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
@@ -1275,7 +1266,169 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const paginationControls = container.querySelector('.pagination-controls'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate'); let editingRowId = null; let currentRows = []; let currentPage = 0; let rowsPerPage = 20; let totalRows = 0; const identifyHierarchy = () => { const relations = schema.filter(f => f.type === 'relation'); if (relations.length < 2) return { parent: null, child: null }; const parent = relations[0]; const child = relations[1]; return { parent, child }; }; const { parent: parentField, child: childField } = identifyHierarchy(); const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const skip = currentPage * rowsPerPage; const url = '/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage; const res = await api.get(url); currentRows = res.data?.rows || res.rows || []; totalRows = res.data?.total || res.total || 0; dataDisplay.innerHTML = ''; for (const row of currentRows) { const rowData = { ...row.data }; for (const field of schema) { if (field.type === 'relation' && rowData[field.id]) { const relData = rowData[field.id]?.data || rowData[field.id]; if (typeof relData === 'object' && relData !== null) { const values = Object.values(relData).filter(v => typeof v !== 'object' && v !== null && v !== undefined && !['true', 'false'].includes(String(v).toLowerCase())); if (field === childField && parentField && rowData[parentField.id]) { const parentData = rowData[parentField.id]?.data || rowData[parentField.id]; const parentText = typeof parentData === 'object' ? Object.values(parentData)[0] : String(parentData); const childValues = values.filter(v => String(v) !== String(parentText)); rowData[field.id].display_label = childValues.join(' - ') || values[0] || '---'; } else { rowData[field.id].display_label = values[0] || '---'; } } else { rowData[field.id].display_label = String(relData); } } } const div = document.createElement('div'); div.innerHTML = Mustache.render(displayTemplate.innerHTML, { data: rowData, row_id: row.row_id }); dataDisplay.appendChild(div.firstElementChild); } renderPagination(); } catch (err) { console.error('Fetch and render error:', err); dataDisplay.innerHTML = '<p class=\\\"text-red-600 p-4\\\">Error loading data</p>'; } }; const renderPagination = () => { paginationControls.innerHTML = ''; const totalPages = Math.ceil(totalRows / rowsPerPage); if (totalPages <= 1) return; const prevBtn = document.createElement('button'); prevBtn.textContent = 'Previous'; prevBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'; prevBtn.disabled = currentPage === 0; prevBtn.addEventListener('click', () => { if (currentPage > 0) { currentPage--; fetchAndRenderRows(); } }); const pageInfo = document.createElement('span'); pageInfo.className = 'px-3 py-1'; pageInfo.textContent = 'Page ' + (currentPage + 1) + ' of ' + totalPages; const nextBtn = document.createElement('button'); nextBtn.textContent = 'Next'; nextBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'; nextBtn.disabled = currentPage >= totalPages - 1; nextBtn.addEventListener('click', () => { if (currentPage < totalPages - 1) { currentPage++; fetchAndRenderRows(); } }); paginationControls.appendChild(prevBtn); paginationControls.appendChild(pageInfo); paginationControls.appendChild(nextBtn); }; const generateForm = async (initialData = {}) => { formContainer.innerHTML = ''; formContainer.classList.remove('hidden'); const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; const relationalData = {}; for (const field of schema) { const wrapper = document.createElement('div'); const label = document.createElement('label'); label.className = 'block text-sm font-semibold mb-1 text-gray-700'; label.textContent = field.label; wrapper.appendChild(label); if (field.type === 'relation') { const select = document.createElement('select'); select.name = field.id; select.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all'; select.required = true; selects[field.id] = select; const relSchemaId = field.related_schema_id; try { const relUrl = '/custom-data/rows/' + relSchemaId + '?limit=1000'; const relRes = await api.get(relUrl); const relRows = relRes.data?.rows || relRes.rows || []; relationalData[field.id] = relRows; if (field === parentField) { const defaultOpt = document.createElement('option'); defaultOpt.value = ''; defaultOpt.textContent = 'Select ' + field.label + '...'; select.appendChild(defaultOpt); const seen = new Set(); for (const r of relRows) { const values = Object.values(r.data).filter(v => typeof v !== 'object' && v !== null); const text = String(values[0] || ''); if (!seen.has(text) && text) { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = text; select.appendChild(opt); seen.add(text); } } } else if (field === childField) { const defaultOpt = document.createElement('option'); defaultOpt.value = ''; defaultOpt.textContent = 'Select ' + field.label + '...'; select.appendChild(defaultOpt); } if (initialData[field.id]) { select.value = initialData[field.id]; } } catch (err) { console.error('Error fetching related data for ' + field.id + ':', err); } wrapper.appendChild(select); } else { const input = document.createElement('input'); input.name = field.id; input.type = field.type === 'email' ? 'email' : field.type === 'number' ? 'number' : 'text'; input.value = initialData[field.id] || ''; input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all'; input.required = true; wrapper.appendChild(input); } form.appendChild(wrapper); } if (parentField && childField && selects[parentField.id] && selects[childField.id]) { selects[parentField.id].addEventListener('change', () => { const parentSelect = selects[parentField.id]; const childSelect = selects[childField.id]; const selectedIndex = parentSelect.selectedIndex; if (selectedIndex <= 0) { childSelect.innerHTML = '<option value=\\\"\\\">Select ' + childField.label + '...</option>'; return; } const parentText = parentSelect.options[selectedIndex].textContent; const childRows = relationalData[childField.id] || []; childSelect.innerHTML = '<option value=\\\"\\\">Select ' + childField.label + '...</option>'; for (const r of childRows) { const dataValues = Object.values(r.data); const hasParentMatch = dataValues.some(v => String(v) === String(parentText)); const isAvailable = r.data.available === true || r.data.available === 'true' || r.data.available === undefined; if (hasParentMatch && isAvailable) { const values = dataValues.filter(v => typeof v !== 'object' && String(v) !== String(parentText) && !['true', 'false'].includes(String(v).toLowerCase())); const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = values.join(' - ') || values[0] || r.row_id; childSelect.appendChild(opt); } } }); if (initialData[parentField.id]) { selects[parentField.id].dispatchEvent(new Event('change')); if (initialData[childField.id]) { selects[childField.id].value = initialData[childField.id]; } } } const submitBtn = document.createElement('button'); submitBtn.type = 'submit'; submitBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2'; submitBtn.textContent = editingRowId ? 'Update' : 'Submit'; form.appendChild(submitBtn); form.addEventListener('submit', async (e) => { e.preventDefault(); const formData = new FormData(form); const data = Object.fromEntries(formData); const sitemember_id = properties.sitemember_id || null; console.log('Form submission - Data:', data); console.log('Child field:', childField); try { if (editingRowId) { await api.put('/custom-data/rows/' + editingRowId, { data, sitemember_id }); console.log('Booking updated successfully'); } else { await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }); console.log('Booking created successfully'); if (childField && data[childField.id]) { try { const targetRowId = data[childField.id]; console.log('Updating slot availability. Target row ID:', targetRowId); const fetchUrl = '/custom-data/rows/' + targetRowId; const fetchRes = await api.get(fetchUrl); console.log('Fetched slot data:', fetchRes); const existingData = fetchRes.data?.data || fetchRes.data?.row?.data || fetchRes.data || {}; console.log('Existing slot data:', existingData); const updatedData = { ...existingData, available: false }; console.log('Updated slot data to send:', updatedData); const updateRes = await api.put('/custom-data/rows/' + targetRowId, { data: updatedData, sitemember_id }); console.log('Slot update response:', updateRes); console.log('Slot updated successfully to unavailable'); } catch (updateErr) { console.error('Cross-table update failed:', updateErr); console.error('Error details:', updateErr.message); alert('Booking saved but slot update failed. Please check console for details.'); } } else { console.log('No child field to update or no value provided'); } } editingRowId = null; formContainer.classList.add('hidden'); await fetchAndRenderRows(); } catch (err) { console.error('Form submission error:', err); console.error('Error details:', err.message); alert('Error saving data. Please try again.'); } }); formContainer.appendChild(form); }; dataDisplay.addEventListener('click', async (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const row = currentRows.find(r => r.row_id === editingRowId); if (row) { await generateForm(row.data); } return; } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { if (confirm('Are you sure you want to delete this item?')) { try { const rowId = deleteBtn.dataset.rowId; const sitemember_id = properties.sitemember_id || null; const deleteUrl = '/custom-data/rows/' + rowId + (sitemember_id ? '?sitemember_id=' + sitemember_id : ''); await api.delete(deleteUrl); await fetchAndRenderRows(); } catch (err) { console.error('Delete error:', err); alert('Error deleting item.'); } } } }); addButton.addEventListener('click', async () => { editingRowId = null; await generateForm(); }); fetchAndRenderRows();"
+  "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const paginationControls = container.querySelector('.pagination-controls'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate'); let editingRowId = null; let currentRows = []; let currentPage = 0; let rowsPerPage = 20; let totalRows = 0;
+
+const identifyHierarchy = () => {
+    const relations = schema.filter(f => f.type === 'relation');
+    const parent = relations.find(f => f.id.match(/day|brand|category/i)) || relations[0];
+    const child = relations.find(f => f !== parent) || relations[1];
+    return { parent, child };
+};
+const { parent: parentField, child: childField } = identifyHierarchy();
+
+const fetchAndRenderRows = async () => {
+    if (properties.hideData) return;
+    try {
+        const skip = currentPage * rowsPerPage;
+        const url = '/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage;
+        const res = await api.get(url);
+        currentRows = res.data?.rows || res.rows || [];
+        totalRows = res.data?.total || res.total || 0;
+        dataDisplay.innerHTML = '';
+
+        for (const row of currentRows) {
+            const rowData = { ...row.data };
+            schema.forEach(field => {
+                if (field.type === 'relation' && rowData[field.id]) {
+                    const relData = rowData[field.id]?.data || rowData[field.id];
+                    if (typeof relData === 'object' && relData !== null) {
+                        const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true', 'false'].includes(String(v).toLowerCase()));
+                        if (field === childField && parentField && rowData[parentField.id]) {
+                            const pData = rowData[parentField.id]?.data || rowData[parentField.id];
+                            const pText = typeof pData === 'object' ? Object.values(pData)[0] : String(pData);
+                            rowData[field.id].display_label = values.filter(v => String(v) !== String(pText)).join(' - ') || values[0];
+                        } else {
+                            rowData[field.id].display_label = values[0] || '---';
+                        }
+                    }
+                }
+            });
+            const div = document.createElement('div');
+            div.innerHTML = Mustache.render(displayTemplate.innerHTML, { data: rowData, row_id: row.row_id });
+            dataDisplay.appendChild(div.firstElementChild);
+        }
+        renderPagination();
+    } catch (err) { console.error('Fetch error:', err); }
+};
+
+const renderPagination = () => {
+    paginationControls.innerHTML = '';
+    const totalPages = Math.ceil(totalRows / rowsPerPage);
+    if (totalPages <= 1) return;
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Previous';
+    prevBtn.className = 'px-3 py-1 border rounded bg-white disabled:opacity-50';
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.onclick = () => { currentPage--; fetchAndRenderRows(); };
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.className = 'px-3 py-1 border rounded bg-white disabled:opacity-50';
+    nextBtn.disabled = currentPage >= totalPages - 1;
+    nextBtn.onclick = () => { currentPage++; fetchAndRenderRows(); };
+    paginationControls.append(prevBtn, nextBtn);
+};
+
+const generateForm = async (initialData = {}) => {
+    formContainer.innerHTML = '';
+    formContainer.classList.remove('hidden');
+    const form = document.createElement('form');
+    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const selects = {};
+    const relCache = {};
+
+    for (const field of schema) {
+        const wrapper = document.createElement('div');
+        wrapper.innerHTML = `<label class='block text-sm font-semibold mb-1'>${field.label}</label>`;
+        if (field.type === 'relation') {
+            const sel = document.createElement('select');
+            sel.name = field.id; sel.className = 'w-full p-2 border rounded-lg';
+            sel.required = true; selects[field.id] = sel;
+            const res = await api.get('/custom-data/rows/' + field.related_schema_id + '?limit=1000');
+            const relRows = res.data?.rows || res.rows || [];
+            relCache[field.id] = relRows;
+            if (field === parentField) {
+                sel.innerHTML = `<option value=''>Select ${field.label}...</option>`;
+                const seen = new Set();
+                relRows.forEach(r => {
+                    const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0];
+                    if (txt && !seen.has(txt)) {
+                        const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = txt;
+                        sel.appendChild(opt); seen.add(txt);
+                    }
+                });
+            }
+            wrapper.appendChild(sel);
+        } else {
+            const input = document.createElement('input');
+            input.name = field.id; input.value = initialData[field.id] || '';
+            input.className = 'w-full p-2 border rounded-lg'; input.required = true;
+            wrapper.appendChild(input);
+        }
+        form.appendChild(wrapper);
+    }
+
+    if (parentField && childField && selects[parentField.id]) {
+        selects[parentField.id].onchange = () => {
+            const pTxt = selects[parentField.id].options[selects[parentField.id].selectedIndex].textContent;
+            const cSel = selects[childField.id];
+            cSel.innerHTML = `<option value=''>Select ${childField.label}...</option>`;
+            relCache[childField.id].filter(r => Object.values(r.data).includes(pTxt) && (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)).forEach(r => {
+                const opt = document.createElement('option'); opt.value = r.row_id;
+                opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && String(v) !== pTxt && !['true','false'].includes(String(v).toLowerCase())).join(' - ');
+                cSel.appendChild(opt);
+            });
+        };
+        if (initialData[parentField.id]) {
+            selects[parentField.id].value = initialData[parentField.id];
+            selects[parentField.id].dispatchEvent(new Event('change'));
+            if (initialData[childField.id]) selects[childField.id].value = initialData[childField.id];
+        }
+    }
+
+    const subBtn = document.createElement('button');
+    subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold mt-2';
+    subBtn.textContent = editingRowId ? 'Update Booking' : 'Confirm Booking';
+    form.appendChild(subBtn);
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const data = Object.fromEntries(new FormData(form));
+        const sitemember_id = properties.sitemember_id || null;
+        try {
+            if (editingRowId) await api.put('/custom-data/rows/' + schemaId + '/' + editingRowId, { data, sitemember_id });
+            else {
+                await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id });
+                const slotId = data[childField?.id];
+                const slotSchemaId = childField?.related_schema_id;
+                if (slotId && slotSchemaId) {
+                    const res = await api.get('/custom-data/rows/' + slotSchemaId + '/' + slotId);
+                    const existing = res.data?.data || res.data?.row?.data || res.data || {};
+                    await api.put('/custom-data/rows/' + slotSchemaId + '/' + slotId, { data: { ...existing, available: false }, sitemember_id });
+                }
+            }
+        } catch (err) { console.error('Submit error:', err); }
+        editingRowId = null; await fetchAndRenderRows(); generateForm();
+    };
+    formContainer.appendChild(form);
+};
+
+container.addEventListener('click', async (e) => {
+    const editBtn = e.target.closest('.edit-btn');
+    const delBtn = e.target.closest('.delete-btn');
+    if (editBtn) {
+        editingRowId = editBtn.dataset.rowId;
+        const row = currentRows.find(r => r.row_id === editingRowId);
+        if (row) await generateForm(row.data);
+    } else if (delBtn) {
+        if (confirm('Delete?')) {
+            await api.delete('/custom-data/rows/' + schemaId + '/' + delBtn.dataset.rowId + (properties.sitemember_id ? '?sitemember_id=' + properties.sitemember_id : ''));
+            await fetchAndRenderRows();
+        }
+    }
+});
+
+addButton.onclick = () => { editingRowId = null; generateForm(); };
+generateForm(); fetchAndRenderRows();"
 }
 """.strip()
 
