@@ -1214,23 +1214,64 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
     -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
-    -   CROSS-TABLE SIDE EFFECTS & DATA INTEGRITY protocol: If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
-            If the user's prompt implies a reservation, booking, or "claiming" system (e.g., "mark the slot as booked" or "make it unavailable"):
-            -  Step 1: Resource Detection: Identify the row_id of the related resource from the form data.
-            -  Step 2: Schema Identification: The script MUST find the related_schema_id for that specific resource by looking it up in properties.schema_fields.
-            -  Step 3: Targeted Fetch (Prevent 404): The script MUST execute await api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID) to retrieve the current state.
-            -  Step 4: Safe Merge & Targeted Update: Extract existing fields using const existing = res.data?.data || res.data?.row?.data || res.data || {};.
-            -  Step 5: Execute Update: Call await api.put('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID, { data: { ...existing, available: false }, sitemember_id }). Spreading ...existing ensures that other fields like Day or Start Time are preserved.
-            -  Step 6: UI Refresh: These calls MUST be await-ed before refreshing the UI to ensure the database update finishes first.
-            
-    -   It MUST handle the full CRUD lifecycle, including populating the form correctly for editing.
-    -   API Calls to Use (UNIVERSAL TARGETING):
-        -   Fetch Paginated/Filtered Rows: api.get('/custom-data/rows/' + schemaId + '?skip=0&limit=1000'). To find a specific row, you can add &row_id=' + ROW_ID.
-        -   Add New Row: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id }).
-        -   Fetch ANY Row (Cross-Table): api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '/' + ROW_ID). CRITICAL: Use this targeted path to retrieve a single row from a related table without 404 errors.
-        -   Update ANY Row (Cross-Table): api.put('/custom-data/rows/' + TARGET_SCHEMA_ID, { row_id: ROW_ID, data: mergedData, sitemember_id }). CRITICAL: The row_id MUST be in the body, NOT in the URL path.
-        -   Delete Row: api.delete('/custom-data/rows/' + schemaId + '?row_id=' + ROW_ID + (sitemember_id ? '&sitemember_id=' + sitemember_id : '')).
-        
+    -   **UNIVERSAL CROSS-TABLE MUTATION ENGINE (CRITICAL):**
+            If the user's prompt implies updating, syncing, reserving, or modifying ANY OTHER TABLE (e.g., "mark slot as unavailable", "decrease stock"):
+                1) **Define Mutation Rules:** The script MUST define a `const crossTableMutations` array at the top.
+                        Example:
+                        ```javascript
+                        const crossTableMutations = [
+                            {
+                            when: "create", // or "update"
+                            sourceField: "time", // The field in THIS form holding the related Row ID
+                            target: {
+                                field: "available", // The field in the OTHER table to change
+                                value: false // Static value OR dynamic logic
+                            }
+                            }
+                        ];
+                        ```
+                    2) **Implement Executor Function:** The script MUST include this exact helper function `runCrossTableMutations`:
+                        ```javascript
+                        const runCrossTableMutations = async (mode, formData, sitemember_id) => {
+                            const rules = crossTableMutations.filter(r => r.when === mode);
+                            for (const rule of rules) {
+                                const targetRowId = formData[rule.sourceField];
+                                // Find the related schema ID dynamically from the schema definition
+                                const fieldDef = schema.find(f => f.id === rule.sourceField);
+                                const targetSchemaId = fieldDef?.related_schema_id;
+                        
+                                if (targetRowId && targetSchemaId) {
+                                    try {
+                                        // STEP A: Fetch using query param (Prevents 404)
+                                        const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);
+                                        const rows = res.data?.rows || res.rows || [];
+                                        const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
+                        
+                                        // STEP B: Update using Body (Correct API Standard)
+                                        const newValue = rule.target.value; 
+                                        await api.put(`/custom-data/rows/${targetSchemaId}`, { 
+                                            row_id: targetRowId, 
+                                            data: { ...existing, [rule.target.field]: newValue }, 
+                                            sitemember_id 
+                                        });
+                                        console.log(`Mutation success: Updated ${targetSchemaId}`);
+                                    } catch (err) { console.error('Mutation failed:', err); }
+                                }
+                            }
+                        };
+                        ```
+                    3) **Call on Submit:** Inside the `form.onsubmit` handler, the script MUST call:
+                        `await runCrossTableMutations(editingRowId ? "update" : "create", data, sitemember_id);`
+   
+    -   **API Calls to Use (STRICT ZYGOFLOW STANDARD):**
+        -   **Fetch Paginated Rows:** `api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + limit)`
+        -   **Fetch Related Rows (Dropdowns):** `api.get('/custom-data/rows/' + RELATED_SCHEMA_ID + '?limit=1000')`
+        -   **Add New Row:** `api.post('/custom-data/rows/' + schemaId, { data, sitemember_id })`
+        -   **Fetch Single Row (Cross-Table):** `api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?row_id=' + TARGET_ROW_ID)`
+            * *CRITICAL: Do NOT put row_id in the URL path. Use the query parameter `?row_id=`.*
+        -   **Update ANY Row (Universal):** `api.put('/custom-data/rows/' + TARGET_SCHEMA_ID, { row_id: TARGET_ROW_ID, data: mergedData, sitemember_id })`
+            * *CRITICAL: The URL is just the Schema ID. The `row_id` MUST be inside the JSON body.*
+        -   **Delete Row:** `api.delete('/custom-data/rows/' + schemaId + '?row_id=' + ROW_ID + (sitemember_id ? '&sitemember_id=' + sitemember_id : ''))`
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
@@ -1267,147 +1308,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const paginationControls = container.querySelector('.pagination-controls'); const addButton = container.querySelector('.add-new-btn'); const displayTemplate = container.querySelector('#displayTemplate'); let editingRowId = null; let currentRows = []; let currentPage = 0; let rowsPerPage = 20; let totalRows = 0;
-
-const fetchAndRenderRows = async () => {
-    if (properties.hideData) return;
-    try {
-        const url = '/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage;
-        const res = await api.get(url);
-        currentRows = res.data?.rows || res.rows || [];
-        totalRows = res.data?.total || res.total || 0;
-        dataDisplay.innerHTML = '';
-        currentRows.forEach(row => {
-            const rowData = { ...row.data };
-            schema.forEach(field => {
-                if (field.type === 'relation' && rowData[field.id]) {
-                    const relData = rowData[field.id]?.data || rowData[field.id];
-                    const values = Object.values(relData).filter(v => typeof v !== 'object' && !['true','false'].includes(String(v).toLowerCase()));
-                    rowData[field.id].display_label = values[0] || '---';
-                }
-            });
-            const div = document.createElement('div');
-            div.innerHTML = Mustache.render(displayTemplate.innerHTML, { data: rowData, row_id: row.row_id });
-            dataDisplay.appendChild(div.firstElementChild);
-        });
-        renderPagination();
-    } catch (err) { console.error('Fetch error:', err); }
-};
-
-const renderPagination = () => {
-    paginationControls.innerHTML = '';
-    const totalPages = Math.ceil(totalRows / rowsPerPage);
-    if (totalPages <= 1) return;
-    const prevBtn = document.createElement('button'); prevBtn.textContent = 'Previous';
-    prevBtn.className = 'px-3 py-1 border rounded bg-white disabled:opacity-50';
-    prevBtn.disabled = currentPage === 0;
-    prevBtn.onclick = () => { currentPage--; fetchAndRenderRows(); };
-    const nextBtn = document.createElement('button'); nextBtn.textContent = 'Next';
-    nextBtn.className = 'px-3 py-1 border rounded bg-white disabled:opacity-50';
-    nextBtn.disabled = currentPage >= totalPages - 1;
-    nextBtn.onclick = () => { currentPage++; fetchAndRenderRows(); };
-    paginationControls.append(prevBtn, nextBtn);
-};
-
-const generateForm = async (initialData = {}) => {
-    formContainer.innerHTML = ''; formContainer.classList.remove('hidden');
-    const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
-    const selects = {}; const relCache = {};
-
-    for (const field of schema) {
-        const wrapper = document.createElement('div');
-        wrapper.innerHTML = `<label class='block text-sm font-semibold mb-1'>${field.label}</label>`;
-        if (field.type === 'relation') {
-            const sel = document.createElement('select'); sel.name = field.id;
-            sel.className = 'w-full p-2 border rounded-lg'; sel.required = true;
-            selects[field.id] = sel;
-            const res = await api.get('/custom-data/rows/' + field.related_schema_id + '?limit=1000');
-            const relRows = res.data?.rows || res.rows || [];
-            relCache[field.id] = relRows;
-            sel.innerHTML = `<option value=''>Select ${field.label}...</option>`;
-            if (field.id === 'day') {
-                const seen = new Set();
-                relRows.forEach(r => {
-                    const txt = Object.values(r.data).filter(v => typeof v !== 'object')[0];
-                    if (txt && !seen.has(txt)) {
-                        const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = txt;
-                        sel.appendChild(opt); seen.add(txt);
-                    }
-                });
-            }
-            wrapper.appendChild(sel);
-        } else {
-            const input = document.createElement('input'); input.name = field.id;
-            input.value = initialData[field.id] || ''; input.className = 'w-full p-2 border rounded-lg';
-            wrapper.appendChild(input);
-        }
-        form.appendChild(wrapper);
-    }
-
-    selects['day'].onchange = () => {
-        const dTxt = selects['day'].options[selects['day'].selectedIndex].textContent;
-        selects['time'].innerHTML = '<option value=\"\">Select Time...</option>';
-        relCache['time'].filter(r => Object.values(r.data).includes(dTxt) && (r.data.available === true || r.data.available === 'true')).forEach(r => {
-            const opt = document.createElement('option'); opt.value = r.row_id;
-            opt.textContent = Object.values(r.data).filter(v => typeof v !== 'object' && String(v) !== dTxt && !['true','false'].includes(String(v).toLowerCase())).join(' - ');
-            selects['time'].appendChild(opt);
-        });
-    };
-
-    const subBtn = document.createElement('button');
-    subBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2.5 rounded-lg font-bold';
-    subBtn.textContent = editingRowId ? 'Update' : 'Confirm Booking';
-    form.appendChild(subBtn);
-
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-        const data = Object.fromEntries(new FormData(form));
-        const sitemember_id = properties.sitemember_id || null;
-        try {
-            if (editingRowId) {
-                await api.put('/custom-data/rows/' + schemaId, { row_id: editingRowId, data, sitemember_id });
-            } else {
-                await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id });
-                const slotId = data['time'];
-                const slotField = schema.find(f => f.id === 'time');
-                if (slotId && slotField) {
-                    const slotSchemaId = slotField.related_schema_id;
-                    // FIX: Targeted GET with query param to avoid 404
-                    const res = await api.get('/custom-data/rows/' + slotSchemaId + '?row_id=' + slotId);
-                    const slotRow = (res.data?.rows || res.rows || []).find(r => r.row_id === slotId);
-                    if (slotRow) {
-                        const existing = slotRow.data;
-                        // FIX: PUT to Schema URL with row_id in BODY
-                        await api.put('/custom-data/rows/' + slotSchemaId, { 
-                            row_id: slotId, 
-                            data: { ...existing, available: false }, 
-                            sitemember_id 
-                        });
-                    }
-                }
-            }
-        } catch (err) { console.error('Submit error:', err); }
-        editingRowId = null; await fetchAndRenderRows(); generateForm();
-    };
-    formContainer.appendChild(form);
-};
-
-container.addEventListener('click', async (e) => {
-    const btn = e.target.closest('button'); if (!btn) return;
-    const rowId = btn.dataset.rowId;
-    if (btn.classList.contains('edit-btn')) {
-        editingRowId = rowId; const row = currentRows.find(r => r.row_id === rowId);
-        if (row) await generateForm(row.data);
-    } else if (btn.classList.contains('delete-btn')) {
-        if (confirm('Delete?')) {
-            await api.delete('/custom-data/rows/' + schemaId + '?row_id=' + rowId + (properties.sitemember_id ? '&sitemember_id=' + properties.sitemember_id : ''));
-            await fetchAndRenderRows();
-        }
-    }
-});
-
-addButton.onclick = () => { editingRowId = null; generateForm(); };
-generateForm(); fetchAndRenderRows();"
+  "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentRows = []; const crossTableMutations = [{ when: 'create', sourceField: 'time', target: { field: 'available', value: false } }]; const runCrossTableMutations = async (mode, formData, sitemember_id) => { const rules = crossTableMutations.filter(r => r.when === mode); for (const rule of rules) { const targetRowId = formData[rule.sourceField]; const fieldDef = schema.find(f => f.id === rule.sourceField); const targetSchemaId = fieldDef?.related_schema_id; if (targetRowId && targetSchemaId) { try { const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`); const rows = res.data?.rows || res.rows || []; const existing = rows.find(r => r.row_id === targetRowId)?.data || {}; await api.put(`/custom-data/rows/${targetSchemaId}`, { row_id: targetRowId, data: { ...existing, [rule.target.field]: rule.target.value }, sitemember_id }); } catch (err) { console.error('Mutation failed:', err); } } } }; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`); currentRows = res.data?.rows || res.rows || []; dataDisplay.innerHTML = ''; const tmpl = container.querySelector('#displayTemplate').innerHTML; currentRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(tmpl, { data: row.data, row_id: row.row_id }); dataDisplay.appendChild(div); }); } catch (err) { console.error(err); } }; const generateForm = async (initialData = {}) => { formContainer.innerHTML = ''; formContainer.classList.remove('hidden'); const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const btn = document.createElement('button'); btn.textContent = 'Submit'; btn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2 rounded'; form.appendChild(btn); form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const sitemember_id = properties.sitemember_id || null; try { if (editingRowId) { await api.put(`/custom-data/rows/${schemaId}`, { row_id: editingRowId, data, sitemember_id }); await runCrossTableMutations('update', data, sitemember_id); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); await runCrossTableMutations('create', data, sitemember_id); } } catch(err) { console.error(err); } editingRowId = null; await fetchAndRenderRows(); generateForm(); }; formContainer.appendChild(form); }; addButton.onclick = () => { editingRowId = null; generateForm(); }; fetchAndRenderRows(); generateForm();"
 }
 """.strip()
 
