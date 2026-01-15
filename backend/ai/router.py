@@ -1195,15 +1195,13 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
         -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
-                1.  Find the related schema's definition within the `properties.all_schemas` context provided to the script.
-                2.  Identify the displayKey as a fallback, but prioritize the SMART CONCATENATION logic in step 4 for fields like names or time ranges.
-                3.  Fetch all rows for the `related_schema_id`.
-                4.  ROLE-BASED SMART LABELS (MANDATORY): The script MUST determine the textContent for relational options by identifying the field's role in the DYNAMIC HIERARCHY LOGIC:
-                        -If the field is a 'Parent': The script MUST ONLY use the primary displayKey (e.g., just the Day or just the Brand). DO NOT concatenate additional data here, as it will break the filtering match for the child.
-                        -If the field is a 'Child' or Standalone: The script MUST analyze the row for complementary pairs (e.g., start/end, first/last, make/model). If a pair exists, concatenate them (e.g., val1 + " - " + val2).
-                        -Object Safety: If values are objects, convert them to readable strings before setting the textContent.
+                1.  Find the related schema's definition within the `properties.all_schemas`.
+                2.  Fetch all rows for the `related_schema_id`.
+                3.  **PARENT DEDUPLICATION (MANDATORY):** If the field is a 'Parent' in a dependency (like Day), the script **MUST** use a `new Set()` to ensure unique values. It must iterate through the rows, add values to the Set, and only create `<option>` elements for unique values.
+                4.  ROLE-BASED LABELS:
+                        - If 'Parent': Use the simple unique value (e.g., "Tuesday").
+                        - If 'Child' (filtered): Show the specific concatenation (e.g., "10:00 - 12:00").
                 5.  The `value` for the `<option>` must be the `row_id`.
-                -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic and general-purpose.
     -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
             1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
             2- The script MUST fetch the Child relational data once and store it in a constant variable.
@@ -1230,31 +1228,29 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                             }
                         ];
                         ```
-                    2) **Implement Executor Function:** The script MUST include this exact helper function `runCrossTableMutations`:
+                2) **Implement Executor Function:** The script MUST include this exact helper function `runCrossTableMutations`:
                         ```javascript
                         const runCrossTableMutations = async (mode, formData, sitemember_id) => {
                             const rules = crossTableMutations.filter(r => r.when === mode);
                             for (const rule of rules) {
                                 const targetRowId = formData[rule.sourceField];
-                                // Find the related schema ID dynamically from the schema definition
                                 const fieldDef = schema.find(f => f.id === rule.sourceField);
                                 const targetSchemaId = fieldDef?.related_schema_id;
                         
                                 if (targetRowId && targetSchemaId) {
                                     try {
-                                        // STEP A: Fetch using query param (Prevents 404)
+                                        // STEP A: Fetch using Schema ID (Finds the data)
                                         const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);
                                         const rows = res.data?.rows || res.rows || [];
                                         const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
                         
-                                        // STEP B: Update using Body (Correct API Standard)
+                                        // STEP B: Update using ROW ID (Fixes 404)
                                         const newValue = rule.target.value; 
-                                        await api.put(`/custom-data/rows/${targetSchemaId}`, { 
-                                            row_id: targetRowId, 
+                                        await api.put(`/custom-data/rows/${targetRowId}`, { 
                                             data: { ...existing, [rule.target.field]: newValue }, 
                                             sitemember_id 
                                         });
-                                        console.log(`Mutation success: Updated ${targetSchemaId}`);
+                                        console.log(`Mutation success: Updated ${targetRowId}`);
                                     } catch (err) { console.error('Mutation failed:', err); }
                                 }
                             }
@@ -1268,9 +1264,9 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -   **Fetch Related Rows (Dropdowns):** `api.get('/custom-data/rows/' + RELATED_SCHEMA_ID + '?limit=1000')`
         -   **Add New Row:** `api.post('/custom-data/rows/' + schemaId, { data, sitemember_id })`
         -   **Fetch Single Row (Cross-Table):** `api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?row_id=' + TARGET_ROW_ID)`
-            * *CRITICAL: Do NOT put row_id in the URL path. Use the query parameter `?row_id=`.*
-        -   **Update ANY Row (Universal):** `api.put('/custom-data/rows/' + TARGET_SCHEMA_ID, { row_id: TARGET_ROW_ID, data: mergedData, sitemember_id })`
-            * *CRITICAL: The URL is just the Schema ID. The `row_id` MUST be inside the JSON body.*
+                * *CRITICAL: Do NOT put row_id in the URL path. Use the query parameter `?row_id=`.*
+        -   **Update ANY Row (Universal):** `api.put('/custom-data/rows/' + TARGET_ROW_ID, { data: mergedData, sitemember_id })`
+                * *CRITICAL: The URL must be the specific ROW ID, not the Schema ID.*
         -   **Delete Row:** `api.delete('/custom-data/rows/' + schemaId + '?row_id=' + ROW_ID + (sitemember_id ? '&sitemember_id=' + sitemember_id : ''))`
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
@@ -1308,7 +1304,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentRows = []; const crossTableMutations = [{ when: 'create', sourceField: 'time', target: { field: 'available', value: false } }]; const runCrossTableMutations = async (mode, formData, sitemember_id) => { const rules = crossTableMutations.filter(r => r.when === mode); for (const rule of rules) { const targetRowId = formData[rule.sourceField]; const fieldDef = schema.find(f => f.id === rule.sourceField); const targetSchemaId = fieldDef?.related_schema_id; if (targetRowId && targetSchemaId) { try { const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`); const rows = res.data?.rows || res.rows || []; const existing = rows.find(r => r.row_id === targetRowId)?.data || {}; await api.put(`/custom-data/rows/${targetSchemaId}`, { row_id: targetRowId, data: { ...existing, [rule.target.field]: rule.target.value }, sitemember_id }); } catch (err) { console.error('Mutation failed:', err); } } } }; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`); currentRows = res.data?.rows || res.rows || []; dataDisplay.innerHTML = ''; const tmpl = container.querySelector('#displayTemplate').innerHTML; currentRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(tmpl, { data: row.data, row_id: row.row_id }); dataDisplay.appendChild(div); }); } catch (err) { console.error(err); } }; const generateForm = async (initialData = {}) => { formContainer.innerHTML = ''; formContainer.classList.remove('hidden'); const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const btn = document.createElement('button'); btn.textContent = 'Submit'; btn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2 rounded'; form.appendChild(btn); form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const sitemember_id = properties.sitemember_id || null; try { if (editingRowId) { await api.put(`/custom-data/rows/${schemaId}`, { row_id: editingRowId, data, sitemember_id }); await runCrossTableMutations('update', data, sitemember_id); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); await runCrossTableMutations('create', data, sitemember_id); } } catch(err) { console.error(err); } editingRowId = null; await fetchAndRenderRows(); generateForm(); }; formContainer.appendChild(form); }; addButton.onclick = () => { editingRowId = null; generateForm(); }; fetchAndRenderRows(); generateForm();"
+  "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); let editingRowId = null; let currentRows = []; const crossTableMutations = [{ when: 'create', sourceField: 'time', target: { field: 'available', value: false } }]; const runCrossTableMutations = async (mode, formData, sitemember_id) => { const rules = crossTableMutations.filter(r => r.when === mode); for (const rule of rules) { const targetRowId = formData[rule.sourceField]; const fieldDef = schema.find(f => f.id === rule.sourceField); const targetSchemaId = fieldDef?.related_schema_id; if (targetRowId && targetSchemaId) { try { const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`); const rows = res.data?.rows || res.rows || []; const existing = rows.find(r => r.row_id === targetRowId)?.data || {}; await api.put(`/custom-data/rows/${targetRowId}`, { data: { ...existing, [rule.target.field]: rule.target.value }, sitemember_id }); } catch (err) { console.error('Mutation failed:', err); } } } }; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`); currentRows = res.data?.rows || res.rows || []; dataDisplay.innerHTML = ''; const tmpl = container.querySelector('#displayTemplate').innerHTML; currentRows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(tmpl, { data: row.data, row_id: row.row_id }); dataDisplay.appendChild(div); }); } catch (err) { console.error(err); } }; const generateForm = async (initialData = {}) => { formContainer.innerHTML = ''; formContainer.classList.remove('hidden'); const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const btn = document.createElement('button'); btn.textContent = 'Submit'; btn.className = 'md:col-span-2 w-full bg-blue-600 text-white py-2 rounded'; form.appendChild(btn); form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const sitemember_id = properties.sitemember_id || null; try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); await runCrossTableMutations('update', data, sitemember_id); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); await runCrossTableMutations('create', data, sitemember_id); } } catch(err) { console.error(err); } editingRowId = null; await fetchAndRenderRows(); generateForm(); }; formContainer.appendChild(form); }; addButton.onclick = () => { editingRowId = null; generateForm(); }; fetchAndRenderRows(); generateForm();"
 }
 """.strip()
 
