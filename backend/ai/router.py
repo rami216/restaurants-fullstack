@@ -1357,35 +1357,30 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
     }
 };
 
-// 3. FETCH & RENDER (Definition only - NOT called automatically)
+// 3. FETCH & RENDER (Strict Privacy Mode)
 const fetchAndRenderRows = async () => {
-    // SECURITY: Double check hideData property
     if (properties.hideData) return;
     try {
         const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`);
         currentRows = res.data?.rows || res.rows || [];
         dataDisplay.innerHTML = '';
         const tmpl = container.querySelector('#displayTemplate').innerHTML;
-        
         currentRows.forEach(row => {
             const rowData = JSON.parse(JSON.stringify(row.data));
-            
-            
+            // Fix Booleans
             Object.keys(rowData).forEach(key => {
                 if (rowData[key] === false) rowData[key] = 'false';
                 if (rowData[key] === true) rowData[key] = 'true';
             });
-
             // Smart Labels
             schema.forEach(f => {
                 if (f.type === 'relation' && rowData[f.id]) {
                     const d = rowData[f.id].data || rowData[f.id];
-                    let label = d[f.id]; 
+                    let label = d[f.id];
                     if (!label) label = Object.values(d).filter(v => typeof v !== 'object')[0];
                     rowData[f.id].display_label = label || '---';
                 }
             });
-
             const div = document.createElement('div');
             div.innerHTML = Mustache.render(tmpl, {
                 data: rowData,
@@ -1437,7 +1432,6 @@ const generateForm = async (initialData = {}) => {
                         sel.appendChild(opt);
                     }
                 });
-
                 sel.addEventListener('change', () => {
                     const selectedDayText = sel.options[sel.selectedIndex].textContent;
                     const timeSelect = selects['time'];
@@ -1485,6 +1479,20 @@ const generateForm = async (initialData = {}) => {
         e.preventDefault();
         const data = {};
         new FormData(form).forEach((v, k) => data[k] = v);
+        
+        // --- ID SYNCHRONIZATION FIX ---
+        // If 'time' is selected, it represents the SPECIFIC slot ID.
+        // We force 'day' to use that same ID so the data matches perfectly.
+        if (data['time'] && data['day']) {
+             // Optional: Check if schemas match to be safe
+             const dayField = schema.find(f => f.id === 'day');
+             const timeField = schema.find(f => f.id === 'time');
+             if (dayField && timeField && dayField.related_schema_id === timeField.related_schema_id) {
+                 data['day'] = data['time'];
+             }
+        }
+        // ------------------------------
+
         const sitemember_id = properties.sitemember_id || null;
         try {
             if (editingRowId) {
@@ -1494,11 +1502,10 @@ const generateForm = async (initialData = {}) => {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
                 await runCrossTableMutations('create', data, sitemember_id);
             }
-            
-            // --- PRIVACY PROTOCOL (SCENARIO A) ---
-            alert('Booking Confirmed!'); 
+            // PRIVACY PROTOCOL (Scenario A)
+            alert('Booking Confirmed!');
             editingRowId = null;
-            form.reset(); 
+            form.reset();
             formContainer.classList.add('hidden');
             
         } catch (err) {
@@ -1526,8 +1533,6 @@ if (addButton) {
         generateForm();
     };
 }
-
-
 
 "
 }
