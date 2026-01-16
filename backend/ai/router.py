@@ -1212,14 +1212,15 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Identify the property in the Child data that matches the Parent's schema.
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
-    -   **Data Submission (CONTEXT-AWARE BEHAVIOR):**
-        On form submit, the script MUST follow the user's intent regarding the form state:
-            1.  **IF** the user says "don't load data", "clear form", or "close after save":
-                -   The script **MUST** call `form.reset()`.
-                -   The script **MUST** call `formContainer.classList.add('hidden')`.
-                -   **CRITICAL:** The script MUST **NOT** call `generateForm()` at the end of the function, because that will re-open the form.
-            2.  **IF** the user says "keep open" or "admin panel": The script may reload the data (`generateForm()`) to allow continuous editing.
-            3.  **DEFAULT:** If unspecified, default to **clearing and hiding** (`form.reset()` and `.hidden`) to prevent data leaks.
+   -   **DATA VISIBILITY & PRIVACY PROTOCOL (CRITICAL):**
+            The script MUST strictly follow the user's intent regarding data visibility.
+                1.  **SCENARIO A: Public/Write-Only (e.g., "don't load data", "booking form", "privacy"):**
+                    -   **Initial Load:** The script MUST **NOT** call `fetchAndRenderRows()` at the bottom of the script. The `dataDisplay` must remain empty.
+                    -   **After Submit:** The script MUST **NOT** call `fetchAndRenderRows()`. It must simply `alert('Success')`, `form.reset()`, and `formContainer.classList.add('hidden')`.
+                2.  **SCENARIO B: Admin/Manager (e.g., "manage bookings", "show list"):**
+                    -   **Initial Load:** The script MUST call `fetchAndRenderRows()` at the bottom.
+                    -   **After Submit:** The script MUST call `fetchAndRenderRows()` to refresh the list.
+                3.  **DEFAULT:** If unspecified, assume **Scenario B** (Admin Mode).
     -   **UNIVERSAL CROSS-TABLE MUTATION ENGINE (CRITICAL):**
             If the user's prompt implies updating, syncing, reserving, or modifying ANY OTHER TABLE (e.g., "mark slot as unavailable", "decrease stock"):
                 1) **Define Mutation Rules:** The script MUST define a `const crossTableMutations` array at the top.
@@ -1499,7 +1500,7 @@ const generateForm = async (initialData = {}) => {
             editingRowId = null;
             form.reset(); // Clear inputs
             formContainer.classList.add('hidden'); // Close the box
-            await fetchAndRenderRows(); // Refresh table ONLY
+            
             // DO NOT call generateForm() here, or it will re-open!
         } catch (err) { console.error(err); }
     };
@@ -1530,8 +1531,7 @@ if (addButton) {
     });
 }
 
-// Initial Load
-fetchAndRenderRows();"
+"
 }
 """.strip()
 
