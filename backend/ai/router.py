@@ -1212,11 +1212,14 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Identify the property in the Child data that matches the Parent's schema.
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
-   -   **Data Submission (CONTEXT-AWARE BEHAVIOR):**
-            On form submit, the script MUST follow the user's intent regarding the form state:
-                1.  **IF** the user says "don't load data", "clear form", or implies a public submission (e.g., "Booking Form"): The script **MUST** call `form.reset()`, set `editingRowId = null`, and hide the form (`formContainer.classList.add('hidden')`) immediately after success. **DO NOT** reload the data.
-                2.  **IF** the user says "keep open", "admin panel", or "manage data": The script may reload the updated data to allow continuous editing.
-                3.  **DEFAULT:** If unspecified, default to **clearing and hiding** to prevent data leaks.
+    -   **Data Submission (CONTEXT-AWARE BEHAVIOR):**
+        On form submit, the script MUST follow the user's intent regarding the form state:
+            1.  **IF** the user says "don't load data", "clear form", or "close after save":
+                -   The script **MUST** call `form.reset()`.
+                -   The script **MUST** call `formContainer.classList.add('hidden')`.
+                -   **CRITICAL:** The script MUST **NOT** call `generateForm()` at the end of the function, because that will re-open the form.
+            2.  **IF** the user says "keep open" or "admin panel": The script may reload the data (`generateForm()`) to allow continuous editing.
+            3.  **DEFAULT:** If unspecified, default to **clearing and hiding** (`form.reset()` and `.hidden`) to prevent data leaks.
     -   **UNIVERSAL CROSS-TABLE MUTATION ENGINE (CRITICAL):**
             If the user's prompt implies updating, syncing, reserving, or modifying ANY OTHER TABLE (e.g., "mark slot as unavailable", "decrease stock"):
                 1) **Define Mutation Rules:** The script MUST define a `const crossTableMutations` array at the top.
@@ -1492,11 +1495,12 @@ const generateForm = async (initialData = {}) => {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
                 await runCrossTableMutations('create', data, sitemember_id);
             }
-            // PRIVACY/RESET LOGIC (AI: Adapt this based on user prompt)
+            // PRIVACY LOGIC:
             editingRowId = null;
-            form.reset(); 
-            formContainer.classList.add('hidden'); 
-            await fetchAndRenderRows();
+            form.reset(); // Clear inputs
+            formContainer.classList.add('hidden'); // Close the box
+            await fetchAndRenderRows(); // Refresh table ONLY
+            // DO NOT call generateForm() here, or it will re-open!
         } catch (err) { console.error(err); }
     };
     formContainer.appendChild(form);
