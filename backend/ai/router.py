@@ -1276,7 +1276,8 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 * *CRITICAL: Do NOT put row_id in the URL path. Use the query parameter `?row_id=`.*
         -   **Update ANY Row (Universal):** `api.put('/custom-data/rows/' + TARGET_ROW_ID, { data: mergedData, sitemember_id })`
                 * *CRITICAL: The URL must be the specific ROW ID, not the Schema ID.*
-        -   **Delete Row:** `api.delete('/custom-data/rows/' + schemaId + '?row_id=' + ROW_ID + (sitemember_id ? '&sitemember_id=' + sitemember_id : ''))`
+        -   **Delete Row:** `api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=' + (sitemember_id || ''))`
+                * *CRITICAL: The URL must be the specific ROW ID, not the Schema ID.*
     -   Pagination Logic:
         -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
         -  Buttons MUST be disabled when on the first or last page.
