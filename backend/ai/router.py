@@ -1516,17 +1516,33 @@ const generateForm = async (initialData = {}) => {
 };
 
 // 5. EVENT LISTENERS
-container.addEventListener('click', (e) => {
-    if (e.target.closest('.edit-btn')) {
-        editingRowId = e.target.closest('.edit-btn').dataset.rowId;
+container.addEventListener('click', async (e) => {
+    // Edit Button
+    const editBtn = e.target.closest('.edit-btn');
+    if (editBtn) {
+        editingRowId = editBtn.dataset.rowId;
         const row = currentRows.find(r => r.row_id === editingRowId);
         if (row) generateForm(row.data);
     }
-    if (e.target.closest('.delete-btn')) {
-        if (confirm('Delete?')) api.delete(`/custom-data/rows/${schemaId}?row_id=${e.target.closest('.delete-btn').dataset.rowId}`).then(() => fetchAndRenderRows());
+
+    // Delete Button
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+        if (confirm('Delete?')) {
+            try {
+                const sitemember_id = properties.sitemember_id || null;
+                const rowId = deleteBtn.dataset.rowId;
+                // Add await here to ensure it finishes
+                await api.delete(`/custom-data/rows/${schemaId}?row_id=${rowId}${sitemember_id ? '&sitemember_id=' + sitemember_id : ''}`);
+                // Only refresh after success
+                await fetchAndRenderRows();
+            } catch (err) {
+                console.error("Delete failed:", err);
+                alert("Failed to delete row.");
+            }
+        }
     }
 });
-
 if (addButton) {
     addButton.onclick = () => {
         editingRowId = null;
