@@ -1323,37 +1323,33 @@ let currentRows = [];
 // 1. DATA MUTATION CONFIGURATION
 const crossTableMutations = [{
     when: 'create',
-    sourceField: 'time', // The form field that contains the Slot's Row ID
+    sourceField: 'time',
     target: {
         field: 'available',
         value: false
     }
 }];
 
-// 2. CROSS-TABLE EXECUTOR (Fixed API Paths)
+// 2. CROSS-TABLE EXECUTOR
 const runCrossTableMutations = async (mode, formData, sitemember_id) => {
     const rules = crossTableMutations.filter(r => r.when === mode);
     for (const rule of rules) {
         const targetRowId = formData[rule.sourceField];
-        // We find the schema ID just to be safe, but we use Row ID for the update
         const fieldDef = schema.find(f => f.id === rule.sourceField);
         const targetSchemaId = fieldDef?.related_schema_id;
 
         if (targetRowId && targetSchemaId) {
             try {
-                // Fetch the existing slot data first to prevent wiping other fields
                 const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);
                 const rows = res.data?.rows || res.rows || [];
                 const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
 
-                // Update the specific Slot Row ID
                 await api.put(`/custom-data/rows/${targetRowId}`, {
                     data: { ...existing,
                         [rule.target.field]: rule.target.value
                     },
                     sitemember_id
                 });
-                console.log(`Mutation success: Updated Slot ${targetRowId}`);
             } catch (err) {
                 console.error('Mutation failed:', err);
             }
@@ -1361,24 +1357,35 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
     }
 };
 
-// 3. FETCH & RENDER
+// 3. FETCH & RENDER (Definition only - NOT called automatically)
 const fetchAndRenderRows = async () => {
+    // SECURITY: Double check hideData property
     if (properties.hideData) return;
     try {
         const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`);
         currentRows = res.data?.rows || res.rows || [];
         dataDisplay.innerHTML = '';
         const tmpl = container.querySelector('#displayTemplate').innerHTML;
+        
         currentRows.forEach(row => {
-            const rowData = { ...row.data
-            };
-            // Simple display label logic
+            const rowData = JSON.parse(JSON.stringify(row.data));
+            
+            
+            Object.keys(rowData).forEach(key => {
+                if (rowData[key] === false) rowData[key] = 'false';
+                if (rowData[key] === true) rowData[key] = 'true';
+            });
+
+            // Smart Labels
             schema.forEach(f => {
                 if (f.type === 'relation' && rowData[f.id]) {
                     const d = rowData[f.id].data || rowData[f.id];
-                    rowData[f.id].display_label = Object.values(d).filter(v => typeof v !== 'object')[0] || '---';
+                    let label = d[f.id]; 
+                    if (!label) label = Object.values(d).filter(v => typeof v !== 'object')[0];
+                    rowData[f.id].display_label = label || '---';
                 }
             });
+
             const div = document.createElement('div');
             div.innerHTML = Mustache.render(tmpl, {
                 data: rowData,
@@ -1391,7 +1398,7 @@ const fetchAndRenderRows = async () => {
     }
 };
 
-// 4. FORM GENERATION (Fixed Layout & Deduplication)
+// 4. FORM GENERATION
 const generateForm = async (initialData = {}) => {
     formContainer.innerHTML = '';
     formContainer.classList.remove('hidden');
@@ -1401,9 +1408,7 @@ const generateForm = async (initialData = {}) => {
     const relCache = {};
 
     for (const field of schema) {
-        // Create a wrapper div so label and input stay together
         const wrapper = document.createElement('div');
-        
         const label = document.createElement('label');
         label.className = 'block text-sm font-semibold text-gray-700 mb-1';
         label.textContent = field.label;
@@ -1413,41 +1418,35 @@ const generateForm = async (initialData = {}) => {
             const sel = document.createElement('select');
             sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
             selects[field.id] = sel;
-            sel.name = field.id; // Ensure name is set for FormData
-            
-            // Fetch related data
+            sel.name = field.id;
+
             const res = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`);
             const rows = res.data?.rows || res.rows || [];
             relCache[field.id] = rows;
-
             sel.innerHTML = '<option value="">Select...</option>';
 
             if (field.id === 'day') {
-                // DEDUPLICATION LOGIC for Days
                 const seen = new Set();
                 rows.forEach(r => {
                     const txt = r.data.day;
                     if (txt && !seen.has(txt)) {
                         seen.add(txt);
                         const opt = document.createElement('option');
-                        opt.value = r.row_id; // Value is the Row ID
-                        opt.textContent = txt; // Text is the Day Name
+                        opt.value = r.row_id;
+                        opt.textContent = txt;
                         sel.appendChild(opt);
                     }
                 });
 
-                // Add Change Listener for Dependent Time Field
                 sel.addEventListener('change', () => {
                     const selectedDayText = sel.options[sel.selectedIndex].textContent;
                     const timeSelect = selects['time'];
                     if (timeSelect) {
                         timeSelect.innerHTML = '<option value="">Select Time...</option>';
-                        // Filter times: Match Day Name AND Check Availability
-                        const availableTimes = relCache['time'].filter(r => 
-                            r.data.day === selectedDayText && 
+                        const availableTimes = relCache['time'].filter(r =>
+                            r.data.day === selectedDayText &&
                             (r.data.available === true || r.data.available === 'true')
                         );
-                        
                         availableTimes.forEach(r => {
                             const opt = document.createElement('option');
                             opt.value = r.row_id;
@@ -1457,8 +1456,7 @@ const generateForm = async (initialData = {}) => {
                     }
                 });
             } else if (field.id !== 'time') {
-                // Standard relation population for non-dependent fields
-                 rows.forEach(r => {
+                rows.forEach(r => {
                     const val = Object.values(r.data).filter(v => typeof v !== 'object')[0];
                     const opt = document.createElement('option');
                     opt.value = r.row_id;
@@ -1496,40 +1494,40 @@ const generateForm = async (initialData = {}) => {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
                 await runCrossTableMutations('create', data, sitemember_id);
             }
-            // PRIVACY LOGIC:
-            editingRowId = null;
-            form.reset(); // Clear inputs
-            formContainer.classList.add('hidden'); // Close the box
             
-            // DO NOT call generateForm() here, or it will re-open!
-        } catch (err) { console.error(err); }
+            // --- PRIVACY PROTOCOL (SCENARIO A) ---
+            alert('Booking Confirmed!'); 
+            editingRowId = null;
+            form.reset(); 
+            formContainer.classList.add('hidden');
+            
+        } catch (err) {
+            console.error(err);
+        }
     };
     formContainer.appendChild(form);
 };
 
 // 5. EVENT LISTENERS
 container.addEventListener('click', (e) => {
-    const editBtn = e.target.closest('.edit-btn');
-    if (editBtn) {
-        editingRowId = editBtn.dataset.rowId;
+    if (e.target.closest('.edit-btn')) {
+        editingRowId = e.target.closest('.edit-btn').dataset.rowId;
         const row = currentRows.find(r => r.row_id === editingRowId);
         if (row) generateForm(row.data);
     }
-    const deleteBtn = e.target.closest('.delete-btn');
-    if (deleteBtn) {
-        if (confirm('Delete?')) {
-            api.delete(`/custom-data/rows/${schemaId}?row_id=${deleteBtn.dataset.rowId}`).then(() => fetchAndRenderRows());
-        }
+    if (e.target.closest('.delete-btn')) {
+        if (confirm('Delete?')) api.delete(`/custom-data/rows/${schemaId}?row_id=${e.target.closest('.delete-btn').dataset.rowId}`).then(() => fetchAndRenderRows());
     }
 });
 
-// This was missing in your code!
 if (addButton) {
-    addButton.addEventListener('click', () => {
+    addButton.onclick = () => {
         editingRowId = null;
         generateForm();
-    });
+    };
 }
+
+
 
 "
 }
