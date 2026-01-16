@@ -1212,7 +1212,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 - Identify the property in the Child data that matches the Parent's schema.
                 - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
                 - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
-    -   **Data Submission:** On form submit, it **MUST** use `new FormData(form)` and `Object.fromEntries()` to reliably collect all data.
+   -   **Data Submission (CONTEXT-AWARE BEHAVIOR):**
+            On form submit, the script MUST follow the user's intent regarding the form state:
+                1.  **IF** the user says "don't load data", "clear form", or implies a public submission (e.g., "Booking Form"): The script **MUST** call `form.reset()`, set `editingRowId = null`, and hide the form (`formContainer.classList.add('hidden')`) immediately after success. **DO NOT** reload the data.
+                2.  **IF** the user says "keep open", "admin panel", or "manage data": The script may reload the updated data to allow continuous editing.
+                3.  **DEFAULT:** If unspecified, default to **clearing and hiding** to prevent data leaks.
     -   **UNIVERSAL CROSS-TABLE MUTATION ENGINE (CRITICAL):**
             If the user's prompt implies updating, syncing, reserving, or modifying ANY OTHER TABLE (e.g., "mark slot as unavailable", "decrease stock"):
                 1) **Define Mutation Rules:** The script MUST define a `const crossTableMutations` array at the top.
@@ -1488,12 +1492,12 @@ const generateForm = async (initialData = {}) => {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
                 await runCrossTableMutations('create', data, sitemember_id);
             }
-        } catch (err) {
-            console.error(err);
-        }
-        editingRowId = null;
-        await fetchAndRenderRows();
-        generateForm();
+            // PRIVACY/RESET LOGIC (AI: Adapt this based on user prompt)
+            editingRowId = null;
+            form.reset(); 
+            formContainer.classList.add('hidden'); 
+            await fetchAndRenderRows();
+        } catch (err) { console.error(err); }
     };
     formContainer.appendChild(form);
 };
