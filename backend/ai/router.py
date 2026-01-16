@@ -1480,18 +1480,14 @@ const generateForm = async (initialData = {}) => {
         const data = {};
         new FormData(form).forEach((v, k) => data[k] = v);
         
-        // --- ID SYNCHRONIZATION FIX ---
-        // If 'time' is selected, it represents the SPECIFIC slot ID.
-        // We force 'day' to use that same ID so the data matches perfectly.
+        // ID Synchronization
         if (data['time'] && data['day']) {
-             // Optional: Check if schemas match to be safe
              const dayField = schema.find(f => f.id === 'day');
              const timeField = schema.find(f => f.id === 'time');
              if (dayField && timeField && dayField.related_schema_id === timeField.related_schema_id) {
                  data['day'] = data['time'];
              }
         }
-        // ------------------------------
 
         const sitemember_id = properties.sitemember_id || null;
         try {
@@ -1502,12 +1498,11 @@ const generateForm = async (initialData = {}) => {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
                 await runCrossTableMutations('create', data, sitemember_id);
             }
-            // PRIVACY PROTOCOL (Scenario A)
+            // Privacy Protocol
             alert('Booking Confirmed!');
             editingRowId = null;
             form.reset();
             formContainer.classList.add('hidden');
-            
         } catch (err) {
             console.error(err);
         }
@@ -1515,9 +1510,9 @@ const generateForm = async (initialData = {}) => {
     formContainer.appendChild(form);
 };
 
-// 5. EVENT LISTENERS
+// 5. EVENT LISTENERS (FIXED DELETE URL)
 container.addEventListener('click', async (e) => {
-    // Edit Button
+    // Edit
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
@@ -1525,30 +1520,43 @@ container.addEventListener('click', async (e) => {
         if (row) generateForm(row.data);
     }
 
-    // Delete Button
+    // Delete
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
         if (confirm('Delete?')) {
+            const rowElement = deleteBtn.closest('.flex'); 
+            const originalText = deleteBtn.innerText;
+            deleteBtn.innerText = '...'; 
+            deleteBtn.disabled = true;
+
             try {
                 const sitemember_id = properties.sitemember_id || null;
                 const rowId = deleteBtn.dataset.rowId;
-                // Add await here to ensure it finishes
-                await api.delete(`/custom-data/rows/${schemaId}?row_id=${rowId}${sitemember_id ? '&sitemember_id=' + sitemember_id : ''}`);
-                // Only refresh after success
-                await fetchAndRenderRows();
+                
+               
+                await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`);
+                
+                // Instant UI Update
+                if (rowElement) rowElement.remove();
+                currentRows = currentRows.filter(r => r.row_id !== rowId);
+
             } catch (err) {
                 console.error("Delete failed:", err);
                 alert("Failed to delete row.");
+                deleteBtn.innerText = originalText;
+                deleteBtn.disabled = false;
             }
         }
     }
 });
+
 if (addButton) {
     addButton.onclick = () => {
         editingRowId = null;
         generateForm();
     };
 }
+
 
 "
 }
