@@ -153,6 +153,7 @@ export default function AiDatabasePage() {
   };
 
   // --- ✅ FIXED: UNIVERSAL DISPLAY LOGIC ---
+  // --- ✅ FIXED: ROBUST UNIVERSAL DISPLAY LOGIC ---
   const getDisplayValue = (
     cellData: any,
     field: SchemaField,
@@ -166,6 +167,7 @@ export default function AiDatabasePage() {
     if (typeof cellData === "object" && cellData !== null && cellData.data) {
       const data = cellData.data;
 
+      // Extract all printable values
       const values = Object.values(data).filter(
         (v): v is string | number =>
           (typeof v === "string" || typeof v === "number") && v !== null
@@ -177,10 +179,7 @@ export default function AiDatabasePage() {
         values.length > 1;
 
       if (isChild) {
-        // --- UNIVERSAL FILTERING (NO HARDCODING) ---
-        // We look at all OTHER fields in this specific row.
-        // If a value exists in another column (e.g. "Monday" is in the 'Day' column),
-        // we add it to a list of things to HIDE in this column.
+        // --- UNIVERSAL FILTERING ---
         const parentValues = new Set<string>();
 
         if (row && selectedSchema) {
@@ -188,34 +187,36 @@ export default function AiDatabasePage() {
             // Don't look at yourself
             if (otherField.id !== field.id && row.data[otherField.id]) {
               const otherVal = row.data[otherField.id];
-
-              // If the other column is also a relation object, look inside it
               if (typeof otherVal === "object" && otherVal?.data) {
                 Object.values(otherVal.data).forEach((v) =>
                   parentValues.add(String(v))
                 );
               } else {
-                // Regular text/number column
                 parentValues.add(String(otherVal));
               }
             }
           });
         }
 
-        // Filter out values that are duplicates of the Parent column
-        return values
-          .filter((v) => !parentValues.has(v.toString()))
-          .join(" - ");
+        // Apply Filter
+        const filtered = values.filter((v) => !parentValues.has(v.toString()));
+
+        // 🚨 SAFETY NET: If filtering removed EVERYTHING, revert to showing the raw values.
+        // This happens when two columns point to the same data (like Day & Time both pointing to Slots).
+        if (filtered.length === 0 && values.length > 0) {
+          return values.join(" - ");
+        }
+
+        return filtered.join(" - ");
       }
 
-      // Default: Just show the first value (e.g. "Monday")
+      // Default: Just show the first value
       return values.length > 0 ? String(values[0]) : cellData.row_id;
     }
 
     // Default fallback
     return String(cellData || "");
   };
-
   // --- RENDER ---
   if (error) return <div className="p-8 text-center text-red-500">{error}</div>;
 
