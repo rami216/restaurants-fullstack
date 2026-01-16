@@ -260,7 +260,8 @@ export default function AiDatabasePage() {
                   <Plus size={16} className="mr-2" /> Add New
                 </button>
               </div>
-              <div className="overflow-hidden bg-white rounded-lg shadow">
+              {/* ✅ FIXED: Changed overflow-hidden to overflow-x-auto */}
+              <div className="overflow-x-auto bg-white rounded-lg shadow">
                 <table className="min-w-full divide-y divide-gray-200">
                   <thead className="bg-gray-50">
                     <tr>
@@ -293,9 +294,9 @@ export default function AiDatabasePage() {
                           {selectedSchema.fields.map((field) => (
                             <td
                               key={field.id}
-                              className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap"
+                              /* ✅ FIXED: Removed 'whitespace-nowrap' so text can wrap */
+                              className="px-6 py-4 text-sm text-gray-700"
                             >
-                              {/* ✅ MODIFIED: We now pass the 'row' object here */}
                               {getDisplayValue(row.data[field.id], field, row)}
                             </td>
                           ))}
