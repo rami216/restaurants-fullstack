@@ -92,7 +92,6 @@ export default function AiDatabasePage() {
   // --- CRUD and Modal Handlers ---
   const handleOpenModal = (row: DataRow | null) => {
     setEditingRow(row);
-    // When editing, we need to store the ID of the related object, not the whole object
     const initialFormData = row
       ? Object.entries(row.data).reduce((acc, [key, value]) => {
           if (typeof value === "object" && value !== null && value.row_id) {
@@ -138,7 +137,6 @@ export default function AiDatabasePage() {
   };
 
   const handleDeleteRow = async (rowId: string) => {
-    // ✅ THE FIX: Add a check for selectedSchema before using it.
     if (!selectedSchema) {
       setError("Cannot delete row: no schema selected.");
       return;
@@ -154,42 +152,67 @@ export default function AiDatabasePage() {
     }
   };
 
-  const getDisplayValue = (cellData: any, field: SchemaField) => {
+  // --- ✅ FIXED: UNIVERSAL DISPLAY LOGIC ---
+  const getDisplayValue = (
+    cellData: any,
+    field: SchemaField,
+    row?: DataRow
+  ) => {
+    // 1. Boolean Fix: Explicitly return string "true"/"false" so they don't vanish
+    if (cellData === false) return "false";
+    if (cellData === true) return "true";
+
+    // 2. Relation/Object Handling
     if (typeof cellData === "object" && cellData !== null && cellData.data) {
       const data = cellData.data;
 
-      // Convert unknown values to strings safely while filtering out nested objects
       const values = Object.values(data).filter(
         (v): v is string | number =>
           (typeof v === "string" || typeof v === "number") && v !== null
       );
 
-      // DYNAMIC ROLE DETECTION: A child field usually has multiple descriptive strings (like start/end time)
-      // or is explicitly not the first relation found in the schema.
+      // Dynamic Role Detection
       const isChild =
         field.id.toLowerCase().match(/time|slot|sub|model/i) ||
         values.length > 1;
 
       if (isChild) {
-        // UNIVERSAL REDUNDANCY FILTER:
-        // We look for any value that matches common "Parent" patterns or is just one of many.
-        // For your specific case, we strip out any value that isn't a time-formatted string
-        // if it's a "Time" column, or we just join everything that isn't the first field.
+        // --- UNIVERSAL FILTERING (NO HARDCODING) ---
+        // We look at all OTHER fields in this specific row.
+        // If a value exists in another column (e.g. "Monday" is in the 'Day' column),
+        // we add it to a list of things to HIDE in this column.
+        const parentValues = new Set<string>();
+
+        if (row && selectedSchema) {
+          selectedSchema.fields.forEach((otherField) => {
+            // Don't look at yourself
+            if (otherField.id !== field.id && row.data[otherField.id]) {
+              const otherVal = row.data[otherField.id];
+
+              // If the other column is also a relation object, look inside it
+              if (typeof otherVal === "object" && otherVal?.data) {
+                Object.values(otherVal.data).forEach((v) =>
+                  parentValues.add(String(v))
+                );
+              } else {
+                // Regular text/number column
+                parentValues.add(String(otherVal));
+              }
+            }
+          });
+        }
+
+        // Filter out values that are duplicates of the Parent column
         return values
-          .filter((v) => {
-            const str = v.toString();
-            // Hide common calendar names or generic parent labels if they appear in a child column
-            return !str.match(
-              /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i
-            );
-          })
+          .filter((v) => !parentValues.has(v.toString()))
           .join(" - ");
       }
 
-      // For Parent fields, just show the primary descriptive value
+      // Default: Just show the first value (e.g. "Monday")
       return values.length > 0 ? String(values[0]) : cellData.row_id;
     }
 
+    // Default fallback
     return String(cellData || "");
   };
 
@@ -271,8 +294,8 @@ export default function AiDatabasePage() {
                               key={field.id}
                               className="px-6 py-4 text-sm text-gray-700 whitespace-nowrap"
                             >
-                              {/* ✅ MODIFIED: Use the helper function here */}
-                              {getDisplayValue(row.data[field.id], field)}
+                              {/* ✅ MODIFIED: We now pass the 'row' object here */}
+                              {getDisplayValue(row.data[field.id], field, row)}
                             </td>
                           ))}
                           <td className="px-6 py-4 space-x-2 text-sm font-medium text-right whitespace-nowrap">
@@ -436,24 +459,14 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
         (typeof v === "string" || typeof v === "number") && v !== null
     );
 
-    // Identify if this relation should be a "Child" (detailed) or "Parent" (simple)
     const isChild = field.id.toLowerCase().match(/time|slot|sub|model/i);
 
     if (isChild) {
-      // For children, show the full detail but strip the parent's name if found
-      return values
-        .filter(
-          (v) =>
-            !v
-              .toString()
-              .match(
-                /Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday/i
-              )
-        )
-        .join(" - ");
+      // For the dropdown, we keep it simple since we don't have the parent context yet
+      // This will just show "Monday - 10:00 - 12:00" which is actually helpful in a dropdown
+      return values.join(" - ");
     }
 
-    // For parents, show only the primary name
     return values.length > 0 ? String(values[0]) : option.row_id;
   };
 
@@ -469,7 +482,6 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
         {loading ? "Loading..." : `Select ${field.label}`}
       </option>
       {(() => {
-        // --- UNIVERSAL UNIQUE FILTER ---
         const seenLabels = new Set<string>();
         return options
           .filter((option) => {
