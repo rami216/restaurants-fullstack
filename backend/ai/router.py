@@ -267,6 +267,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **1.  HTML Structure:**
     - The HTML must be wrapped in a single container `<div>`.
     - This container will have the unique class name you are given applied to it.
+    - **FORMS:** If creating a form, use `<form>`. **DO NOT** add `action=""` or `method=""` attributes. We handle submission purely via JavaScript.
 
 **2. Styling:**
     - All CSS must be in a single <style> tag.
@@ -290,14 +291,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - CSS must be concise, scoped, and visually polished by default.
 
 **3.  Interactivity (`script` key):**
-    - Provide a JavaScript string that adds event listeners to the HTML.
-    - The script will be executed inside a function that receives `container` as an argument.
-    - Use `container.querySelector('.your-class')` to find and manipulate elements.
-    - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
-    - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups. If no specific logic is requested, the script key should be an empty string "".
-    - **IMPORTANT JAVASCRIPT SYNTAX RULE:** If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
-      - **Correct:** `const myFunc = () => { /* logic */ };`
-      - **Incorrect:** `function myFunc() { /* logic */ };`
+    - Provide a JavaScript string executed inside a function `(container, api, schemaId, properties, Mustache)`.
+    - **Use `container.querySelector`** (NOT document.querySelector).
+    - **Do NOT** wrap code in `<script>`.
+    - **Use function expressions** (`const x = () => {}`).
+    - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
+    - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -414,7 +413,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
     { "key":"btnText", "label":"Button Text", "type":"text" }
   ],
-  "script": "const form = container.querySelector('form'); form.onsubmit = async (e) => { e.preventDefault(); const formData = {}; new FormData(form).forEach((v, k) => formData[k] = v); try { await api.post('/custom-data/rows/550e8400-e29b-41d4-a716-446655440000', { data: formData, sitemember_id: null }); alert('Subscribed!'); form.reset(); } catch(err) { console.error(err); alert('Failed.'); } };"
+  "script": "const form = container.querySelector('form'); if(form) { form.onsubmit = async (e) => { e.preventDefault(); const formData = {}; new FormData(form).forEach((v, k) => formData[k] = v); try { const submitBtn = form.querySelector('button[type=\"submit\"]'); const origText = submitBtn.innerText; submitBtn.innerText = '...'; await api.post('/custom-data/rows/550e8400-e29b-41d4-a716-446655440000', { data: formData, sitemember_id: null }); alert('Subscribed!'); form.reset(); submitBtn.innerText = origText; } catch(err) { console.error(err); alert('Failed.'); } }; }"
 }
 
 """.strip()
