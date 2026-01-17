@@ -1184,6 +1184,11 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
     -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector. You MUST only use container.querySelector so multiple forms on one page do not conflict.
+    -   **UI SYNCHRONIZATION (MANDATORY):** The script MUST explicitly select and update the static UI elements (Title, Add Button) using the values from `properties` at the very top of the execution. This ensures the editor updates immediately.
+        -   Set `titleElement.textContent = properties.title`.
+        -   Set `titleElement.style.color = properties.titleColor`.
+        -   Set `addButton.textContent = properties.addButtonText`.
+        -   Set `addButton.style.backgroundColor = properties.buttonBgColor`.
     -   Initial Load Guard: The script MUST check if (properties.hideData) return; at the very beginning of the fetchAndRenderRows function to prevent private data from loading.
     -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
@@ -1319,10 +1324,22 @@ const dataDisplay = container.querySelector('.data-display');
 const formContainer = container.querySelector('.form-container');
 const addButton = container.querySelector('.add-new-btn');
 const paginationControls = container.querySelector('.pagination-controls');
+const titleElement = container.querySelector('h2, h3'); // Select the header
+
 let editingRowId = null;
 let currentRows = [];
 let currentPage = 0;
 const rowsPerPage = 20;
+
+
+if (titleElement) {
+    titleElement.textContent = properties.title;
+    if (properties.titleColor) titleElement.style.color = properties.titleColor;
+}
+if (addButton) {
+    addButton.textContent = properties.addButtonText;
+    if (properties.buttonBgColor) addButton.style.backgroundColor = properties.buttonBgColor;
+}
 
 // 1. DATA MUTATION CONFIGURATION
 // Automatically sets "Available" to false when a slot is booked
