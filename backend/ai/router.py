@@ -313,6 +313,60 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             4.  **Read:** `const res = await api.get('/custom-data/rows/' + SCHEMA_ID);`
         - **IF** the user just wants a visual element (e.g., "Hero Section"):
             - Ignore the schemas. Do not write API calls.
+**6.  CROSS-TABLE DATA OPERATIONS (CRITICAL):**
+        If the user wants to interact with an EXISTING table (e.g., "save to Subscribers", "update inventory"):
+        
+        **A) IDENTIFY THE TARGET TABLE:**
+            - Look in `EXISTING_SCHEMAS_ON_WEBSITE` for a matching schema
+            - Extract the `schema_id` for that table
+        
+        **B) FORM SUBMISSION PATTERN:**
+            - The form's `onsubmit` handler MUST start with `e.preventDefault();` (CRITICAL - prevents page reload)
+            - Collect form data using: `const data = {}; new FormData(form).forEach((v,k) => data[k] = v);`
+        
+        **C) API OPERATIONS:**
+            - **CREATE:** `await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
+            - **READ ALL:** `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=100');`
+            - **READ ONE:** `const res = await api.get('/custom-data/rows/' + ROW_ID);`
+            - **UPDATE:** `await api.put('/custom-data/rows/' + ROW_ID, { data, sitemember_id: null });`
+            - **DELETE:** `await api.delete('/custom-data/rows/' + ROW_ID);`
+        
+        **D) USER FEEDBACK:**
+            - After successful save: Show success message, reset form
+            - Example: `alert('Success!'); form.reset();`
+            - Disable button during submission: `btn.disabled = true; btn.innerText = '...';`
+        
+        **E) EXAMPLE PATTERN FOR FORMS:**
+```javascript
+            const form = container.querySelector('form');
+            if (form) {
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    const data = {};
+                    new FormData(form).forEach((v, k) => data[k] = v);
+                    
+                    const btn = form.querySelector('button[type="submit"]');
+                    const originalText = btn.innerText;
+                    btn.disabled = true;
+                    btn.innerText = '...';
+                    
+                    try {
+                        await api.post('/custom-data/rows/SCHEMA_ID_HERE', { 
+                            data, 
+                            sitemember_id: null 
+                        });
+                        alert('Success!');
+                        form.reset();
+                    } catch (err) {
+                        console.error(err);
+                        alert('Error saving data');
+                    } finally {
+                        btn.disabled = false;
+                        btn.innerText = originalText;
+                    }
+                };
+            }
+```
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
@@ -359,8 +413,19 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **Prompt:** "A newsletter form that saves email to Subscribers"
 **Output:**
 {
-  "aiTemplate": "<div class=\\"ai-newsletter-123\\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\\"email\\" placeholder=\\"{{placeholderText}}\\" class=\\"p-2 border w-full mb-2 rounded\\"><button type=\\"submit\\" style=\\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\\" class=\\"p-2 w-full font-bold\\">{{btnText}}</button></form></div>",
-  "properties": { "bgColor": "#ffffff", "padding": "24px", "borderRadius": "12px", "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", "maxWidth": "400px", "placeholderText": "Enter your email...", "btnColor": "#2563eb", "btnTextColor": "#ffffff", "btnRadius": "6px", "btnText": "Subscribe" },
+  "aiTemplate": "<div class=\"ai-newsletter-123\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\"email\" placeholder=\"{{placeholderText}}\" class=\"p-2 border w-full mb-2 rounded\" required><button type=\"submit\" style=\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\" class=\"p-2 w-full font-bold\">{{btnText}}</button></form></div>",
+  "properties": { 
+    "bgColor": "#ffffff", 
+    "padding": "24px", 
+    "borderRadius": "12px", 
+    "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", 
+    "maxWidth": "400px", 
+    "placeholderText": "Enter your email...", 
+    "btnColor": "#2563eb", 
+    "btnTextColor": "#ffffff", 
+    "btnRadius": "6px", 
+    "btnText": "Subscribe" 
+  },
   "editableProps": [
     { "key":"bgColor", "label":"Background", "type":"color" },
     { "key":"padding", "label":"Padding", "type":"text" },
@@ -372,7 +437,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
     { "key":"btnText", "label":"Button Text", "type":"text" }
   ],
-  "script": "const form = container.querySelector('form'); if(form) { form.onsubmit = async (e) => { e.preventDefault(); const fd = {}; new FormData(form).forEach((v, k) => fd[k] = v); try { const btn = form.querySelector('button'); const old = btn.innerText; btn.innerText = '...'; await api.post('/custom-data/rows/SCHEMA_UUID_HERE', { data: fd, sitemember_id: null }); alert('Success!'); form.reset(); btn.innerText = old; } catch(err) { alert('Error'); } }; }"
+  "script": "const form = container.querySelector('form'); if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const btn = form.querySelector('button[type=\"submit\"]'); const originalText = btn.innerText; btn.disabled = true; btn.innerText = '...'; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); alert('Success!'); form.reset(); } catch (err) { console.error(err); alert('Error'); } finally { btn.disabled = false; btn.innerText = originalText; } }; }"
 }
 
 """.strip()
