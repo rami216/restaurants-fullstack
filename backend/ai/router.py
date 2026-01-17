@@ -476,6 +476,69 @@ class GenerateRequestForElement(BaseModel):
     unique_class_name: str
     website_id: UUID | str
 
+# @router.post("/generate-ai-element")
+# async def generate_ai_element(
+#     body: GenerateRequestForElement,
+#     db: AsyncSession = Depends(get_db),
+#     user: User = Depends(get_current_active_user),
+# ):
+#     try:
+#         # Guard: validate website_id exists
+#         if not body.website_id:
+#             raise HTTPException(400, "website_id is required")
+
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+#         )
+
+#         resp = openai.chat.completions.create(
+#             model=AI_DEFAULT_MODEL,                  # e.g. "gpt-4o"
+#             response_format={"type": "json_object"},
+#             messages=[
+#                 {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_FROM_GPT5},
+#                 {"role": "user",   "content": user_content},
+#             ],
+#             temperature=0.2,
+#             max_tokens=4096,
+#         )
+
+#         # v1 SDK: usage is an object; model is on resp.model
+#         usage = getattr(resp, "usage", None)
+#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+
+#         content = resp.choices[0].message.content
+#         payload = json.loads(content)
+
+#         # strip <script> wrapper if present
+#         if isinstance(payload.get("script"), str):
+#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if m:
+#                 payload["script"] = m.group(1).strip()
+
+#         # Track usage (expects UUID + int user_id)
+#         await track_ai_usage(
+#             db=db,
+#             website_id=body.website_id,             # keep as UUID
+#             user_id=user.id,                         # your users.id is INTEGER
+#             model=model_used,
+#             feature="generate_element",
+#             prompt_tokens=prompt_tokens,
+#             completion_tokens=completion_tokens,
+#             meta={"unique_class_name": body.unique_class_name},
+#         )
+
+#         return payload
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         # print full traceback to your server console so you see the real error
+#         import traceback; traceback.print_exc()
+#         raise HTTPException(500, f"generate-ai-element failed: {e}")
+
 @router.post("/generate-ai-element")
 async def generate_ai_element(
     body: GenerateRequestForElement,
@@ -487,16 +550,38 @@ async def generate_ai_element(
         if not body.website_id:
             raise HTTPException(400, "website_id is required")
 
+        # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
+        # We need this so the AI knows the IDs of "Leads", "Products", etc.
+        # This matches the logic used in 'generate_data_app_element'
+        schema_result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
+        )
+        existing_schemas = schema_result.scalars().all()
+        
+        # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
+        schemas_context = json.dumps([
+            {
+                "name": s.name, 
+                "schema_id": str(s.schema_id), 
+                "fields": s.fields 
+            } 
+            for s in existing_schemas
+        ])
+
+        # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
+        # We append the schema list so Rule 5 in the prompt works correctly
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
-            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
         )
 
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,                  # e.g. "gpt-4o"
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": ELEMENT_GENERATOR_PROMPT_FROM_GPT5},
+                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_FROM_GPT5},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -538,7 +623,6 @@ async def generate_ai_element(
         # print full traceback to your server console so you see the real error
         import traceback; traceback.print_exc()
         raise HTTPException(500, f"generate-ai-element failed: {e}")
-
 #region gpt5 
 # client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60)  # set timeout on the client
 # MODEL = "gpt-5-nano"
