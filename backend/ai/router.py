@@ -303,57 +303,16 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **NO user-facing text should be hardcoded in the `aiTemplate`**.
     - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
     - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
-**5.  DATA INTERACTIONS (CONDITIONAL LOGIC):**
-    - You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
-    - **CASE A: PURELY VISUAL ELEMENT (e.g., "Accordion", "Hero Text", "Simple Button"):**
-        - **IGNORE** the existing schemas. Do not write any API calls.
-        - Just create the HTML/CSS/JS for the visual element.
-    
-    - **CASE B: DATA-CONNECTED ELEMENT (e.g., "Contact Form", "Newsletter Signup", "List of Products"):**
-        - **Identify Schema:** Find the correct `schema_id` from the provided list based on the user's intent.
-        - **Write Logic:** Write the raw JavaScript to handle the API calls using the `api` object.
-        - **USE THESE API SIGNATURES:**
-            * **Create:** `await api.post('/custom-data/rows/' + TARGET_SCHEMA_ID, { data: formData, sitemember_id: null });`
-            * **Read (List):** `const res = await api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?limit=20');`
-            * **Read (Single):** `const res = await api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?row_id=' + TARGET_ROW_ID);`
-            * **Update:** `await api.put('/custom-data/rows/' + TARGET_ROW_ID, { data: updates, sitemember_id: null });`
-            * **Delete:** `await api.delete('/custom-data/rows/' + TARGET_ROW_ID);`
 
-    - **SCENARIO: FORMS (Saving Data):**
-        - Attach `onsubmit` to the form.
-        - Collect data using `FormData`.
-        - Call `api.post`.
-        - Alert success and reset form.
-        - *Example:*
-          ```javascript
-          const form = container.querySelector('form');
-          form.onsubmit = async (e) => {
-              e.preventDefault();
-              const formData = {};
-              new FormData(form).forEach((v, k) => formData[k] = v);
-              try {
-                  await api.post('/custom-data/rows/THE_SCHEMA_UUID', { data: formData, sitemember_id: null });
-                  alert('Submitted!');
-                  form.reset();
-              } catch(err) { console.error(err); alert('Failed.'); }
-          };
-          ```
-
-    - **SCENARIO: DISPLAYING DATA (Loading List):**
-        - Call `api.get` immediately.
-        - Loop through `res.data.rows`.
-        - **Manually generate HTML strings** for each row and inject them into a container using `innerHTML`.
-        - *Example:*
-          ```javascript
-          const load = async () => {
-             const res = await api.get('/custom-data/rows/THE_SCHEMA_UUID');
-             const list = container.querySelector('.list');
-             list.innerHTML = res.data.rows.map(row => 
-                 `<div class="item"><b>${row.data.title}</b></div>`
-             ).join('');
-          };
-          load();
-          ```
+**5.  DATA LOGIC (How to connect to the database):**
+        - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
+        - **IF** the user wants to save/load data (e.g., "Contact Form", "List of Items"):
+            1.  Find the matching `schema_id` from the list.
+            2.  Write the `api` call in the script.
+            3.  **Create:** `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: formData, sitemember_id: null });`
+            4.  **Read:** `const res = await api.get('/custom-data/rows/' + SCHEMA_ID);`
+        - **IF** the user just wants a visual element (e.g., "Hero Section"):
+            - Ignore the schemas. Do not write API calls.
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
@@ -413,7 +372,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
     { "key":"btnText", "label":"Button Text", "type":"text" }
   ],
-  "script": "const form = container.querySelector('form'); if(form) { form.onsubmit = async (e) => { e.preventDefault(); const formData = {}; new FormData(form).forEach((v, k) => formData[k] = v); try { const submitBtn = form.querySelector('button[type=\"submit\"]'); const origText = submitBtn.innerText; submitBtn.innerText = '...'; await api.post('/custom-data/rows/550e8400-e29b-41d4-a716-446655440000', { data: formData, sitemember_id: null }); alert('Subscribed!'); form.reset(); submitBtn.innerText = origText; } catch(err) { console.error(err); alert('Failed.'); } }; }"
+  "script": "const form = container.querySelector('form'); if(form) { form.onsubmit = async (e) => { e.preventDefault(); const fd = {}; new FormData(form).forEach((v, k) => fd[k] = v); try { const btn = form.querySelector('button'); const old = btn.innerText; btn.innerText = '...'; await api.post('/custom-data/rows/SCHEMA_UUID_HERE', { data: fd, sitemember_id: null }); alert('Success!'); form.reset(); btn.innerText = old; } catch(err) { alert('Error'); } }; }"
 }
 
 """.strip()
