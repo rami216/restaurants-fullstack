@@ -2777,9 +2777,20 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           ? payload.editableProps
           : [];
         const handleAiPropLocalChange = (key: string, value: any) => {
+          // 1. Update the nested AI properties
+          const newAiProps = { ...aiProps, [key]: value };
+          const newPayload = { ...payload, properties: newAiProps };
+
+          // 2. CRITICAL: Update the top-level properties too (so the renderer sees it)
+          const newTopLevelProps = {
+            ...(selectedItem.properties || {}),
+            [key]: value,
+          };
+
           updateItem({
             ...selectedItem,
-            aiPayload: { ...payload, properties: { ...aiProps, [key]: value } },
+            properties: newTopLevelProps, // <--- THIS WAS MISSING
+            aiPayload: newPayload,
           });
         };
 
