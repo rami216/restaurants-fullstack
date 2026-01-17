@@ -1346,7 +1346,8 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
                 const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
 
                 await api.put(`/custom-data/rows/${targetRowId}`, {
-                    data: { ...existing,
+                    data: {
+                        ...existing,
                         [rule.target.field]: rule.target.value
                     },
                     sitemember_id
@@ -1358,7 +1359,7 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
     }
 };
 
-// 3. FETCH & RENDER (Strict Privacy Mode)
+// 3. FETCH & RENDER (Strict Privacy Mode + Boolean Fix)
 const fetchAndRenderRows = async () => {
     if (properties.hideData) return;
     try {
@@ -1366,15 +1367,23 @@ const fetchAndRenderRows = async () => {
         currentRows = res.data?.rows || res.rows || [];
         dataDisplay.innerHTML = '';
         const tmpl = container.querySelector('#displayTemplate').innerHTML;
+        
         currentRows.forEach(row => {
-            const rowData = JSON.parse(JSON.stringify(row.data));
-            // Fix Booleans
-            Object.keys(rowData).forEach(key => {
-                if (rowData[key] === false) rowData[key] = 'false';
-                if (rowData[key] === true) rowData[key] = 'true';
-            });
-            // Smart Labels
+            const div = document.createElement('div');
+            const rowData = { ...row.data };
+
+            // LOOP SCHEMA TO FIX DISPLAY ISSUES
             schema.forEach(f => {
+                // ✅ BOOLEAN FIX: Handle empty/null values so they default to "false" string
+                if (f.type === 'boolean') {
+                    if (rowData[f.id] === undefined || rowData[f.id] === null || rowData[f.id] === '') {
+                        rowData[f.id] = 'false';
+                    } else {
+                        rowData[f.id] = String(rowData[f.id]);
+                    }
+                }
+                
+                // RELATION FIX: Smart Labels
                 if (f.type === 'relation' && rowData[f.id]) {
                     const d = rowData[f.id].data || rowData[f.id];
                     let label = d[f.id];
@@ -1382,7 +1391,7 @@ const fetchAndRenderRows = async () => {
                     rowData[f.id].display_label = label || '---';
                 }
             });
-            const div = document.createElement('div');
+
             div.innerHTML = Mustache.render(tmpl, {
                 data: rowData,
                 row_id: row.row_id
@@ -1411,11 +1420,11 @@ const generateForm = async (initialData = {}) => {
         wrapper.appendChild(label);
 
         if (field.type === 'relation') {
+            // ... (Relation Logic remains the same) ...
             const sel = document.createElement('select');
             sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
             selects[field.id] = sel;
             sel.name = field.id;
-
             const res = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`);
             const rows = res.data?.rows || res.rows || [];
             relCache[field.id] = rows;
@@ -1460,6 +1469,17 @@ const generateForm = async (initialData = {}) => {
                 });
             }
             wrapper.appendChild(sel);
+
+        } else if (field.type === 'boolean') {
+           
+            const sel = document.createElement('select');
+            sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            sel.name = field.id;
+            sel.innerHTML = '<option value="false">False</option><option value="true">True</option>';
+            // Set initial value
+            sel.value = (initialData[field.id] === true || initialData[field.id] === 'true') ? 'true' : 'false';
+            wrapper.appendChild(sel);
+
         } else {
             const input = document.createElement('input');
             input.type = field.type;
@@ -1480,14 +1500,14 @@ const generateForm = async (initialData = {}) => {
         e.preventDefault();
         const data = {};
         new FormData(form).forEach((v, k) => data[k] = v);
-        
-        // ID Synchronization
+
+        // ID Sync
         if (data['time'] && data['day']) {
-             const dayField = schema.find(f => f.id === 'day');
-             const timeField = schema.find(f => f.id === 'time');
-             if (dayField && timeField && dayField.related_schema_id === timeField.related_schema_id) {
-                 data['day'] = data['time'];
-             }
+            const dayField = schema.find(f => f.id === 'day');
+            const timeField = schema.find(f => f.id === 'time');
+            if (dayField && timeField && dayField.related_schema_id === timeField.related_schema_id) {
+                data['day'] = data['time'];
+            }
         }
 
         const sitemember_id = properties.sitemember_id || null;
@@ -1499,8 +1519,7 @@ const generateForm = async (initialData = {}) => {
                 await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
                 await runCrossTableMutations('create', data, sitemember_id);
             }
-            // Privacy Protocol
-            alert('Booking Confirmed!');
+            alert('Success!');
             editingRowId = null;
             form.reset();
             formContainer.classList.add('hidden');
@@ -1513,7 +1532,7 @@ const generateForm = async (initialData = {}) => {
 
 // 5. EVENT LISTENERS
 container.addEventListener('click', async (e) => {
-    // Edit Button
+    // Edit
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
@@ -1521,31 +1540,25 @@ container.addEventListener('click', async (e) => {
         if (row) generateForm(row.data);
     }
 
-    // Delete Button (FIXED)
+    // Delete (FIXED)
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
         if (confirm('Delete?')) {
-            
-            const rowElement = deleteBtn.closest('.transition-shadow'); 
+            // ✅ Target the correct Row Container
+            const rowElement = deleteBtn.closest('.transition-shadow');
             const originalText = deleteBtn.innerText;
-            
-            // Visual Feedback
             deleteBtn.innerText = '...';
             deleteBtn.disabled = true;
 
             try {
                 const sitemember_id = properties.sitemember_id || null;
                 const rowId = deleteBtn.dataset.rowId;
-
-               
+                
+            
                 await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`);
 
-                // Instant UI Removal
-                if (rowElement) {
-                    rowElement.remove();
-                }
-                
-                // Update Local Data
+                // Instant Remove
+                if (rowElement) rowElement.remove();
                 currentRows = currentRows.filter(r => r.row_id !== rowId);
 
             } catch (err) {
@@ -1564,7 +1577,6 @@ if (addButton) {
         generateForm();
     };
 }
-
 
 "
 }
