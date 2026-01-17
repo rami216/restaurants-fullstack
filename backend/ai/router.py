@@ -1511,9 +1511,9 @@ const generateForm = async (initialData = {}) => {
     formContainer.appendChild(form);
 };
 
-// 5. EVENT LISTENERS (FIXED DELETE URL)
+// 5. EVENT LISTENERS
 container.addEventListener('click', async (e) => {
-    // Edit
+    // Edit Button
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
@@ -1521,29 +1521,36 @@ container.addEventListener('click', async (e) => {
         if (row) generateForm(row.data);
     }
 
-    // Delete
+    // Delete Button (FIXED)
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
         if (confirm('Delete?')) {
-            const rowElement = deleteBtn.closest('.flex'); 
+            
+            const rowElement = deleteBtn.closest('.transition-shadow'); 
             const originalText = deleteBtn.innerText;
-            deleteBtn.innerText = '...'; 
+            
+            // Visual Feedback
+            deleteBtn.innerText = '...';
             deleteBtn.disabled = true;
 
             try {
                 const sitemember_id = properties.sitemember_id || null;
                 const rowId = deleteBtn.dataset.rowId;
-                
+
                
                 await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`);
+
+                // Instant UI Removal
+                if (rowElement) {
+                    rowElement.remove();
+                }
                 
-                // Instant UI Update
-                if (rowElement) rowElement.remove();
+                // Update Local Data
                 currentRows = currentRows.filter(r => r.row_id !== rowId);
 
             } catch (err) {
-                console.error("Delete failed:", err);
-                alert("Failed to delete row.");
+                console.error('Delete failed:', err);
+                alert('Failed to delete.');
                 deleteBtn.innerText = originalText;
                 deleteBtn.disabled = false;
             }
