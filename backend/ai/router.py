@@ -1318,10 +1318,14 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
 const dataDisplay = container.querySelector('.data-display');
 const formContainer = container.querySelector('.form-container');
 const addButton = container.querySelector('.add-new-btn');
+const paginationControls = container.querySelector('.pagination-controls');
 let editingRowId = null;
 let currentRows = [];
+let currentPage = 0;
+const rowsPerPage = 20;
 
 // 1. DATA MUTATION CONFIGURATION
+// Automatically sets "Available" to false when a slot is booked
 const crossTableMutations = [{
     when: 'create',
     sourceField: 'time',
@@ -1346,8 +1350,7 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
                 const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
 
                 await api.put(`/custom-data/rows/${targetRowId}`, {
-                    data: {
-                        ...existing,
+                    data: { ...existing,
                         [rule.target.field]: rule.target.value
                     },
                     sitemember_id
@@ -1359,31 +1362,31 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
     }
 };
 
-// 3. FETCH & RENDER (Strict Privacy Mode + Boolean Fix)
+// 3. FETCH & RENDER (With Privacy & Boolean Fixes)
 const fetchAndRenderRows = async () => {
+    // PRIVACY: Stop if hideData is on
     if (properties.hideData) return;
+
     try {
-        const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`);
+        const skip = currentPage * rowsPerPage;
+        const res = await api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage);
         currentRows = res.data?.rows || res.rows || [];
         dataDisplay.innerHTML = '';
         const tmpl = container.querySelector('#displayTemplate').innerHTML;
-        
+
         currentRows.forEach(row => {
             const div = document.createElement('div');
             const rowData = { ...row.data };
 
-            // LOOP SCHEMA TO FIX DISPLAY ISSUES
             schema.forEach(f => {
-                // ✅ BOOLEAN FIX: Handle empty/null values so they default to "false" string
+                // ✅ BOOLEAN DISPLAY FIX
                 if (f.type === 'boolean') {
-                    if (rowData[f.id] === undefined || rowData[f.id] === null || rowData[f.id] === '') {
-                        rowData[f.id] = 'false';
-                    } else {
-                        rowData[f.id] = String(rowData[f.id]);
-                    }
+                    const val = rowData[f.id];
+                    // Forces strict string 'true' or 'false'
+                    rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false';
                 }
-                
-                // RELATION FIX: Smart Labels
+
+                // RELATION FIX
                 if (f.type === 'relation' && rowData[f.id]) {
                     const d = rowData[f.id].data || rowData[f.id];
                     let label = d[f.id];
@@ -1398,12 +1401,46 @@ const fetchAndRenderRows = async () => {
             });
             dataDisplay.appendChild(div);
         });
+        
+        // Update pagination buttons after rendering rows
+        renderPagination();
+        
     } catch (err) {
         console.error(err);
     }
 };
 
-// 4. FORM GENERATION
+// 4. PAGINATION LOGIC
+const renderPagination = () => {
+    if (!paginationControls) return;
+    paginationControls.innerHTML = '';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Previous';
+    prevBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.onclick = () => {
+        if (currentPage > 0) {
+            currentPage--;
+            fetchAndRenderRows();
+        }
+    };
+    paginationControls.appendChild(prevBtn);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    nextBtn.disabled = currentRows.length < rowsPerPage;
+    nextBtn.onclick = () => {
+        if (currentRows.length === rowsPerPage) {
+            currentPage++;
+            fetchAndRenderRows();
+        }
+    };
+    paginationControls.appendChild(nextBtn);
+};
+
+// 5. FORM GENERATION
 const generateForm = async (initialData = {}) => {
     formContainer.innerHTML = '';
     formContainer.classList.remove('hidden');
@@ -1420,7 +1457,6 @@ const generateForm = async (initialData = {}) => {
         wrapper.appendChild(label);
 
         if (field.type === 'relation') {
-            // ... (Relation Logic remains the same) ...
             const sel = document.createElement('select');
             sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
             selects[field.id] = sel;
@@ -1430,6 +1466,7 @@ const generateForm = async (initialData = {}) => {
             relCache[field.id] = rows;
             sel.innerHTML = '<option value="">Select...</option>';
 
+            // Dynamic Day/Time Logic
             if (field.id === 'day') {
                 const seen = new Set();
                 rows.forEach(r => {
@@ -1471,13 +1508,13 @@ const generateForm = async (initialData = {}) => {
             wrapper.appendChild(sel);
 
         } else if (field.type === 'boolean') {
-           
+            // ✅ BOOLEAN FORM FIX (Use Select instead of Input)
             const sel = document.createElement('select');
             sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
             sel.name = field.id;
-            sel.innerHTML = '<option value="false">False</option><option value="true">True</option>';
-            // Set initial value
-            sel.value = (initialData[field.id] === true || initialData[field.id] === 'true') ? 'true' : 'false';
+            sel.innerHTML = '<option value="true">True</option><option value="false">False</option>';
+            const isTrue = initialData[field.id] === true || initialData[field.id] === 'true';
+            sel.value = isTrue ? 'true' : 'false';
             wrapper.appendChild(sel);
 
         } else {
@@ -1492,7 +1529,7 @@ const generateForm = async (initialData = {}) => {
     }
 
     const btn = document.createElement('button');
-    btn.textContent = editingRowId ? 'Update' : 'Confirm Booking';
+    btn.textContent = editingRowId ? 'Update' : 'Submit';
     btn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';
     form.appendChild(btn);
 
@@ -1501,7 +1538,6 @@ const generateForm = async (initialData = {}) => {
         const data = {};
         new FormData(form).forEach((v, k) => data[k] = v);
 
-        // ID Sync
         if (data['time'] && data['day']) {
             const dayField = schema.find(f => f.id === 'day');
             const timeField = schema.find(f => f.id === 'time');
@@ -1523,6 +1559,10 @@ const generateForm = async (initialData = {}) => {
             editingRowId = null;
             form.reset();
             formContainer.classList.add('hidden');
+            
+            // ✅ PRIVACY CHECK: Only refresh if allowed
+            if (!properties.hideData) fetchAndRenderRows();
+            
         } catch (err) {
             console.error(err);
         }
@@ -1530,9 +1570,9 @@ const generateForm = async (initialData = {}) => {
     formContainer.appendChild(form);
 };
 
-// 5. EVENT LISTENERS
+// 6. EVENT LISTENERS
 container.addEventListener('click', async (e) => {
-    // Edit
+    // Edit Button
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
@@ -1540,11 +1580,11 @@ container.addEventListener('click', async (e) => {
         if (row) generateForm(row.data);
     }
 
-    // Delete (FIXED)
+    // Delete Button
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
         if (confirm('Delete?')) {
-            // ✅ Target the correct Row Container
+            
             const rowElement = deleteBtn.closest('.transition-shadow');
             const originalText = deleteBtn.innerText;
             deleteBtn.innerText = '...';
@@ -1554,10 +1594,9 @@ container.addEventListener('click', async (e) => {
                 const sitemember_id = properties.sitemember_id || null;
                 const rowId = deleteBtn.dataset.rowId;
                 
-            
+               
                 await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`);
-
-                // Instant Remove
+                
                 if (rowElement) rowElement.remove();
                 currentRows = currentRows.filter(r => r.row_id !== rowId);
 
@@ -1577,6 +1616,9 @@ if (addButton) {
         generateForm();
     };
 }
+
+
+renderPagination();
 
 "
 }
