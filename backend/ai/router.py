@@ -268,38 +268,155 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - The HTML must be wrapped in a single container `<div>`.
     - This container will have the unique class name you are given applied to it.
 
-**2.  Styling:**
-    - All CSS must be in a single `<style>` tag.
-    - Use mustache tokens `{{...}}` for all editable style values.
-    - **You MUST expose editables for ALL visual controls** (colors, borders, spacing, typography, effects, motion) for every element you create — whether it is a UI component, a game, an animation, or any other type of element.
-    - If the element has distinct sections (e.g., title/header vs. content/body), provide **separate tokens** for their backgrounds, text colors, paddings, and radii.
-    - **CRITICAL SCOPING RULE:** Every single CSS rule you write MUST be prefixed with the given unique class name to prevent styles from leaking.
-    - CSS must be concise, scoped, and visually polished.
+**2. Styling:**
+    - All CSS must be in a single <style> tag.
+    - Use mustache tokens {{...}} for all editable style values.
+    - **OUTER CONTAINER RULES (CRITICAL):**
+        - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
+        - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
+        - DO NOT apply borders, backgrounds, or shadows to this main container <div> unless the user specifically asks for a "card" or "box". 
+        - Apply the primary design (e.g., {{buttonBgColor}}, borders, shadows) directly to the specific internal element (e.g., the <button> or <a> tag) so the element looks like it is floating naturally on the section background.
+    - **You MUST expose editables for the following visual controls (when relevant):**
+        - **Colors:** element background color, text color, link color, hover/active accents, border color.
+        - **Borders:** border width, border style, border radius.
+        - **Spacing:** padding and/or gap for internal elements.
+        - **Typography:** font size(s), font weight(s), line-height, text alignment.
+        - **Effects & Motion:** box-shadow (at least one), transition speed/easing.
+    - If the element has distinct sections, provide separate tokens (e.g., `titleBgColor`, `contentBgColor`).
+    - **CRITICAL SCOPING SUB-RULE:** Every single CSS rule MUST be prefixed with the `unique_class_name` to prevent styles from leaking.
+        - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `:root { ... }`
+    - CSS must be concise, scoped, and visually polished by default.
 
 **3.  Interactivity (`script` key):**
-    - Provide a JavaScript string that adds event listeners and logic for all interactions.
+    - Provide a JavaScript string that adds event listeners to the HTML.
     - The script will be executed inside a function that receives `container` as an argument.
-    - Use `container.querySelector(...)` or `container.querySelectorAll(...)` for selections.
-    - **DO NOT** wrap code in `<script>` tags — only provide raw JavaScript.
-    - Use arrow functions or function expressions, NOT function declarations.
+    - Use `container.querySelector('.your-class')` to find and manipulate elements.
+    - **DO NOT** wrap your code in a `<script>` tag. Provide only the raw JavaScript.
+    - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups. If no specific logic is requested, the script key should be an empty string "".
+    - **IMPORTANT JAVASCRIPT SYNTAX RULE:** If you need to define any helper functions, you **MUST** use **function expressions** (arrow functions are best), not function declarations.
+      - **Correct:** `const myFunc = () => { /* logic */ };`
+      - **Incorrect:** `function myFunc() { /* logic */ };`
 
-**4.  Editable Content & Properties:**
-    - **EVERY user-facing text or style value must use a mustache token** (e.g., `{{buttonText}}`, `{{bgColor}}`).
-    - For every token, you MUST:
-        1. Provide a default value in `properties`.
-        2. Add an entry in `editableProps` with key, label, and type.
-    - This applies to ALL elements, including games, animations, and UI widgets.
+**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    - **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+**5.  DATA INTERACTIONS (CONDITIONAL LOGIC):**
+    - You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+    - **CASE A: PURELY VISUAL ELEMENT (e.g., "Accordion", "Hero Text", "Simple Button"):**
+        - **IGNORE** the existing schemas. Do not write any API calls.
+        - Just create the HTML/CSS/JS for the visual element.
+    
+    - **CASE B: DATA-CONNECTED ELEMENT (e.g., "Contact Form", "Newsletter Signup", "List of Products"):**
+        - **Identify Schema:** Find the correct `schema_id` from the provided list based on the user's intent.
+        - **Write Logic:** Write the raw JavaScript to handle the API calls using the `api` object.
+        - **USE THESE API SIGNATURES:**
+            * **Create:** `await api.post('/custom-data/rows/' + TARGET_SCHEMA_ID, { data: formData, sitemember_id: null });`
+            * **Read (List):** `const res = await api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?limit=20');`
+            * **Read (Single):** `const res = await api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?row_id=' + TARGET_ROW_ID);`
+            * **Update:** `await api.put('/custom-data/rows/' + TARGET_ROW_ID, { data: updates, sitemember_id: null });`
+            * **Delete:** `await api.delete('/custom-data/rows/' + TARGET_ROW_ID);`
 
-**5.  SPECIAL RULES FOR GAMES OR COMPLEX INTERACTIVE ELEMENTS:**
-    - If the prompt requests a game or other interactive experience, create a **fully functional, playable, and self-contained** version.
-    - Implement all required mechanics in JavaScript — no placeholders or incomplete logic.
-    - Include clear visual feedback for user actions (e.g., collisions, score updates, win/loss states).
-    - Expose gameplay-related parameters as editable tokens (speed, difficulty, object size, spawn rate, lives, etc.) in addition to normal style editables.
-    - All visuals and gameplay logic must be scoped to the container class.
+    - **SCENARIO: FORMS (Saving Data):**
+        - Attach `onsubmit` to the form.
+        - Collect data using `FormData`.
+        - Call `api.post`.
+        - Alert success and reset form.
+        - *Example:*
+          ```javascript
+          const form = container.querySelector('form');
+          form.onsubmit = async (e) => {
+              e.preventDefault();
+              const formData = {};
+              new FormData(form).forEach((v, k) => formData[k] = v);
+              try {
+                  await api.post('/custom-data/rows/THE_SCHEMA_UUID', { data: formData, sitemember_id: null });
+                  alert('Submitted!');
+                  form.reset();
+              } catch(err) { console.error(err); alert('Failed.'); }
+          };
+          ```
 
+    - **SCENARIO: DISPLAYING DATA (Loading List):**
+        - Call `api.get` immediately.
+        - Loop through `res.data.rows`.
+        - **Manually generate HTML strings** for each row and inject them into a container using `innerHTML`.
+        - *Example:*
+          ```javascript
+          const load = async () => {
+             const res = await api.get('/custom-data/rows/THE_SCHEMA_UUID');
+             const list = container.querySelector('.list');
+             list.innerHTML = res.data.rows.map(row => 
+                 `<div class="item"><b>${row.data.title}</b></div>`
+             ).join('');
+          };
+          load();
+          ```
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
-**OUTPUT:** A valid JSON object as described.
+**OUTPUT:** A valid JSON object.
+
+**Example Prompt:** "an accordion with two items"
+**Example `unique_class_name`:** `.ai-accordion-12345`
+### **EXAMPLE 1: Visual Element (Highly Customizable Accordion)**
+**Prompt:** "An accordion with 2 items"
+**Output:**
+{
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345{width:100%;max-width:{{maxWidth}};font-family:{{fontFamily}}}.ai-accordion-12345 .accordion-item{border:{{borderWidth}} solid {{borderColor}};margin-bottom:{{itemGap}};border-radius:{{borderRadius}};overflow:hidden;box-shadow:{{boxShadow}};background:{{itemBgColor}}}.ai-accordion-12345 .accordion-title{background:{{titleBgColor}};color:{{titleTextColor}};padding:{{titlePadding}};font-size:{{titleFontSize}};font-weight:{{titleFontWeight}};cursor:pointer;transition:{{transitionSpeed}};display:flex;justify-content:space-between;align-items:center}.ai-accordion-12345 .accordion-title:hover{background:{{titleHoverBg}}}.ai-accordion-12345 .accordion-content{background:{{contentBgColor}};color:{{contentTextColor}};padding:{{contentPadding}};display:none;font-size:{{contentFontSize}};line-height:{{contentLineHeight}}}</style><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title1}} <span>+</span></div><div class=\\"accordion-content\\">{{content1}}</div></div><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title2}} <span>+</span></div><div class=\\"accordion-content\\">{{content2}}</div></div></div>",
+  "properties": {
+    "title1": "Question 1", "content1": "Answer 1 text goes here.",
+    "title2": "Question 2", "content2": "Answer 2 text goes here.",
+    "maxWidth": "600px", "fontFamily": "inherit", "itemGap": "10px",
+    "borderWidth": "1px", "borderColor": "#e5e7eb", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.05)", "itemBgColor": "#ffffff",
+    "titleBgColor": "#f9fafb", "titleHoverBg": "#f3f4f6", "titleTextColor": "#111827", "titlePadding": "16px", "titleFontSize": "16px", "titleFontWeight": "600", "transitionSpeed": "0.2s",
+    "contentBgColor": "#ffffff", "contentTextColor": "#4b5563", "contentPadding": "16px", "contentFontSize": "14px", "contentLineHeight": "1.5"
+  },
+  "editableProps": [
+    { "key":"title1", "label":"Title 1", "type":"text" }, { "key":"content1", "label":"Content 1", "type":"text" },
+    { "key":"title2", "label":"Title 2", "type":"text" }, { "key":"content2", "label":"Content 2", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"itemGap", "label":"Gap Between Items", "type":"text" },
+    { "key":"borderWidth", "label":"Border Width", "type":"text" },
+    { "key":"borderColor", "label":"Border Color", "type":"color" },
+    { "key":"borderRadius", "label":"Border Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Box Shadow", "type":"text" },
+    { "key":"titleBgColor", "label":"Title Background", "type":"color" },
+    { "key":"titleHoverBg", "label":"Title Hover Background", "type":"color" },
+    { "key":"titleTextColor", "label":"Title Text Color", "type":"color" },
+    { "key":"titleFontSize", "label":"Title Font Size", "type":"text" },
+    { "key":"titleFontWeight", "label":"Title Font Weight", "type":"text" },
+    { "key":"titlePadding", "label":"Title Padding", "type":"text" },
+    { "key":"contentBgColor", "label":"Content Background", "type":"color" },
+    { "key":"contentTextColor", "label":"Content Text Color", "type":"color" },
+    { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
+    { "key":"contentPadding", "label":"Content Padding", "type":"text" }
+  ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+}
+
+### **EXAMPLE 2: Data Element (Data-Connected Form)**
+**Prompt:** "A newsletter form that saves email to Subscribers"
+**Output:**
+{
+  "aiTemplate": "<div class=\\"ai-newsletter-123\\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\\"email\\" placeholder=\\"{{placeholderText}}\\" class=\\"p-2 border w-full mb-2 rounded\\"><button type=\\"submit\\" style=\\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\\" class=\\"p-2 w-full font-bold\\">{{btnText}}</button></form></div>",
+  "properties": { "bgColor": "#ffffff", "padding": "24px", "borderRadius": "12px", "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", "maxWidth": "400px", "placeholderText": "Enter your email...", "btnColor": "#2563eb", "btnTextColor": "#ffffff", "btnRadius": "6px", "btnText": "Subscribe" },
+  "editableProps": [
+    { "key":"bgColor", "label":"Background", "type":"color" },
+    { "key":"padding", "label":"Padding", "type":"text" },
+    { "key":"borderRadius", "label":"Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Shadow", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"placeholderText", "label":"Placeholder", "type":"text" },
+    { "key":"btnColor", "label":"Button Color", "type":"color" },
+    { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
+    { "key":"btnText", "label":"Button Text", "type":"text" }
+  ],
+  "script": "const form = container.querySelector('form'); form.onsubmit = async (e) => { e.preventDefault(); const formData = {}; new FormData(form).forEach((v, k) => formData[k] = v); try { await api.post('/custom-data/rows/550e8400-e29b-41d4-a716-446655440000', { data: formData, sitemember_id: null }); alert('Subscribed!'); form.reset(); } catch(err) { console.error(err); alert('Failed.'); } };"
+}
+
 """.strip()
 
 
