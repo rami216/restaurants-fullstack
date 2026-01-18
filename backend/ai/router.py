@@ -1424,22 +1424,43 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                 2- Create a <input type="hidden" name="FIELD_ID"> to store the URL.
                 3- Add an onchange listener to the file input:
                     input.onchange = async (e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        const btn = form.querySelector('button:last-of-type');
-                        btn.disabled = true; btn.innerText = 'Uploading...';
-                        try {
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            const res = await fetch('/uploads/', { method: 'POST', body: formData });
-                            const json = await res.json();
-                            if (json.url) { 
-                                hiddenInput.value = json.url; 
-                                alert('Upload complete');
-                            }
-                        } catch(err) { console.error(err); alert('Upload failed'); }
-                        finally { btn.disabled = false; btn.innerText = 'Save'; }
-                    };
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // FIX: Select button safely (without relying on type="submit")
+                const btn = form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+                
+                if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // FIX: Use 'api.post' to ensure it hits the backend URL, not the frontend
+                    const res = await api.post('/uploads/', formData);
+                    
+                    // Handle different response structures
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        
+                        // Visual success
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '\\u2713 Ready';
+                        if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch(err) {
+                    console.error('Upload error:', err);
+                    alert('Upload failed');
+                    input.value = '';
+                } finally {
+                    if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                }
+            };
     -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
             1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
             2- The script MUST fetch the Child relational data once and store it in a constant variable.
@@ -1776,40 +1797,40 @@ const generateForm = async (initialData = {}) => {
             wrapper.appendChild(sel);
 
         } else if (field.type === 'file' || field.type === 'image') {
-            // 1. Create File Input
             const input = document.createElement('input');
             input.type = 'file';
             input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
             
-            // 2. Create Hidden Input (Holds the URL string for the DB)
             const hiddenUrl = document.createElement('input');
             hiddenUrl.type = 'hidden';
             hiddenUrl.name = field.id;
             hiddenUrl.value = initialData[field.id] || '';
             wrapper.appendChild(hiddenUrl);
 
-            // 3. Upload Logic
             input.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
-                // Disable submit button during upload
-                const btn = form.querySelector('button[type="submit"]') || form.querySelector('button:last-child');
-                const originalText = btn ? btn.innerText : 'Submit';
+                
+                // Select button safely
+                const btn = form.querySelector('button[type="submit"]') || form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+                
                 if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-
+                
                 try {
                     const formData = new FormData();
                     formData.append('file', file);
                     
-                    // Call your new generic upload endpoint
-                    const res = await fetch('/uploads/', { method: 'POST', body: formData });
-                    const json = await res.json();
+                    // FIX: Use api.post to hit the Backend URL (Solves 404)
+                    const res = await api.post('/uploads/', formData);
                     
-                    if (json.url) {
-                        hiddenUrl.value = json.url; // Save URL to hidden input
+                    // Handle response safely
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
                         
-                        // Visual Success Indicator
+                        // Visual Success
                         const msg = document.createElement('span');
                         msg.className = 'text-xs text-green-600 block mt-1';
                         msg.innerText = '✓ Ready to save';
@@ -1817,11 +1838,11 @@ const generateForm = async (initialData = {}) => {
                         input.parentNode.insertBefore(msg, input.nextSibling);
                     }
                 } catch(err) {
-                    console.error(err);
+                    console.error('Upload error:', err);
                     alert('Upload failed');
-                    input.value = ''; // Reset
+                    input.value = '';
                 } finally {
-                    if(btn) { btn.disabled = false; btn.innerText = originalText; }
+                    if(btn) { btn.disabled = false; btn.innerText = oldText; }
                 }
             };
             wrapper.appendChild(input);
