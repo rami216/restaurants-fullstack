@@ -190,7 +190,7 @@ async def delete_storage_object(
 
 
 # ==========================================
-# ✅ UNIVERSAL UPLOAD (Prioritizes File Extension)
+# ✅ BULLETPROOF UPLOAD (Manually Forces PDF Type)
 # ==========================================
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_generic_file(
@@ -204,20 +204,29 @@ async def upload_generic_file(
              raise HTTPException(status_code=413, detail="File too large (Max 10MB).")
 
         # ---------------------------------------------------------
-        # 🧠 THE LOGIC FIX
-        # 1. Ask Python to guess based on the filename (e.g., ".pdf" -> "application/pdf")
-        #    This is reliable because it ignores what the browser "claims".
-        guessed_type, _ = mimetypes.guess_type(file.filename)
-        
-        # 2. Use the guess first! Only fallback to the browser's claim if Python has no clue.
-        content_type = guessed_type or file.content_type or "application/octet-stream"
+        # 🧠 THE FIX: Manual Override for PDFs
+        # Sometimes servers miss the mime-type definitions. We force it here.
         # ---------------------------------------------------------
+        filename_lower = file.filename.lower()
+        content_type = None
+
+        if filename_lower.endswith(".pdf"):
+            content_type = "application/pdf"
+        elif filename_lower.endswith((".jpg", ".jpeg")):
+            content_type = "image/jpeg"
+        elif filename_lower.endswith(".png"):
+            content_type = "image/png"
+        
+        # Fallback to python guess or browser claim if not found above
+        if not content_type:
+            guessed_type, _ = mimetypes.guess_type(file.filename)
+            content_type = guessed_type or file.content_type or "application/octet-stream"
 
         # Generate unique ID
         anon_id = f"public_{uuid.uuid4().hex[:8]}"
         object_key = _make_object_key(file.filename, content_type, anon_id)
         
-        # Upload with the CORRECT content_type
+        # Upload with the FORCED content_type
         res = supabase.storage.from_(WEBSITE_FILES_BUCKET).upload(
             path=object_key,
             file=file_bytes,
