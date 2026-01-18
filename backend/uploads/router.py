@@ -190,7 +190,7 @@ async def delete_storage_object(
 
 
 # ==========================================
-# ✅ UNIVERSAL UPLOAD (Handles PDF, IMG, CODE, ETC.)
+# ✅ UNIVERSAL UPLOAD (Prioritizes File Extension)
 # ==========================================
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_generic_file(
@@ -204,12 +204,12 @@ async def upload_generic_file(
              raise HTTPException(status_code=413, detail="File too large (Max 10MB).")
 
         # ---------------------------------------------------------
-        # 🧠 THE FIX: INTELLIGENT MIME TYPE DETECTION
-        # 1. Ask Python "What is this file based on extension?" (Most accurate)
+        # 🧠 THE LOGIC FIX
+        # 1. Ask Python to guess based on the filename (e.g., ".pdf" -> "application/pdf")
+        #    This is reliable because it ignores what the browser "claims".
         guessed_type, _ = mimetypes.guess_type(file.filename)
         
-        # 2. If Python knows, use that. If not, ask the Browser.
-        # 3. If neither knows, fallback to generic 'octet-stream'.
+        # 2. Use the guess first! Only fallback to the browser's claim if Python has no clue.
         content_type = guessed_type or file.content_type or "application/octet-stream"
         # ---------------------------------------------------------
 
@@ -217,7 +217,7 @@ async def upload_generic_file(
         anon_id = f"public_{uuid.uuid4().hex[:8]}"
         object_key = _make_object_key(file.filename, content_type, anon_id)
         
-        # Upload
+        # Upload with the CORRECT content_type
         res = supabase.storage.from_(WEBSITE_FILES_BUCKET).upload(
             path=object_key,
             file=file_bytes,
