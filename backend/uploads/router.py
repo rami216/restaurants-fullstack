@@ -190,39 +190,41 @@ async def delete_storage_object(
 
 
 # --- ADD THIS NEW ENDPOINT ---
+# ==========================================
+# ✅ NEW: PUBLIC GENERIC UPLOAD (For Website Visitors)
+# No Auth Required - Matches your Public Data Form logic
+# ==========================================
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_generic_file(
     file: UploadFile = File(...),
-    db: AsyncSession = Depends(get_db),
-    current_user: User = Depends(get_current_active_user)
+    # ❌ REMOVED: current_user dependency (Visitor has no token)
+    # ❌ REMOVED: db dependency (Not needed for simple storage)
 ):
     try:
-        # 1. Check Owner & Storage Limits
-        owner = await db.scalar(select(RestaurantOwner).where(RestaurantOwner.user_id == current_user.id))
+        # 1. Simple Security: Max File Size Limit (e.g., 10MB)
+        MAX_FILE_SIZE = 10 * 1024 * 1024 # 10 MB
         
-        # Read file bytes
+        # Read file
         file_bytes = await file.read()
         
-        if owner:
-            if owner.storage_bytes_used + len(file_bytes) > STORAGE_LIMIT_BYTES:
-                 raise HTTPException(status_code=413, detail="Storage limit exceeded.")
+        if len(file_bytes) > MAX_FILE_SIZE:
+             raise HTTPException(status_code=413, detail="File too large (Max 10MB).")
 
-        # 2. Upload to Supabase (Generic Bucket)
+        # 2. Upload to Supabase
         content_type = file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
-        object_key = _make_object_key(file.filename, content_type, str(current_user.id))
         
+        # We use a random ID because the uploader is anonymous
+        anon_id = f"public_{uuid.uuid4().hex[:8]}"
+        object_key = _make_object_key(file.filename, content_type, anon_id)
+        
+        # Upload to the 'website-uploads' bucket
         res = supabase.storage.from_(WEBSITE_FILES_BUCKET).upload(
             path=object_key,
             file=file_bytes,
             file_options={"contentType": content_type, "upsert": "true"}
         )
         
-        # 3. Update Usage
-        if owner:
-            owner.storage_bytes_used += len(file_bytes)
-            await db.commit()
-
-        # 4. Return URL
+        # 3. Return URL
         public_url = _public_url(WEBSITE_FILES_BUCKET, object_key)
         
         return JSONResponse({"url": public_url}, status_code=201)
