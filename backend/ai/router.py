@@ -291,12 +291,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - CSS must be concise, scoped, and visually polished by default.
 
 **3.  Interactivity (`script` key):**
-    - Provide a JavaScript string executed inside a function `(container, api, schemaId, properties, Mustache)`.
-    - **Use `container.querySelector`** (NOT document.querySelector).
-    - **Do NOT** wrap code in `<script>`.
-    - **Use function expressions** (`const x = () => {}`).
-    - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
-    - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
+        - Provide a JavaScript string executed inside a function `(container, api, schemaId, properties, Mustache)`.
+        - **Use `container.querySelector`** (NOT document.querySelector).
+        - **Do NOT** wrap code in `<script>`.
+        - **Use function expressions** (`const x = () => {}`).
+        - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
+        - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -305,68 +305,46 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
 
 **5.  DATA LOGIC (How to connect to the database):**
-        - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
-        - **IF** the user wants to save/load data (e.g., "Contact Form", "List of Items"):
-            1.  Find the matching `schema_id` from the list.
-            2.  Write the `api` call in the script.
-            3.  **Create:** `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: formData, sitemember_id: null });`
-            4.  **Read:** `const res = await api.get('/custom-data/rows/' + SCHEMA_ID);`
-        - **IF** the user just wants a visual element (e.g., "Hero Section"):
-            - Ignore the schemas. Do not write API calls.
-**6.  CROSS-TABLE DATA OPERATIONS (CRITICAL):**
-        If the user wants to interact with an EXISTING table (e.g., "save to Subscribers", "update inventory"):
-        
-        **A) IDENTIFY THE TARGET TABLE:**
-            - Look in `EXISTING_SCHEMAS_ON_WEBSITE` for a matching schema
-            - Extract the `schema_id` for that table
-        
-        **B) FORM SUBMISSION PATTERN:**
-            - The form's `onsubmit` handler MUST start with `e.preventDefault();` (CRITICAL - prevents page reload)
-            - Collect form data using: `const data = {}; new FormData(form).forEach((v,k) => data[k] = v);`
-        
-        **C) API OPERATIONS:**
-            - **CREATE:** `await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
-            - **READ ALL:** `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=100');`
-            - **READ ONE:** `const res = await api.get('/custom-data/rows/' + ROW_ID);`
-            - **UPDATE:** `await api.put('/custom-data/rows/' + ROW_ID, { data, sitemember_id: null });`
-            - **DELETE:** `await api.delete('/custom-data/rows/' + ROW_ID);`
-        
-        **D) USER FEEDBACK:**
-            - After successful save: Show success message, reset form
-            - Example: `alert('Success!'); form.reset();`
-            - Disable button during submission: `btn.disabled = true; btn.innerText = '...';`
-        
-        **E) EXAMPLE PATTERN FOR FORMS:**
-```javascript
-            const form = container.querySelector('form');
-            if (form) {
-                form.onsubmit = async (e) => {
-                    e.preventDefault();
-                    const data = {};
-                    new FormData(form).forEach((v, k) => data[k] = v);
-                    
-                    const btn = form.querySelector('button[type="submit"]');
-                    const originalText = btn.innerText;
-                    btn.disabled = true;
-                    btn.innerText = '...';
-                    
-                    try {
-                        await api.post('/custom-data/rows/SCHEMA_ID_HERE', { 
-                            data, 
-                            sitemember_id: null 
-                        });
-                        alert('Success!');
-                        form.reset();
-                    } catch (err) {
-                        console.error(err);
-                        alert('Error saving data');
-                    } finally {
-                        btn.disabled = false;
-                        btn.innerText = originalText;
-                    }
-                };
-            }
-```
+    - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
+
+    - This element MAY:
+        - Create rows in any existing schema
+        - Read rows from any existing schema
+        - Update rows in any existing schema
+        - Delete rows from any existing schema
+        - Use multiple schemas in the same component
+
+    - This element MUST NEVER:
+        - Create schemas
+        - Invent schemas
+        - Guess schema IDs
+
+    - **IF** the user wants to save/load/update/delete data:
+        1. You MUST find the correct `schema_id` from `EXISTING_SCHEMAS_ON_WEBSITE`
+        2. You MUST write the correct API call in the script.
+
+    - Allowed API operations:
+
+        **Create:**
+        `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
+
+        **Read:**
+        `const res = await api.get('/custom-data/rows/' + SCHEMA_ID);`
+
+        **Update:**
+        `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });`
+
+        **Delete:**
+        `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
+
+    - You MAY read from one table and write/update/delete in another table.
+
+    - **Field names in forms MUST match column names in the schema exactly.**
+
+    - If the user just wants a visual element (e.g., "Hero Section"):
+        - Ignore the schemas. Do not write API calls.
+
+
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
@@ -437,7 +415,8 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
     { "key":"btnText", "label":"Button Text", "type":"text" }
   ],
-  "script": "const form = container.querySelector('form'); if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const btn = form.querySelector('button[type=\"submit\"]'); const originalText = btn.innerText; btn.disabled = true; btn.innerText = '...'; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); alert('Success!'); form.reset(); } catch (err) { console.error(err); alert('Error'); } finally { btn.disabled = false; btn.innerText = originalText; } }; }"
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const btn = form ? form.querySelector('button[type=\"submit\"]') : null; if (form && statusEl && btn) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); btn.disabled = true; statusEl.textContent = properties.statusLoadingText; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); statusEl.textContent = properties.statusSuccessText; form.reset(); } catch (err) { statusEl.textContent = properties.statusErrorText; } finally { btn.disabled = false; } }; }"
+
 }
 
 """.strip()
