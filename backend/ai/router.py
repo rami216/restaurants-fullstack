@@ -296,6 +296,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Do NOT** wrap code in `<script>`.
         - **Use function expressions** (`const x = () => {}`).
         - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
+        - **MANDATORY SCRIPT RULE:** If your `aiTemplate` contains a `<form>`, the `script` key **MUST NOT** be empty. You **MUST** write a script to handle the submission.
         - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
@@ -384,9 +385,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 };
             }
             ```
-            **AND CRITICAL:** You **MUST ALSO** generate the standard `form.onsubmit` handler (as defined in Rule 3) to save the final data row (including the hidden input value) to the database. The file upload listener handles the *storage*, the form submit handles the *database record*.
-    - If the user just wants a visual element (e.g., "Hero Section"):
-        - Ignore the schemas. Do not write API calls.
+        4.  **AND CRITICAL:** You **MUST ALSO** generate the standard `form.onsubmit` handler (as defined in Rule 3) to save the final data row (including the hidden input value) to the database.
+
+
+    - **WHEN TO IGNORE SCHEMAS:**
+        - ONLY ignore schemas if the user explicitly asks for a **STATIC** visual element (e.g., "Hero Section", "Pricing Card", "Footer"). 
+        - If it is a FORM, you MUST use a schema and WRITE A SCRIPT.
 
 
 ---
