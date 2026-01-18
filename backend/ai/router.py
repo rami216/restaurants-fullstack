@@ -342,6 +342,56 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - You MAY read from one table and write/update/delete in another table.
 
     - **Field names in forms MUST match column names in the schema exactly.**
+    - **FILE & IMAGE UPLOADS (CRITICAL):**
+    - If the user implies uploading a file (e.g., "Job Application with CV", "Upload Profile Pic"):
+        1.  In `aiTemplate`, render an `<input type="file" id="file_field_id">`.
+        2.  **CRITICAL:** Render a `<input type="hidden" name="SCHEMA_COLUMN_NAME">` right next to it. This hidden input will hold the final URL sent to the database.
+        3.  In `script`, you **MUST** generate this exact listener logic for the file input:
+            ```javascript
+            const fileInput = container.querySelector('input[type="file"]'); // Use specific ID if multiple
+            const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');
+            
+            if(fileInput) {
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    // FIX: Select button safely
+                    const btn = container.querySelector('button[type="submit"]') || container.querySelector('button');
+                    const oldText = btn ? btn.innerText : 'Submit';
+                    
+                    if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                    
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        // FIX: Use 'api.post' to ensure it hits the backend URL
+                        const res = await api.post('/uploads/', formData);
+                        
+                        // Handle different response structures
+                        const url = res.data ? res.data.url : res.url;
+                        
+                        if (url) {
+                            hiddenInput.value = url;
+                            
+                            // Visual success
+                            const msg = document.createElement('span');
+                            msg.className = 'text-xs text-green-600 block mt-1';
+                            msg.innerText = '✓ Ready';
+                            if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
+                            fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
+                        }
+                    } catch(err) {
+                        console.error('Upload error:', err);
+                        alert('Upload failed');
+                        fileInput.value = '';
+                    } finally {
+                        if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                    }
+                };
+            }
+            ```
 
     - If the user just wants a visual element (e.g., "Hero Section"):
         - Ignore the schemas. Do not write API calls.
