@@ -1426,7 +1426,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                     input.onchange = async (e) => {
                         const file = e.target.files[0];
                         if (!file) return;
-                        const btn = form.querySelector('button[type="submit"]');
+                        const btn = form.querySelector('button:last-of-type');
                         btn.disabled = true; btn.innerText = 'Uploading...';
                         try {
                             const formData = new FormData();
