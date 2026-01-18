@@ -328,8 +328,10 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         **Create:**
         `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
 
-        **Read:**
-        `const res = await api.get('/custom-data/rows/' + SCHEMA_ID);`
+        **Read (List & Render):**
+        `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');`
+        - **CRITICAL:** The response data is in `res.data.rows`.
+        - **RENDER LOGIC:** You MUST manually loop through `res.data.rows`, generate HTML strings, and inject them into a container using `innerHTML`.
 
         **Update:**
         `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });`
@@ -351,7 +353,40 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 **Example Prompt:** "an accordion with two items"
 **Example `unique_class_name`:** `.ai-accordion-12345`
-### **EXAMPLE 1: Visual Element (Highly Customizable Accordion)**
+
+### **EXAMPLE 1: Data Element (Data-Connected Form)**
+**Prompt:** "A newsletter form that saves email to Subscribers"
+**Output:**
+{
+  "aiTemplate": "<div class=\"ai-newsletter-123\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\"email\" placeholder=\"{{placeholderText}}\" class=\"p-2 border w-full mb-2 rounded\" required><button type=\"submit\" style=\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\" class=\"p-2 w-full font-bold\">{{btnText}}</button></form></div>",
+  "properties": { 
+    "bgColor": "#ffffff", 
+    "padding": "24px", 
+    "borderRadius": "12px", 
+    "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", 
+    "maxWidth": "400px", 
+    "placeholderText": "Enter your email...", 
+    "btnColor": "#2563eb", 
+    "btnTextColor": "#ffffff", 
+    "btnRadius": "6px", 
+    "btnText": "Subscribe" 
+  },
+  "editableProps": [
+    { "key":"bgColor", "label":"Background", "type":"color" },
+    { "key":"padding", "label":"Padding", "type":"text" },
+    { "key":"borderRadius", "label":"Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Shadow", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"placeholderText", "label":"Placeholder", "type":"text" },
+    { "key":"btnColor", "label":"Button Color", "type":"color" },
+    { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
+    { "key":"btnText", "label":"Button Text", "type":"text" }
+  ],
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const btn = form ? form.querySelector('button[type=\"submit\"]') : null; if (form && statusEl && btn) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); btn.disabled = true; statusEl.textContent = properties.statusLoadingText; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); statusEl.textContent = properties.statusSuccessText; form.reset(); } catch (err) { statusEl.textContent = properties.statusErrorText; } finally { btn.disabled = false; } }; }"
+
+}
+
+### **EXAMPLE 2: Visual Element (Highly Customizable Accordion)**
 **Prompt:** "An accordion with 2 items"
 **Output:**
 {
@@ -387,37 +422,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
 }
 
-### **EXAMPLE 2: Data Element (Data-Connected Form)**
-**Prompt:** "A newsletter form that saves email to Subscribers"
-**Output:**
-{
-  "aiTemplate": "<div class=\"ai-newsletter-123\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\"email\" placeholder=\"{{placeholderText}}\" class=\"p-2 border w-full mb-2 rounded\" required><button type=\"submit\" style=\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\" class=\"p-2 w-full font-bold\">{{btnText}}</button></form></div>",
-  "properties": { 
-    "bgColor": "#ffffff", 
-    "padding": "24px", 
-    "borderRadius": "12px", 
-    "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", 
-    "maxWidth": "400px", 
-    "placeholderText": "Enter your email...", 
-    "btnColor": "#2563eb", 
-    "btnTextColor": "#ffffff", 
-    "btnRadius": "6px", 
-    "btnText": "Subscribe" 
-  },
-  "editableProps": [
-    { "key":"bgColor", "label":"Background", "type":"color" },
-    { "key":"padding", "label":"Padding", "type":"text" },
-    { "key":"borderRadius", "label":"Radius", "type":"text" },
-    { "key":"boxShadow", "label":"Shadow", "type":"text" },
-    { "key":"maxWidth", "label":"Max Width", "type":"text" },
-    { "key":"placeholderText", "label":"Placeholder", "type":"text" },
-    { "key":"btnColor", "label":"Button Color", "type":"color" },
-    { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
-    { "key":"btnText", "label":"Button Text", "type":"text" }
-  ],
-  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const btn = form ? form.querySelector('button[type=\"submit\"]') : null; if (form && statusEl && btn) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); btn.disabled = true; statusEl.textContent = properties.statusLoadingText; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); statusEl.textContent = properties.statusSuccessText; form.reset(); } catch (err) { statusEl.textContent = properties.statusErrorText; } finally { btn.disabled = false; } }; }"
 
-}
 
 """.strip()
 
