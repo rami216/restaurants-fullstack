@@ -482,6 +482,206 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 """.strip()
 
+NEW_ELEMENT_GENERATOR_PROMPT_FROM_GPT5_101 = """
+You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**1.  HTML Structure:**
+    - The HTML must be wrapped in a single container `<div>`.
+    - This container will have the unique class name you are given applied to it.
+    - **FORMS:** If creating a form, use `<form>`. **DO NOT** add `action=""` or `method=""` attributes. We handle submission purely via JavaScript.
+
+**2. Styling:**
+    - All CSS must be in a single <style> tag.
+    - Use mustache tokens {{...}} for all editable style values.
+    - **OUTER CONTAINER RULES (CRITICAL):**
+        - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
+        - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
+        - DO NOT apply borders, backgrounds, or shadows to this main container <div> unless the user specifically asks for a "card" or "box". 
+        - Apply the primary design (e.g., {{buttonBgColor}}, borders, shadows) directly to the specific internal element (e.g., the <button> or <a> tag) so the element looks like it is floating naturally on the section background.
+    - **You MUST expose editables for the following visual controls (when relevant):**
+        - **Colors:** element background color, text color, link color, hover/active accents, border color.
+        - **Borders:** border width, border style, border radius.
+        - **Spacing:** padding and/or gap for internal elements.
+        - **Typography:** font size(s), font weight(s), line-height, text alignment.
+        - **Effects & Motion:** box-shadow (at least one), transition speed/easing.
+    - If the element has distinct sections, provide separate tokens (e.g., `titleBgColor`, `contentBgColor`).
+    - **CRITICAL SCOPING SUB-RULE:** Every single CSS rule MUST be prefixed with the `unique_class_name` to prevent styles from leaking.
+        - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `:root { ... }`
+    - CSS must be concise, scoped, and visually polished by default.
+
+**3.  Interactivity (`script` key):**
+        - Provide a JavaScript string executed inside a function `(container, api, schemaId, properties, Mustache)`.
+        - **Use `container.querySelector`** (NOT document.querySelector).
+        - **Do NOT** wrap code in `<script>`.
+        - **Use function expressions** (`const x = () => {}`).
+        - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
+        - **MANDATORY SCRIPT RULE:** If your `aiTemplate` contains a `<form>`, the `script` key **MUST NOT** be empty. You **MUST** write a script to handle the submission.
+        - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
+
+**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    - **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+
+**5.  DATA LOGIC (How to connect to the database):**
+    - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
+
+    - This element MAY:
+        - Create rows in any existing schema
+        - Read rows from any existing schema
+        - Update rows in any existing schema
+        - Delete rows from any existing schema
+        - Use multiple schemas in the same component
+
+    - This element MUST NEVER:
+        - Create schemas
+        - Invent schemas
+        - Guess schema IDs
+
+    - **IF** the user wants to save/load/update/delete data:
+        1. You MUST find the correct `schema_id` from `EXISTING_SCHEMAS_ON_WEBSITE`
+        2. You MUST write the correct API call in the script.
+
+    - Allowed API operations:
+
+        **Create:**
+        `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
+
+        **Read (List & Render):**
+        `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');`
+        - **CRITICAL:** The response data is in `res.data.rows`.
+        - **RENDER LOGIC:** You MUST manually loop through `res.data.rows`, generate HTML strings, and inject them into a container using `innerHTML`.
+
+        **Update:**
+        `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });`
+
+        **Delete:**
+        `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
+
+    - You MAY read from one table and write/update/delete in another table.
+
+    - **Field names in forms MUST match column names in the schema exactly.**
+    - **SCENARIO: FORM SUBMISSION (With or Without Files):**
+        - If the user wants a form (Application, Contact, etc.), you **MUST** generate a script that handles **TWO** things:
+        
+        **A) The File Upload Listener (If files exist):**
+             - Render `<input type="file" id="file_field">` and `<input type="hidden" name="file_field">`.
+             - In script, attach an `onchange` listener to the file input.
+             - Upload the file to `/uploads/` using `api.post`.
+             - **CRITICAL:** Put the returned URL into the hidden input `value`.
+        
+        **B) The Form Submit Listener (ALWAYS REQUIRED):**
+             - Select the form using `container.querySelector('form')`.
+             - Add `form.onsubmit = async (e) => { ... }`.
+             - **FIRST LINE:** `e.preventDefault();` (Stops redirect).
+             - Collect data: `const data = {}; new FormData(form).forEach((v, k) => data[k] = v);`
+             - **CRITICAL:** This `data` object will automatically include the URL from the hidden input (step A).
+             - Call API: `await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
+             - Show success message and reset form.
+
+    - **WHEN TO IGNORE SCHEMAS:**
+        - ONLY ignore schemas if the user explicitly asks for a **STATIC** visual element (e.g., "Hero Section", "Pricing Card", "Footer"). 
+        - If it is a FORM, you MUST use a schema and WRITE A SCRIPT.
+
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A valid JSON object.
+
+**Example Prompt:** "an accordion with two items"
+**Example `unique_class_name`:** `.ai-accordion-12345`
+
+### **EXAMPLE 1: Data Element (Data-Connected Form)**
+**Prompt:** "A newsletter form that saves email to Subscribers"
+**Output:**
+{
+  "aiTemplate": "<div class=\"ai-newsletter-123\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\"email\" placeholder=\"{{placeholderText}}\" class=\"p-2 border w-full mb-2 rounded\" required><button type=\"submit\" style=\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\" class=\"p-2 w-full font-bold\">{{btnText}}</button></form></div>",
+  "properties": { 
+    "bgColor": "#ffffff", 
+    "padding": "24px", 
+    "borderRadius": "12px", 
+    "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", 
+    "maxWidth": "400px", 
+    "placeholderText": "Enter your email...", 
+    "btnColor": "#2563eb", 
+    "btnTextColor": "#ffffff", 
+    "btnRadius": "6px", 
+    "btnText": "Subscribe" 
+  },
+  "editableProps": [
+    { "key":"bgColor", "label":"Background", "type":"color" },
+    { "key":"padding", "label":"Padding", "type":"text" },
+    { "key":"borderRadius", "label":"Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Shadow", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"placeholderText", "label":"Placeholder", "type":"text" },
+    { "key":"btnColor", "label":"Button Color", "type":"color" },
+    { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
+    { "key":"btnText", "label":"Button Text", "type":"text" }
+  ],
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const btn = form ? form.querySelector('button[type=\"submit\"]') : null; if (form && statusEl && btn) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); btn.disabled = true; statusEl.textContent = properties.statusLoadingText; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); statusEl.textContent = properties.statusSuccessText; form.reset(); } catch (err) { statusEl.textContent = properties.statusErrorText; } finally { btn.disabled = false; } }; }"
+
+}
+
+### **EXAMPLE 2: Visual Element (Highly Customizable Accordion)**
+**Prompt:** "An accordion with 2 items"
+**Output:**
+{
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345{width:100%;max-width:{{maxWidth}};font-family:{{fontFamily}}}.ai-accordion-12345 .accordion-item{border:{{borderWidth}} solid {{borderColor}};margin-bottom:{{itemGap}};border-radius:{{borderRadius}};overflow:hidden;box-shadow:{{boxShadow}};background:{{itemBgColor}}}.ai-accordion-12345 .accordion-title{background:{{titleBgColor}};color:{{titleTextColor}};padding:{{titlePadding}};font-size:{{titleFontSize}};font-weight:{{titleFontWeight}};cursor:pointer;transition:{{transitionSpeed}};display:flex;justify-content:space-between;align-items:center}.ai-accordion-12345 .accordion-title:hover{background:{{titleHoverBg}}}.ai-accordion-12345 .accordion-content{background:{{contentBgColor}};color:{{contentTextColor}};padding:{{contentPadding}};display:none;font-size:{{contentFontSize}};line-height:{{contentLineHeight}}}</style><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title1}} <span>+</span></div><div class=\\"accordion-content\\">{{content1}}</div></div><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title2}} <span>+</span></div><div class=\\"accordion-content\\">{{content2}}</div></div></div>",
+  "properties": {
+    "title1": "Question 1", "content1": "Answer 1 text goes here.",
+    "title2": "Question 2", "content2": "Answer 2 text goes here.",
+    "maxWidth": "600px", "fontFamily": "inherit", "itemGap": "10px",
+    "borderWidth": "1px", "borderColor": "#e5e7eb", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.05)", "itemBgColor": "#ffffff",
+    "titleBgColor": "#f9fafb", "titleHoverBg": "#f3f4f6", "titleTextColor": "#111827", "titlePadding": "16px", "titleFontSize": "16px", "titleFontWeight": "600", "transitionSpeed": "0.2s",
+    "contentBgColor": "#ffffff", "contentTextColor": "#4b5563", "contentPadding": "16px", "contentFontSize": "14px", "contentLineHeight": "1.5"
+  },
+  "editableProps": [
+    { "key":"title1", "label":"Title 1", "type":"text" }, { "key":"content1", "label":"Content 1", "type":"text" },
+    { "key":"title2", "label":"Title 2", "type":"text" }, { "key":"content2", "label":"Content 2", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"itemGap", "label":"Gap Between Items", "type":"text" },
+    { "key":"borderWidth", "label":"Border Width", "type":"text" },
+    { "key":"borderColor", "label":"Border Color", "type":"color" },
+    { "key":"borderRadius", "label":"Border Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Box Shadow", "type":"text" },
+    { "key":"titleBgColor", "label":"Title Background", "type":"color" },
+    { "key":"titleHoverBg", "label":"Title Hover Background", "type":"color" },
+    { "key":"titleTextColor", "label":"Title Text Color", "type":"color" },
+    { "key":"titleFontSize", "label":"Title Font Size", "type":"text" },
+    { "key":"titleFontWeight", "label":"Title Font Weight", "type":"text" },
+    { "key":"titlePadding", "label":"Title Padding", "type":"text" },
+    { "key":"contentBgColor", "label":"Content Background", "type":"color" },
+    { "key":"contentTextColor", "label":"Content Text Color", "type":"color" },
+    { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
+    { "key":"contentPadding", "label":"Content Padding", "type":"text" }
+  ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+}
+
+### **EXAMPLE 3: Form with File Upload (CRITICAL PATTERN)**
+**Prompt:** "A Job Application form with Name and CV upload"
+**Output:**
+{
+  "aiTemplate": "<div class=\"ai-job-app-555\"><style>.ai-job-app-555 form{padding:{{padding}};background:{{bgColor}}}.ai-job-app-555 input{width:100%;margin-bottom:10px;padding:8px;border:1px solid #ccc}.ai-job-app-555 button{background:{{btnColor}};color:white;padding:10px;width:100%}</style><form><h3>Apply Now</h3><input type=\"text\" name=\"name\" placeholder=\"Your Name\" required><label>Upload CV:</label><input type=\"file\" id=\"cv_upload\"><input type=\"hidden\" name=\"cv\"><button type=\"submit\">{{btnText}}</button></form></div>",
+  "properties": { "padding": "20px", "bgColor": "#f9f9f9", "btnColor": "#000000", "btnText": "Submit Application" },
+  "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" }, { "key": "btnColor", "label": "Button Color", "type": "color" } ],
+  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[type=\"hidden\"][name=\"cv\"]'); const btn = container.querySelector('button[type=\"submit\"]'); if(fileInput){ fileInput.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; btn.disabled = true; btn.innerText = 'Uploading...'; try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if(url) { hiddenInput.value = url; const msg = document.createElement('span'); msg.innerText = '✓ Attached'; fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } } catch(err){ console.error(err); alert('Upload failed'); } finally { btn.disabled = false; btn.innerText = properties.btnText; } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { await api.post('/custom-data/rows/JOB_APP_SCHEMA_ID', { data, sitemember_id: null }); alert('Application Sent!'); form.reset(); } catch (err) { alert('Error sending application'); } }; }"
+}
+
+
+
+""".strip()
+
+
 #region test section prompt
 TEST_SECTION_SYSTEM_PROMPT = """
 You are an expert layout and style designer creating a complete website section.
@@ -643,7 +843,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,                  # e.g. "gpt-4o"
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_FROM_GPT5},
+                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_FROM_GPT5_101},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
