@@ -464,6 +464,16 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
 }
 
+### **EXAMPLE 3: Form with File Upload (CRITICAL PATTERN)**
+**Prompt:** "A Job Application form with Name and CV upload"
+**Output:**
+{
+  "aiTemplate": "<div class=\"ai-job-app-555\"><style>.ai-job-app-555 form{padding:{{padding}};background:{{bgColor}}}.ai-job-app-555 input{width:100%;margin-bottom:10px;padding:8px;border:1px solid #ccc}.ai-job-app-555 button{background:{{btnColor}};color:white;padding:10px;width:100%}</style><form><h3>Apply Now</h3><input type=\"text\" name=\"name\" placeholder=\"Your Name\" required><label>Upload CV:</label><input type=\"file\" id=\"cv_upload\"><input type=\"hidden\" name=\"cv\"><button type=\"submit\">{{btnText}}</button></form></div>",
+  "properties": { "padding": "20px", "bgColor": "#f9f9f9", "btnColor": "#000000", "btnText": "Submit Application" },
+  "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" }, { "key": "btnColor", "label": "Button Color", "type": "color" } ],
+  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[type=\"hidden\"][name=\"cv\"]'); const btn = container.querySelector('button[type=\"submit\"]'); if(fileInput){ fileInput.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; btn.disabled = true; btn.innerText = 'Uploading...'; try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if(url) { hiddenInput.value = url; const msg = document.createElement('span'); msg.innerText = '✓ Attached'; fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } } catch(err){ console.error(err); alert('Upload failed'); } finally { btn.disabled = false; btn.innerText = properties.btnText; } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { await api.post('/custom-data/rows/JOB_APP_SCHEMA_ID', { data, sitemember_id: null }); alert('Application Sent!'); form.reset(); } catch (err) { alert('Error sending application'); } }; }"
+}
+
 
 
 """.strip()
