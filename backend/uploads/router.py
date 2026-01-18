@@ -190,7 +190,7 @@ async def delete_storage_object(
 
 
 # ==========================================
-# ✅ BULLETPROOF UPLOAD (Manually Forces PDF Type)
+# ✅ UNIVERSAL UPLOAD (With Correct Headers)
 # ==========================================
 @router.post("/", status_code=status.HTTP_201_CREATED)
 async def upload_generic_file(
@@ -203,10 +203,7 @@ async def upload_generic_file(
         if len(file_bytes) > MAX_FILE_SIZE:
              raise HTTPException(status_code=413, detail="File too large (Max 10MB).")
 
-        # ---------------------------------------------------------
-        # 🧠 THE FIX: Manual Override for PDFs
-        # Sometimes servers miss the mime-type definitions. We force it here.
-        # ---------------------------------------------------------
+        # 1. Force PDF Content-Type based on extension
         filename_lower = file.filename.lower()
         content_type = None
 
@@ -217,7 +214,7 @@ async def upload_generic_file(
         elif filename_lower.endswith(".png"):
             content_type = "image/png"
         
-        # Fallback to python guess or browser claim if not found above
+        # 2. Fallback
         if not content_type:
             guessed_type, _ = mimetypes.guess_type(file.filename)
             content_type = guessed_type or file.content_type or "application/octet-stream"
@@ -226,11 +223,12 @@ async def upload_generic_file(
         anon_id = f"public_{uuid.uuid4().hex[:8]}"
         object_key = _make_object_key(file.filename, content_type, anon_id)
         
-        # Upload with the FORCED content_type
+        # 3. UPLOAD WITH CORRECT HEADER KEY ("content-type")
         res = supabase.storage.from_(WEBSITE_FILES_BUCKET).upload(
             path=object_key,
             file=file_bytes,
-            file_options={"contentType": content_type, "upsert": "true"}
+            # FIX: "contentType" -> "content-type"
+            file_options={"content-type": content_type, "upsert": "true"} 
         )
         
         public_url = _public_url(WEBSITE_FILES_BUCKET, object_key)
