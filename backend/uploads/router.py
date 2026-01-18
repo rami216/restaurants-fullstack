@@ -18,6 +18,7 @@ SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "menu_item_images")
 SUPABASE_VIDEO_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "all_vids")
+WEBSITE_FILES_BUCKET = os.getenv("SUPABASE_WEBSITE_BUCKET", "website-uploads")
 SUPABASE_FOLDER_PREFIX = os.getenv("SUPABASE_FOLDER_PREFIX", "").strip("/")
 
 # Optional: your Cloudflare media host (if you want backend to also return a CDN URL)
@@ -186,3 +187,46 @@ async def delete_storage_object(
     except Exception as e:
         print(f"Error deleting storage object: {e}")
         raise HTTPException(status_code=500, detail="Failed to delete file from storage.")
+
+
+# --- ADD THIS NEW ENDPOINT ---
+@router.post("/", status_code=status.HTTP_201_CREATED)
+async def upload_generic_file(
+    file: UploadFile = File(...),
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    try:
+        # 1. Check Owner & Storage Limits
+        owner = await db.scalar(select(RestaurantOwner).where(RestaurantOwner.user_id == current_user.id))
+        
+        # Read file bytes
+        file_bytes = await file.read()
+        
+        if owner:
+            if owner.storage_bytes_used + len(file_bytes) > STORAGE_LIMIT_BYTES:
+                 raise HTTPException(status_code=413, detail="Storage limit exceeded.")
+
+        # 2. Upload to Supabase (Generic Bucket)
+        content_type = file.content_type or mimetypes.guess_type(file.filename)[0] or "application/octet-stream"
+        object_key = _make_object_key(file.filename, content_type, str(current_user.id))
+        
+        res = supabase.storage.from_(WEBSITE_FILES_BUCKET).upload(
+            path=object_key,
+            file=file_bytes,
+            file_options={"contentType": content_type, "upsert": "true"}
+        )
+        
+        # 3. Update Usage
+        if owner:
+            owner.storage_bytes_used += len(file_bytes)
+            await db.commit()
+
+        # 4. Return URL
+        public_url = _public_url(WEBSITE_FILES_BUCKET, object_key)
+        
+        return JSONResponse({"url": public_url}, status_code=201)
+
+    except Exception as e:
+        print("GENERIC UPLOAD ERROR:", e)
+        raise HTTPException(500, f"Upload failed: {str(e)}")

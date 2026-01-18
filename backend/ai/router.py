@@ -1360,6 +1360,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -   `"type": "relation"`
         -   `"related_schema_id": "the_uuid_of_the_existing_schema"`
     -   If the prompt describes a new concept with no matching existing schema, you should use standard types like "text", "number", etc.
+    -   File/Image Handling: If the prompt mentions "image", "photo", "avatar" -> use "type": "image". If it mentions "file", "pdf", "document", "attachment" -> use "type": "file".
 
 2.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
 
@@ -1377,6 +1378,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   An **EMPTY** container for displaying the data: `<div class="data-display space-y-3 w-full overflow-x-auto"></div>`.
     -   An **EMPTY** container for pagination controls: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
     -   A `<template id="displayTemplate">`.
+    -   Files/Images: If a field is image, render <img src="{{data.field}}" class="h-10 w-10 object-cover">. If file, render <a href="{{data.field}}" target="_blank" class="text-blue-500 underline">Download</a>.
 
 5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
     -   It MUST be a `div` with class: `flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow`.
@@ -1417,6 +1419,27 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
                         - If 'Child' (filtered): Show the specific concatenation (e.g., "10:00 - 12:00").
                 5.  The `value` for the `<option>` must be the `row_id`.
                 -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic.
+        -   IF schema field type is 'file' or 'image':
+                1- Create an <input type="file">.
+                2- Create a <input type="hidden" name="FIELD_ID"> to store the URL.
+                3- Add an onchange listener to the file input:
+                    input.onchange = async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+                        const btn = form.querySelector('button[type="submit"]');
+                        btn.disabled = true; btn.innerText = 'Uploading...';
+                        try {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            const res = await fetch('/uploads/', { method: 'POST', body: formData });
+                            const json = await res.json();
+                            if (json.url) { 
+                                hiddenInput.value = json.url; 
+                                alert('Upload complete');
+                            }
+                        } catch(err) { console.error(err); alert('Upload failed'); }
+                        finally { btn.disabled = false; btn.innerText = 'Save'; }
+                    };
     -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
             1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
             2- The script MUST fetch the Child relational data once and store it in a constant variable.
@@ -1619,6 +1642,15 @@ const fetchAndRenderRows = async () => {
                     if (!label) label = Object.values(d).filter(v => typeof v !== 'object')[0];
                     rowData[f.id].display_label = label || '---';
                 }
+                // ✅ FILE/IMAGE DISPLAY FIX
+            if (rowData[f.id] && (f.type === 'file' || f.type === 'image')) {
+                // If the template expects a string, we give it the URL.
+                // But if the AI template logic (Mustache) isn't set up for images, 
+                // we can force HTML injection here if we modify the Mustache template dynamically, 
+                // but usually, we just ensure the URL is clean.
+                // For now, ensure it's treated as a string URL.
+                rowData[f.id] = String(rowData[f.id]);
+            }
             });
 
             div.innerHTML = Mustache.render(tmpl, {
@@ -1743,7 +1775,57 @@ const generateForm = async (initialData = {}) => {
             sel.value = isTrue ? 'true' : 'false';
             wrapper.appendChild(sel);
 
-        } else {
+        } else if (field.type === 'file' || field.type === 'image') {
+            // 1. Create File Input
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            
+            // 2. Create Hidden Input (Holds the URL string for the DB)
+            const hiddenUrl = document.createElement('input');
+            hiddenUrl.type = 'hidden';
+            hiddenUrl.name = field.id;
+            hiddenUrl.value = initialData[field.id] || '';
+            wrapper.appendChild(hiddenUrl);
+
+            // 3. Upload Logic
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                // Disable submit button during upload
+                const btn = form.querySelector('button[type="submit"]') || form.querySelector('button:last-child');
+                const originalText = btn ? btn.innerText : 'Submit';
+                if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // Call your new generic upload endpoint
+                    const res = await fetch('/uploads/', { method: 'POST', body: formData });
+                    const json = await res.json();
+                    
+                    if (json.url) {
+                        hiddenUrl.value = json.url; // Save URL to hidden input
+                        
+                        // Visual Success Indicator
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '✓ Ready to save';
+                        if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch(err) {
+                    console.error(err);
+                    alert('Upload failed');
+                    input.value = ''; // Reset
+                } finally {
+                    if(btn) { btn.disabled = false; btn.innerText = originalText; }
+                }
+            };
+            wrapper.appendChild(input);
+            }else {
             const input = document.createElement('input');
             input.type = field.type;
             input.name = field.id;
