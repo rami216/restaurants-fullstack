@@ -348,7 +348,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         2.  **CRITICAL:** Render a `<input type="hidden" name="SCHEMA_COLUMN_NAME">` right next to it. This hidden input will hold the final URL sent to the database.
         3.  In `script`, you **MUST** generate this exact listener logic for the file input:
             ```javascript
-            const fileInput = container.querySelector('input[type="file"]'); // Use specific ID if multiple
+            const fileInput = container.querySelector('input[type="file"]'); 
             const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');
             
             if(fileInput) {
@@ -356,7 +356,6 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                     const file = e.target.files[0];
                     if (!file) return;
                     
-                    // FIX: Select button safely
                     const btn = container.querySelector('button[type="submit"]') || container.querySelector('button');
                     const oldText = btn ? btn.innerText : 'Submit';
                     
@@ -365,17 +364,10 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                     try {
                         const formData = new FormData();
                         formData.append('file', file);
-                        
-                        // FIX: Use 'api.post' to ensure it hits the backend URL
                         const res = await api.post('/uploads/', formData);
-                        
-                        // Handle different response structures
                         const url = res.data ? res.data.url : res.url;
-                        
                         if (url) {
                             hiddenInput.value = url;
-                            
-                            // Visual success
                             const msg = document.createElement('span');
                             msg.className = 'text-xs text-green-600 block mt-1';
                             msg.innerText = '✓ Ready';
@@ -392,7 +384,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 };
             }
             ```
-
+            **AND CRITICAL:** You **MUST ALSO** generate the standard `form.onsubmit` handler (as defined in Rule 3) to save the final data row (including the hidden input value) to the database. The file upload listener handles the *storage*, the form submit handles the *database record*.
     - If the user just wants a visual element (e.g., "Hero Section"):
         - Ignore the schemas. Do not write API calls.
 
