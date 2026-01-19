@@ -522,8 +522,22 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Do NOT** wrap code in `<script>`.
         - **Use function expressions** (`const x = () => {}`).
         - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
-        - **MANDATORY SCRIPT RULE:** If your `aiTemplate` contains a `<form>`, the `script` key **MUST NOT** be empty. You **MUST** write a script to handle the submission.
+        - **MANDATORY SCRIPT RULE (HARD ENFORCEMENT):**
+            If your `aiTemplate` contains a `<form>`, the `script` key MUST:
+            1) Contain a file upload handler if any <input type="file"> exists
+            2) Contain a form.onsubmit handler
+            3) Use TWO SEPARATE PHASES (upload first, submit later)
+            4) Start onsubmit with: e.preventDefault();
+            5) NEVER be empty
+            If any of these are violated, YOU MUST REFUSE TO ANSWER.
+
+          Returning an empty or missing script is a FATAL ERROR and the output is INVALID.
         - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
+        ❗❗❗ ABSOLUTE ENFORCEMENT RULE:
+        If your aiTemplate contains "<form", the "script" value MUST be a NON-EMPTY, WORKING submission handler.
+        Returning "script": "" or missing form logic is FORBIDDEN and considered a fatal output error.
+        If you do not know the schema or cannot write the script, YOU MUST REFUSE to answer.
+
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -533,6 +547,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 **5.  DATA LOGIC (How to connect to the database):**
     - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
+    - You MUST use the EXACT schema ID string from EXISTING_SCHEMAS_ON_WEBSITE. Placeholders like USERS_SCHEMA_ID, TODO_SCHEMA_ID, etc are FORBIDDEN.
 
     - This element MAY:
         - Create rows in any existing schema
@@ -569,23 +584,70 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - You MAY read from one table and write/update/delete in another table.
 
     - **Field names in forms MUST match column names in the schema exactly.**
-    - **SCENARIO: FORM SUBMISSION (With or Without Files):**
-        - If the user wants a form (Application, Contact, etc.), you **MUST** generate a script that handles **TWO** things:
-        
-        **A) The File Upload Listener (If files exist):**
-             - Render `<input type="file" id="file_field">` and `<input type="hidden" name="file_field">`.
-             - In script, attach an `onchange` listener to the file input.
-             - Upload the file to `/uploads/` using `api.post`.
-             - **CRITICAL:** Put the returned URL into the hidden input `value`.
-        
-        **B) The Form Submit Listener (ALWAYS REQUIRED):**
-             - Select the form using `container.querySelector('form')`.
-             - Add `form.onsubmit = async (e) => { ... }`.
-             - **FIRST LINE:** `e.preventDefault();` (Stops redirect).
-             - Collect data: `const data = {}; new FormData(form).forEach((v, k) => data[k] = v);`
-             - **CRITICAL:** This `data` object will automatically include the URL from the hidden input (step A).
-             - Call API: `await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
-             - Show success message and reset form.
+   **SCENARIO: FORM SUBMISSION (With or Without Files) — ABSOLUTE ENFORCEMENT MODE:**
+
+        If the element contains a <form>, the output is only VALID if the script follows EXACTLY this architecture:
+
+        ---------------------------------------
+        PHASE 1 — FILE UPLOAD (IF ANY <input type="file"> EXISTS)
+
+        - You MUST render:
+            <input type="file" id="FILE_FIELD_ID">
+            <input type="hidden" name="SAME_FIELD_NAME">
+
+        - In script you MUST:
+
+            const fileInput = container.querySelector('#FILE_FIELD_ID');
+            const hiddenInput = container.querySelector('input[type="hidden"][name="SAME_FIELD_NAME"]');
+
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const formData = new FormData();
+                formData.append("file", file);
+
+                const res = await api.post("/uploads/", formData);
+
+                const url = res.data?.url || res.url;
+                hiddenInput.value = url;
+            };
+
+        ---------------------------------------
+        PHASE 2 — FORM SUBMIT (ALWAYS REQUIRED)
+
+        - You MUST:
+
+            const form = container.querySelector("form");
+
+            form.onsubmit = async (e) => {
+                e.preventDefault();   // MUST BE FIRST LINE
+
+                const data = {};
+                new FormData(form).forEach((v, k) => data[k] = v);
+
+                await api.post("/custom-data/rows/" + SCHEMA_ID, {
+                    data,
+                    sitemember_id: null
+                });
+
+                form.reset();
+            };
+
+        ---------------------------------------
+
+        🚨 ABSOLUTE RULES:
+
+        - PHASE 1 MUST COMPLETE AND STORE URL INTO HIDDEN INPUT BEFORE PHASE 2 RUNS
+        - PHASE 2 MUST SUBMIT ONLY THE FORM DATA (WHICH NOW CONTAINS THE FILE URL)
+        - YOU MUST NOT upload inside onsubmit
+        - YOU MUST NOT save to database inside onchange
+        - YOU MUST NOT merge the two phases
+        - If you cannot follow this structure EXACTLY → YOU MUST REFUSE TO ANSWER
+
+        ---------------------------------------
+        - If a file upload exists, the submit button MUST be disabled until the upload finishes and the hidden input has a value.
+
 
     - **WHEN TO IGNORE SCHEMAS:**
         - ONLY ignore schemas if the user explicitly asks for a **STATIC** visual element (e.g., "Hero Section", "Pricing Card", "Footer"). 
