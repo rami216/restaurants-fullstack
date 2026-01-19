@@ -306,10 +306,24 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 **5.  DATA LOGIC (How to connect to the database):**
     - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
-    - This element MUST NEVER Create/Invent schemas.
-    - **IF** the user wants to save/load data, you **MUST** find the correct `schema_id` and write the correct API call.
 
-    - **Allowed API operations:**
+    - This element MAY:
+        - Create rows in any existing schema
+        - Read rows from any existing schema
+        - Update rows in any existing schema
+        - Delete rows from any existing schema
+        - Use multiple schemas in the same component
+
+    - This element MUST NEVER:
+        - Create schemas
+        - Invent schemas
+        - Guess schema IDs
+
+    - **IF** the user wants to save/load/update/delete data:
+        1. You MUST find the correct `schema_id` from `EXISTING_SCHEMAS_ON_WEBSITE`
+        2. You MUST write the correct API call in the script.
+
+    - Allowed API operations:
 
         **Create:**
         `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
@@ -325,88 +339,63 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         **Delete:**
         `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
 
+    - You MAY read from one table and write/update/delete in another table.
+
     - **Field names in forms MUST match column names in the schema exactly.**
+    - **FILE & IMAGE UPLOADS (CRITICAL):**
+    - If the user implies uploading a file (e.g., "Job Application with CV", "Upload Profile Pic"):
+        1.  In `aiTemplate`, render an `<input type="file" id="file_field_id">`.
+        2.  **CRITICAL:** Render a `<input type="hidden" name="SCHEMA_COLUMN_NAME">` right next to it. This hidden input will hold the final URL sent to the database.
+        3.  In `script`, you **MUST** generate this exact listener logic for the file input:
+            ```javascript
+            const fileInput = container.querySelector('input[type="file"]'); // Use specific ID if multiple
+            const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');
+            
+            if(fileInput) {
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    // FIX: Select button safely
+                    const btn = container.querySelector('button[type="submit"]') || container.querySelector('button');
+                    const oldText = btn ? btn.innerText : 'Submit';
+                    
+                    if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                    
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        // FIX: Use 'api.post' to ensure it hits the backend URL
+                        const res = await api.post('/uploads/', formData);
+                        
+                        // Handle different response structures
+                        const url = res.data ? res.data.url : res.url;
+                        
+                        if (url) {
+                            hiddenInput.value = url;
+                            
+                            // Visual success
+                            const msg = document.createElement('span');
+                            msg.className = 'text-xs text-green-600 block mt-1';
+                            msg.innerText = '✓ Ready';
+                            if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
+                            fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
+                        }
+                    } catch(err) {
+                        console.error('Upload error:', err);
+                        alert('Upload failed');
+                        fileInput.value = '';
+                    } finally {
+                        if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                    }
+                };
+            }
+            ```
 
-    - **CRITICAL SCRIPT RECIPE FOR FORMS:**
-        If the user wants a form (with OR without files), you **MUST** generate a script containing **TWO SEPARATE, INDEPENDENT BLOCKS**. 
-        **DO NOT** nest the form submit logic inside the file upload check. They must be siblings.
+    - If the user just wants a visual element (e.g., "Hero Section"):
+        - Ignore the schemas. Do not write API calls.
 
-        **BLOCK 1: The File Upload Listener (Include ONLY if <input type="file"> exists)**
-        ```javascript
-        const fileInput = container.querySelector('input[type="file"]'); 
-        const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]'); // Matches schema column
-        
-        if (fileInput && hiddenInput) {
-             fileInput.onchange = async (e) => {
-                 const file = e.target.files[0];
-                 if (!file) return;
-                 
-                 // UI Feedback
-                 const btn = container.querySelector('button[type="submit"]');
-                 const oldText = btn ? btn.innerText : 'Submit';
-                 if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-                 
-                 try {
-                     const formData = new FormData();
-                     formData.append('file', file);
-                     const res = await api.post('/uploads/', formData);
-                     const url = res.data ? res.data.url : res.url;
-                     
-                     if (url) {
-                         hiddenInput.value = url; // Store URL for the final submit
-                         
-                         // Visual Success Checkmark
-                         const msg = document.createElement('span');
-                         msg.className = 'text-xs text-green-600 block mt-1';
-                         msg.innerText = '✓ Ready';
-                         if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
-                         fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
-                     }
-                 } catch(err) {
-                     alert('Upload failed');
-                     fileInput.value = '';
-                 } finally {
-                     if(btn) { btn.disabled = false; btn.innerText = oldText; }
-                 }
-             };
-        }
-        ```
-
-        **BLOCK 2: The Form Submit Listener (MANDATORY FOR ALL FORMS)**
-        ```javascript
-        const form = container.querySelector('form');
-        if (form) {
-             form.onsubmit = async (e) => {
-                 // 1. STOP PAGE RELOAD (CRITICAL)
-                 e.preventDefault(); 
-                 
-                 // 2. Collect Data
-                 const data = {}; 
-                 new FormData(form).forEach((v, k) => data[k] = v);
-                 // Note: If 'hiddenInput' was set by Block 1, its value is already inside 'data' here.
-
-                 // 3. UI Feedback
-                 const btn = form.querySelector('button[type="submit"]');
-                 if(btn) btn.disabled = true;
-
-                 try {
-                    // 4. API Call (Create, Update, or Delete based on prompt)
-                    await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });
-                    alert('Success!'); 
-                    form.reset();
-                 } catch(err) { 
-                    console.error(err); 
-                    alert('Error submitting form'); 
-                 } finally { 
-                    if(btn) btn.disabled = false; 
-                 }
-             };
-        }
-        ```
-
-    - **WHEN TO IGNORE SCHEMAS:**
-        - ONLY ignore schemas if the user explicitly asks for a **STATIC** visual element (e.g., "Hero Section", "Pricing Card", "Footer"). 
-        - If it is a FORM, you MUST use a schema and WRITE A SCRIPT.
 
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
@@ -484,6 +473,229 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 }
 
 
+
+""".strip()
+
+NEW_ELEMENT_GENERATOR_PROMPT_WITHOUT_TABLE_CREATION = """
+You are an expert full-stack developer creating a single, self-contained, interactive HTML element using Tailwind CSS.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+1.  **Analyze Existing Schemas (NO NEW TABLES):**
+    -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+    -   **STRICT RULE:** You are **FORBIDDEN** from inventing new schemas or creating new SQL tables.
+    -   If the user wants to save/load data, you **MUST** find the most relevant `schema_id` from the provided list and use it.
+    -   If the prompt describes a visual element (Hero, Accordion) with no data saving, ignore schemas.
+
+2.  **`aiTemplate`**: The main HTML structure. It MUST include:
+    -   A `<style>` tag for all CSS, scoped using the `unique_class_name`. **CRITICAL:** The style tag MUST include:
+            * `.{unique_class_name} .title { color: {{titleColor}}; }`
+            * `.{unique_class_name} .add-new-btn { background-color: {{buttonBgColor}}; }`
+    -   A main container with Tailwind classes: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
+    -   A header `div` with class `flex justify-between items-center mb-6`.
+    -   A static main title `<h3>` or `<h2>` with classes `text-2xl font-bold title`.
+    -   **IF DATA APP:** A static "Add New" button with classes `add-new-btn px-4 py-2 text-white rounded-lg font-semibold transition-all active:scale-95`.
+    -   **IF DATA APP:** An **EMPTY** container for the form: `<div class="form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden"></div>`.
+    -   **IF DATA APP:** An **EMPTY** container for displaying the data: `<div class="data-display space-y-3 w-full overflow-x-auto"></div>`.
+    -   **IF DATA APP:** An **EMPTY** container for pagination controls: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
+    -   **IF DATA APP:** A `<template id="displayTemplate">`.
+    -   **IF VISUAL UI ONLY:** Ignore the form/data containers above and simply render the requested HTML (Accordion, Hero, etc.) inside the main container.
+
+3. **`displayTemplate` (For Data Apps Only)**:
+    -   It MUST be a `div` with class: `flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow`.
+    -   For regular fields, you **MUST** use `{{data.field_id}}` inside a `div` with class `flex-1`.
+    -   CRITICAL: For relational fields, use {{data.field_id.display_label}}. This label is dynamically generated by the script's pre-processing logic to handle both simple names and complex concatenations like time slots.
+    -   It **MUST** include edit/delete buttons in a `div` with class `flex gap-2`. Buttons must have `data-row-id="{{row_id}}"`. Use classes: `edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded` and `delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded`.
+
+4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+    -   Make the component's styling fully editable.
+    -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
+    -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
+    -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
+
+5.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+    -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+    -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector. You MUST only use container.querySelector so multiple forms on one page do not conflict.
+    
+    -   **DECISION TREE (CRITICAL):**
+        1.  **IF VISUAL UI (Accordion, Hero, etc.):** Write standard JS event listeners (e.g., `click` to toggle). Do not include the complex data logic below.
+        2.  **IF DATA APP (Form, List, CRM):** You **MUST** include the following logic (PRESERVED EXACTLY):
+
+    -   **UI SYNCHRONIZATION (MANDATORY):** The script MUST explicitly select and update the static UI elements (Title, Add Button) using the values from `properties` at the very top of the execution.
+        -   Set `titleElement.textContent = properties.title`.
+        -   Set `titleElement.style.color = properties.titleColor`.
+        -   Set `addButton.textContent = properties.addButtonText`.
+        -   Set `addButton.style.backgroundColor = properties.buttonBgColor`.
+    -   Initial Load Guard: The script MUST check if (properties.hideData) return; at the very beginning of the fetchAndRenderRows function to prevent private data from loading.
+    -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
+    -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
+    -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
+        -   The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
+        -   Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
+        -   Every `<input>` and `<select>` created MUST have class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+        -   The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+        -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
+        -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
+        -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
+                1.  Find the related schema's definition within the `properties.all_schemas`.
+                2.  Fetch all rows for the `related_schema_id`.
+                3.  **PARENT DEDUPLICATION (MANDATORY):** If the field is a 'Parent' in a dependency (like Day), the script **MUST** use a `new Set()` to ensure unique values. It must iterate through the rows, add values to the Set, and only create `<option>` elements for unique values.
+                4.  ROLE-BASED LABELS:
+                        - If 'Parent': Use the simple unique value (e.g., "Tuesday").
+                        - If 'Child' (filtered): Show the specific concatenation (e.g., "10:00 - 12:00").
+                5.  The `value` for the `<option>` must be the `row_id`.
+                -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic.
+        -   IF schema field type is 'file' or 'image':
+                1- Create an <input type="file">.
+                2- Create a <input type="hidden" name="FIELD_ID"> to store the URL.
+                3- Add an onchange listener to the file input:
+                    input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // FIX: Select button safely (without relying on type="submit")
+                const btn = form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+                
+                if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // FIX: Use 'api.post' to ensure it hits the backend URL, not the frontend
+                    const res = await api.post('/uploads/', formData);
+                    
+                    // Handle different response structures
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        
+                        // Visual success
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '\\u2713 Ready';
+                        if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch(err) {
+                    console.error('Upload error:', err);
+                    alert('Upload failed');
+                    input.value = '';
+                } finally {
+                    if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                }
+            };
+    -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
+            1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
+            2- The script MUST fetch the Child relational data once and store it in a constant variable.
+            3- Add a change event listener to the Parent <select> dropdown.
+            4- DYNAMIC FILTERING MATCH: Whenever the Parent changes, the script MUST:
+                - Clear the Child dropdown completely.
+                - Identify the property in the Child data that matches the Parent's schema.
+                - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
+                - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
+   -   **DATA VISIBILITY & PRIVACY PROTOCOL (CRITICAL):**
+            The script MUST strictly follow the user's intent regarding data visibility.
+                1.  **SCENARIO A: Public/Write-Only (e.g., "don't load data", "booking form", "privacy"):**
+                    -   **Initial Load:** The script MUST **NOT** call `fetchAndRenderRows()` at the bottom of the script. The `dataDisplay` must remain empty.
+                    -   **After Submit:** The script MUST **NOT** call `fetchAndRenderRows()`. It must simply `alert('Success')`, `form.reset()`, and `formContainer.classList.add('hidden')`.
+                2.  **SCENARIO B: Admin/Manager (e.g., "manage bookings", "show list"):**
+                    -   **Initial Load:** The script MUST call `fetchAndRenderRows()` at the bottom.
+                    -   **After Submit:** The script MUST call `fetchAndRenderRows()` to refresh the list.
+                3.  **DEFAULT:** If unspecified, assume **Scenario B** (Admin Mode).
+    -   **UNIVERSAL CROSS-TABLE MUTATION ENGINE (CRITICAL):**
+            If the user's prompt implies updating, syncing, reserving, or modifying ANY OTHER TABLE (e.g., "mark slot as unavailable", "decrease stock"):
+                1) **Define Mutation Rules:** The script MUST define a `const crossTableMutations` array at the top.
+                        Example:
+                        ```javascript
+                        const crossTableMutations = [
+                            {
+                            when: "create", // or "update"
+                            sourceField: "time", // The field in THIS form holding the related Row ID
+                            target: {
+                                field: "available", // The field in the OTHER table to change
+                                value: false // Static value OR dynamic logic
+                            }
+                            }
+                        ];
+                        ```
+                2) **Implement Executor Function:** The script MUST include this exact helper function `runCrossTableMutations`:
+                   ```javascript
+                   const runCrossTableMutations = async (mode, formData, sitemember_id) => {
+                       const rules = crossTableMutations.filter(r => r.when === mode);
+                       for (const rule of rules) {
+                           const targetRowId = formData[rule.sourceField];
+                           const fieldDef = schema.find(f => f.id === rule.sourceField);
+                           const targetSchemaId = fieldDef?.related_schema_id;
+                   
+                           if (targetRowId && targetSchemaId) {
+                               try {
+                                   // STEP A: Fetch using Schema ID (Finds the data)
+                                   const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);
+                                   const rows = res.data?.rows || res.rows || [];
+                                   const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
+                   
+                                   // STEP B: Update using ROW ID (Fixes 404)
+                                   const newValue = rule.target.value; 
+                                   await api.put(`/custom-data/rows/${targetRowId}`, { 
+                                       data: { ...existing, [rule.target.field]: newValue }, 
+                                       sitemember_id 
+                                   });
+                                   console.log(`Mutation success: Updated ${targetRowId}`);
+                               } catch (err) { console.error('Mutation failed:', err); }
+                           }
+                       }
+                   };
+                   ```
+                    3) **Call on Submit:** Inside the `form.onsubmit` handler, the script MUST call:
+                        `await runCrossTableMutations(editingRowId ? "update" : "create", data, sitemember_id);`
+   
+    -   **API Calls to Use (STRICT ZYGOFLOW STANDARD):**
+        -   **Fetch Paginated Rows:** `api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + limit)`
+        -   **Fetch Related Rows (Dropdowns):** `api.get('/custom-data/rows/' + RELATED_SCHEMA_ID + '?limit=1000')`
+        -   **Add New Row:** `api.post('/custom-data/rows/' + schemaId, { data, sitemember_id })`
+        -   **Fetch Single Row (Cross-Table):** `api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?row_id=' + TARGET_ROW_ID)`
+                * *CRITICAL: Do NOT put row_id in the URL path. Use the query parameter `?row_id=`.*
+        -   **Update ANY Row (Universal):** `api.put('/custom-data/rows/' + TARGET_ROW_ID, { data: mergedData, sitemember_id })`
+                * *CRITICAL: The URL must be the specific ROW ID, not the Schema ID.*
+        -   **Delete Row:** `api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=' + (sitemember_id || ''))`
+                * *CRITICAL: The URL must be the specific ROW ID, not the Schema ID.*
+    -   Pagination Logic:
+        -  It MUST render "Previous" and "Next" buttons inside a .pagination-controls container.
+        -  Buttons MUST be disabled when on the first or last page.
+        -  Pagination buttons MUST use classes: `px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed`.
+        -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
+        
+    -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A valid JSON object.
+
+### **EXAMPLE 1: Complex UI Element (Accordion)**
+**Prompt:** "An accordion with 2 items"
+**Output:**
+{
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345{width:100%}.accordion-item{border-bottom:1px solid #ccc}.accordion-title{padding:10px;cursor:pointer;background:#f9f9f9}.accordion-content{display:none;padding:10px}</style><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title1}}</div><div class=\\"accordion-content\\">{{content1}}</div></div><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title2}}</div><div class=\\"accordion-content\\">{{content2}}</div></div></div>",
+  "properties": { "title1": "Q1", "content1": "A1", "title2": "Q2", "content2": "A2" },
+  "editableProps": [ { "key":"title1", "label":"Title 1", "type":"text" }, { "key":"content1", "label":"Content 1", "type":"text" }, { "key":"title2", "label":"Title 2", "type":"text" }, { "key":"content2", "label":"Content 2", "type":"text" } ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; c.style.display = c.style.display === 'block' ? 'none' : 'block'; }));"
+}
+
+### **EXAMPLE 2: Data Form (CRITICAL PATTERN)**
+**Prompt:** "A Job Application form with Name and CV upload"
+**Output:**
+{
+  "aiTemplate": "<div class=\"ai-job-app-555\"><style>.ai-job-app-555 form{padding:20px;background:#f9f9f9}.ai-job-app-555 input{width:100%;margin-bottom:10px;padding:8px;border:1px solid #ccc}.ai-job-app-555 button{background:blue;color:white;padding:10px;width:100%}</style><div class=\"form-container\"></div>",
+  "properties": { "title": "Job App", "btnText": "Submit" },
+  "editableProps": [ { "key": "title", "label": "Title", "type": "text" }, { "key": "btnText", "label": "Button Text", "type": "text" } ],
+  "script": "const schema = properties.schema_fields || []; const formContainer = container.querySelector('.form-container'); const crossTableMutations = []; const runCrossTableMutations = async (mode, data, mid) => { /* ...mutation logic... */ }; const generateForm = async () => { formContainer.innerHTML = ''; const form = document.createElement('form'); /* ...dynamic input generation logic... */ const fileInput = document.createElement('input'); fileInput.type = 'file'; fileInput.onchange = async (e) => { /* ...upload logic to /uploads/ ... */ }; form.appendChild(fileInput); const btn = document.createElement('button'); btn.innerText = properties.btnText; form.appendChild(btn); form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null }); await runCrossTableMutations('create', data, null); alert('Sent!'); form.reset(); }; formContainer.appendChild(form); }; generateForm();"
+}
 
 """.strip()
 #region test section prompt
