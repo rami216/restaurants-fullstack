@@ -285,6 +285,9 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Effects & Motion:** box-shadow (at least one), transition speed/easing.
     - If the element has distinct sections, provide separate tokens (e.g., `titleBgColor`, `contentBgColor`).
     - **CRITICAL SCOPING SUB-RULE:** Every single CSS rule MUST be prefixed with the `unique_class_name` to prevent styles from leaking.
+        - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `:root { ... }`
     - CSS must be concise, scoped, and visually polished by default.
 
 **3.  Interactivity (`script` key):**
@@ -293,7 +296,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Do NOT** wrap code in `<script>`.
         - **Use function expressions** (`const x = () => {}`).
         - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
-        - **MANDATORY SCRIPT RULE:** If your `aiTemplate` contains a `<form>`, the `script` key **MUST NOT** be empty. You **MUST** write a script to handle the submission.
+        - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -321,86 +324,77 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         2. You MUST write the correct API call in the script.
 
     - Allowed API operations:
-        **Create:** `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
-        **Read:** `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');`
-        **Update:** `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });`
-        **Delete:** `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
+
+        **Create:**
+        `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
+
+        **Read (List & Render):**
+        `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');`
+        - **CRITICAL:** The response data is in `res.data.rows`.
+        - **RENDER LOGIC:** You MUST manually loop through `res.data.rows`, generate HTML strings, and inject them into a container using `innerHTML`.
+
+        **Update:**
+        `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });`
+
+        **Delete:**
+        `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
+
+    - You MAY read from one table and write/update/delete in another table.
 
     - **Field names in forms MUST match column names in the schema exactly.**
+    - **FILE & IMAGE UPLOADS (CRITICAL):**
+    - If the user implies uploading a file (e.g., "Job Application with CV", "Upload Profile Pic"):
+        1.  In `aiTemplate`, render an `<input type="file" id="file_field_id">`.
+        2.  **CRITICAL:** Render a `<input type="hidden" name="SCHEMA_COLUMN_NAME">` right next to it. This hidden input will hold the final URL sent to the database.
+        3.  In `script`, you **MUST** generate this exact listener logic for the file input:
+            ```javascript
+            const fileInput = container.querySelector('input[type="file"]'); // Use specific ID if multiple
+            const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');
+            
+            if(fileInput) {
+                fileInput.onchange = async (e) => {
+                    const file = e.target.files[0];
+                    if (!file) return;
+                    
+                    // FIX: Select button safely
+                    const btn = container.querySelector('button[type="submit"]') || container.querySelector('button');
+                    const oldText = btn ? btn.innerText : 'Submit';
+                    
+                    if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                    
+                    try {
+                        const formData = new FormData();
+                        formData.append('file', file);
+                        
+                        // FIX: Use 'api.post' to ensure it hits the backend URL
+                        const res = await api.post('/uploads/', formData);
+                        
+                        // Handle different response structures
+                        const url = res.data ? res.data.url : res.url;
+                        
+                        if (url) {
+                            hiddenInput.value = url;
+                            
+                            // Visual success
+                            const msg = document.createElement('span');
+                            msg.className = 'text-xs text-green-600 block mt-1';
+                            msg.innerText = '✓ Ready';
+                            if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
+                            fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
+                        }
+                    } catch(err) {
+                        console.error('Upload error:', err);
+                        alert('Upload failed');
+                        fileInput.value = '';
+                    } finally {
+                        if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                    }
+                };
+            }
+            ```
 
-    - **MASTER SCRIPT RECIPE (CRITICAL):**
-        - **IF FORM ONLY (No Files):**
-             1. Select form: `const form = container.querySelector('form');`
-             2. Add listener: `form.onsubmit = async (e) => {`
-             3. **PREVENT DEFAULT:** `e.preventDefault();`
-             4. Collect data: `const data = {}; new FormData(form).forEach((v, k) => data[k] = v);`
-             5. **API Call (CHOOSE ONE based on user intent):**
-                - **Create:** `await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
-                - **Update:** `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data });`
-                - **Delete:** `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
-
-        - **IF FORM + FILE UPLOAD:**
-             - You MUST generate **BOTH** listeners below. Do not leave the script empty.
-             
-             **Part 1: The File Listener (Copy Exact Logic):**
-             ```javascript
-             const fileInput = container.querySelector('input[type="file"]'); 
-             const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');
-             
-             if(fileInput && hiddenInput) {
-                 fileInput.onchange = async (e) => {
-                     const file = e.target.files[0];
-                     if (!file) return;
-                     
-                     const btn = container.querySelector('button[type="submit"]') || container.querySelector('button');
-                     const oldText = btn ? btn.innerText : 'Submit';
-                     if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-                     
-                     try {
-                         const formData = new FormData();
-                         formData.append('file', file);
-                         const res = await api.post('/uploads/', formData);
-                         const url = res.data ? res.data.url : res.url;
-                         if (url) {
-                             hiddenInput.value = url;
-                             const msg = document.createElement('span');
-                             msg.className = 'text-xs text-green-600 block mt-1';
-                             msg.innerText = '✓ Ready';
-                             if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
-                             fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
-                         }
-                     } catch(err) {
-                         console.error('Upload error:', err);
-                         alert('Upload failed');
-                         fileInput.value = '';
-                     } finally {
-                         if(btn) { btn.disabled = false; btn.innerText = oldText; }
-                     }
-                 };
-             }
-             ```
-
-             **Part 2: The Submit Listener (Standard):**
-             ```javascript
-             const form = container.querySelector('form');
-             if(form) {
-                 form.onsubmit = async (e) => {
-                     e.preventDefault(); // CRITICAL: Stops page reload
-                     const data = {}; 
-                     new FormData(form).forEach((v, k) => data[k] = v);
-                     
-                     try {
-                        // CHOOSE CORRECT API METHOD (POST for create, PUT for update)
-                        await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });
-                        alert('Success'); form.reset();
-                     } catch(err) { alert('Error'); }
-                 };
-             }
-             ```
-
-    - **WHEN TO IGNORE SCHEMAS:**
-        - ONLY ignore schemas if the user explicitly asks for a **STATIC** visual element (e.g., "Hero Section", "Pricing Card", "Footer"). 
-        - If it is a FORM, you MUST use a schema and WRITE A SCRIPT.
+    - If the user just wants a visual element (e.g., "Hero Section"):
+        - Ignore the schemas. Do not write API calls.
 
 
 ---
@@ -478,15 +472,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
 }
 
-### **EXAMPLE 3: Form with File Upload (CRITICAL PATTERN)**
-**Prompt:** "A Job Application form with Name and CV upload"
-**Output:**
-{
-  "aiTemplate": "<div class=\"ai-job-app-555\"><style>.ai-job-app-555 form{padding:{{padding}};background:{{bgColor}}}.ai-job-app-555 input{width:100%;margin-bottom:10px;padding:8px;border:1px solid #ccc}.ai-job-app-555 button{background:{{btnColor}};color:white;padding:10px;width:100%}</style><form><h3>Apply Now</h3><input type=\"text\" name=\"name\" placeholder=\"Your Name\" required><label>Upload CV:</label><input type=\"file\" id=\"cv_upload\"><input type=\"hidden\" name=\"cv\"><button type=\"submit\">{{btnText}}</button></form></div>",
-  "properties": { "padding": "20px", "bgColor": "#f9f9f9", "btnColor": "#000000", "btnText": "Submit Application" },
-  "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" }, { "key": "btnColor", "label": "Button Color", "type": "color" } ],
-  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[type=\"hidden\"][name=\"cv\"]'); const btn = container.querySelector('button[type=\"submit\"]'); if(fileInput){ fileInput.onchange = async (e) => { const file = e.target.files[0]; if(!file) return; btn.disabled = true; btn.innerText = 'Uploading...'; try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if(url) { hiddenInput.value = url; const msg = document.createElement('span'); msg.innerText = '✓ Attached'; fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } } catch(err){ console.error(err); alert('Upload failed'); } finally { btn.disabled = false; btn.innerText = properties.btnText; } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { await api.post('/custom-data/rows/JOB_APP_SCHEMA_ID', { data, sitemember_id: null }); alert('Application Sent!'); form.reset(); } catch (err) { alert('Error sending application'); } }; }"
-}
+
 
 """.strip()
 #region test section prompt
