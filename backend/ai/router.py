@@ -1307,60 +1307,51 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
     - **Field names in forms MUST match column names in the schema exactly.**
     
-    - **MASTER SCRIPT RECIPE (MANDATORY FOR ALL FORMS):**
-        If the element involves a `<form>`, you **MUST** generate this exact script structure. Do not deviate.
-
-        ```javascript
-        const form = container.querySelector('form');
-        if (form) {
+    - **FILE & IMAGE UPLOADS (CRITICAL FIX - UPLOAD ON SUBMIT):**
+        If the schema has a field with `type: "file"` or `type: "image"`:
+        1.  In `aiTemplate`, render an `<input type="file" id="FIELD_ID_input">` (NO hidden input needed).
+        2.  **SCRIPT STRATEGY:** You MUST handle the file upload **INSIDE** the `form.onsubmit` function, immediately after `e.preventDefault()`.
+        3.  **Use this EXACT Pattern:**
+            ```javascript
             form.onsubmit = async (e) => {
-                e.preventDefault(); // 1. STOP PAGE RELOAD
+                e.preventDefault(); // STOP RELOAD
                 
                 const btn = form.querySelector('button[type="submit"]');
-                const originalText = btn ? btn.innerText : 'Submit';
                 if(btn) { btn.disabled = true; btn.innerText = 'Processing...'; }
-
+                
                 const data = {};
                 new FormData(form).forEach((v, k) => data[k] = v);
-
-                try {
-                    // 2. FILE UPLOAD LOGIC (Inline Check)
-                    const fileInput = container.querySelector('input[type="file"]');
-                    if (fileInput && fileInput.files.length > 0) {
-                        if(btn) btn.innerText = 'Uploading File...';
+                
+                // --- FILE UPLOAD LOGIC START ---
+                const fileInput = container.querySelector('input[type="file"]');
+                if (fileInput && fileInput.files.length > 0) {
+                    try {
                         const formData = new FormData();
                         formData.append('file', fileInput.files[0]);
                         const uploadRes = await api.post('/uploads/', formData);
                         const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
                         
-                        // Find the schema field name for this file (usually matches input ID or name)
-                        const fileFieldName = fileInput.getAttribute('name') || 'cv' || 'image'; 
-                        data[fileFieldName] = fileUrl; 
+                        // Add the URL to the data object using the correct schema field name
+                        data['FIELD_NAME'] = fileUrl; 
+                    } catch (uploadErr) {
+                        alert('File upload failed. Please try again.');
+                        if(btn) btn.disabled = false;
+                        return; // Stop submission
                     }
+                }
+                // --- FILE UPLOAD LOGIC END ---
 
-                    // 3. SAVE DATA
-                    if(btn) btn.innerText = 'Saving...';
-                    
-                    // Determine Schema ID (Use provided ID)
-                    const targetSchema = '{{SCHEMA_ID}}'; 
-                    
-                    if (typeof editingRowId !== 'undefined' && editingRowId) {
-                         await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id: null });
-                    } else {
-                         await api.post(`/custom-data/rows/${targetSchema}`, { data, sitemember_id: null });
-                    }
-                    
+                try {
+                    await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });
                     alert('Success!'); 
                     form.reset();
                 } catch (err) {
-                    console.error(err);
-                    alert('Error: ' + err.message);
+                    alert('Error saving data.');
                 } finally {
-                    if(btn) { btn.disabled = false; btn.innerText = originalText; }
+                    if(btn) { btn.disabled = false; btn.innerText = properties.submitText || 'Submit'; }
                 }
             };
-        }
-        ```
+            ```
 
     - **RELATIONAL FIELDS (Parent-Child Dynamic Filtering):**
         If the prompt implies a dependency (e.g., "select time for a specific day"):
@@ -1513,7 +1504,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
     { "key":"contentPadding", "label":"Content Padding", "type":"text" }
   ],
-  "script": "const form = container.querySelector('form'); if (form) { form.onsubmit = async (e) => { e.preventDefault(); const btn = form.querySelector('button[type=\"submit\"]'); const originalText = btn ? btn.innerText : 'Submit'; if(btn) { btn.disabled = true; btn.innerText = 'Processing...'; } const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { const fileInput = container.querySelector('#cv_input'); if (fileInput && fileInput.files.length > 0) { if(btn) btn.innerText = 'Uploading...'; const formData = new FormData(); formData.append('file', fileInput.files[0]); const uploadRes = await api.post('/uploads/', formData); const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url; data['cv'] = fileUrl; } if(btn) btn.innerText = 'Saving...'; await api.post('/custom-data/rows/JOB_APP_SCHEMA_ID', { data, sitemember_id: null }); alert('Application Sent!'); form.reset(); } catch (err) { alert('Error'); } finally { if(btn) { btn.disabled = false; btn.innerText = originalText; } } }; }"
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
 }
 
 """.strip()
