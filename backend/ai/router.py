@@ -963,7 +963,6 @@ Your output MUST be a valid JSON object containing TWO top-level keys: "properti
   ]
 }
 """.strip()
-
 ELEMENT_GENERATOR_PROMPT_FULL_NO_SCHEMA = """
 You are an expert full-stack developer creating a single, self-contained, interactive element using Tailwind CSS for a professional, modern UI.
 
@@ -973,6 +972,13 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 ---
 ### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**0. DETECTION RULE - IS THIS A DATA ELEMENT? (CHECK FIRST)**
+    -   **Before you start, ask yourself: "Does this element need to save data to a database or interact with existing schemas?"**
+    -   **Keywords that mean YES (MUST have script):** "form", "subscribe", "submit", "add", "create", "booking", "registration", "contact", "sign up", "manage", "list", "table", "CRUD", "save", "store"
+    -   **Keywords that mean NO (script can be empty):** "accordion", "tabs", "slider", "carousel", "animation", "dropdown menu", "navigation"
+    -   **If YES → You MUST generate a complete script with form generation and API calls. Script CANNOT be empty.**
+    -   **If NO → Script can be empty string "".**
 
 1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
     -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
@@ -1224,6 +1230,83 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   ],
   "script": "const schema = properties.schema_fields || [];const formContainer = container.querySelector('.form-container');const addButton = container.querySelector('.add-new-btn');const titleElement = container.querySelector('h3');if (titleElement) {titleElement.textContent = properties.title;titleElement.style.color = properties.titleColor;}if (addButton) {addButton.textContent = properties.addButtonText;addButton.style.backgroundColor = properties.buttonBgColor;}const crossTableMutations = [{when: 'create',sourceField: 'time_slot',target: {field: 'available',value: false}}];const runCrossTableMutations = async (mode, formData, sitemember_id) => {const rules = crossTableMutations.filter(r => r.when === mode);for (const rule of rules) {const targetRowId = formData[rule.sourceField];const fieldDef = schema.find(f => f.id === rule.sourceField);const targetSchemaId = fieldDef?.related_schema_id;if (targetRowId && targetSchemaId) {try {const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);const rows = res.data?.rows || res.rows || [];const existing = rows.find(r => r.row_id === targetRowId)?.data || {};await api.put(`/custom-data/rows/${targetRowId}`, {data: {...existing,[rule.target.field]: rule.target.value},sitemember_id});} catch (err) {console.error('Mutation failed:', err);}}}};const generateForm = async () => {formContainer.innerHTML = '';formContainer.classList.remove('hidden');const form = document.createElement('form');form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';for (const field of schema) {const wrapper = document.createElement('div');const label = document.createElement('label');label.className = 'block text-sm font-semibold text-gray-700 mb-1';label.textContent = field.label;wrapper.appendChild(label);if (field.type === 'relation') {const sel = document.createElement('select');sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';sel.name = field.id;const res = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`);const rows = res.data?.rows || res.rows || [];sel.innerHTML = '<option value=\"\">Select...</option>';rows.filter(r => r.data.available === true).forEach(r => {const opt = document.createElement('option');opt.value = r.row_id;opt.textContent = `${r.data.day} ${r.data.start_time}`;sel.appendChild(opt);});wrapper.appendChild(sel);} else {const input = document.createElement('input');input.type = field.type;input.name = field.id;input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';wrapper.appendChild(input);}form.appendChild(wrapper);}const btn = document.createElement('button');btn.type = 'submit';btn.textContent = 'Submit';btn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';form.appendChild(btn);form.onsubmit = async (e) => {e.preventDefault();const data = {};new FormData(form).forEach((v, k) => data[k] = v);const sitemember_id = properties.sitemember_id || null;try {await api.post(`/custom-data/rows/${properties.schema_id}`, {data,sitemember_id});await runCrossTableMutations('create', data, sitemember_id);alert('Booking confirmed!');form.reset();formContainer.classList.add('hidden');} catch (err) {console.error(err);alert('Booking failed');}};formContainer.appendChild(form);};if (addButton) {addButton.onclick = () => generateForm();}"
 }
+
+---
+
+**MANDATORY SCRIPT TEMPLATE FOR DATA ELEMENTS:**
+
+If you detected this is a data element (form/CRUD), your script MUST follow this structure at minimum:
+
+```javascript
+const schema = properties.schema_fields || [];
+const formContainer = container.querySelector('.form-container');
+const addButton = container.querySelector('.add-new-btn');
+const titleElement = container.querySelector('h3');
+
+// UI Sync (MANDATORY)
+if (titleElement) {
+    titleElement.textContent = properties.title;
+    titleElement.style.color = properties.titleColor;
+}
+if (addButton) {
+    addButton.textContent = properties.addButtonText;
+    addButton.style.backgroundColor = properties.buttonBgColor;
+}
+
+// Form Generation Function (MANDATORY for forms)
+const generateForm = async () => {
+    formContainer.innerHTML = '';
+    formContainer.classList.remove('hidden');
+    const form = document.createElement('form');
+    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    
+    // Loop through schema fields and create inputs
+    for (const field of schema) {
+        const wrapper = document.createElement('div');
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-semibold text-gray-700 mb-1';
+        label.textContent = field.label;
+        wrapper.appendChild(label);
+        
+        const input = document.createElement('input');
+        input.type = field.type;
+        input.name = field.id;
+        input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+        wrapper.appendChild(input);
+        form.appendChild(wrapper);
+    }
+    
+    const btn = document.createElement('button');
+    btn.type = 'submit';
+    btn.textContent = 'Submit';
+    btn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';
+    form.appendChild(btn);
+    
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const data = {};
+        new FormData(form).forEach((v, k) => data[k] = v);
+        const sitemember_id = properties.sitemember_id || null;
+        try {
+            await api.post(`/custom-data/rows/${properties.schema_id}`, {data, sitemember_id});
+            alert('Success!');
+            form.reset();
+            formContainer.classList.add('hidden');
+        } catch (err) {
+            console.error(err);
+            alert('Failed');
+        }
+    };
+    formContainer.appendChild(form);
+};
+
+// Wire up the Add button (MANDATORY)
+if (addButton) {
+    addButton.onclick = () => generateForm();
+}
+```
+
+**You must adapt this template to match the specific fields and requirements, but the structure MUST be present for all data elements.**
 
 """.strip()
 #endregion
