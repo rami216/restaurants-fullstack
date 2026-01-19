@@ -1321,6 +1321,10 @@ If any of these are missing → OUTPUT IS INVALID.
         - Data submission logic
         - "script" is NOT ALLOWED to be empty
         - Returning "script": "" is a CRITICAL FAILURE
+        If a file/image field exists:
+            - Upload-on-submit is FORBIDDEN
+            - Upload MUST happen in input.onchange
+
        
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
@@ -1368,57 +1372,76 @@ If any of these are missing → OUTPUT IS INVALID.
 
     - **Field names in forms MUST match column names in the schema exactly.**
     
-    - **FILE & IMAGE UPLOADS (CRITICAL FIX - UPLOAD ON SUBMIT):**
-        🚨 If the user request involves a schema that has a file/image field:
-            - You MUST include a script
-            - You MUST follow the upload pattern
-            - You MUST NOT skip the script
-            - You MUST NOT return an empty script
+    ### 🚨 FILE & IMAGE FIELDS (MANDATORY ARCHITECTURE)
 
-        If the schema has a field with `type: "file"` or `type: "image"`:
-        1.  In `aiTemplate`, render an `<input type="file" id="FIELD_ID_input">` (NO hidden input needed).
-        2.  **SCRIPT STRATEGY:** You MUST handle the file upload **INSIDE** the `form.onsubmit` function, immediately after `e.preventDefault()`.
-        3.  **Use this EXACT Pattern:**
-            ```javascript
-            form.onsubmit = async (e) => {
-                e.preventDefault(); // STOP RELOAD
-                
-                const btn = form.querySelector('button[type="submit"]');
-                if(btn) { btn.disabled = true; btn.innerText = 'Processing...'; }
-                
-                const data = {};
-                new FormData(form).forEach((v, k) => data[k] = v);
-                
-                // --- FILE UPLOAD LOGIC START ---
-                const fileInput = container.querySelector('input[type="file"]');
-                if (fileInput && fileInput.files.length > 0) {
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', fileInput.files[0]);
-                        const uploadRes = await api.post('/uploads/', formData);
-                        const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
-                        
-                        // Add the URL to the data object using the correct schema field name
-                        data['FIELD_NAME'] = fileUrl; 
-                    } catch (uploadErr) {
-                        alert('File upload failed. Please try again.');
-                        if(btn) btn.disabled = false;
-                        return; // Stop submission
-                    }
-                }
-                // --- FILE UPLOAD LOGIC END ---
+            If ANY schema field has:
+            - type: "file"
+            - OR type: "image"
+
+            You MUST follow THIS EXACT ARCHITECTURE:
+
+            ### 1) In aiTemplate:
+
+            For each file/image field with id FIELD_ID:
+
+            - You MUST render:
+            <input type="file" id="FIELD_ID_input">
+            <input type="hidden" name="FIELD_ID">
+
+            The hidden input is the value that will be saved to the database.
+
+            ---
+
+            ### 2) In script:
+
+            You MUST attach an onchange handler to the file input:
+
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const btn = form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+
+                if (btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
 
                 try {
-                    await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });
-                    alert('Success!'); 
-                    form.reset();
+                    const formData = new FormData();
+                    formData.append('file', file);
+
+                    const res = await api.post('/uploads/', formData);
+
+                    const url = res.data ? res.data.url : res.url;
+
+                    if (!url) throw new Error('No URL returned');
+
+                    hiddenInput.value = url;
+
+                    // Optional success indicator
+                    const msg = container.ownerDocument.createElement('span');
+                    msg.textContent = '✓ Ready';
+                    if (input.nextSibling) input.parentNode.removeChild(input.nextSibling);
+                    input.parentNode.appendChild(msg);
+
                 } catch (err) {
-                    alert('Error saving data.');
+                    alert('Upload failed. Please try again.');
+                    input.value = '';
+                    hiddenInput.value = '';
                 } finally {
-                    if(btn) { btn.disabled = false; btn.innerText = properties.submitText || 'Submit'; }
+                    if (btn) { btn.disabled = false; btn.innerText = oldText; }
                 }
             };
-            ```
+
+            ---
+
+            ### 3) Form submission:
+
+            - form.onsubmit MUST still exist
+            - It MUST still start with: e.preventDefault()
+            - It MUST read values from FormData(form)
+            - The hidden input value will now be included automatically
+            - You MUST NOT upload files inside onsubmit anymore
+
 
     - **RELATIONAL FIELDS (Parent-Child Dynamic Filtering):**
         If the prompt implies a dependency (e.g., "select time for a specific day"):
