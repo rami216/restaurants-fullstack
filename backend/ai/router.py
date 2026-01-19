@@ -1221,6 +1221,48 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 NEW_ELEMENT_GENERATOR_PROMPT_FIXED = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+### 🧱 ARCHITECTURE SELECTION (MANDATORY)
+
+Before generating anything, you MUST classify the element into EXACTLY ONE of these:
+
+1) FORM_ELEMENT
+   - Used if there is ANY:
+     - <form>
+     - submit
+     - saving data
+     - file/image upload
+   - RULES:
+     - MUST include a script
+     - MUST have form.onsubmit
+     - MUST start with e.preventDefault()
+     - "script" is NEVER allowed to be empty
+
+2) DATA_LIST_ELEMENT
+   - Used if the element:
+     - Loads data
+     - Lists rows
+     - Shows history, table, cards, etc.
+   - RULES:
+     - MUST include a script
+     - MUST fetch using api.get
+     - MUST render using innerHTML loop
+     - "script" is NEVER allowed to be empty
+
+3) VISUAL_ELEMENT
+   - Used if the element is:
+     - Hero, accordion, tabs, UI only
+   - RULES:
+     - MUST NOT call API
+     - Script is only for UI behavior
+     - Script MAY be minimal but NOT null
+
+🚨 FORBIDDEN:
+- You are FORBIDDEN to:
+  - Mix these types
+  - Invent a new architecture
+  - Output a FORM_ELEMENT or DATA_LIST_ELEMENT with an empty script
+
+If you violate this → OUTPUT IS INVALID AND MUST BE REGENERATED.
 
 Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
 
@@ -1259,11 +1301,19 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **Do NOT** wrap code in `<script>`.
     - **Use function expressions** (`const x = () => {}`).
     - **DO NOT** include `alert()`, `console.log()`, or any placeholder popups unless for form success/error messages.
-    - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
+    - **CRITICAL FORM RULE:** 
+        If the element is a FORM_ELEMENT:
+            - A script is MANDATORY
+            - form.onsubmit MUST exist
+            - The VERY FIRST LINE inside onsubmit MUST be:
+            e.preventDefault();
+
+If any of these are missing → OUTPUT IS INVALID.
+
     - **DECISION TREE:** If the element is a Form, you **MUST** include a script. If the element is purely visual (Accordion, Hero), the script can be minimal (just UI toggles).
     🚨 ABSOLUTE RULE:
         If the schema contains ANY field of type "file" or "image":
-
+        - Returning "script": "" is STRICTLY FORBIDDE
         - You MUST generate a complete form submission script
         - You MUST include:
         - e.preventDefault()
@@ -1271,6 +1321,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - Data submission logic
         - "script" is NOT ALLOWED to be empty
         - Returning "script": "" is a CRITICAL FAILURE
+       
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -1414,6 +1465,18 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - Ignore the schemas. Do not write API calls.
 
 ---
+Before outputting JSON, you MUST verify:
+
+- Which type is this? FORM_ELEMENT, DATA_LIST_ELEMENT, or VISUAL_ELEMENT?
+- If FORM_ELEMENT or DATA_LIST_ELEMENT:
+  - Is "script" non-empty?
+  - Does form.onsubmit exist (if form)?
+  - Does it start with e.preventDefault()?
+- If any file/image input exists:
+  - Is upload logic present?
+
+If ANY answer is "no" → YOU MUST REGENERATE.
+
 **INPUT:** A user's prompt, a `unique_class_name`, and `EXISTING_SCHEMAS_ON_WEBSITE`.
 **OUTPUT:** A valid JSON object.
 
@@ -1484,7 +1547,109 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key": "namePlaceholder", "label": "Name Placeholder", "type": "text" },
     { "key": "submitText", "label": "Submit Text", "type": "text" }
   ],
-  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const daySelect = container.querySelector('#day_select'); const timeSelect = container.querySelector('#time_select'); const loadSlots = async () => { try { const res = await api.get('/custom-data/rows/time-789?limit=1000'); const allSlots = res.data.rows; const uniqueDays = new Set(); allSlots.forEach(row => { if (row.data.day) uniqueDays.add(row.data.day); }); uniqueDays.forEach(day => { const opt = document.createElement('option'); opt.value = day; opt.textContent = day; daySelect.appendChild(opt); }); daySelect.addEventListener('change', () => { const selectedDay = daySelect.value; timeSelect.innerHTML = '<option value=\"\">Select Time...</option>'; const filtered = allSlots.filter(row => row.data.day === selectedDay && row.data.available === true); filtered.forEach(row => { const opt = document.createElement('option'); opt.value = row.row_id; opt.textContent = row.data.start_time + ' - ' + row.data.end_time; timeSelect.appendChild(opt); }); }); } catch (err) { console.error('Failed to load slots:', err); } }; loadSlots(); if (form && statusEl) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const submitBtn = form.querySelector('button[type=\"submit\"]'); if (submitBtn) submitBtn.disabled = true; statusEl.textContent = 'Booking...'; try { await api.post('/custom-data/rows/booking-456', { data, sitemember_id: null }); const slotId = data.time_slot; if (slotId) { const slotRes = await api.get('/custom-data/rows/time-789?row_id=' + slotId); const slotData = slotRes.data.rows[0].data; await api.put('/custom-data/rows/' + slotId, { data: { ...slotData, available: false }, sitemember_id: null }); } statusEl.textContent = 'Booking confirmed!'; statusEl.style.color = '#10b981'; form.reset(); } catch (err) { console.error(err); statusEl.textContent = 'Booking failed.'; statusEl.style.color = '#ef4444'; } finally { if (submitBtn) submitBtn.disabled = false; } }; }"
+  "script": "const form = container.querySelector('form');
+const statusEl = container.querySelector('.form-status');
+const daySelect = container.querySelector('#day_select');
+const timeSelect = container.querySelector('#time_select');
+
+const loadSlots = async () => {
+    try {
+        const res = await api.get('/custom-data/rows/time-789?limit=1000');
+        const allSlots = res.data.rows || [];
+
+        // Build unique days
+        const uniqueDays = new Set();
+        allSlots.forEach(row => {
+            if (row.data && row.data.day) uniqueDays.add(row.data.day);
+        });
+
+        // Populate day dropdown
+        uniqueDays.forEach(day => {
+            const opt = container.ownerDocument.createElement('option');
+            opt.value = day;
+            opt.textContent = day;
+            daySelect.appendChild(opt);
+        });
+
+        // When day changes, filter times
+        daySelect.addEventListener('change', () => {
+            const selectedDay = daySelect.value;
+            timeSelect.innerHTML = '<option value="">Select Time...</option>';
+
+            const filtered = allSlots.filter(row => {
+                return row.data 
+                    && row.data.day === selectedDay 
+                    && row.data.available === true;
+            });
+
+            filtered.forEach(row => {
+                const opt = container.ownerDocument.createElement('option');
+                opt.value = row.row_id;
+                opt.textContent = row.data.start_time + ' - ' + row.data.end_time;
+                timeSelect.appendChild(opt);
+            });
+        });
+
+    } catch (err) {
+        if (statusEl) {
+            statusEl.textContent = 'Failed to load time slots.';
+            statusEl.style.color = '#ef4444';
+        }
+    }
+};
+
+// Load slots immediately
+loadSlots();
+
+if (form) {
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+
+        const data = {};
+        new FormData(form).forEach((v, k) => data[k] = v);
+
+        const submitBtn = form.querySelector('button[type="submit"]');
+        if (submitBtn) submitBtn.disabled = true;
+        if (statusEl) {
+            statusEl.textContent = 'Booking...';
+            statusEl.style.color = '#6b7280';
+        }
+
+        try {
+            await api.post('/custom-data/rows/booking-456', { data, sitemember_id: null });
+
+            const slotId = data.time_slot;
+            if (slotId) {
+                const slotRes = await api.get('/custom-data/rows/time-789?row_id=' + slotId);
+                const slotRow = slotRes.data.rows && slotRes.data.rows[0];
+
+                if (slotRow && slotRow.data) {
+                    await api.put('/custom-data/rows/' + slotId, {
+                        data: { ...slotRow.data, available: false },
+                        sitemember_id: null
+                    });
+                }
+            }
+
+            if (statusEl) {
+                statusEl.textContent = 'Booking confirmed!';
+                statusEl.style.color = '#10b981';
+            }
+
+            form.reset();
+            timeSelect.innerHTML = '<option value="">Select Time...</option>';
+
+        } catch (err) {
+            if (statusEl) {
+                statusEl.textContent = 'Booking failed.';
+                statusEl.style.color = '#ef4444';
+            }
+        } finally {
+            if (submitBtn) submitBtn.disabled = false;
+        }
+    };
+}
+"
 }
 
 ### **EXAMPLE 3: Visual Element (Accordion - No Database)**
