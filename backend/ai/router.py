@@ -1261,6 +1261,16 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **DO NOT** include `alert()`, `console.log()`, or any placeholder popups unless for form success/error messages.
     - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
     - **DECISION TREE:** If the element is a Form, you **MUST** include a script. If the element is purely visual (Accordion, Hero), the script can be minimal (just UI toggles).
+    🚨 ABSOLUTE RULE:
+        If the schema contains ANY field of type "file" or "image":
+
+        - You MUST generate a complete form submission script
+        - You MUST include:
+        - e.preventDefault()
+        - File upload logic
+        - Data submission logic
+        - "script" is NOT ALLOWED to be empty
+        - Returning "script": "" is a CRITICAL FAILURE
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -1308,6 +1318,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **Field names in forms MUST match column names in the schema exactly.**
     
     - **FILE & IMAGE UPLOADS (CRITICAL FIX - UPLOAD ON SUBMIT):**
+        🚨 If the user request involves a schema that has a file/image field:
+            - You MUST include a script
+            - You MUST follow the upload pattern
+            - You MUST NOT skip the script
+            - You MUST NOT return an empty script
+
         If the schema has a field with `type: "file"` or `type: "image"`:
         1.  In `aiTemplate`, render an `<input type="file" id="FIELD_ID_input">` (NO hidden input needed).
         2.  **SCRIPT STRATEGY:** You MUST handle the file upload **INSIDE** the `form.onsubmit` function, immediately after `e.preventDefault()`.
