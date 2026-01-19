@@ -1053,7 +1053,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     
     - **FILE & IMAGE UPLOADS (CRITICAL FIX):**
         If the schema has a field with `type: "file"` or `type: "image"`:
-        1.  In `aiTemplate`, render an `<input type="file" id="FIELD_ID_input">`.
+        1.  In `aiTemplate`, render an `<input type="file" id="FIELD_ID_input" required>` with the `required` attribute.
         2.  **CRITICAL:** Render a `<input type="hidden" name="FIELD_ID">` right next to it. This hidden input will hold the final URL sent to the database.
         3.  In `script`, you **MUST** add this exact listener logic BEFORE the form.onsubmit handler:
             ```javascript
@@ -1085,7 +1085,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                             
                             const msg = document.createElement('span');
                             msg.className = 'text-xs text-green-600 block mt-1';
-                            msg.innerText = '✓ File uploaded';
+                            msg.innerText = '✓ File ready';
                             const existing = fileInput_FIELD_ID.parentNode.querySelector('.text-green-600');
                             if (existing) existing.remove();
                             fileInput_FIELD_ID.parentNode.appendChild(msg);
@@ -1094,6 +1094,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                         console.error('Upload error:', err);
                         alert('Upload failed. Please try again.');
                         fileInput_FIELD_ID.value = '';
+                        hiddenInput_FIELD_ID.value = '';
                     } finally {
                         if (submitBtn) { 
                             submitBtn.disabled = false; 
@@ -1103,7 +1104,22 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 };
             }
             ```
-        4. **IMPORTANT:** This upload logic MUST happen BEFORE form submission. The form.onsubmit handler will then pick up the URL from the hidden input.
+        4. **CRITICAL VALIDATION:** In the form.onsubmit handler, you MUST check if the file was uploaded:
+            ```javascript
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                
+                // CRITICAL: Check if file upload completed
+                if (fileInput_FIELD_ID && !hiddenInput_FIELD_ID.value) {
+                    alert('Please wait for the file to finish uploading.');
+                    return;
+                }
+                
+                const data = {};
+                new FormData(form).forEach((v, k) => data[k] = v);
+                // ... rest of submission logic
+            };
+            ```
 
     - **RELATIONAL FIELDS (Parent-Child Dynamic Filtering):**
         If the prompt implies a dependency (e.g., "select time for a specific day"):
@@ -1187,7 +1203,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key": "positionPlaceholder", "label": "Position Placeholder", "type": "text" },
     { "key": "submitText", "label": "Submit Button Text", "type": "text" }
   ],
-  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const fileInput_cv = container.querySelector('#cv_input'); const hiddenInput_cv = container.querySelector('input[name=\"cv\"]'); if (fileInput_cv && hiddenInput_cv) { fileInput_cv.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; const submitBtn = form.querySelector('button[type=\"submit\"]'); const oldText = submitBtn ? submitBtn.innerText : 'Submit'; if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = 'Uploading...'; } try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if (url) { hiddenInput_cv.value = url; const msg = document.createElement('span'); msg.className = 'text-xs text-green-600 block mt-1'; msg.innerText = '✓ CV uploaded'; const existing = fileInput_cv.parentNode.querySelector('.text-green-600'); if (existing) existing.remove(); fileInput_cv.parentNode.appendChild(msg); } } catch (err) { console.error('Upload error:', err); alert('Upload failed. Please try again.'); fileInput_cv.value = ''; } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = oldText; } } }; } if (form && statusEl) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => { if (k !== 'cv_input') data[k] = v; }); const submitBtn = form.querySelector('button[type=\"submit\"]'); if (submitBtn) submitBtn.disabled = true; statusEl.textContent = 'Submitting...'; try { await api.post('/custom-data/rows/job-123', { data, sitemember_id: null }); statusEl.textContent = 'Application submitted successfully!'; statusEl.style.color = '#10b981'; form.reset(); hiddenInput_cv.value = ''; const successMsg = fileInput_cv.parentNode.querySelector('.text-green-600'); if (successMsg) successMsg.remove(); } catch (err) { console.error(err); statusEl.textContent = 'Submission failed. Please try again.'; statusEl.style.color = '#ef4444'; } finally { if (submitBtn) submitBtn.disabled = false; } }; }"
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const fileInput_cv = container.querySelector('#cv_input'); const hiddenInput_cv = container.querySelector('input[name=\"cv\"]'); if (fileInput_cv && hiddenInput_cv) { fileInput_cv.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; const submitBtn = form.querySelector('button[type=\"submit\"]'); const oldText = submitBtn ? submitBtn.innerText : 'Submit'; if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = 'Uploading...'; } try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if (url) { hiddenInput_cv.value = url; const msg = document.createElement('span'); msg.className = 'text-xs text-green-600 block mt-1'; msg.innerText = '✓ CV ready'; const existing = fileInput_cv.parentNode.querySelector('.text-green-600'); if (existing) existing.remove(); fileInput_cv.parentNode.appendChild(msg); } } catch (err) { console.error('Upload error:', err); alert('Upload failed. Please try again.'); fileInput_cv.value = ''; hiddenInput_cv.value = ''; } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = oldText; } } }; } if (form && statusEl) { form.onsubmit = async (e) => { e.preventDefault(); if (fileInput_cv && !hiddenInput_cv.value) { alert('Please wait for the CV to finish uploading.'); return; } const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const submitBtn = form.querySelector('button[type=\"submit\"]'); if (submitBtn) submitBtn.disabled = true; statusEl.textContent = 'Submitting...'; try { await api.post('/custom-data/rows/job-123', { data, sitemember_id: null }); statusEl.textContent = 'Application submitted successfully!'; statusEl.style.color = '#10b981'; form.reset(); hiddenInput_cv.value = ''; const successMsg = fileInput_cv.parentNode.querySelector('.text-green-600'); if (successMsg) successMsg.remove(); } catch (err) { console.error(err); statusEl.textContent = 'Submission failed. Please try again.'; statusEl.style.color = '#ef4444'; } finally { if (submitBtn) submitBtn.disabled = false; } }; }"
 }
 
 ### **EXAMPLE 2: Booking Form with Parent-Child Time Selection**
