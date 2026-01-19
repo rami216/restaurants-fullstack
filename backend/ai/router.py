@@ -297,7 +297,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Use function expressions** (`const x = () => {}`).
         - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
         - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
-        - **CRITICAL FILE INPUT RULE:** If your HTML contains `<input type="file">`, you **MUST** generate the specific upload script defined in Rule 5. Leaving the script empty is a CRITICAL FAILURE.
+        
         
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -343,23 +343,42 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - You MAY read from one table and write/update/delete in another table.
 
     - **Field names in forms MUST match column names in the schema exactly.**
-    - **SCENARIO: FORM SUBMISSION (With or Without Files):**
-        - If the user wants a form (Application, Contact, etc.), you **MUST** generate a script that handles **TWO** things.
-        
-        **A) The File Upload Listener (IF FILES EXIST):**
-             - If you rendered an `<input type="file" id="file_field">`, you MUST also render `<input type="hidden" name="SCHEMA_COLUMN_NAME">`.
-             - In the script, you **MUST** attach an `onchange` listener to the file input.
-             - Inside that listener, upload the file: `const res = await api.post('/uploads/', formData);`
-             - **CRITICAL:** Put the returned URL (`res.data.url`) into the hidden input `value`.
-        
-        **B) The Form Submit Listener (ALWAYS REQUIRED):**
-             - Select the form using `container.querySelector('form')`.
-             - Add `form.onsubmit = async (e) => { ... }`.
-             - **FIRST LINE:** `e.preventDefault();` (Stops redirect).
-             - Collect data: `const data = {}; new FormData(form).forEach((v, k) => data[k] = v);`
-             - **CRITICAL:** This `data` object will automatically include the URL from the hidden input (step A) if it was populated.
-             - Call API: `await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
-             - Show success message and reset form.
+   - **SCENARIO: FORM SUBMISSION (With or Without Files):**
+        - If the user wants a form (Application, Contact, etc.), you **MUST** generate a script that handles submission safely using `api.post`.
+        - **CRITICAL SCRIPT STRUCTURE:** You must write the script in this exact order. Do not bundle checks (e.g., do NOT write `if (form && fileInput)`). Handle them separately.
+
+        **A) The Submit Listener (MANDATORY):**
+             - `const form = container.querySelector('form');`
+             - `if (form) {`
+             - `    form.onsubmit = async (e) => {`
+             - `        e.preventDefault();`
+             - `        const btn = form.querySelector('button[type="submit"]'); if(btn) btn.disabled = true;`
+             - `        const data = {}; new FormData(form).forEach((v, k) => data[k] = v);`
+             - `        try {`
+             - `            await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });`
+             - `            alert('Success!'); form.reset();`
+             - `        } catch (err) { console.error(err); alert('Error'); }`
+             - `        finally { if(btn) btn.disabled = false; }`
+             - `    };`
+             - `}`
+
+        **B) The File Upload Listener (Optional - Only if input exists):**
+             - `const fileInput = container.querySelector('input[type="file"]');`
+             - `const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');`
+             - `if (fileInput && hiddenInput) {`
+             - `    fileInput.onchange = async (e) => {`
+             - `        const file = e.target.files[0]; if (!file) return;`
+             - `        const btn = container.querySelector('button[type="submit"]');`
+             - `        if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }`
+             - `        try {`
+             - `            const formData = new FormData(); formData.append('file', file);`
+             - `            const res = await api.post('/uploads/', formData);`
+             - `            const url = res.data ? res.data.url : res.url;`
+             - `            if (url) { hiddenInput.value = url; }`
+             - `        } catch(err) { console.error(err); alert('Upload failed'); fileInput.value = ''; }`
+             - `        finally { if(btn) { btn.disabled = false; btn.innerText = properties.buttonText || 'Submit'; } }`
+             - `    };`
+             - `}`
 
     - If the user just wants a visual element (e.g., "Hero Section"):
         - Ignore the schemas. Do not write API calls.
