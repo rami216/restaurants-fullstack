@@ -306,24 +306,10 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 **5.  DATA LOGIC (How to connect to the database):**
     - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
+    - This element MUST NEVER Create/Invent schemas.
+    - **IF** the user wants to save/load data, you **MUST** find the correct `schema_id` and write the correct API call.
 
-    - This element MAY:
-        - Create rows in any existing schema
-        - Read rows from any existing schema
-        - Update rows in any existing schema
-        - Delete rows from any existing schema
-        - Use multiple schemas in the same component
-
-    - This element MUST NEVER:
-        - Create schemas
-        - Invent schemas
-        - Guess schema IDs
-
-    - **IF** the user wants to save/load/update/delete data:
-        1. You MUST find the correct `schema_id` from `EXISTING_SCHEMAS_ON_WEBSITE`
-        2. You MUST write the correct API call in the script.
-
-    - Allowed API operations:
+    - **Allowed API operations:**
 
         **Create:**
         `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
@@ -339,63 +325,88 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         **Delete:**
         `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
 
-    - You MAY read from one table and write/update/delete in another table.
-
     - **Field names in forms MUST match column names in the schema exactly.**
-    - **FILE & IMAGE UPLOADS (CRITICAL):**
-    - If the user implies uploading a file (e.g., "Job Application with CV", "Upload Profile Pic"):
-        1.  In `aiTemplate`, render an `<input type="file" id="file_field_id">`.
-        2.  **CRITICAL:** Render a `<input type="hidden" name="SCHEMA_COLUMN_NAME">` right next to it. This hidden input will hold the final URL sent to the database.
-        3.  In `script`, you **MUST** generate this exact listener logic for the file input:
-            ```javascript
-            const fileInput = container.querySelector('input[type="file"]'); // Use specific ID if multiple
-            const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]');
-            
-            if(fileInput) {
-                fileInput.onchange = async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    
-                    // FIX: Select button safely
-                    const btn = container.querySelector('button[type="submit"]') || container.querySelector('button');
-                    const oldText = btn ? btn.innerText : 'Submit';
-                    
-                    if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-                    
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        
-                        // FIX: Use 'api.post' to ensure it hits the backend URL
-                        const res = await api.post('/uploads/', formData);
-                        
-                        // Handle different response structures
-                        const url = res.data ? res.data.url : res.url;
-                        
-                        if (url) {
-                            hiddenInput.value = url;
-                            
-                            // Visual success
-                            const msg = document.createElement('span');
-                            msg.className = 'text-xs text-green-600 block mt-1';
-                            msg.innerText = '✓ Ready';
-                            if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
-                            fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
-                        }
-                    } catch(err) {
-                        console.error('Upload error:', err);
-                        alert('Upload failed');
-                        fileInput.value = '';
-                    } finally {
-                        if(btn) { btn.disabled = false; btn.innerText = oldText; }
-                    }
-                };
-            }
-            ```
 
-    - If the user just wants a visual element (e.g., "Hero Section"):
-        - Ignore the schemas. Do not write API calls.
+    - **CRITICAL SCRIPT RECIPE FOR FORMS:**
+        If the user wants a form (with OR without files), you **MUST** generate a script containing **TWO SEPARATE, INDEPENDENT BLOCKS**. 
+        **DO NOT** nest the form submit logic inside the file upload check. They must be siblings.
 
+        **BLOCK 1: The File Upload Listener (Include ONLY if <input type="file"> exists)**
+        ```javascript
+        const fileInput = container.querySelector('input[type="file"]'); 
+        const hiddenInput = container.querySelector('input[type="hidden"][name="SCHEMA_COLUMN_NAME"]'); // Matches schema column
+        
+        if (fileInput && hiddenInput) {
+             fileInput.onchange = async (e) => {
+                 const file = e.target.files[0];
+                 if (!file) return;
+                 
+                 // UI Feedback
+                 const btn = container.querySelector('button[type="submit"]');
+                 const oldText = btn ? btn.innerText : 'Submit';
+                 if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                 
+                 try {
+                     const formData = new FormData();
+                     formData.append('file', file);
+                     const res = await api.post('/uploads/', formData);
+                     const url = res.data ? res.data.url : res.url;
+                     
+                     if (url) {
+                         hiddenInput.value = url; // Store URL for the final submit
+                         
+                         // Visual Success Checkmark
+                         const msg = document.createElement('span');
+                         msg.className = 'text-xs text-green-600 block mt-1';
+                         msg.innerText = '✓ Ready';
+                         if(fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove();
+                         fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
+                     }
+                 } catch(err) {
+                     alert('Upload failed');
+                     fileInput.value = '';
+                 } finally {
+                     if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                 }
+             };
+        }
+        ```
+
+        **BLOCK 2: The Form Submit Listener (MANDATORY FOR ALL FORMS)**
+        ```javascript
+        const form = container.querySelector('form');
+        if (form) {
+             form.onsubmit = async (e) => {
+                 // 1. STOP PAGE RELOAD (CRITICAL)
+                 e.preventDefault(); 
+                 
+                 // 2. Collect Data
+                 const data = {}; 
+                 new FormData(form).forEach((v, k) => data[k] = v);
+                 // Note: If 'hiddenInput' was set by Block 1, its value is already inside 'data' here.
+
+                 // 3. UI Feedback
+                 const btn = form.querySelector('button[type="submit"]');
+                 if(btn) btn.disabled = true;
+
+                 try {
+                    // 4. API Call (Create, Update, or Delete based on prompt)
+                    await api.post('/custom-data/rows/' + SCHEMA_ID, { data, sitemember_id: null });
+                    alert('Success!'); 
+                    form.reset();
+                 } catch(err) { 
+                    console.error(err); 
+                    alert('Error submitting form'); 
+                 } finally { 
+                    if(btn) btn.disabled = false; 
+                 }
+             };
+        }
+        ```
+
+    - **WHEN TO IGNORE SCHEMAS:**
+        - ONLY ignore schemas if the user explicitly asks for a **STATIC** visual element (e.g., "Hero Section", "Pricing Card", "Footer"). 
+        - If it is a FORM, you MUST use a schema and WRITE A SCRIPT.
 
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
