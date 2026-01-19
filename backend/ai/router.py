@@ -1005,7 +1005,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **Use function expressions** (`const x = () => {}`).
     - **DO NOT** include `alert()`, `console.log()`, or any placeholder popups unless for form success/error messages.
     - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
-
+    - **DECISION TREE:** If the element is a Form, you **MUST** include a script. If the element is purely visual (Accordion, Hero), the script can be minimal (just UI toggles).
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     - **NO user-facing text should be hardcoded in the `aiTemplate`**.
@@ -1055,71 +1055,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         If the schema has a field with `type: "file"` or `type: "image"`:
         1.  In `aiTemplate`, render an `<input type="file" id="FIELD_ID_input" required>` with the `required` attribute.
         2.  **CRITICAL:** Render a `<input type="hidden" name="FIELD_ID">` right next to it. This hidden input will hold the final URL sent to the database.
-        3.  In `script`, you **MUST** add this exact listener logic BEFORE the form.onsubmit handler:
-            ```javascript
-            const fileInput_FIELD_ID = container.querySelector('#FIELD_ID_input');
-            const hiddenInput_FIELD_ID = container.querySelector('input[name="FIELD_ID"]');
+        3.  **UNIFIED SCRIPT LOGIC (CRITICAL):**
+            You MUST generate a script that handles two separate events:
             
-            if (fileInput_FIELD_ID && hiddenInput_FIELD_ID) {
-                fileInput_FIELD_ID.onchange = async (e) => {
-                    const file = e.target.files[0];
-                    if (!file) return;
-                    
-                    const submitBtn = form.querySelector('button[type="submit"]');
-                    const oldText = submitBtn ? submitBtn.innerText : 'Submit';
-                    
-                    if (submitBtn) { 
-                        submitBtn.disabled = true; 
-                        submitBtn.innerText = 'Uploading...'; 
-                    }
-                    
-                    try {
-                        const formData = new FormData();
-                        formData.append('file', file);
-                        
-                        const res = await api.post('/uploads/', formData);
-                        const url = res.data ? res.data.url : res.url;
-                        
-                        if (url) {
-                            hiddenInput_FIELD_ID.value = url;
-                            
-                            const msg = document.createElement('span');
-                            msg.className = 'text-xs text-green-600 block mt-1';
-                            msg.innerText = '✓ File ready';
-                            const existing = fileInput_FIELD_ID.parentNode.querySelector('.text-green-600');
-                            if (existing) existing.remove();
-                            fileInput_FIELD_ID.parentNode.appendChild(msg);
-                        }
-                    } catch (err) {
-                        console.error('Upload error:', err);
-                        alert('Upload failed. Please try again.');
-                        fileInput_FIELD_ID.value = '';
-                        hiddenInput_FIELD_ID.value = '';
-                    } finally {
-                        if (submitBtn) { 
-                            submitBtn.disabled = false; 
-                            submitBtn.innerText = oldText; 
-                        }
-                    }
-                };
-            }
-            ```
-        4. **CRITICAL VALIDATION:** In the form.onsubmit handler, you MUST check if the file was uploaded:
-            ```javascript
-            form.onsubmit = async (e) => {
-                e.preventDefault();
-                
-                // CRITICAL: Check if file upload completed
-                if (fileInput_FIELD_ID && !hiddenInput_FIELD_ID.value) {
-                    alert('Please wait for the file to finish uploading.');
-                    return;
-                }
-                
-                const data = {};
-                new FormData(form).forEach((v, k) => data[k] = v);
-                // ... rest of submission logic
-            };
-            ```
+            A) **File Upload (onchange):** If a file input exists, attach an `onchange` listener. Upload the file to `/uploads/` and set the returned URL into the hidden input. Show a "Uploading..." state on the button.
+            
+            B) **Form Submit (onsubmit):** Attach an `onsubmit` listener to the form. **FIRST LINE: `e.preventDefault()`**. Check if the file is still uploading. If ready, collect data (including the hidden URL) and call `api.post` (or `put`/`delete`).
 
     - **RELATIONAL FIELDS (Parent-Child Dynamic Filtering):**
         If the prompt implies a dependency (e.g., "select time for a specific day"):
@@ -1272,7 +1213,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
     { "key":"contentPadding", "label":"Content Padding", "type":"text" }
   ],
-  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('#cv_input'); const hiddenInput = container.querySelector('input[name=\\\"cv\\\"]'); const btn = container.querySelector('button[type=\\\"submit\\\"]'); if (fileInput && hiddenInput) { fileInput.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; btn.disabled = true; btn.innerText = 'Uploading...'; try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if (url) { hiddenInput.value = url; const msg = document.createElement('span'); msg.className = 'text-xs text-green-600 block mt-1'; msg.innerText = '✓ Attached'; if (fileInput.nextSibling?.className?.includes('text-green-600')) fileInput.nextSibling.remove(); fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } } catch (err) { alert('Upload failed'); fileInput.value = ''; } finally { btn.disabled = false; btn.innerText = properties.submitText || 'Submit'; } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); if (fileInput && fileInput.value && !hiddenInput.value) { alert('Please wait for file upload.'); return; } try { await api.post('/custom-data/rows/JOB_APP_SCHEMA_ID', { data, sitemember_id: null }); alert('Application Sent!'); form.reset(); if(hiddenInput) hiddenInput.value = ''; } catch (err) { alert('Error sending application'); } }; }"
 }
 
 """.strip()
