@@ -1082,7 +1082,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,                  # e.g. "gpt-4o"
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_WITHOUT_TABLE_CREATION},
+                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_WITHOUT_TABLE_CREATION_1},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
