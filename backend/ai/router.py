@@ -2263,7 +2263,13 @@ NEW_ELEMENT_GENERATOR_PROMPT_FIXED_2 = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
 ### 🚨 CORE RULE: THE SCRIPT IS MANDATORY
-**NEVER return an empty script.**
+**NEVER return an empty script - even for simple elements.**
+
+- If script is "" or null → APPLICATION CRASHES
+- Minimum script for forms: form.onsubmit with e.preventDefault() and API call
+- File upload forms: MUST use the 2-step pattern (upload file, then submit form)
+- Visual elements: MUST have event listeners or state management
+
 If your "script" key is empty ("") or null, the entire application crashes.
 You MUST write a full JavaScript string for every single element.
 
@@ -2321,6 +2327,87 @@ For forms WITH file uploads (type="file" or type="image"):
     - **Use function expressions** (`const x = () => {}`).
     - **DO NOT** include `alert()`, `console.log()`, or any placeholder popups unless for form success/error messages.
 
+    - 🔴 **CRITICAL: SCRIPT CANNOT BE EMPTY**
+        - If script is "" or null, the application CRASHES.
+        - Even simple forms MUST have a script with form.onsubmit handler.
+        
+    - 🔴 **FILE/IMAGE UPLOAD FORMS (MANDATORY PATTERN):**
+        If ANY field has type="file" or type="image":
+        1. HTML MUST include: `<input type="file" id="{field}_input">` and `<input type="hidden" name="{field}">`
+        2. Script MUST handle file upload FIRST (before form submit)
+        3. Script MUST store URL in hidden input
+        4. Script MUST prevent default form submission
+        5. COPY this exact pattern:
+```javascript
+        const fileInput = container.querySelector('#cv_input');
+        const hiddenUrl = container.querySelector('input[name="cv"]');
+        const form = container.querySelector('form');
+        const submitBtn = form.querySelector('button');
+        
+        if (fileInput) {
+            fileInput.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                const oldText = submitBtn.innerText;
+                submitBtn.disabled = true;
+                submitBtn.innerText = 'Uploading...';
+                
+                try {
+                    const fd = new FormData();
+                    fd.append('file', file);
+                    const res = await api.post('/uploads/', fd);
+                    const url = res.data?.url || res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '✓ Ready';
+                        const old = fileInput.parentNode.querySelector('.text-green-600');
+                        if (old) old.remove();
+                        fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
+                    }
+                } catch (err) {
+                    alert('Upload failed');
+                    fileInput.value = '';
+                } finally {
+                    submitBtn.disabled = false;
+                    submitBtn.innerText = oldText;
+                }
+            };
+        }
+        
+        if (form) {
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                
+                if (fileInput && !hiddenUrl.value) {
+                    alert('Please upload file first');
+                    return;
+                }
+                
+                const data = {};
+                new FormData(form).forEach((v,k) => data[k] = v);
+                
+                submitBtn.disabled = true;
+                
+                try {
+                    await api.post('/custom-data/rows/SCHEMA_ID_HERE', {data, sitemember_id: null});
+                    alert('Success!');
+                    form.reset();
+                    hiddenUrl.value = '';
+                } catch (err) {
+                    alert('Failed');
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            };
+        }
+```
+```
+
+---
 
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
@@ -2403,123 +2490,7 @@ For forms WITH file uploads (type="file" or type="image"):
         5. The `value` for the `<option>` must be the `row_id`.
         - **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic.
     
-        ### 🔴 CRITICAL: FILE & IMAGE UPLOAD PROTOCOL:
-            When the schema contains `type: "file"` or `type: "image"`:
-                **HTML Structure:**
-                ```html
-
-
-                ```
-                **JavaScript Logic (MANDATORY - COPY EXACTLY):**
-                    ```javascript
-                    const form = container.querySelector('form');
-                    const fileInput = container.querySelector('#{field_id}_input');
-                    const hiddenUrlInput = container.querySelector('input[name="{field_id}"]');
-                    const submitBtn = form.querySelector('button[type="submit"]');
-                    const statusEl = container.querySelector('.form-status');
-
-                // Step 1: File Upload Handler
-                if (fileInput) {
-                    fileInput.onchange = async (e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-
-                        const originalBtnText = submitBtn ? submitBtn.innerText : 'Submit';
-                        if (submitBtn) {
-                            submitBtn.disabled = true;
-                            submitBtn.innerText = 'Uploading file...';
-                        }
-
-                        try {
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            
-                            const res = await api.post('/uploads/', formData);
-                            const url = res.data ? res.data.url : res.url;
-                            
-                            if (url) {
-                                hiddenUrlInput.value = url;
-                                
-                                // Show success indicator
-                                const successMsg = container.ownerDocument.createElement('span');
-                                successMsg.className = 'text-xs text-green-600 block mt-1';
-                                successMsg.innerText = '✓ File ready';
-                                
-                                // Remove old success message if exists
-                                const oldMsg = fileInput.parentNode.querySelector('.text-green-600');
-                                if (oldMsg) oldMsg.remove();
-                                
-                                fileInput.parentNode.insertBefore(successMsg, fileInput.nextSibling);
-                            }
-                        } catch (err) {
-                            console.error('Upload error:', err);
-                            alert('File upload failed. Please try again.');
-                            fileInput.value = '';
-                            hiddenUrlInput.value = '';
-                        } finally {
-                            if (submitBtn) {
-                                submitBtn.disabled = false;
-                                submitBtn.innerText = originalBtnText;
-                            }
-                        }
-                    };
-                }
-
-                // Step 2: Form Submission Handler
-                if (form) {
-                    form.onsubmit = async (e) => {
-                        e.preventDefault(); // CRITICAL: Prevent default form submission
-                        
-                        // Check if file is required but not uploaded
-                        if (fileInput && fileInput.hasAttribute('required') && !hiddenUrlInput.value) {
-                            alert('Please upload a file first.');
-                            return;
-                        }
-                        
-                        const data = {};
-                        new FormData(form).forEach((v, k) => data[k] = v);
-                        
-                        if (submitBtn) {
-                            submitBtn.disabled = true;
-                            submitBtn.innerText = 'Submitting...';
-                        }
-                        
-                        try {
-                            await api.post('/custom-data/rows/{SCHEMA_ID}', { 
-                                data, 
-                                sitemember_id: null 
-                            });
-                            
-                            if (statusEl) {
-                                statusEl.textContent = 'Success!';
-                                statusEl.style.color = '#10b981';
-                            }
-                            
-                            form.reset();
-                            hiddenUrlInput.value = '';
-                            
-                            // Remove file success message
-                            const fileMsg = fileInput.parentNode.querySelector('.text-green-600');
-                            if (fileMsg) fileMsg.remove();
-                            
-                        } catch (err) {
-                            console.error('Submission error:', err);
-                            if (statusEl) {
-                                statusEl.textContent = 'Submission failed.';
-                                statusEl.style.color = '#ef4444';
-                            }
-                        } finally {
-                            if (submitBtn) {
-                                submitBtn.disabled = false;
-                                submitBtn.innerText = properties.submitText || 'Submit';
-                            }
-                        }
-                    };
-                }
-                ```
-
-        **Replace `{field_id}` with actual field name (e.g., "cv")**
-        **Replace `{SCHEMA_ID}` with the target schema ID from EXISTING_SCHEMAS**
+        
 
     - **DYNAMIC HIERARCHY LOGIC:** If the prompt implies a dependency (e.g., "A for each B"):
         1. Identify the 'Parent' field and the 'Child' field from the schema.
