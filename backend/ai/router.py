@@ -1927,7 +1927,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_ELEMENT_CREATION_WITHOUT_TABLE_TRY_1},
+                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_FIXED},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
