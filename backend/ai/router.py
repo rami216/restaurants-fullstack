@@ -2262,36 +2262,11 @@ if (form) {
 NEW_ELEMENT_GENERATOR_PROMPT_FIXED_2 = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
-### 🚨 CORE RULE: THE SCRIPT IS MANDATORY
-**NEVER return an empty script - even for simple elements.**
-
-- If script is "" or null → APPLICATION CRASHES
-- Minimum script for forms: form.onsubmit with e.preventDefault() and API call
-- File upload forms: MUST use the 2-step pattern (upload file, then submit form)
-- Visual elements: MUST have event listeners or state management
-
-If your "script" key is empty ("") or null, the entire application crashes.
-You MUST write a full JavaScript string for every single element.
+🚨 SCRIPT REQUIREMENT: The script key MUST contain a raw JavaScript string that handles all interactivity, including form submission and file uploads. If this key is empty, the application will crash.
 
 Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
 
----
-### **CRITICAL RULES FOR YOUR OUTPUT**
 
-### 🚨 MANDATORY SCRIPT RULES
-
-**NEVER return an empty script, even for simple forms.**
-
-For forms WITHOUT file uploads:
-- Minimum script: Handle form.onsubmit, prevent default, collect FormData, make API call, show success/error
-
-For forms WITH file uploads (type="file" or type="image"):
-- MUST prevent form default submission
-- MUST handle file upload FIRST (get URL)
-- MUST store URL in hidden input
-- MUST submit all data (text fields + file URL) together
-
-**If you return script: "" or script: null, the application CRASHES.**
 
 
 **1.  HTML Structure:**
@@ -2320,103 +2295,14 @@ For forms WITH file uploads (type="file" or type="image"):
         - **Incorrect:** `:root { ... }`
     - CSS must be concise, scoped, and visually polished by default.
 
-**3.  Interactivity (`script` key):**
-    - Provide a JavaScript string executed inside a function `(container, api, schemaId, properties, Mustache)`.
-    - **Use `container.querySelector`** (NOT document.querySelector).
-    - **Do NOT** wrap code in `<script>`.
-    - **Use function expressions** (`const x = () => {}`).
-    - **DO NOT** include `alert()`, `console.log()`, or any placeholder popups unless for form success/error messages.
 
-    - 🔴 **CRITICAL: SCRIPT CANNOT BE EMPTY**
-        - If script is "" or null, the application CRASHES.
-        - Even simple forms MUST have a script with form.onsubmit handler.
-        
-    - 🔴 **FILE/IMAGE UPLOAD FORMS (MANDATORY PATTERN):**
-        If ANY field has type="file" or type="image":
-        1. HTML MUST include: `<input type="file" id="{field}_input">` and `<input type="hidden" name="{field}">`
-        2. Script MUST handle file upload FIRST (before form submit)
-        3. Script MUST store URL in hidden input
-        4. Script MUST prevent default form submission
-        5. COPY this exact pattern:
-```javascript
-        const fileInput = container.querySelector('#cv_input');
-        const hiddenUrl = container.querySelector('input[name="cv"]');
-        const form = container.querySelector('form');
-        const submitBtn = form.querySelector('button');
-        
-        if (fileInput) {
-            fileInput.onchange = async (e) => {
-                const file = e.target.files[0];
-                if (!file) return;
-                
-                const oldText = submitBtn.innerText;
-                submitBtn.disabled = true;
-                submitBtn.innerText = 'Uploading...';
-                
-                try {
-                    const fd = new FormData();
-                    fd.append('file', file);
-                    const res = await api.post('/uploads/', fd);
-                    const url = res.data?.url || res.url;
-                    
-                    if (url) {
-                        hiddenUrl.value = url;
-                        const msg = document.createElement('span');
-                        msg.className = 'text-xs text-green-600 block mt-1';
-                        msg.innerText = '✓ Ready';
-                        const old = fileInput.parentNode.querySelector('.text-green-600');
-                        if (old) old.remove();
-                        fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
-                    }
-                } catch (err) {
-                    alert('Upload failed');
-                    fileInput.value = '';
-                } finally {
-                    submitBtn.disabled = false;
-                    submitBtn.innerText = oldText;
-                }
-            };
-        }
-        
-        if (form) {
-            form.onsubmit = async (e) => {
-                e.preventDefault();
-                
-                if (fileInput && !hiddenUrl.value) {
-                    alert('Please upload file first');
-                    return;
-                }
-                
-                const data = {};
-                new FormData(form).forEach((v,k) => data[k] = v);
-                
-                submitBtn.disabled = true;
-                
-                try {
-                    await api.post('/custom-data/rows/SCHEMA_ID_HERE', {data, sitemember_id: null});
-                    alert('Success!');
-                    form.reset();
-                    hiddenUrl.value = '';
-                } catch (err) {
-                    alert('Failed');
-                } finally {
-                    submitBtn.disabled = false;
-                }
-            };
-        }
-```
-```
-
----
-
-
-**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+**3.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     - **NO user-facing text should be hardcoded in the `aiTemplate`**.
     - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
     - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
 
-**5.  DATA LOGIC (How to connect to the database):**
+**4.  DATA LOGIC (How to connect to the database):**
     - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
 
     - This element MAY:
@@ -2464,7 +2350,7 @@ For forms WITH file uploads (type="file" or type="image"):
     - If the user just wants a visual element (e.g., "Hero Section", "Accordion"):
         - Ignore the schemas. Do not write API calls.
 
-6. **`script`**: A complete, raw JavaScript string that makes the element interactive.
+5. **`script`**: A complete, raw JavaScript string that makes the element interactive.
     - It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
     - **STRICT LOCAL SCOPING:** You MUST NOT use `document.querySelector`. You MUST only use `container.querySelector` so multiple elements on one page do not conflict.
     - **UI SYNCHRONIZATION (MANDATORY):** The script MUST explicitly select and update the static UI elements (Title, Add Button) using the values from `properties` at the very top of the execution. This ensures the editor updates immediately:
@@ -2474,13 +2360,39 @@ For forms WITH file uploads (type="file" or type="image"):
         - Set `addButton.style.backgroundColor = properties.buttonBgColor`.
     - **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the very beginning of the `fetchAndRenderRows` function to prevent private data from loading.
     - **State Management:** It MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (e.g., 20), and `totalRows`.
-    - **Accessing the Schema:** You **MUST** get the field definitions from `properties.schema_fields`. **DO NOT** use a root-level "schema" key in the JSON to avoid creating a database table.
+    - **ACCESSING THE FIELDS: You MUST get the field definitions from properties.schema_fields. DO NOT use a root-level "schema" key in the JSON, as this will trigger unwanted database table creation.
     - **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
         - The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
         - Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
         - Every `<input>` and `<select>` created MUST have class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
         - The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
     - **Relational Fields:** For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
+           
+    - FILE & IMAGE HANDLING (MANDATORY): If the prompt involves files/images, the script MUST include this exact logic:
+       const hiddenUrl = container.querySelector('input[type="hidden"]');
+       const btn = form.querySelector('button');
+       input.onchange = async (e) => {
+           const file = e.target.files[0];
+           if (!file) return;
+           const oldText = btn ? btn.innerText : 'Submit';
+           if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+           try {
+               const formData = new FormData();
+               formData.append('file', file);
+               const res = await api.post('/uploads/', formData);
+               const url = res.data ? res.data.url : res.url;
+               if (url) {
+                   hiddenUrl.value = url;
+                   const msg = document.createElement('span');
+                   msg.className = 'text-xs text-green-600 block mt-1';
+                   msg.innerText = '✓ Ready';
+                   if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                   input.parentNode.insertBefore(msg, input.nextSibling);
+               }
+           } catch(err) { alert('Upload failed'); input.value = ''; }
+           finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
+       };
+        
     - **ULTRA-CRITICAL DROPDOWN RULE:** The script must populate the dropdown dynamically. It must:
         1. Find the related schema's definition within the `properties.all_schemas`.
         2. Fetch all rows for the `related_schema_id` using `api.get('/custom-data/rows/' + related_id + '?limit=1000')`.
@@ -2517,6 +2429,13 @@ For forms WITH file uploads (type="file" or type="image"):
         - **Delete Row:** `api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=...')`
     - **Pagination Logic:** Render "Previous" and "Next" buttons in `.pagination-controls`. Update `currentPage` and re-fetch on click.
     - It MUST use function expressions (e.g., `const myFunc = () => {}`).
+    🚨 ABSOLUTE RULE FOR SCRIPT CONTENT: If the prompt involves a form or file upload, the "script" key MUST NOT BE EMPTY. 
+    You must explicitly write the code for:
+    1. form.onsubmit starting with e.preventDefault()
+    2. input.onchange for file uploads
+    3. api.post for data saving. 
+    If you return "" or null, the application crashes.
+    
 ---
 
 **INPUT:** A user's prompt, a `unique_class_name`, and `EXISTING_SCHEMAS_ON_WEBSITE`.
