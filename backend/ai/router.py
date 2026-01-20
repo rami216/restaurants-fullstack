@@ -2272,6 +2272,22 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 ---
 ### **CRITICAL RULES FOR YOUR OUTPUT**
 
+### 🚨 MANDATORY SCRIPT RULES
+
+**NEVER return an empty script, even for simple forms.**
+
+For forms WITHOUT file uploads:
+- Minimum script: Handle form.onsubmit, prevent default, collect FormData, make API call, show success/error
+
+For forms WITH file uploads (type="file" or type="image"):
+- MUST prevent form default submission
+- MUST handle file upload FIRST (get URL)
+- MUST store URL in hidden input
+- MUST submit all data (text fields + file URL) together
+
+**If you return script: "" or script: null, the application CRASHES.**
+
+
 **1.  HTML Structure:**
     - The HTML must be wrapped in a single container `<div>`.
     - This container will have the unique class name you are given applied to it.
@@ -2386,34 +2402,125 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - If 'Child' (filtered): Show the specific concatenation (e.g., "10:00 - 12:00").
         5. The `value` for the `<option>` must be the `row_id`.
         - **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic.
-    - **FILE & IMAGE HANDLING:** If a field type is 'file' or 'image':
-        1. Create an `<input type="file">`.
-        2. Create a `<input type="hidden" name="FIELD_ID">` to store the URL.
-        3. Add an `onchange` listener to the file input:
-           ```javascript
-           input.onchange = async (e) => {
-               const file = e.target.files[0];
-               if (!file) return;
-               const btn = form.querySelector('button');
-               const oldText = btn ? btn.innerText : 'Submit';
-               if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-               try {
-                   const formData = new FormData();
-                   formData.append('file', file);
-                   const res = await api.post('/uploads/', formData);
-                   const url = res.data ? res.data.url : res.url;
-                   if (url) {
-                       hiddenUrl.value = url;
-                       const msg = document.createElement('span');
-                       msg.className = 'text-xs text-green-600 block mt-1';
-                       msg.innerText = '✓ Ready';
-                       if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
-                       input.parentNode.insertBefore(msg, input.nextSibling);
-                   }
-               } catch(err) { alert('Upload failed'); input.value = ''; }
-               finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
-           };
-           ```
+    
+        ### 🔴 CRITICAL: FILE & IMAGE UPLOAD PROTOCOL:
+            When the schema contains `type: "file"` or `type: "image"`:
+                **HTML Structure:**
+                ```html
+
+
+                ```
+                **JavaScript Logic (MANDATORY - COPY EXACTLY):**
+                    ```javascript
+                    const form = container.querySelector('form');
+                    const fileInput = container.querySelector('#{field_id}_input');
+                    const hiddenUrlInput = container.querySelector('input[name="{field_id}"]');
+                    const submitBtn = form.querySelector('button[type="submit"]');
+                    const statusEl = container.querySelector('.form-status');
+
+                // Step 1: File Upload Handler
+                if (fileInput) {
+                    fileInput.onchange = async (e) => {
+                        const file = e.target.files[0];
+                        if (!file) return;
+
+                        const originalBtnText = submitBtn ? submitBtn.innerText : 'Submit';
+                        if (submitBtn) {
+                            submitBtn.disabled = true;
+                            submitBtn.innerText = 'Uploading file...';
+                        }
+
+                        try {
+                            const formData = new FormData();
+                            formData.append('file', file);
+                            
+                            const res = await api.post('/uploads/', formData);
+                            const url = res.data ? res.data.url : res.url;
+                            
+                            if (url) {
+                                hiddenUrlInput.value = url;
+                                
+                                // Show success indicator
+                                const successMsg = container.ownerDocument.createElement('span');
+                                successMsg.className = 'text-xs text-green-600 block mt-1';
+                                successMsg.innerText = '✓ File ready';
+                                
+                                // Remove old success message if exists
+                                const oldMsg = fileInput.parentNode.querySelector('.text-green-600');
+                                if (oldMsg) oldMsg.remove();
+                                
+                                fileInput.parentNode.insertBefore(successMsg, fileInput.nextSibling);
+                            }
+                        } catch (err) {
+                            console.error('Upload error:', err);
+                            alert('File upload failed. Please try again.');
+                            fileInput.value = '';
+                            hiddenUrlInput.value = '';
+                        } finally {
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.innerText = originalBtnText;
+                            }
+                        }
+                    };
+                }
+
+                // Step 2: Form Submission Handler
+                if (form) {
+                    form.onsubmit = async (e) => {
+                        e.preventDefault(); // CRITICAL: Prevent default form submission
+                        
+                        // Check if file is required but not uploaded
+                        if (fileInput && fileInput.hasAttribute('required') && !hiddenUrlInput.value) {
+                            alert('Please upload a file first.');
+                            return;
+                        }
+                        
+                        const data = {};
+                        new FormData(form).forEach((v, k) => data[k] = v);
+                        
+                        if (submitBtn) {
+                            submitBtn.disabled = true;
+                            submitBtn.innerText = 'Submitting...';
+                        }
+                        
+                        try {
+                            await api.post('/custom-data/rows/{SCHEMA_ID}', { 
+                                data, 
+                                sitemember_id: null 
+                            });
+                            
+                            if (statusEl) {
+                                statusEl.textContent = 'Success!';
+                                statusEl.style.color = '#10b981';
+                            }
+                            
+                            form.reset();
+                            hiddenUrlInput.value = '';
+                            
+                            // Remove file success message
+                            const fileMsg = fileInput.parentNode.querySelector('.text-green-600');
+                            if (fileMsg) fileMsg.remove();
+                            
+                        } catch (err) {
+                            console.error('Submission error:', err);
+                            if (statusEl) {
+                                statusEl.textContent = 'Submission failed.';
+                                statusEl.style.color = '#ef4444';
+                            }
+                        } finally {
+                            if (submitBtn) {
+                                submitBtn.disabled = false;
+                                submitBtn.innerText = properties.submitText || 'Submit';
+                            }
+                        }
+                    };
+                }
+                ```
+
+        **Replace `{field_id}` with actual field name (e.g., "cv")**
+        **Replace `{SCHEMA_ID}` with the target schema ID from EXISTING_SCHEMAS**
+
     - **DYNAMIC HIERARCHY LOGIC:** If the prompt implies a dependency (e.g., "A for each B"):
         1. Identify the 'Parent' field and the 'Child' field from the schema.
         2. Fetch Child relational data once and store it.
@@ -2478,7 +2585,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key": "positionPlaceholder", "label": "Position Placeholder", "type": "text" },
     { "key": "submitText", "label": "Submit Button Text", "type": "text" }
   ],
-  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const fileInput = container.querySelector('#cv_input'); const hiddenInput = container.querySelector('input[name=\"cv\"]'); const submitBtn = form.querySelector('button[type=\"submit\"]'); if (fileInput) { fileInput.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = 'Uploading...'; } try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; hiddenInput.value = url; if (fileInput.nextSibling && fileInput.nextSibling.tagName === 'SPAN') fileInput.nextSibling.remove(); const msg = container.ownerDocument.createElement('span'); msg.textContent = '✓ Ready'; msg.style.color = 'green'; msg.style.fontSize = '12px'; fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } catch (err) { alert('Upload failed'); fileInput.value = ''; hiddenInput.value = ''; } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = properties.submitText; } } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = 'Processing...'; } const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { await api.post('/custom-data/rows/job-123', { data, sitemember_id: null }); statusEl.textContent = 'Success!'; statusEl.style.color = 'green'; form.reset(); if(hiddenInput) hiddenInput.value = ''; } catch (err) { statusEl.textContent = 'Error.'; statusEl.style.color = 'red'; } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = properties.submitText; } } }; }"
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const fileInput = container.querySelector('#cv_input'); const hiddenUrlInput = container.querySelector('input[name=\"cv\"]'); const submitBtn = form.querySelector('button[type=\"submit\"]'); if (fileInput) { fileInput.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; const originalText = submitBtn ? submitBtn.innerText : 'Submit'; if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = 'Uploading...'; } try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if (url) { hiddenUrlInput.value = url; const msg = container.ownerDocument.createElement('span'); msg.className = 'text-xs text-green-600 block mt-1'; msg.innerText = '✓ Ready'; const oldMsg = fileInput.parentNode.querySelector('.text-green-600'); if (oldMsg) oldMsg.remove(); fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } } catch (err) { console.error('Upload error:', err); alert('Upload failed'); fileInput.value = ''; hiddenUrlInput.value = ''; } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = originalText; } } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); if (fileInput && !hiddenUrlInput.value) { alert('Please upload CV first'); return; } const data = {}; new FormData(form).forEach((v, k) => data[k] = v); if (submitBtn) submitBtn.disabled = true; try { await api.post('/custom-data/rows/job-123', { data, sitemember_id: null }); if (statusEl) { statusEl.textContent = 'Application submitted!'; statusEl.style.color = '#10b981'; } form.reset(); hiddenUrlInput.value = ''; const fileMsg = fileInput.parentNode.querySelector('.text-green-600'); if (fileMsg) fileMsg.remove(); } catch (err) { console.error('Submit error:', err); if (statusEl) { statusEl.textContent = 'Submission failed'; statusEl.style.color = '#ef4444'; } } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = properties.submitText; } } }; }"
 }
 
 ### **EXAMPLE 2: Booking Form with Parent-Child Time Selection**
