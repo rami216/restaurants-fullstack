@@ -2444,7 +2444,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **INPUT:** A user's prompt, a `unique_class_name`, and `EXISTING_SCHEMAS_ON_WEBSITE`.
 **OUTPUT:** A valid JSON object.
 
-### **EXAMPLE 1: Form with File Upload (Job Application)**
+### **EXAMPLE : Form with File Upload (Job Application) or loading data or any ui element**
 **Prompt:** "A job application form with name, position, and CV upload that saves to Jobs schema"
 **EXISTING_SCHEMAS:** `[{"name": "Jobs", "schema_id": "job-123", "fields": [{"id": "name", "type": "text"}, {"id": "position", "type": "text"}, {"id": "cv", "type": "file"}]}]`
 **Output:**
@@ -2478,305 +2478,220 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key": "positionPlaceholder", "label": "Position Placeholder", "type": "text" },
     { "key": "submitText", "label": "Submit Button Text", "type": "text" }
   ],
-  "script": "const schema = properties.schema_fields || [];
+  "script": "
+  const schema = properties.schema_fields || [];
 const formContainer = container.querySelector('.form-container');
-const titleElement = container.querySelector('h2');
+const dataDisplay = container.querySelector('.data-display');
+const titleElement = container.querySelector('h2, .title');
+const addButton = container.querySelector('.add-new-btn');
+const statusEl = container.querySelector('.form-status, .status-msg');
 
-// 1. UI SYNCHRONIZATION
+let currentRows = [];
+let currentPage = 0;
+const rowsPerPage = 20;
+
+// 1. UI SYNCHRONIZATION (MANDATORY)
 if (titleElement) {
-    titleElement.textContent = properties.formTitle;
+    titleElement.textContent = properties.formTitle || properties.title;
     titleElement.style.color = properties.titleColor;
 }
+if (addButton) {
+    addButton.textContent = properties.addButtonText;
+    if (properties.buttonBgColor || properties.btnBg) {
+        addButton.style.backgroundColor = properties.buttonBgColor || properties.btnBg;
+    }
+}
 
-// 2. DYNAMIC FORM GENERATION
+// 2. DYNAMIC FORM GENERATION ENGINE
 const generateForm = async (initialData = {}) => {
+    if (!formContainer) return;
     formContainer.innerHTML = '';
+    formContainer.classList.remove('hidden');
+    
     const form = document.createElement('form');
-    // Using dynamic classes from instructions
     form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const selects = {};
+    const relCache = {};
 
-    schema.forEach(field => {
+    for (const field of schema) {
         const wrapper = document.createElement('div');
         const label = document.createElement('label');
         label.className = 'block text-sm font-semibold text-gray-700 mb-1';
         label.textContent = field.label;
         wrapper.appendChild(label);
 
-        // 3. FILE & IMAGE HANDLING (Inside the loop for correct scoping)
-        if (field.type === 'file' || field.type === 'image') {
+        // --- RELATION / DROPDOWN LOGIC ---
+        if (field.type === 'relation') {
+            const sel = document.createElement('select');
+            sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none';
+            sel.name = field.id;
+            selects[field.id] = sel;
+            
+            // Fetch related data
+            const res = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`);
+            const rows = res.data?.rows || res.rows || [];
+            relCache[field.id] = rows;
+            sel.innerHTML = `<option value="">Select ${field.label}...</option>`;
+
+            // PARENT DEDUPLICATION (e.g., Day)
+            if (field.id === 'day' || field.id === 'parent') {
+                const uniqueValues = [...new Set(rows.map(r => r.data[field.id]))];
+                uniqueValues.forEach(val => {
+                    const opt = document.createElement('option');
+                    opt.value = val;
+                    opt.textContent = val;
+                    sel.appendChild(opt);
+                });
+
+                // CHILD FILTERING (e.g., Time Slot)
+                sel.addEventListener('change', () => {
+                    const childSelect = selects['time_slot'] || selects['time'] || selects['child'];
+                    if (childSelect) {
+                        childSelect.innerHTML = '<option value="">Select Option...</option>';
+                        const filtered = relCache[childSelect.name].filter(r => r.data[field.id] === sel.value && (r.data.available === true || r.data.available === 'true'));
+                        filtered.forEach(r => {
+                            const opt = document.createElement('option');
+                            opt.value = r.row_id;
+                            opt.textContent = r.data.start_time ? `${r.data.start_time} - ${r.data.end_time}` : Object.values(r.data)[0];
+                            childSelect.appendChild(opt);
+                        });
+                    }
+                });
+            } else if (!selects['day'] && !selects['parent']) {
+                // Standard Relation
+                rows.forEach(r => {
+                    const opt = document.createElement('option');
+                    opt.value = r.row_id;
+                    opt.textContent = Object.values(r.data).find(v => typeof v !== 'object') || '---';
+                    sel.appendChild(opt);
+                });
+            }
+            wrapper.appendChild(sel);
+
+        // --- FILE UPLOAD LOGIC ---
+        } else if (field.type === 'file' || field.type === 'image') {
             const input = document.createElement('input');
             input.type = 'file';
-            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
-
+            input.className = 'w-full p-2 border rounded-lg';
             const hiddenUrl = document.createElement('input');
             hiddenUrl.type = 'hidden';
             hiddenUrl.name = field.id;
-            hiddenUrl.value = initialData[field.id] || '';
-            wrapper.appendChild(hiddenUrl);
 
             input.onchange = async (e) => {
                 const file = e.target.files[0];
                 if (!file) return;
-
-                const submitBtn = form.querySelector('button');
-                const oldText = submitBtn ? submitBtn.innerText : 'Submit';
-                
-                if (submitBtn) {
-                    submitBtn.disabled = true;
-                    submitBtn.innerText = 'Uploading...';
-                }
-
+                const btn = form.querySelector('button');
+                const oldText = btn.innerText;
+                btn.disabled = true; btn.innerText = 'Uploading...';
                 try {
-                    const formData = new FormData();
-                    formData.append('file', file);
-                    // Hit the Zygoflow upload endpoint
-                    const res = await api.post('/uploads/', formData);
-                    const url = res.data ? res.data.url : res.url;
-                    
-                    if (url) {
-                        hiddenUrl.value = url;
-                        const msg = document.createElement('span');
-                        msg.className = 'text-xs text-green-600 block mt-1';
-                        msg.innerText = '✓ Ready';
-                        if (input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
-                        input.parentNode.insertBefore(msg, input.nextSibling);
-                    }
-                } catch (err) {
-                    console.error('Upload error:', err);
-                    alert('Upload failed');
-                    input.value = '';
-                } finally {
-                    if (submitBtn) {
-                        submitBtn.disabled = false;
-                        submitBtn.innerText = oldText;
-                    }
-                }
+                    const fd = new FormData(); fd.append('file', file);
+                    const res = await api.post('/uploads/', fd);
+                    hiddenUrl.value = res.data?.url || res.url;
+                    const msg = document.createElement('span');
+                    msg.className = 'text-xs text-green-600 block mt-1';
+                    msg.innerText = '✓ Ready';
+                    if (input.nextSibling?.innerText?.includes('✓')) input.nextSibling.remove();
+                    input.parentNode.insertBefore(msg, input.nextSibling);
+                } catch (err) { alert('Upload failed'); }
+                finally { btn.disabled = false; btn.innerText = oldText; }
             };
             wrapper.appendChild(input);
+            wrapper.appendChild(hiddenUrl);
+
+        // --- STANDARD INPUTS ---
         } else {
-            // Standard text inputs
-            const input = document.createElement('input');
-            input.type = field.type;
-            input.name = field.id;
-            input.placeholder = field.label;
-            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
-            input.value = initialData[field.id] || '';
-            wrapper.appendChild(input);
+            const inp = document.createElement('input');
+            inp.type = field.type;
+            inp.name = field.id;
+            inp.placeholder = field.label;
+            inp.className = 'w-full p-2 border rounded-lg border-gray-300';
+            inp.value = initialData[field.id] || '';
+            wrapper.appendChild(inp);
         }
         form.appendChild(wrapper);
-    });
+    }
 
-    // 4. SUBMIT BUTTON
+    // Submit Button
     const submitBtn = document.createElement('button');
     submitBtn.type = 'submit';
-    submitBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';
-    submitBtn.textContent = properties.submitText;
-    submitBtn.style.backgroundColor = properties.btnBg;
-    submitBtn.style.color = properties.btnColor;
+    submitBtn.className = 'md:col-span-2 w-full font-bold py-2.5 rounded-lg text-white transition-colors mt-2';
+    submitBtn.style.backgroundColor = properties.btnBg || properties.buttonBgColor || '#3b82f6';
+    submitBtn.textContent = properties.submitText || 'Submit';
     form.appendChild(submitBtn);
 
-    // 5. FORM SUBMISSION LOGIC
+    // 3. FORM SUBMISSION & CROSS-TABLE MUTATION
     form.onsubmit = async (e) => {
         e.preventDefault();
         const data = {};
         new FormData(form).forEach((v, k) => data[k] = v);
-
-        // Verification for CV
-        const cvField = schema.find(f => f.type === 'file');
-        if (cvField && !data[cvField.id]) {
-            alert('Please upload your CV first');
-            return;
-        }
-
+        
         try {
-            // Posting to the correct Schema ID from example (job-123)
-            await api.post('/custom-data/rows/job-123', { data, sitemember_id: null });
-            alert('Application submitted successfully!');
-            form.reset();
-            // Remove success checkmarks
-            container.querySelectorAll('.text-green-600').forEach(el => el.remove());
-        } catch (err) {
-            console.error('Submit error:', err);
-            alert('Submission failed. Please try again.');
-        }
-    };
-
-    formContainer.appendChild(form);
-};
-
-// INITIAL LOAD
-generateForm();"
-}
-
-### **EXAMPLE 2: Booking Form with Parent-Child Time Selection**
-**Prompt:** "A booking form where user selects a day, then available time slots for that day"
-**EXISTING_SCHEMAS:** `[{"name": "TimeSlots", "schema_id": "time-789", "fields": [{"id": "day", "type": "text"}, {"id": "start_time", "type": "text"}, {"id": "end_time", "type": "text"}, {"id": "available", "type": "boolean"}]}, {"name": "Bookings", "schema_id": "booking-456", "fields": [{"id": "customer_name", "type": "text"}, {"id": "time_slot", "type": "relation", "related_schema_id": "time-789"}]}]`
-**Output:**
-{
-  "aiTemplate": "<div class=\"ai-booking-789\" style=\"background: transparent; width: 100%; display: flex; justify-content: center; align-items: center;\"><style>.ai-booking-789 form { background: {{formBg}}; padding: {{formPadding}}; border-radius: {{formRadius}}; max-width: {{formMaxWidth}}; width: 100%; } .ai-booking-789 input, .ai-booking-789 select, .ai-booking-789 button { width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 6px; border: 1px solid #ddd; } .ai-booking-789 button { background: {{btnBg}}; color: {{btnColor}}; font-weight: bold; cursor: pointer; border: none; }</style><form><h2 style=\"color: {{titleColor}};\">{{formTitle}}</h2><input type=\"text\" name=\"customer_name\" placeholder=\"{{namePlaceholder}}\" required><select id=\"day_select\"><option value=\"\">Select Day...</option></select><select id=\"time_select\" name=\"time_slot\"><option value=\"\">Select Time...</option></select><button type=\"submit\">{{submitText}}</button><span class=\"form-status\" style=\"display: block; margin-top: 8px; font-size: 14px;\"></span></form></div>",
-  "properties": {
-    "formBg": "#ffffff",
-    "formPadding": "32px",
-    "formRadius": "12px",
-    "formMaxWidth": "500px",
-    "titleColor": "#1f2937",
-    "btnBg": "#3b82f6",
-    "btnColor": "#ffffff",
-    "formTitle": "Book Appointment",
-    "namePlaceholder": "Your Name",
-    "submitText": "Book Now"
-  },
-  "editableProps": [
-    { "key": "formBg", "label": "Form Background", "type": "color" },
-    { "key": "formPadding", "label": "Padding", "type": "text" },
-    { "key": "formRadius", "label": "Border Radius", "type": "text" },
-    { "key": "formMaxWidth", "label": "Max Width", "type": "text" },
-    { "key": "titleColor", "label": "Title Color", "type": "color" },
-    { "key": "btnBg", "label": "Button Background", "type": "color" },
-    { "key": "btnColor", "label": "Button Text", "type": "color" },
-    { "key": "formTitle", "label": "Form Title", "type": "text" },
-    { "key": "namePlaceholder", "label": "Name Placeholder", "type": "text" },
-    { "key": "submitText", "label": "Submit Text", "type": "text" }
-  ],
-  "script": "const form = container.querySelector('form');
-const statusEl = container.querySelector('.form-status');
-const daySelect = container.querySelector('#day_select');
-const timeSelect = container.querySelector('#time_select');
-
-const loadSlots = async () => {
-    try {
-        const res = await api.get('/custom-data/rows/time-789?limit=1000');
-        const allSlots = res.data.rows || [];
-
-        // Build unique days
-        const uniqueDays = new Set();
-        allSlots.forEach(row => {
-            if (row.data && row.data.day) uniqueDays.add(row.data.day);
-        });
-
-        // Populate day dropdown
-        uniqueDays.forEach(day => {
-            const opt = container.ownerDocument.createElement('option');
-            opt.value = day;
-            opt.textContent = day;
-            daySelect.appendChild(opt);
-        });
-
-        // When day changes, filter times
-        daySelect.addEventListener('change', () => {
-            const selectedDay = daySelect.value;
-            timeSelect.innerHTML = '<option value="">Select Time...</option>';
-
-            const filtered = allSlots.filter(row => {
-                return row.data 
-                    && row.data.day === selectedDay 
-                    && row.data.available === true;
-            });
-
-            filtered.forEach(row => {
-                const opt = container.ownerDocument.createElement('option');
-                opt.value = row.row_id;
-                opt.textContent = row.data.start_time + ' - ' + row.data.end_time;
-                timeSelect.appendChild(opt);
-            });
-        });
-
-    } catch (err) {
-        if (statusEl) {
-            statusEl.textContent = 'Failed to load time slots.';
-            statusEl.style.color = '#ef4444';
-        }
-    }
-};
-
-// Load slots immediately
-loadSlots();
-
-if (form) {
-    form.onsubmit = async (e) => {
-        e.preventDefault();
-
-        const data = {};
-        new FormData(form).forEach((v, k) => data[k] = v);
-
-        const submitBtn = form.querySelector('button[type="submit"]');
-        if (submitBtn) submitBtn.disabled = true;
-        if (statusEl) {
-            statusEl.textContent = 'Booking...';
-            statusEl.style.color = '#6b7280';
-        }
-
-        try {
-            await api.post('/custom-data/rows/booking-456', { data, sitemember_id: null });
-
-            const slotId = data.time_slot;
-            if (slotId) {
-                const slotRes = await api.get('/custom-data/rows/time-789?row_id=' + slotId);
-                const slotRow = slotRes.data.rows && slotRes.data.rows[0];
-
-                if (slotRow && slotRow.data) {
-                    await api.put('/custom-data/rows/' + slotId, {
-                        data: { ...slotRow.data, available: false },
-                        sitemember_id: null
+            // A. Post Primary Data (e.g., Booking or Applicant)
+            const mainRes = await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id: null });
+            
+            // B. Cross-Table Mutation (e.g., Mark Time Slot Unavailable)
+            const slotId = data.time_slot || data.booking_id;
+            const slotSchema = schema.find(f => f.id === 'time_slot' || f.id === 'booking_id')?.related_schema_id;
+            if (slotId && slotSchema) {
+                const slotRes = await api.get(`/custom-data/rows/${slotSchema}?row_id=${slotId}`);
+                const slotRow = (slotRes.data?.rows || slotRes.rows || [])[0];
+                if (slotRow) {
+                    await api.put(`/custom-data/rows/${slotId}`, { 
+                        data: { ...slotRow.data, available: false }, 
+                        sitemember_id: null 
                     });
                 }
             }
 
-            if (statusEl) {
-                statusEl.textContent = 'Booking confirmed!';
-                statusEl.style.color = '#10b981';
-            }
-
+            if (statusEl) { statusEl.textContent = 'Success!'; statusEl.style.color = '#10b981'; }
+            alert('Success!');
             form.reset();
-            timeSelect.innerHTML = '<option value="">Select Time...</option>';
-
+            if (properties.hideData) formContainer.classList.add('hidden');
+            else fetchAndRenderRows();
         } catch (err) {
-            if (statusEl) {
-                statusEl.textContent = 'Booking failed.';
-                statusEl.style.color = '#ef4444';
-            }
-        } finally {
-            if (submitBtn) submitBtn.disabled = false;
+            if (statusEl) { statusEl.textContent = 'Error occurred'; statusEl.style.color = '#ef4444'; }
         }
     };
-}
-"
+    formContainer.appendChild(form);
+};
+
+// 4. ACCORDION / VISUAL INTERACTIVITY
+const initVisuals = () => {
+    const titles = container.querySelectorAll('.accordion-title');
+    titles.forEach(t => t.addEventListener('click', () => {
+        const content = t.nextElementSibling;
+        const isOpen = content.style.display === 'block';
+        content.style.display = isOpen ? 'none' : 'block';
+        const icon = t.querySelector('span');
+        if (icon) icon.textContent = isOpen ? '+' : '-';
+    }));
+};
+
+// 5. FETCH & RENDER (FOR ADMIN/LIST MODE)
+const fetchAndRenderRows = async () => {
+    if (properties.hideData || !dataDisplay) return;
+    try {
+        const res = await api.get(`/custom-data/rows/${schemaId}?limit=20`);
+        const rows = res.data?.rows || res.rows || [];
+        dataDisplay.innerHTML = '';
+        const tmpl = container.querySelector('#displayTemplate')?.innerHTML;
+        if (!tmpl) return;
+        rows.forEach(r => {
+            const div = document.createElement('div');
+            div.innerHTML = Mustache.render(tmpl, { data: r.data, row_id: r.row_id });
+            dataDisplay.appendChild(div);
+        });
+    } catch (err) { console.error(err); }
+};
+
+// INITIALIZATION
+if (addButton) addButton.onclick = () => generateForm();
+initVisuals();
+fetchAndRenderRows();
+  "
 }
 
-### **EXAMPLE 3: Visual Element (Accordion - No Database)**
-**Prompt:** "An accordion with 2 items"
-**Output:**
-{
-  "aiTemplate": "<div class=\"ai-accordion-12345\" style=\"background: transparent; width: 100%; display: flex; justify-content: center; align-items: center;\"><style>.ai-accordion-12345 { max-width: {{maxWidth}}; width: 100%; } .ai-accordion-12345 .accordion-item { border: {{borderWidth}} solid {{borderColor}}; margin-bottom: {{itemGap}}; border-radius: {{borderRadius}}; overflow: hidden; box-shadow: {{boxShadow}}; } .ai-accordion-12345 .accordion-title { background: {{titleBgColor}}; color: {{titleTextColor}}; padding: {{titlePadding}}; font-size: {{titleFontSize}}; font-weight: {{titleFontWeight}}; cursor: pointer; transition: {{transitionSpeed}}; display: flex; justify-content: space-between; } .ai-accordion-12345 .accordion-title:hover { background: {{titleHoverBg}}; } .ai-accordion-12345 .accordion-content { background: {{contentBgColor}}; color: {{contentTextColor}}; padding: {{contentPadding}}; display: none; font-size: {{contentFontSize}}; }</style><div class=\"accordion-item\"><div class=\"accordion-title\">{{title1}} <span>+</span></div><div class=\"accordion-content\">{{content1}}</div></div><div class=\"accordion-item\"><div class=\"accordion-title\">{{title2}} <span>+</span></div><div class=\"accordion-content\">{{content2}}</div></div></div>",
-  "properties": {
-    "title1": "Question 1", "content1": "Answer 1 text.",
-    "title2": "Question 2", "content2": "Answer 2 text.",
-    "maxWidth": "600px", "itemGap": "10px",
-    "borderWidth": "1px", "borderColor": "#e5e7eb", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.05)",
-    "titleBgColor": "#f9fafb", "titleHoverBg": "#f3f4f6", "titleTextColor": "#111827", "titlePadding": "16px", "titleFontSize": "16px", "titleFontWeight": "600", "transitionSpeed": "0.2s",
-    "contentBgColor": "#ffffff", "contentTextColor": "#4b5563", "contentPadding": "16px", "contentFontSize": "14px"
-  },
-  "editableProps": [
-    { "key":"title1", "label":"Title 1", "type":"text" }, { "key":"content1", "label":"Content 1", "type":"text" },
-    { "key":"title2", "label":"Title 2", "type":"text" }, { "key":"content2", "label":"Content 2", "type":"text" },
-    { "key":"maxWidth", "label":"Max Width", "type":"text" },
-    { "key":"itemGap", "label":"Gap Between Items", "type":"text" },
-    { "key":"borderWidth", "label":"Border Width", "type":"text" },
-    { "key":"borderColor", "label":"Border Color", "type":"color" },
-    { "key":"borderRadius", "label":"Border Radius", "type":"text" },
-    { "key":"boxShadow", "label":"Box Shadow", "type":"text" },
-    { "key":"titleBgColor", "label":"Title Background", "type":"color" },
-    { "key":"titleHoverBg", "label":"Title Hover Background", "type":"color" },
-    { "key":"titleTextColor", "label":"Title Text Color", "type":"color" },
-    { "key":"titleFontSize", "label":"Title Font Size", "type":"text" },
-    { "key":"titleFontWeight", "label":"Title Font Weight", "type":"text" },
-    { "key":"titlePadding", "label":"Title Padding", "type":"text" },
-    { "key":"contentBgColor", "label":"Content Background", "type":"color" },
-    { "key":"contentTextColor", "label":"Content Text Color", "type":"color" },
-    { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
-    { "key":"contentPadding", "label":"Content Padding", "type":"text" }
-  ],
-  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+
 }
 
 """.strip()
