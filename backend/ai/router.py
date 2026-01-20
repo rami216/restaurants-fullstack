@@ -2478,7 +2478,134 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key": "positionPlaceholder", "label": "Position Placeholder", "type": "text" },
     { "key": "submitText", "label": "Submit Button Text", "type": "text" }
   ],
-  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const fileInput = container.querySelector('#cv_input'); const hiddenUrlInput = container.querySelector('input[name=\"cv\"]'); const submitBtn = form.querySelector('button[type=\"submit\"]'); if (fileInput) { fileInput.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; const originalText = submitBtn ? submitBtn.innerText : 'Submit'; if (submitBtn) { submitBtn.disabled = true; submitBtn.innerText = 'Uploading...'; } try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if (url) { hiddenUrlInput.value = url; const msg = container.ownerDocument.createElement('span'); msg.className = 'text-xs text-green-600 block mt-1'; msg.innerText = '✓ Ready'; const oldMsg = fileInput.parentNode.querySelector('.text-green-600'); if (oldMsg) oldMsg.remove(); fileInput.parentNode.insertBefore(msg, fileInput.nextSibling); } } catch (err) { console.error('Upload error:', err); alert('Upload failed'); fileInput.value = ''; hiddenUrlInput.value = ''; } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = originalText; } } }; } if (form) { form.onsubmit = async (e) => { e.preventDefault(); if (fileInput && !hiddenUrlInput.value) { alert('Please upload CV first'); return; } const data = {}; new FormData(form).forEach((v, k) => data[k] = v); if (submitBtn) submitBtn.disabled = true; try { await api.post('/custom-data/rows/job-123', { data, sitemember_id: null }); if (statusEl) { statusEl.textContent = 'Application submitted!'; statusEl.style.color = '#10b981'; } form.reset(); hiddenUrlInput.value = ''; const fileMsg = fileInput.parentNode.querySelector('.text-green-600'); if (fileMsg) fileMsg.remove(); } catch (err) { console.error('Submit error:', err); if (statusEl) { statusEl.textContent = 'Submission failed'; statusEl.style.color = '#ef4444'; } } finally { if (submitBtn) { submitBtn.disabled = false; submitBtn.innerText = properties.submitText; } } }; }"
+  "script": "const schema = properties.schema_fields || [];
+const formContainer = container.querySelector('.form-container');
+const titleElement = container.querySelector('h2');
+
+// 1. UI SYNCHRONIZATION
+if (titleElement) {
+    titleElement.textContent = properties.formTitle;
+    titleElement.style.color = properties.titleColor;
+}
+
+// 2. DYNAMIC FORM GENERATION
+const generateForm = async (initialData = {}) => {
+    formContainer.innerHTML = '';
+    const form = document.createElement('form');
+    // Using dynamic classes from instructions
+    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+
+    schema.forEach(field => {
+        const wrapper = document.createElement('div');
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-semibold text-gray-700 mb-1';
+        label.textContent = field.label;
+        wrapper.appendChild(label);
+
+        // 3. FILE & IMAGE HANDLING (Inside the loop for correct scoping)
+        if (field.type === 'file' || field.type === 'image') {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+
+            const hiddenUrl = document.createElement('input');
+            hiddenUrl.type = 'hidden';
+            hiddenUrl.name = field.id;
+            hiddenUrl.value = initialData[field.id] || '';
+            wrapper.appendChild(hiddenUrl);
+
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+
+                const submitBtn = form.querySelector('button');
+                const oldText = submitBtn ? submitBtn.innerText : 'Submit';
+                
+                if (submitBtn) {
+                    submitBtn.disabled = true;
+                    submitBtn.innerText = 'Uploading...';
+                }
+
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    // Hit the Zygoflow upload endpoint
+                    const res = await api.post('/uploads/', formData);
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '✓ Ready';
+                        if (input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch (err) {
+                    console.error('Upload error:', err);
+                    alert('Upload failed');
+                    input.value = '';
+                } finally {
+                    if (submitBtn) {
+                        submitBtn.disabled = false;
+                        submitBtn.innerText = oldText;
+                    }
+                }
+            };
+            wrapper.appendChild(input);
+        } else {
+            // Standard text inputs
+            const input = document.createElement('input');
+            input.type = field.type;
+            input.name = field.id;
+            input.placeholder = field.label;
+            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            input.value = initialData[field.id] || '';
+            wrapper.appendChild(input);
+        }
+        form.appendChild(wrapper);
+    });
+
+    // 4. SUBMIT BUTTON
+    const submitBtn = document.createElement('button');
+    submitBtn.type = 'submit';
+    submitBtn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';
+    submitBtn.textContent = properties.submitText;
+    submitBtn.style.backgroundColor = properties.btnBg;
+    submitBtn.style.color = properties.btnColor;
+    form.appendChild(submitBtn);
+
+    // 5. FORM SUBMISSION LOGIC
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const data = {};
+        new FormData(form).forEach((v, k) => data[k] = v);
+
+        // Verification for CV
+        const cvField = schema.find(f => f.type === 'file');
+        if (cvField && !data[cvField.id]) {
+            alert('Please upload your CV first');
+            return;
+        }
+
+        try {
+            // Posting to the correct Schema ID from example (job-123)
+            await api.post('/custom-data/rows/job-123', { data, sitemember_id: null });
+            alert('Application submitted successfully!');
+            form.reset();
+            // Remove success checkmarks
+            container.querySelectorAll('.text-green-600').forEach(el => el.remove());
+        } catch (err) {
+            console.error('Submit error:', err);
+            alert('Submission failed. Please try again.');
+        }
+    };
+
+    formContainer.appendChild(form);
+};
+
+// INITIAL LOAD
+generateForm();"
 }
 
 ### **EXAMPLE 2: Booking Form with Parent-Child Time Selection**
