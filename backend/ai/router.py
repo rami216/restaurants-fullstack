@@ -2305,64 +2305,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **Use function expressions** (`const x = () => {}`).
     - **DO NOT** include `alert()`, `console.log()`, or any placeholder popups unless for form success/error messages.
 
-    - **CRITICAL FORM RULE:**
-        If the element is a FORM_ELEMENT:
-            - A script is MANDATORY
-            - form.onsubmit MUST exist
-            - The VERY FIRST LINE inside onsubmit MUST be:
-            `e.preventDefault();` (This stops the page from redirecting/crashing).
 
-    - **🚨 FILE & IMAGE UPLOAD LOGIC (MANDATORY):**
-        IF the user asks for a file or image upload, you MUST generate this specific logic in the script:
-        
-        1. In `aiTemplate`, create an `<input type="file">`.
-        2. In `aiTemplate`, create a `<input type="hidden" name="FIELD_ID">` to store the URL.
-        3. In `script`, add an `onchange` listener to the file input with this **EXACT** structure:
-           ```javascript
-           // Select elements
-           const fileInput = container.querySelector('input[type="file"]');
-           const hiddenInput = container.querySelector('input[type="hidden"]');
-           const btn = container.querySelector('button[type="submit"]');
-
-           if(fileInput) {
-               fileInput.onchange = async (e) => {
-                   const file = e.target.files[0];
-                   if (!file) return;
-                   
-                   const oldText = btn ? btn.innerText : 'Submit';
-                   if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-                   
-                   try {
-                       const formData = new FormData();
-                       formData.append('file', file);
-                       
-                       // Use 'api.post' to ensure it hits the backend URL
-                       const res = await api.post('/uploads/', formData);
-                       
-                       // Handle different response structures
-                       const url = res.data ? res.data.url : res.url;
-                       
-                       if (url) {
-                           hiddenInput.value = url; // Update the hidden input
-                           
-                           // Visual success
-                           const msg = document.createElement('span');
-                           msg.style.color = 'green';
-                           msg.style.fontSize = '12px';
-                           msg.innerText = '✓ Ready';
-                           if(fileInput.nextSibling?.tagName === 'SPAN') fileInput.nextSibling.remove();
-                           fileInput.parentNode.insertBefore(msg, fileInput.nextSibling);
-                       }
-                   } catch(err) {
-                       console.error('Upload error:', err);
-                       alert('Upload failed');
-                       fileInput.value = '';
-                   } finally {
-                       if(btn) { btn.disabled = false; btn.innerText = oldText; }
-                   }
-               };
-           }
-           ```
 
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -2380,10 +2323,6 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - Delete rows from any existing schema
         - Use multiple schemas in the same component
 
-    - This element MUST NEVER:
-        - Create schemas
-        - Invent schemas
-        - Guess schema IDs
 
     - **IF** the user wants to save/load/update/delete data:
         1. You MUST find the correct `schema_id` from `EXISTING_SCHEMAS_ON_WEBSITE`
@@ -2422,18 +2361,85 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - If the user just wants a visual element (e.g., "Hero Section", "Accordion"):
         - Ignore the schemas. Do not write API calls.
 
+6. **`script`**: A complete, raw JavaScript string that makes the element interactive.
+    - It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
+    - **STRICT LOCAL SCOPING:** You MUST NOT use `document.querySelector`. You MUST only use `container.querySelector` so multiple elements on one page do not conflict.
+    - **UI SYNCHRONIZATION (MANDATORY):** The script MUST explicitly select and update the static UI elements (Title, Add Button) using the values from `properties` at the very top of the execution. This ensures the editor updates immediately:
+        - Set `titleElement.textContent = properties.title`.
+        - Set `titleElement.style.color = properties.titleColor`.
+        - Set `addButton.textContent = properties.addButtonText`.
+        - Set `addButton.style.backgroundColor = properties.buttonBgColor`.
+    - **Initial Load Guard:** The script MUST check `if (properties.hideData) return;` at the very beginning of the `fetchAndRenderRows` function to prevent private data from loading.
+    - **State Management:** It MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (e.g., 20), and `totalRows`.
+    - **Accessing the Schema:** You **MUST** get the field definitions from `properties.schema_fields`. **DO NOT** use a root-level "schema" key in the JSON to avoid creating a database table.
+    - **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
+        - The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
+        - Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
+        - Every `<input>` and `<select>` created MUST have class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+        - The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+    - **Relational Fields:** For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
+    - **ULTRA-CRITICAL DROPDOWN RULE:** The script must populate the dropdown dynamically. It must:
+        1. Find the related schema's definition within the `properties.all_schemas`.
+        2. Fetch all rows for the `related_schema_id` using `api.get('/custom-data/rows/' + related_id + '?limit=1000')`.
+        3. **PARENT DEDUPLICATION (MANDATORY):** If the field is a 'Parent' in a dependency (like Day), the script **MUST** use a `new Set()` to ensure unique values. Only create `<option>` elements for unique values.
+        4. **ROLE-BASED LABELS:** - If 'Parent': Use the simple unique value (e.g., "Tuesday").
+            - If 'Child' (filtered): Show the specific concatenation (e.g., "10:00 - 12:00").
+        5. The `value` for the `<option>` must be the `row_id`.
+        - **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic.
+    - **FILE & IMAGE HANDLING:** If a field type is 'file' or 'image':
+        1. Create an `<input type="file">`.
+        2. Create a `<input type="hidden" name="FIELD_ID">` to store the URL.
+        3. Add an `onchange` listener to the file input:
+           ```javascript
+           input.onchange = async (e) => {
+               const file = e.target.files[0];
+               if (!file) return;
+               const btn = form.querySelector('button');
+               const oldText = btn ? btn.innerText : 'Submit';
+               if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+               try {
+                   const formData = new FormData();
+                   formData.append('file', file);
+                   const res = await api.post('/uploads/', formData);
+                   const url = res.data ? res.data.url : res.url;
+                   if (url) {
+                       hiddenUrl.value = url;
+                       const msg = document.createElement('span');
+                       msg.className = 'text-xs text-green-600 block mt-1';
+                       msg.innerText = '✓ Ready';
+                       if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                       input.parentNode.insertBefore(msg, input.nextSibling);
+                   }
+               } catch(err) { alert('Upload failed'); input.value = ''; }
+               finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
+           };
+           ```
+    - **DYNAMIC HIERARCHY LOGIC:** If the prompt implies a dependency (e.g., "A for each B"):
+        1. Identify the 'Parent' field and the 'Child' field from the schema.
+        2. Fetch Child relational data once and store it.
+        3. Add a change event listener to the Parent `<select>`.
+        4. **DYNAMIC FILTERING MATCH:** When the Parent changes:
+            - Clear the Child dropdown.
+            - Filter rows where the Child data matches the selected Parent text.
+            - Re-populate the Child dropdown.
+    - **DATA VISIBILITY & PRIVACY:**
+        1. **Scenario A (Public/Write-Only):** If the prompt implies privacy/booking, DO NOT call `fetchAndRenderRows()`. After submit, just `alert('Success')`, `form.reset()`, and hide the container.
+        2. **Scenario B (Admin/List Mode):** Call `fetchAndRenderRows()` on bottom of script and after submit.
+    - **CROSS-TABLE MUTATION ENGINE (CRITICAL):**
+        If the user prompt implies updating ANOTHER table (e.g., "mark slot unavailable"):
+        1. Define `const crossTableMutations` at the top.
+        2. Implement `runCrossTableMutations` to fetch the target row using its Schema ID and update it via its specific Row ID.
+        3. Call this function inside the `form.onsubmit` handler.
+    - **API CALLS TO USE (STRICT) if needed based on user prompt:**
+        - **Fetch Paginated Rows:** `api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + limit)`
+        - **Fetch Related Rows:** `api.get('/custom-data/rows/' + RELATED_ID + '?limit=1000')`
+        - **Add New Row:** `api.post('/custom-data/rows/' + schemaId, { data, sitemember_id })`
+        - **Fetch Single Row (Cross-Table):** `api.get('/custom-data/rows/' + TARGET_SCHEMA_ID + '?row_id=' + TARGET_ROW_ID)`
+        - **Update ANY Row (Universal):** `api.put('/custom-data/rows/' + TARGET_ROW_ID, { data: mergedData, sitemember_id })`
+        - **Delete Row:** `api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=...')`
+    - **Pagination Logic:** Render "Previous" and "Next" buttons in `.pagination-controls`. Update `currentPage` and re-fetch on click.
+    - It MUST use function expressions (e.g., `const myFunc = () => {}`).
 ---
-Before outputting JSON, you MUST verify:
-
-- Which type is this? FORM_ELEMENT, DATA_LIST_ELEMENT, or VISUAL_ELEMENT?
-- If FORM_ELEMENT or DATA_LIST_ELEMENT:
-  - Is "script" non-empty?
-  - Does form.onsubmit exist (if form)?
-  - Does it start with e.preventDefault()?
-- If any file/image input exists:
-  - Is upload logic present?
-
-If ANY answer is "no" → YOU MUST REGENERATE.
 
 **INPUT:** A user's prompt, a `unique_class_name`, and `EXISTING_SCHEMAS_ON_WEBSITE`.
 **OUTPUT:** A valid JSON object.
