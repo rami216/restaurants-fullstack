@@ -2368,9 +2368,11 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
     - **Relational Fields:** For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
            
-    - FILE & IMAGE HANDLING (MANDATORY): If the prompt involves files/images, the script MUST include this exact logic:
+- FILE & IMAGE HANDLING (MANDATORY): If the prompt involves files/images, the script MUST include this exact logic. The script MUST first explicitly select the elements:
+       const input = container.querySelector('input[type="file"]');
        const hiddenUrl = container.querySelector('input[type="hidden"]');
        const btn = form.querySelector('button');
+
        input.onchange = async (e) => {
            const file = e.target.files[0];
            if (!file) return;
@@ -2391,8 +2393,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                }
            } catch(err) { alert('Upload failed'); input.value = ''; }
            finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
-       };
-        
+       };        
     - **ULTRA-CRITICAL DROPDOWN RULE:** The script must populate the dropdown dynamically. It must:
         1. Find the related schema's definition within the `properties.all_schemas`.
         2. Fetch all rows for the `related_schema_id` using `api.get('/custom-data/rows/' + related_id + '?limit=1000')`.
@@ -2429,12 +2430,14 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Delete Row:** `api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=...')`
     - **Pagination Logic:** Render "Previous" and "Next" buttons in `.pagination-controls`. Update `currentPage` and re-fetch on click.
     - It MUST use function expressions (e.g., `const myFunc = () => {}`).
-    🚨 ABSOLUTE RULE FOR SCRIPT CONTENT: If the prompt involves a form or file upload, the "script" key MUST NOT BE EMPTY. 
-    You must explicitly write the code for:
+    
+    🚨 ABSOLUTE SCRIPT ENFORCEMENT: 
+    If the user prompt involves a form or file upload, the "script" key MUST NOT BE EMPTY, "" or null. 
+    You MUST explicitly write out the full JavaScript code for:
     1. form.onsubmit starting with e.preventDefault()
-    2. input.onchange for file uploads
-    3. api.post for data saving. 
-    If you return "" or null, the application crashes.
+    2. input.onchange logic for file uploads
+    3. api.post for final data submission.
+    Returning a null script results in a critical application crash.
     
 ---
 
@@ -2700,7 +2703,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_NON_TABLE_AI_FULL_TEST_1},
+                {"role": "system", "content": NEW_ELEMENT_GENERATOR_PROMPT_FIXED_2},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
