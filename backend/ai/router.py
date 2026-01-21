@@ -5207,7 +5207,7 @@ The script runs in a function receiving `(container, api, schemaId, properties, 
     - **Delete:** `api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=' + id)`
     - **Uploads:** For files/images, use `const res = await api.post('/uploads/', formData);`. Use `res.data.url` or `res.url`.
 - **Logic:** Use function expressions (arrow functions) only. Use `container.querySelector`.
-
+**CRITICAL RULE:** If the prompt implies an action (e.g., "save", "submit", "load", "delete"), the `script` key **MUST NOT** be empty. You MUST write the full logic.
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
