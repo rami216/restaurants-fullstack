@@ -3291,7 +3291,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT},
+                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_1},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -5356,6 +5356,648 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 }
 
 ### **EXAMPLE 2: Visual Element (Highly Customizable Accordion)**
+**Prompt:** "An accordion with 2 items"
+**Output:**
+{
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345{width:100%;max-width:{{maxWidth}};font-family:{{fontFamily}}}.ai-accordion-12345 .accordion-item{border:{{borderWidth}} solid {{borderColor}};margin-bottom:{{itemGap}};border-radius:{{borderRadius}};overflow:hidden;box-shadow:{{boxShadow}};background:{{itemBgColor}}}.ai-accordion-12345 .accordion-title{background:{{titleBgColor}};color:{{titleTextColor}};padding:{{titlePadding}};font-size:{{titleFontSize}};font-weight:{{titleFontWeight}};cursor:pointer;transition:{{transitionSpeed}};display:flex;justify-content:space-between;align-items:center}.ai-accordion-12345 .accordion-title:hover{background:{{titleHoverBg}}}.ai-accordion-12345 .accordion-content{background:{{contentBgColor}};color:{{contentTextColor}};padding:{{contentPadding}};display:none;font-size:{{contentFontSize}};line-height:{{contentLineHeight}}}</style><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title1}} <span>+</span></div><div class=\\"accordion-content\\">{{content1}}</div></div><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title2}} <span>+</span></div><div class=\\"accordion-content\\">{{content2}}</div></div></div>",
+  "properties": {
+    "title1": "Question 1", "content1": "Answer 1 text goes here.",
+    "title2": "Question 2", "content2": "Answer 2 text goes here.",
+    "maxWidth": "600px", "fontFamily": "inherit", "itemGap": "10px",
+    "borderWidth": "1px", "borderColor": "#e5e7eb", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.05)", "itemBgColor": "#ffffff",
+    "titleBgColor": "#f9fafb", "titleHoverBg": "#f3f4f6", "titleTextColor": "#111827", "titlePadding": "16px", "titleFontSize": "16px", "titleFontWeight": "600", "transitionSpeed": "0.2s",
+    "contentBgColor": "#ffffff", "contentTextColor": "#4b5563", "contentPadding": "16px", "contentFontSize": "14px", "contentLineHeight": "1.5"
+  },
+  "editableProps": [
+    { "key":"title1", "label":"Title 1", "type":"text" }, { "key":"content1", "label":"Content 1", "type":"text" },
+    { "key":"title2", "label":"Title 2", "type":"text" }, { "key":"content2", "label":"Content 2", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"itemGap", "label":"Gap Between Items", "type":"text" },
+    { "key":"borderWidth", "label":"Border Width", "type":"text" },
+    { "key":"borderColor", "label":"Border Color", "type":"color" },
+    { "key":"borderRadius", "label":"Border Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Box Shadow", "type":"text" },
+    { "key":"titleBgColor", "label":"Title Background", "type":"color" },
+    { "key":"titleHoverBg", "label":"Title Hover Background", "type":"color" },
+    { "key":"titleTextColor", "label":"Title Text Color", "type":"color" },
+    { "key":"titleFontSize", "label":"Title Font Size", "type":"text" },
+    { "key":"titleFontWeight", "label":"Title Font Weight", "type":"text" },
+    { "key":"titlePadding", "label":"Title Padding", "type":"text" },
+    { "key":"contentBgColor", "label":"Content Background", "type":"color" },
+    { "key":"contentTextColor", "label":"Content Text Color", "type":"color" },
+    { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
+    { "key":"contentPadding", "label":"Content Padding", "type":"text" }
+  ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+}
+""".strip()
+BEST_WORKING_NON_TABLE_PROMPT_1 = """
+You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**1.  HTML Structure:**
+    - The HTML must be wrapped in a single container `<div>`.
+    - This container will have the unique class name you are given applied to it.
+    - **FORMS:** If creating a form, use `<form>`. **DO NOT** add `action=""` or `method=""` attributes. We handle submission purely via JavaScript.
+
+**2. Styling:**
+    - All CSS must be in a single <style> tag.
+    - Use mustache tokens {{...}} for all editable style values.
+    - **OUTER CONTAINER RULES (CRITICAL):**
+        - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
+        - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
+        - DO NOT apply borders, backgrounds, or shadows to this main container <div> unless the user specifically asks for a "card" or "box". 
+        - Apply the primary design (e.g., {{buttonBgColor}}, borders, shadows) directly to the specific internal element (e.g., the <button> or <a> tag) so the element looks like it is floating naturally on the section background.
+    - **You MUST expose editables for the following visual controls (when relevant):**
+        - **Colors:** element background color, text color, link color, hover/active accents, border color.
+        - **Borders:** border width, border style, border radius.
+        - **Spacing:** padding and/or gap for internal elements.
+        - **Typography:** font size(s), font weight(s), line-height, text alignment.
+        - **Effects & Motion:** box-shadow (at least one), transition speed/easing.
+    - If the element has distinct sections, provide separate tokens (e.g., `titleBgColor`, `contentBgColor`).
+    - **CRITICAL SCOPING SUB-RULE:** Every single CSS rule MUST be prefixed with the `unique_class_name` to prevent styles from leaking.
+        - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `:root { ... }`
+    - CSS must be concise, scoped, and visually polished by default.
+
+**3.  Interactivity (`script` key):**
+        - Provide a JavaScript string executed inside a function `(container, api, schemaId, properties, Mustache)`.
+        - **Use `container.querySelector`** (NOT document.querySelector).
+        - **Do NOT** wrap code in `<script>`.
+        - **Use function expressions** (`const x = () => {}`).
+        - **STRICT RULE:** DO NOT include `alert()`, `console.log()`, or any placeholder popups.
+        - **CRITICAL FORM RULE:** If interacting with a form, the `onsubmit` handler **MUST** start with `e.preventDefault();` as the very first line. If this is missing, the page will reload and the app will fail.
+
+**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    - **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+
+**5.  DATA LOGIC (How to connect to the database):**
+    - You will see a list called `EXISTING_SCHEMAS_ON_WEBSITE`.
+
+    - This element MAY:
+        - Create rows in any existing schema
+        - Read rows from any existing schema
+        - Update rows in any existing schema
+        - Delete rows from any existing schema
+        - Use multiple schemas in the same component
+
+    - This element MUST NEVER:
+        - Create schemas
+        - Invent schemas
+        - Guess schema IDs
+
+    - **IF** the user wants to save/load/update/delete data:
+        1. You MUST find the correct `schema_id` from `EXISTING_SCHEMAS_ON_WEBSITE`
+        2. You MUST write the correct API call in the script.
+
+    - Allowed API operations:
+
+        **Create:**
+        `await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });`
+
+        **Read (List & Render):**
+        `const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');`
+        - **CRITICAL:** The response data is in `res.data.rows`.
+        - **RENDER LOGIC:** You MUST manually loop through `res.data.rows`, generate HTML strings, and inject them into a container using `innerHTML`.
+
+        **Update:**
+        `await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });`
+
+        **Delete:**
+        `await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);`
+
+    - You MAY read from one table and write/update/delete in another table.
+
+    - **Field names in forms MUST match column names in the schema exactly.**
+    - **FILE & IMAGE UPLOADS (CRITICAL):**
+                1- Create an <input type="file">.
+                2- Create a <input type="hidden" name="FIELD_ID"> to store the URL.
+                3- Add an onchange listener to the file input:
+                    input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // FIX: Select button safely (without relying on type="submit")
+                const btn = form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+                
+                if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // FIX: Use 'api.post' to ensure it hits the backend URL, not the frontend
+                    const res = await api.post('/uploads/', formData);
+                    
+                    // Handle different response structures
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        
+                        // Visual success
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '\\u2713 Ready';
+                        if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch(err) {
+                    console.error('Upload error:', err);
+                    alert('Upload failed');
+                    input.value = '';
+                } finally {
+                    if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                }
+            };
+         -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
+            1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
+            2- The script MUST fetch the Child relational data once and store it in a constant variable.
+            3- Add a change event listener to the Parent <select> dropdown.
+            4- DYNAMIC FILTERING MATCH: Whenever the Parent changes, the script MUST:
+                - Clear the Child dropdown completely.
+                - Identify the property in the Child data that matches the Parent's schema.
+                - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
+                - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
+   -   **DATA VISIBILITY & PRIVACY PROTOCOL (CRITICAL):**
+            The script MUST strictly follow the user's intent regarding data visibility.
+                1.  **SCENARIO A: Public/Write-Only (e.g., "don't load data", "booking form", "privacy"):**
+                    -   **Initial Load:** The script MUST **NOT** call `fetchAndRenderRows()` at the bottom of the script. The `dataDisplay` must remain empty.
+                    -   **After Submit:** The script MUST **NOT** call `fetchAndRenderRows()`. It must simply `alert('Success')`, `form.reset()`, and `formContainer.classList.add('hidden')`.
+                2.  **SCENARIO B: Admin/Manager (e.g., "manage bookings", "show list"):**
+                    -   **Initial Load:** The script MUST call `fetchAndRenderRows()` at the bottom.
+                    -   **After Submit:** The script MUST call `fetchAndRenderRows()` to refresh the list.
+                3.  **DEFAULT:** If unspecified, assume **Scenario B** (Admin Mode).
+    -   **UNIVERSAL CROSS-TABLE MUTATION ENGINE (CRITICAL):**
+            If the user's prompt implies updating, syncing, reserving, or modifying ANY OTHER TABLE (e.g., "mark slot as unavailable", "decrease stock"):
+                1) **Define Mutation Rules:** The script MUST define a `const crossTableMutations` array at the top.
+                        Example:
+                        ```javascript
+                        const crossTableMutations = [
+                            {
+                            when: "create", // or "update"
+                            sourceField: "time", // The field in THIS form holding the related Row ID
+                            target: {
+                                field: "available", // The field in the OTHER table to change
+                                value: false // Static value OR dynamic logic
+                            }
+                            }
+                        ];
+                        ```
+                2) **Implement Executor Function:** The script MUST include this exact helper function `runCrossTableMutations`:
+                   ```javascript
+                   const runCrossTableMutations = async (mode, formData, sitemember_id) => {
+                       const rules = crossTableMutations.filter(r => r.when === mode);
+                       for (const rule of rules) {
+                           const targetRowId = formData[rule.sourceField];
+                           const fieldDef = schema.find(f => f.id === rule.sourceField);
+                           const targetSchemaId = fieldDef?.related_schema_id;
+                   
+                           if (targetRowId && targetSchemaId) {
+                               try {
+                                   // STEP A: Fetch using Schema ID (Finds the data)
+                                   const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);
+                                   const rows = res.data?.rows || res.rows || [];
+                                   const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
+                   
+                                   // STEP B: Update using ROW ID (Fixes 404)
+                                   const newValue = rule.target.value; 
+                                   await api.put(`/custom-data/rows/${targetRowId}`, { 
+                                       data: { ...existing, [rule.target.field]: newValue }, 
+                                       sitemember_id 
+                                   });
+                                   console.log(`Mutation success: Updated ${targetRowId}`);
+                               } catch (err) { console.error('Mutation failed:', err); }
+                           }
+                       }
+                   };
+                   ```
+                    3) **Call on Submit:** Inside the `form.onsubmit` handler, the script MUST call:
+                        `await runCrossTableMutations(editingRowId ? "update" : "create", data, sitemember_id);`
+       
+
+
+---
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A valid JSON object.
+
+
+**Example Prompt:** "A contact list table with fields for name and email."
+**Example `unique_class_name`:** `.ai-contact-list-12345`
+**Example Output:**
+{
+  "name": "Contact List",
+  "schema": [
+    { "id": "name", "label": "Name", "type": "text" },
+    { "id": "email", "label": "Email", "type": "email" }
+  ],
+  "aiTemplate": "<style>.ai-contact-list-12345 .title { color: {{titleColor}}; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; margin-bottom: 1rem; }</style><div class=\\"p-6 bg-white rounded-xl shadow-lg border border-gray-100\\"><div class=\\"flex justify-between items-center mb-6\\"><h3 class=\\"text-2xl font-bold title\\">{{title}}</h3><button class=\\"add-new-btn px-4 py-2 text-white rounded-lg font-semibold hover:opacity-90 transition\\">{{addButtonText}}</button></div><div class=\\"form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden\\"></div><div class=\\"data-display space-y-3 w-full overflow-x-auto\\"></div><div class=\\"pagination-controls mt-6 flex justify-center gap-2\\"></div></div><template id=\\"displayTemplate\\"><div class=\\"flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow\\"><div class=\\"flex-1\\"><p class=\\"font-bold text-gray-900\\">{{data.name}}</p><p class=\\"text-sm text-gray-500\\">{{data.email}}</p></div><div class=\\"flex gap-2\\"><button class=\\"edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
+  "properties": {
+    "title": "Contact List",
+    "addButtonText": "Add Contact",
+    "titleColor": "#111827",
+    "borderColor": "#e5e7eb",
+    "buttonBgColor": "#3b82f6"
+  },
+  "editableProps": [
+    { "key": "title", "label": "Title", "type": "text" },
+    { "key": "addButtonText", "label": "Add Button Text", "type": "text" },
+    { "key": "titleColor", "label": "Title Color", "type": "color" },
+    { "key": "borderColor", "label": "Border Color", "type": "color" },
+    { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
+  ],
+  "script": "const schema = properties.schema_fields || [];
+const dataDisplay = container.querySelector('.data-display');
+const formContainer = container.querySelector('.form-container');
+const addButton = container.querySelector('.add-new-btn');
+const paginationControls = container.querySelector('.pagination-controls');
+const titleElement = container.querySelector('h2, h3'); // Select the header
+
+let editingRowId = null;
+let currentRows = [];
+let currentPage = 0;
+const rowsPerPage = 20;
+
+
+if (titleElement) {
+    titleElement.textContent = properties.title;
+    if (properties.titleColor) titleElement.style.color = properties.titleColor;
+}
+if (addButton) {
+    addButton.textContent = properties.addButtonText;
+    if (properties.buttonBgColor) addButton.style.backgroundColor = properties.buttonBgColor;
+}
+
+// 1. DATA MUTATION CONFIGURATION
+// Automatically sets "Available" to false when a slot is booked
+const crossTableMutations = [{
+    when: 'create',
+    sourceField: 'time',
+    target: {
+        field: 'available',
+        value: false
+    }
+}];
+
+// 2. CROSS-TABLE EXECUTOR
+const runCrossTableMutations = async (mode, formData, sitemember_id) => {
+    const rules = crossTableMutations.filter(r => r.when === mode);
+    for (const rule of rules) {
+        const targetRowId = formData[rule.sourceField];
+        const fieldDef = schema.find(f => f.id === rule.sourceField);
+        const targetSchemaId = fieldDef?.related_schema_id;
+
+        if (targetRowId && targetSchemaId) {
+            try {
+                const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`);
+                const rows = res.data?.rows || res.rows || [];
+                const existing = rows.find(r => r.row_id === targetRowId)?.data || {};
+
+                await api.put(`/custom-data/rows/${targetRowId}`, {
+                    data: { ...existing,
+                        [rule.target.field]: rule.target.value
+                    },
+                    sitemember_id
+                });
+            } catch (err) {
+                console.error('Mutation failed:', err);
+            }
+        }
+    }
+};
+
+// 3. FETCH & RENDER (With Privacy & Boolean Fixes)
+const fetchAndRenderRows = async () => {
+    // PRIVACY: Stop if hideData is on
+    if (properties.hideData) return;
+
+    try {
+        const skip = currentPage * rowsPerPage;
+        const res = await api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage);
+        currentRows = res.data?.rows || res.rows || [];
+        dataDisplay.innerHTML = '';
+        const tmpl = container.querySelector('#displayTemplate').innerHTML;
+
+        currentRows.forEach(row => {
+            const div = document.createElement('div');
+            const rowData = { ...row.data };
+
+            schema.forEach(f => {
+                // ✅ BOOLEAN DISPLAY FIX
+                if (f.type === 'boolean') {
+                    const val = rowData[f.id];
+                    // Forces strict string 'true' or 'false'
+                    rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false';
+                }
+
+                // RELATION FIX
+                if (f.type === 'relation' && rowData[f.id]) {
+                    const d = rowData[f.id].data || rowData[f.id];
+                    let label = d[f.id];
+                    if (!label) label = Object.values(d).filter(v => typeof v !== 'object')[0];
+                    rowData[f.id].display_label = label || '---';
+                }
+                // ✅ FILE/IMAGE DISPLAY FIX
+            if (rowData[f.id] && (f.type === 'file' || f.type === 'image')) {
+                // If the template expects a string, we give it the URL.
+                // But if the AI template logic (Mustache) isn't set up for images, 
+                // we can force HTML injection here if we modify the Mustache template dynamically, 
+                // but usually, we just ensure the URL is clean.
+                // For now, ensure it's treated as a string URL.
+                rowData[f.id] = String(rowData[f.id]);
+            }
+            });
+
+            div.innerHTML = Mustache.render(tmpl, {
+                data: rowData,
+                row_id: row.row_id
+            });
+            dataDisplay.appendChild(div);
+        });
+        
+        // Update pagination buttons after rendering rows
+        renderPagination();
+        
+    } catch (err) {
+        console.error(err);
+    }
+};
+
+// 4. PAGINATION LOGIC
+const renderPagination = () => {
+    if (!paginationControls) return;
+    paginationControls.innerHTML = '';
+
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Previous';
+    prevBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.onclick = () => {
+        if (currentPage > 0) {
+            currentPage--;
+            fetchAndRenderRows();
+        }
+    };
+    paginationControls.appendChild(prevBtn);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    nextBtn.disabled = currentRows.length < rowsPerPage;
+    nextBtn.onclick = () => {
+        if (currentRows.length === rowsPerPage) {
+            currentPage++;
+            fetchAndRenderRows();
+        }
+    };
+    paginationControls.appendChild(nextBtn);
+};
+
+// 5. FORM GENERATION
+const generateForm = async (initialData = {}) => {
+    formContainer.innerHTML = '';
+    formContainer.classList.remove('hidden');
+    const form = document.createElement('form');
+    form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4';
+    const selects = {};
+    const relCache = {};
+
+    for (const field of schema) {
+        const wrapper = document.createElement('div');
+        const label = document.createElement('label');
+        label.className = 'block text-sm font-semibold text-gray-700 mb-1';
+        label.textContent = field.label;
+        wrapper.appendChild(label);
+
+        if (field.type === 'relation') {
+            const sel = document.createElement('select');
+            sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            selects[field.id] = sel;
+            sel.name = field.id;
+            const res = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`);
+            const rows = res.data?.rows || res.rows || [];
+            relCache[field.id] = rows;
+            sel.innerHTML = '<option value="">Select...</option>';
+
+            // Dynamic Day/Time Logic
+            if (field.id === 'day') {
+                const seen = new Set();
+                rows.forEach(r => {
+                    const txt = r.data.day;
+                    if (txt && !seen.has(txt)) {
+                        seen.add(txt);
+                        const opt = document.createElement('option');
+                        opt.value = r.row_id;
+                        opt.textContent = txt;
+                        sel.appendChild(opt);
+                    }
+                });
+                sel.addEventListener('change', () => {
+                    const selectedDayText = sel.options[sel.selectedIndex].textContent;
+                    const timeSelect = selects['time'];
+                    if (timeSelect) {
+                        timeSelect.innerHTML = '<option value="">Select Time...</option>';
+                        const availableTimes = relCache['time'].filter(r =>
+                            r.data.day === selectedDayText &&
+                            (r.data.available === true || r.data.available === 'true')
+                        );
+                        availableTimes.forEach(r => {
+                            const opt = document.createElement('option');
+                            opt.value = r.row_id;
+                            opt.textContent = `${r.data.start_time} - ${r.data.end_time}`;
+                            timeSelect.appendChild(opt);
+                        });
+                    }
+                });
+            } else if (field.id !== 'time') {
+                rows.forEach(r => {
+                    const val = Object.values(r.data).filter(v => typeof v !== 'object')[0];
+                    const opt = document.createElement('option');
+                    opt.value = r.row_id;
+                    opt.textContent = val;
+                    sel.appendChild(opt);
+                });
+            }
+            wrapper.appendChild(sel);
+
+        } else if (field.type === 'boolean') {
+            // ✅ BOOLEAN FORM FIX (Use Select instead of Input)
+            const sel = document.createElement('select');
+            sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            sel.name = field.id;
+            sel.innerHTML = '<option value="true">True</option><option value="false">False</option>';
+            const isTrue = initialData[field.id] === true || initialData[field.id] === 'true';
+            sel.value = isTrue ? 'true' : 'false';
+            wrapper.appendChild(sel);
+
+        } else if (field.type === 'file' || field.type === 'image') {
+            const input = document.createElement('input');
+            input.type = 'file';
+            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            
+            const hiddenUrl = document.createElement('input');
+            hiddenUrl.type = 'hidden';
+            hiddenUrl.name = field.id;
+            hiddenUrl.value = initialData[field.id] || '';
+            wrapper.appendChild(hiddenUrl);
+
+            input.onchange = async (e) => {
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // Select button safely
+                const btn = form.querySelector('button[type="submit"]') || form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+                
+                if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // FIX: Use api.post to hit the Backend URL (Solves 404)
+                    const res = await api.post('/uploads/', formData);
+                    
+                    // Handle response safely
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        
+                        // Visual Success
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '✓ Ready to save';
+                        if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch(err) {
+                    console.error('Upload error:', err);
+                    alert('Upload failed');
+                    input.value = '';
+                } finally {
+                    if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                }
+            };
+            wrapper.appendChild(input);
+            }else {
+            const input = document.createElement('input');
+            input.type = field.type;
+            input.name = field.id;
+            input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all';
+            input.value = initialData[field.id] || '';
+            wrapper.appendChild(input);
+        }
+        form.appendChild(wrapper);
+    }
+
+    const btn = document.createElement('button');
+    btn.textContent = editingRowId ? 'Update' : 'Submit';
+    btn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2';
+    form.appendChild(btn);
+
+    form.onsubmit = async (e) => {
+        e.preventDefault();
+        const data = {};
+        new FormData(form).forEach((v, k) => data[k] = v);
+
+        if (data['time'] && data['day']) {
+            const dayField = schema.find(f => f.id === 'day');
+            const timeField = schema.find(f => f.id === 'time');
+            if (dayField && timeField && dayField.related_schema_id === timeField.related_schema_id) {
+                data['day'] = data['time'];
+            }
+        }
+
+        const sitemember_id = properties.sitemember_id || null;
+        try {
+            if (editingRowId) {
+                await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
+                await runCrossTableMutations('update', data, sitemember_id);
+            } else {
+                await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
+                await runCrossTableMutations('create', data, sitemember_id);
+            }
+            alert('Success!');
+            editingRowId = null;
+            form.reset();
+            formContainer.classList.add('hidden');
+            
+            // ✅ PRIVACY CHECK: Only refresh if allowed
+            if (!properties.hideData) fetchAndRenderRows();
+            
+        } catch (err) {
+            console.error(err);
+        }
+    };
+    formContainer.appendChild(form);
+};
+
+// 6. EVENT LISTENERS
+container.addEventListener('click', async (e) => {
+    // Edit Button
+    const editBtn = e.target.closest('.edit-btn');
+    if (editBtn) {
+        editingRowId = editBtn.dataset.rowId;
+        const row = currentRows.find(r => r.row_id === editingRowId);
+        if (row) generateForm(row.data);
+    }
+
+    // Delete Button
+    const deleteBtn = e.target.closest('.delete-btn');
+    if (deleteBtn) {
+        if (confirm('Delete?')) {
+            
+            const rowElement = deleteBtn.closest('.transition-shadow');
+            const originalText = deleteBtn.innerText;
+            deleteBtn.innerText = '...';
+            deleteBtn.disabled = true;
+
+            try {
+                const sitemember_id = properties.sitemember_id || null;
+                const rowId = deleteBtn.dataset.rowId;
+                
+               
+                await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`);
+                
+                if (rowElement) rowElement.remove();
+                currentRows = currentRows.filter(r => r.row_id !== rowId);
+
+            } catch (err) {
+                console.error('Delete failed:', err);
+                alert('Failed to delete.');
+                deleteBtn.innerText = originalText;
+                deleteBtn.disabled = false;
+            }
+        }
+    }
+});
+
+if (addButton) {
+    addButton.onclick = () => {
+        editingRowId = null;
+        generateForm();
+    };
+}
+
+
+renderPagination();
+
+"
+}
+another example:
+**Example Prompt:** "an accordion with two items"
+**Example `unique_class_name`:** `.ai-accordion-12345`
+
 **Prompt:** "An accordion with 2 items"
 **Output:**
 {
