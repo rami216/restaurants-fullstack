@@ -5973,7 +5973,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"boxShadow","label":"Box Shadow","type":"text" },
     { "key":"transitionSpeed","label":"Transition Speed","type":"text" }
   ],
-  "script": "// WRITE FULL FUNCTIONAL LOGIC HERE BASED ON THE USER PROMPT AND THE INTERACTIVITY/DATA RULES ABOVE. DO NOT USE PLACEHOLDERS."
+  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const list = container.querySelector('.data-list'); const btn = container.querySelector('button[type=\"submit\"]') || container.querySelector('button'); /* 1. If files exist, handle them */ if(fileInput) { fileInput.onchange = async (e) => { /* Upload logic using api.post('/uploads/') */ }; } /* 2. If a form exists, handle submission */ if(form) { form.onsubmit = async (e) => { e.preventDefault(); btn.disabled = true; try { await api.post('/custom-data/rows/' + schemaId, { data: {} }); alert('Success!'); form.reset(); } finally { btn.disabled = false; } }; } /* 3. If a list exists, fetch data */ if(list) { const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId); /* Mustache render logic */ }; fetchRows(); }"
 }
 """.strip()
 #endregion nontabletestingai
