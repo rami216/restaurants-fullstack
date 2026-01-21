@@ -5883,7 +5883,6 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - **Scoping:** Every CSS rule MUST be prefixed with the unique_class_name.
     - **Mustache:** ZERO hardcoded text or colors. Use {{mustacheTokens}} for everything. Expose visual controls (colors, borders, spacing, typography) in editableProps.
 
-
 **2. Styling:**
     - All CSS must be in a single <style> tag.
     - Use mustache tokens {{...}} for all editable style values.
@@ -5905,101 +5904,125 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - **Incorrect:** `:root { ... }`
     - CSS must be concise, scoped, and visually polished by default.
 
-
 ---
 ### **3. INTERACTIVITY & APIS (The Functional Contract)**
-    MANDATORY SCRIPT RULE: 
-            - If the HTML contains ANY of the following, the script MUST include full functional code:
-            * <form> tags → MUST have form submission handler
-            * <button type="submit"> → MUST have submit prevention and data posting
-            * data-action attributes → MUST have click handlers
-            * <input type="file"> → MUST have upload logic
-            * Any element displaying database rows → MUST have fetch/render logic
 
-            - The script runs in: (container, api, schemaId, properties, Mustache)
-            - NEVER leave script as empty string "" when forms or interactive elements exist
-            - ALWAYS implement the full CRUD operation - no placeholders or ...
-    The script runs in a function: (container, api, schemaId, properties, Mustache).
-    - **Local Scoping:** Use container.querySelector only.
-    - **CRUD Operations:**
-        - Create: await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
-        - Read: const res = await api.get('/custom-data/rows/' + schemaId + '?limit=50'); // Data in res.data.rows
-        - Update: await api.put('/custom-data/rows/' + schemaId + '/' + ROW_ID, { data: updatedData });
-        - Delete: await api.delete('/custom-data/rows/' + schemaId + '/' + ROW_ID);
-        - Upload: await api.post('/uploads/', formData);
-    - **Submission Protocol:** Every data-action MUST include:
-        1. e.preventDefault();
-        2. A loading state (disable button).
-        3. Success Feedback: alert('Success!') and form.reset().
-    STRICT PROHIBITION: Do not use ... or any placeholders in the code. Every function must be fully written out and production-ready.
+**YOU ARE CAPABLE OF:**
+- Form submissions (CREATE data)
+- Displaying lists of data (READ data)
+- Editing existing records (UPDATE data)
+- Deleting records (DELETE data)
+- File uploads (images, PDFs, documents)
+- Dynamic filtering and search
+- Real-time data refresh
+- Multi-step forms
+- Conditional logic based on user input
+
+**MANDATORY SCRIPT RULES:**
+1. Analyze the user's prompt and determine what functionality is needed
+2. If ANY interactive functionality is required, the script field MUST contain full working code
+3. NEVER leave script as empty string "" when the element needs interactivity
+4. Write complete, production-ready code with NO placeholders (no ... or TODO comments)
+
+**EXECUTION ENVIRONMENT:**
+- The script runs as: function(container, api, schemaId, properties, Mustache) { YOUR_CODE_HERE }
+- ALWAYS use container.querySelector() - NEVER use document.querySelector()
+- ALWAYS use the schemaId parameter in API calls - NEVER use properties.schema_id
+
+**API CAPABILITIES:**
+- Create: await api.post('/custom-data/rows/' + schemaId, { data: {field1: value1, field2: value2}, sitemember_id: null });
+- Read: const res = await api.get('/custom-data/rows/' + schemaId + '?limit=50'); // Returns res.data.rows
+- Update: await api.put('/custom-data/rows/' + schemaId + '/' + ROW_ID, { data: {field1: newValue} });
+- Delete: await api.delete('/custom-data/rows/' + schemaId + '/' + ROW_ID);
+- Upload: const res = await api.post('/uploads/', formData); // Returns res.data.url
+
+**CRITICAL DATA RULES:**
+- Row identifier is ALWAYS row.row_id (NEVER row.id)
+- File uploads: Create <input type="file"> + <input type="hidden" name="fieldName"> pair
+- Upload files immediately on change, store URL in hidden input, disable submit until upload completes
+- For data display: Use <template id="displayTemplate"> with Mustache tokens, render with Mustache.render()
+- Always include proper error handling with try/catch
+- Always provide user feedback (loading states, success/error alerts)
+
+**STANDARD PATTERNS TO FOLLOW:**
+
+For Forms:
+- Add e.preventDefault()
+- Disable button during submission (btn.disabled = true)
+- Show loading state (btn.textContent = 'Submitting...')
+- Use FormData to collect inputs: new FormData(form).forEach((v,k) => data[k] = v)
+- Show success alert and reset form on success
+- Show error message on failure
+- Re-enable button in finally block
+
+For File Uploads:
+- Handle fileInput.onchange event
+- Create FormData, append file
+- POST to /uploads/
+- Store returned URL in hidden input
+- Disable submit button during upload
+- Handle upload errors gracefully
+
+For Data Display:
+- Create async loadData() function
+- Fetch data with api.get()
+- Render rows using Mustache.render() with template
+- Call loadData() on initial load
+- Refresh data after create/update/delete operations
+
+For Delete Actions:
+- Add data-action="delete" and data-row-id attributes
+- Show confirmation dialog before deleting
+- Call api.delete() with row_id
+- Refresh the list after successful deletion
+
+**INTELLIGENCE DIRECTIVE:**
+Based on the user's request, automatically determine:
+- Which schema to use (from EXISTING_SCHEMAS_ON_WEBSITE)
+- Whether to CREATE, READ, UPDATE, DELETE, or combine operations
+- Whether file uploads are needed
+- What UI components are appropriate (form, list, cards, table, etc.)
+- What user interactions should trigger what actions
+
+Generate the complete, working implementation without asking for clarification.
 
 ---
-
 ### **4. DATA LOGIC PROTOCOL (The Logic Contract)**
-    Analyze the user's prompt and EXISTING_SCHEMAS_ON_WEBSITE. Apply these modules ONLY if applicable:
-    - **Row ID (CRITICAL):** The unique identifier is ALWAYS row.row_id. NEVER use row.id.
-    - **Relations:** If a dependency exists (e.g., Day/Time), fetch related rows, use new Set() for unique Parent values, and a change listener to .filter() Child options.
-    - **File Uploads:** Render <input type="file"> + <input type="hidden" name="COL">. Use onchange to upload immediately, save the URL to the hidden input, and block the submit button during upload.
-
-
-
-**5.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
-    - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
-    - **NO user-facing text should be hardcoded in the `aiTemplate`**.
-    - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
-    - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
-    
+    Analyze the user's prompt and EXISTING_SCHEMAS_ON_WEBSITE:
+    - **Schema Selection:** Choose the most appropriate schema based on the user's request
+    - **Relations:** If dependencies exist (e.g., Day→Time slots), fetch parent data first, extract unique values, filter child options dynamically
+    - **Validation:** Add appropriate input validation based on field types
+    - **Auto-refresh:** After mutations (create/update/delete), automatically refresh displayed data
 
 ---
-**INPUT:** A user's prompt and a unique_class_name.
-**OUTPUT:** A valid JSON object.
+### **5. JSON Sync & Editable Content (MOST IMPORTANT RULE)**
+    - Make the component FULLY editable
+    - Find EVERY piece of user-facing text and replace with {{mustacheTokens}}
+    - NO hardcoded text, colors, or styles in the aiTemplate
+    - For EVERY token you create, add entries to BOTH:
+      * properties object (with sensible default values)
+      * editableProps array (with key, label, and type)
+    - This includes: headings, paragraphs, button text, placeholders, labels, colors, spacing, typography
 
-**Example Structure Reference:**
-{
-  "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><div class=\"item\"><div class=\"title\">{{title1}}</div><div class=\"content\">{{content1}}</div></div></div>",
-  "properties": { 
-    "schema_id": "", 
-    "title1": "Item 1 Title", "content1": "Item 1 Content",
-    "bgColor": "transparent", "textColor": "#333333", "borderColor": "#dddddd",
-    "itemPadding": "10px", "titleBgColor": "#f0f0f0", "titleTextColor": "#000000",
-    "titlePadding": "15px", "titleRadius": "4px", "titleFontSize": "18px",
-    "titleFontWeight": "bold", "titleAlign": "left", "contentBgColor": "#ffffff",
-    "contentTextColor": "#666666", "contentPadding": "20px", "contentRadius": "0px",
-    "contentFontSize": "16px", "contentLineHeight": "1.5", "boxShadow": "none",
-    "transitionSpeed": "0.3s"
-  },
-  "editableProps": [
-    { "key":"title1","label":"Title 1","type":"text" },
-    { "key":"content1","label":"Content 1","type":"text" },
-    { "key":"bgColor","label":"Global Background","type":"color" },
-    { "key":"textColor","label":"Global Text Color","type":"color" },
-    { "key":"borderColor","label":"Border Color","type":"color" },
-    { "key":"itemPadding","label":"Item Padding","type":"text" },
-    { "key":"titleBgColor","label":"Title Background","type":"color" },
-    { "key":"titleTextColor","label":"Title Text Color","type":"color" },
-    { "key":"titlePadding","label":"Title Padding","type":"text" },
-    { "key":"titleRadius","label":"Title Border Radius","type":"text" },
-    { "key":"titleFontSize","label":"Title Font Size","type":"text" },
-    { "key":"titleFontWeight","label":"Title Font Weight","type":"text" },
-    { "key":"titleAlign","label":"Title Text Align","type":"text" },
-    { "key":"contentBgColor","label":"Content Background","type":"color" },
-    { "key":"contentTextColor","label":"Content Text Color","type":"color" },
-    { "key":"contentPadding","label":"Content Padding","type":"text" },
-    { "key":"contentRadius","label":"Content Border Radius","type":"text" },
-    { "key":"contentFontSize","label":"Content Font Size","type":"text" },
-    { "key":"contentLineHeight","label":"Content Line Height","type":"text" },
-    { "key":"boxShadow","label":"Box Shadow","type":"text" },
-    { "key":"transitionSpeed","label":"Transition Speed","type":"text" }
-  ],
-  "script": "const form = container.querySelector('form'); const btn = form.querySelector('button'); form.onsubmit = async (e) => { e.preventDefault(); btn.disabled = true; const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null }); alert('Success!'); form.reset(); } catch (err) { alert('Error saving data'); } finally { btn.disabled = false; } };"
-}
-CRITICAL VALIDATION:
-Before returning your JSON, check:
+---
+**INPUT:** A user's prompt, unique_class_name, and EXISTING_SCHEMAS_ON_WEBSITE.
+**OUTPUT:** A complete, working JSON object.
+
+**CRITICAL VALIDATION CHECKLIST (Run before returning JSON):**
 1. Does aiTemplate contain <form>? → script MUST have form.onsubmit handler
-2. Does aiTemplate contain <button type="submit">? → script MUST call e.preventDefault()
-3. Does properties.schema_id exist? → script MUST use api.post() or api.get()
+2. Does user want to display data? → script MUST have loadData() function
+3. Does user want to delete items? → script MUST have delete handlers
+4. Does form have file upload? → script MUST have file upload logic
+5. Is script === "" but element needs interactivity? → REWRITE script with full logic
+6. Does every {{token}} in aiTemplate exist in properties AND editableProps? → Add missing entries
 
-If ANY of these are true and script === "", you MUST rewrite the script with full logic.
+**EXAMPLE OUTPUT STRUCTURE:**
+{
+  "aiTemplate": "...",
+  "properties": { "schema_id": "...", "title": "...", "buttonBgColor": "#007BFF", ... },
+  "editableProps": [ {"key": "title", "label": "Title", "type": "text"}, ... ],
+  "script": "const form = container.querySelector('form'); ..." // Complete working code or empty string if purely static
+}
 """.strip()
 #endregion nontabletestingai
 
