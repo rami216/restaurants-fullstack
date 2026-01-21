@@ -3305,7 +3305,15 @@ async def generate_ai_element(
 
         content = resp.choices[0].message.content
         payload = json.loads(content)
-
+        # 🔍 DEBUG: Log the raw AI response
+        print("=" * 80)
+        print("🤖 RAW AI RESPONSE:")
+        print("=" * 80)
+        print(json.dumps(payload, indent=2))
+        print("=" * 80)
+        print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
+        print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
+        print("=" * 80)
         # Strip <script> wrapper if present
         if isinstance(payload.get("script"), str):
             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
