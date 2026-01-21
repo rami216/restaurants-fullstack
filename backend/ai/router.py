@@ -5610,20 +5610,17 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - CSS must be concise, scoped, and visually polished by default.
 
 3. Interactivity (script key):
-    - Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
-    - STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
-    - SYNTAX: Use arrow function expressions only (const x = () => {}).
-    - MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
-        - If Data-Driven: Implement fetchAndRenderRows to handle data display.
-        - If Relational: Implement separate api.get calls to populate dropdowns.
-        - If Form-Based: The onsubmit handler MUST follow this "SUBMISSION PROTOCOL":
-            1. Start with e.preventDefault();.
-            2. Disable the submit button and change text to "Saving...".
-            3. Wrap the API call in a try/catch block.
-            4. On Success: Use alert() to notify the user, reset the form, and re-fetch data if a list exists.
-            5. On Finally: Re-enable the submit button.
-    - STRICT PROHIBITION: Do NOT include placeholders. All code must be fully functional.
-         
+        - Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
+        - STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
+        - NO WRAPPERS: Do NOT wrap code in <script> tags.
+        - SYNTAX: Use arrow function expressions only (const x = () => {}).
+        - CRITICAL FORM RULE: If interacting with a form, the onsubmit handler MUST start with e.preventDefault(); as the very first line.
+        - MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
+            - If Data-Driven: Implement fetchAndRenderRows to handle data display.
+            - If Form-Based: Implement form.onsubmit to handle data entry/submission.
+            - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
+        **ACTION FEEDBACK:** For data actions (save/delete/update), you MUST include alert('Success!')andform.reset() in the success block so the user knows the action finished.         
+        
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     - **NO user-facing text should be hardcoded in the `aiTemplate`**.
@@ -5632,16 +5629,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     
 5. DATA LOGIC PROTOCOL (Implementation Rules):
         Analyze the user's prompt and EXISTING_SCHEMAS_ON_WEBSITE. Apply these modules ONLY if applicable:
-
+        *ROW IDENTIFIER (CRITICAL):** The unique identifier for any row in the database is ALWAYS row.row_id. NEVER use row.id in your scripts.
         - SCHEMA IDENTIFICATION:
             - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
             - If no clear match exists, set "schema_id": "" and ignore API logic.
             - Field names in forms MUST match column names in the schema exactly.
 
-        - ROW STRUCTURE (CRITICAL):
-            - When reading data (res.data.rows), the unique identifier is ALWAYS "row_id" (e.g., row.row_id). 
-            - NEVER use "row.id".
-            
         - API OPERATIONS (STRICT):
             - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });
             - Read: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50'); // Data is in res.data.rows
@@ -5709,7 +5702,41 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
     { "key":"btnText", "label":"Button Text", "type":"text" }
   ],
-  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const btn = form ? form.querySelector('button[type=\"submit\"]') : null; if (form && statusEl && btn) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); btn.disabled = true; statusEl.textContent = properties.statusLoadingText; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); statusEl.textContent = properties.statusSuccessText; form.reset(); } catch (err) { statusEl.textContent = properties.statusErrorText; } finally { btn.disabled = false; } }; }"
+  "script": "
+    const form = container.querySelector('form');
+    const btn = form.querySelector('button[type="submit"]');
+
+    form.onsubmit = async (e) => {
+    e.preventDefault();
+    
+    // 1. Loading State
+    btn.disabled = true;
+    const originalText = btn.innerText;
+    btn.innerText = 'Subscribing...';
+
+    const data = {};
+    new FormData(form).forEach((v, k) => data[k] = v);
+
+    try {
+        // 2. API Call
+        await api.post('/custom-data/rows/' + schemaId, { 
+        data, 
+        sitemember_id: properties.sitemember_id || null 
+        });
+
+        // 3. Success Feedback
+        alert('Successfully subscribed!');
+        form.reset();
+    } catch (err) {
+        console.error(err);
+        alert('Failed to subscribe. Please try again.');
+    } finally {
+        // 4. Cleanup
+        btn.disabled = false;
+        btn.innerText = originalText;
+    }
+    };
+  "
 
 }
 
@@ -5754,7 +5781,80 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><form><input name=\"name\" placeholder=\"{{namePlc}}\"><input type=\"file\"><input type=\"hidden\" name=\"cv_file\"><button type=\"submit\">{{btnText}}</button></form><div class=\"list-container\"></div><template id=\"displayTemplate\"><div class=\"card\">{{data.name}} - <a href=\"{{data.cv_file}}\">View CV</a></div></template></div>",
   "properties": { "schema_id": "JOBS_UUID_FROM_CONTEXT", "namePlc": "Your Name", "btnText": "Apply" },
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
-  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
+  "script": "
+    const form = container.querySelector('form');
+    const fileInput = container.querySelector('input[type="file"]');
+    const hiddenInput = container.querySelector('input[type="hidden"]');
+    const list = container.querySelector('.list-container');
+    const btn = form.querySelector('button[type="submit"]');
+
+    // 1. File Upload Logic
+    fileInput.onchange = async (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+
+    btn.disabled = true;
+    const oldText = btn.innerText;
+    btn.innerText = 'Uploading...';
+
+    try {
+        const formData = new FormData();
+        formData.append('file', file);
+        const res = await api.post('/uploads/', formData);
+        
+        // Support different response structures
+        const url = res.data ? res.data.url : res.url;
+        hiddenInput.value = url;
+        
+        alert('File ready!');
+    } catch (err) {
+        alert('Upload failed');
+    } finally {
+        btn.disabled = false;
+        btn.innerText = oldText;
+    }
+    };
+
+    // 2. Submit Logic
+    form.onsubmit = async (e) => {
+    e.preventDefault();
+    btn.disabled = true;
+
+    const data = {};
+    new FormData(form).forEach((v, k) => data[k] = v);
+
+    try {
+        await api.post('/custom-data/rows/' + schemaId, { 
+        data, 
+        sitemember_id: properties.sitemember_id || null 
+        });
+        alert('Application sent!');
+        form.reset();
+        fetchRows(); // Refresh list after save
+    } catch (err) {
+        alert('Error saving application');
+    } finally {
+        btn.disabled = false;
+    }
+    };
+
+    // 3. Render Logic (Crucial for row_id)
+    const fetchRows = async () => {
+    const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10');
+    const rows = res.data ? res.data.rows : [];
+    const tmpl = container.querySelector('#displayTemplate').innerHTML;
+
+    list.innerHTML = rows.map(row => {
+        // We explicitly pass row_id so Update/Delete works
+        return Mustache.render(tmpl, { 
+        data: row.data, 
+        row_id: row.row_id 
+        });
+    }).join('');
+    };
+
+    fetchRows();
+  "
 }
 
 
