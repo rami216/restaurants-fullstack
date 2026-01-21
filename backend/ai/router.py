@@ -3291,7 +3291,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_1},
+                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -5317,6 +5317,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 
 ---
+
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
 
