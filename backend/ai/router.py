@@ -3291,7 +3291,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": NEW_ELEMENT_GENERATOR_NO_TABLE},
+                {"role": "system", "content": NEW_1_DATA_APP_GENERATOR_PROMPT_NO_TABLE},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -5175,46 +5175,55 @@ async def refine_data_app_element(
 
 
 #region nontabletestingai
-
-NEW_NON_TABLE_AI_FULL_TEST_1 = """
+NEW_1_DATA_APP_GENERATOR_PROMPT_NO_TABLE = """
+you should not create any table in database even if the parts below suggestes that, okay!!(just do what the user wants but dont create any table in database!), and all forms should be visibale(i.e not hidden even if below parts suggested that!)
 You are an expert full-stack developer creating a single, self-contained, interactive CRUD data table element using Tailwind CSS for a professional, modern UI.
 
-Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemplate", "properties", "editableProps", and "script".
 
 ---
 ### **CRITICAL RULES FOR YOUR OUTPUT**
 
 1.  **Analyze Existing Schemas for Relationships (MOST IMPORTANT RULE):**
-    -   You will be provided a list of EXISTING_SCHEMAS_ON_WEBSITE..
-    -   NO ROOT SCHEMA: All field definitions MUST be placed inside "properties.schema_fields". NEVER return a root-level "schema" key.
-    -   When a user's prompt matches an existing schema, you MUST create a relational field inside properties.schema_fields.
-    -   For relations, the field must have: "type": "relation" and "related_schema_id": "the_uuid".
-    -   If the prompt mentions "image", "photo", "avatar" -> use "type": "image". If it mentions "file", "pdf", "document" -> use "type": "file". These types trigger the mandatory immediate upload logic in the script.
-    
+    -   You will be provided a list of `EXISTING_SCHEMAS_ON_WEBSITE`.
+    -   When a user's prompt mentions a concept that matches an existing schema (e.g., prompt is "create a list of employees with their department" and a "Departments" schema exists), you **MUST** create a relational field.
+    -   To create a relation, the field in your `schema` output must have:
+        -   `"type": "relation"`
+        -   `"related_schema_id": "the_uuid_of_the_existing_schema"`
+    -   If the prompt describes a new concept with no matching existing schema, you should use standard types like "text", "number", etc.
+    -   File/Image Handling: If the prompt mentions "image", "photo", "avatar" -> use "type": "image". If it mentions "file", "pdf", "document", "attachment" -> use "type": "file".
 
+2.  **`name`**: A short, human-readable name for this data table. **This MUST be based directly on the user's prompt** (e.g., if the prompt asks for a "User Management System", the name MUST be "User Management System").
 
-2.  aiTemplate: The main HTML structure. DO NOT hardcode Tailwind spacing or color classes. Use Mustache tokens for all visual values. It MUST include:
-        - A <style> tag scoped using the unique_class_name. It MUST include rules for tokens: .{unique_class_name} .container { background: {{containerBg}}; padding: {{containerPadding}}; }, .{unique_class_name} .title { color: {{titleColor}}; }, and .{unique_class_name} .add-new-btn { background-color: {{buttonBgColor}}; }.
-        - A main container div using a container class.
-        - A header div containing a static main title (title class) and a static "Add New" button (add-new-btn class).
-        - Three EMPTY containers: .form-container (hidden by default), .data-display, and .pagination-controls.
-        - A <template id="displayTemplate">: This is where row rendering logic lives.
-            - For relational fields: Use {{data.field_id.display_label}}.
-            - For images: Render <img src="{{data.field}}" class="h-10 w-10 object-cover">.
-            - For files: Render <a href="{{data.field}}" target="_blank">Download</a>.
+3.  **`schema`**: An array of objects defining the database fields. Each must have `id`, `label`, and `type`. The `id` must be a single lowercase word (e.g., 'job_title') suitable for a JavaScript object key. Use the relationship rule above where applicable.
 
-3. Internal Row Template: Inside the aiTemplate, the <template id="displayTemplate"> must define the structure for a single data row.
-    - NO HARDCODED DESIGN: Replace specific classes like bg-white or border-gray-100 with generic classes or Mustache tokens (e.g., {{rowBg}}, {{rowBorder}}) to allow for design flexibility.
-    - Relational Data: For relational fields, always use {{data.field_id.display_label}}.
-    - Action Buttons: It MUST include Edit and Delete buttons with data-row-id="{{row_id}}". Use class names edit-btn and delete-btn. Their visual styling (colors, padding) MUST be controlled by Mustache tokens defined in the <style> tag.
+4.  **`aiTemplate`**: The main HTML structure. It MUST include:
+    -   A `<style>` tag for all CSS, scoped using the `unique_class_name`. **CRITICAL:** The style tag MUST include:
+            * `.{unique_class_name} .title { color: {{titleColor}}; }`
+            * `.{unique_class_name} .add-new-btn { background-color: {{buttonBgColor}}; }`
+    -   A main container with Tailwind classes: `p-6 bg-white rounded-xl shadow-lg border border-gray-100`.
+    -   A header `div` with class `flex justify-between items-center mb-6`.
+    -   A static main title `<h3>` or `<h2>` with classes `text-2xl font-bold title`. The `title` class is required for CSS styling.
+    -   A static "Add New" button with classes `add-new-btn px-4 py-2 text-white rounded-lg font-semibold transition-all active:scale-95`. **(DO NOT add bg-blue-600 or any background color class.)**
+    -   An **EMPTY** container for the form: `<div class="form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden"></div>`.
+    -   An **EMPTY** container for displaying the data: `<div class="data-display space-y-3 w-full overflow-x-auto"></div>`.
+    -   An **EMPTY** container for pagination controls: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
+    -   A `<template id="displayTemplate">`.
+    -   Files/Images: If a field is image, render <img src="{{data.field}}" class="h-10 w-10 object-cover">. If file, render <a href="{{data.field}}" target="_blank" class="text-blue-500 underline">Download</a>.
 
-4.  **Styling & Editable Properties (`properties`, `editableProps`)**:
+5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
+    -   It MUST be a `div` with class: `flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow`.
+    -   For regular fields, you **MUST** use `{{data.field_id}}` inside a `div` with class `flex-1`.
+    -   CRITICAL: For relational fields, use {{data.field_id.display_label}}. This label is dynamically generated by the script's pre-processing logic to handle both simple names and complex concatenations like time slots.
+    -   It **MUST** include edit/delete buttons in a `div` with class `flex gap-2`. Buttons must have `data-row-id="{{row_id}}"`. Use classes: `edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded` and `delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded`.
+
+6.  **Styling & Editable Properties (`properties`, `editableProps`)**:
     -   Make the component's styling fully editable.
     -   All style values and user-facing text (like titles and buttons) MUST use mustache tokens.
     -   For EVERY token, add a corresponding entry in `properties` and `editableProps`.
     -   **CRITICAL SCOPING RULE:** Every CSS rule **MUST** be prefixed with the given `unique_class_name`.
 
-5.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
+7.  **`script`**: A complete, raw JavaScript string that makes the element interactive.
     -   It is executed in a function that receives `(container, api, schemaId, properties, Mustache)`.
     -   STRICT LOCAL SCOPING: You MUST NOT use document.querySelector. You MUST only use container.querySelector so multiple forms on one page do not conflict.
     -   **UI SYNCHRONIZATION (MANDATORY):** The script MUST explicitly select and update the static UI elements (Title, Add Button) using the values from `properties` at the very top of the execution. This ensures the editor updates immediately.
@@ -5225,12 +5234,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     -   Initial Load Guard: The script MUST check if (properties.hideData) return; at the very beginning of the fetchAndRenderRows function to prevent private data from loading.
     -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
     -   **Accessing the Schema:** You **MUST** get the schema from `properties.schema_fields`.
-    -   **Form Generation (STYLING DYNAMIC): The script MUST dynamically generate a <form> and its input fields inside the form-container`.
-        -  The <form> element MUST use dynamic styling classes from properties (e.g., form.className = properties.formGridClass).`.
-        -   Every <label> created MUST use the class defined in properties.labelClass.
-        -   Every <input> and <select> created MUST use the class defined in properties.inputClass.
-        -   The submitBtn created MUST use the class defined in properties.submitBtnClass and the background color from properties.buttonBgColor.
-        -   For fields with type: "relation", it MUST generate a <select> dropdown and populate it by fetching rows for the related_schema_id.
+    -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container`.
+        -   The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
+        -   Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
+        -   Every `<input>` and `<select>` created MUST have class: `w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all`.
+        -   The `submitBtn` created MUST have class: `md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2`.
+        -   For fields with `type: "relation"`, it **MUST** generate a `<select>` dropdown.
         -   It must then make a separate API call to fetch the rows for the `related_schema_id` to populate the dropdown's `<option>` elements.
         -   **ULTRA-CRITICAL SCRIPT RULE:** The script must populate the dropdown dynamically. It must:
                 1.  Find the related schema's definition within the `properties.all_schemas`.
@@ -5244,42 +5253,54 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         -   IF schema field type is 'file' or 'image':
                 1- Create an <input type="file">.
                 2- Create a <input type="hidden" name="FIELD_ID"> to store the URL.
-                3- Add an onchange listener to the file input. The script MUST first define the elements it uses::
-                    const input = wrapper.querySelector('input[type="file"]');
-                    const hiddenUrl = wrapper.querySelector('input[type="hidden"]');
-                    const btn = form.querySelector('button');
+                3- Add an onchange listener to the file input:
                     input.onchange = async (e) => {
-                        const file = e.target.files[0];
-                        if (!file) return;
-                        const oldText = btn ? btn.innerText : 'Submit';
-                        if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
-                        try {
-                            const formData = new FormData();
-                            formData.append('file', file);
-                            const res = await api.post('/uploads/', formData);
-                            const url = res.data ? res.data.url : res.url;
-                            if (url) {
-                                hiddenUrl.value = url;
-                                const msg = document.createElement('span');
-                                // Changed to use tokens for design freedom:
-                                msg.style.color = properties.uploadSuccessColor;
-                                msg.style.fontSize = properties.uploadSuccessSize;
-                                msg.className = 'block mt-1';
-                                msg.innerText = '✓ {{uploadSuccessText}}';
-                                if(input.nextSibling?.innerText?.includes('✓')) input.nextSibling.remove();
-                                input.parentNode.insertBefore(msg, input.nextSibling);
-                            }
-                        } catch(err) { alert('Upload failed'); input.value = ''; }
-                        finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } }
-                    };
+                const file = e.target.files[0];
+                if (!file) return;
+                
+                // FIX: Select button safely (without relying on type="submit")
+                const btn = form.querySelector('button');
+                const oldText = btn ? btn.innerText : 'Submit';
+                
+                if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
+                
+                try {
+                    const formData = new FormData();
+                    formData.append('file', file);
+                    
+                    // FIX: Use 'api.post' to ensure it hits the backend URL, not the frontend
+                    const res = await api.post('/uploads/', formData);
+                    
+                    // Handle different response structures
+                    const url = res.data ? res.data.url : res.url;
+                    
+                    if (url) {
+                        hiddenUrl.value = url;
+                        
+                        // Visual success
+                        const msg = document.createElement('span');
+                        msg.className = 'text-xs text-green-600 block mt-1';
+                        msg.innerText = '\\u2713 Ready';
+                        if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove();
+                        input.parentNode.insertBefore(msg, input.nextSibling);
+                    }
+                } catch(err) {
+                    console.error('Upload error:', err);
+                    alert('Upload failed');
+                    input.value = '';
+                } finally {
+                    if(btn) { btn.disabled = false; btn.innerText = oldText; }
+                }
+            };
     -   DYNAMIC HIERARCHY LOGIC: If the prompt implies a dependency (e.g., "Time for a specified Day" or "A for each B"):
-            1- The script MUST identify the 'Parent' field and the 'Child' field from the schema.
-            2- The script MUST fetch the Child relational data once and store it.
-            3- Add a change event listener to the Parent <select>.
-            4-  DYNAMIC FILTERING MATCH: When the Parent changes, the script MUST:
-                - Clear the Child dropdown.
-                - Filter rows where the Child data matches the selected Parent text.
-                - Re-populate the Child dropdown: Every new <option> created MUST inherit the same CSS classes as the Parent <select> (e.g., opt.className = properties.inputClass) to ensure design consistency without being strict.
+            1- The script MUST identify the 'Parent' field (e.g., Day) and the 'Child' field (e.g., Time) from the schema.
+            2- The script MUST fetch the Child relational data once and store it in a constant variable.
+            3- Add a change event listener to the Parent <select> dropdown.
+            4- DYNAMIC FILTERING MATCH: Whenever the Parent changes, the script MUST:
+                - Clear the Child dropdown completely.
+                - Identify the property in the Child data that matches the Parent's schema.
+                - Use .filter() to find rows where that property exactly matches the textContent of the selected Parent option.
+                - Re-populate the Child dropdown using the Child/Standalone concatenation format (e.g., showing the full time range).
    -   **DATA VISIBILITY & PRIVACY PROTOCOL (CRITICAL):**
             The script MUST strictly follow the user's intent regarding data visibility.
                 1.  **SCENARIO A: Public/Write-Only (e.g., "don't load data", "booking form", "privacy"):**
@@ -5362,38 +5383,32 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **Example `unique_class_name`:** `.ai-contact-list-12345`
 **Example Output:**
 {
-  "aiTemplate": "<style>.{{unique_class_name}} .container { background: {{containerBg}}; padding: {{containerPadding}}; border-radius: {{radius}}; border: 1px solid {{borderColor}}; shadow: {{boxShadow}}; } .{{unique_class_name}} .title { color: {{titleColor}}; font-size: {{titleSize}}; } .{{unique_class_name}} .add-new-btn { background-color: {{buttonBgColor}}; border-radius: {{btnRadius}}; padding: {{btnPadding}}; }</style><div class=\"{{unique_class_name}} container\"><div class=\"flex justify-between items-center mb-6\"><h3 class=\"title\">{{title}}</h3><button class=\"add-new-btn text-white font-semibold transition-all active:scale-95\">{{addButtonText}}</button></div><div class=\"form-container hidden\"></div><div class=\"data-display space-y-3 w-full overflow-x-auto\"></div><div class=\"pagination-controls mt-6 flex justify-center gap-2\"></div><template id=\"displayTemplate\"><div class=\"flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow\"><div class=\"flex-1\"><p class=\"font-bold text-gray-900\">{{data.name}}</p><p class=\"text-sm text-gray-500\">{{data.email}}</p></div><div class=\"flex gap-2\"><button class=\"edit-btn\" data-row-id=\"{{row_id}}\">Edit</button><button class=\"delete-btn\" data-row-id=\"{{row_id}}\">Delete</button></div></div></template></div>",
+  "name": "Contact List",
+  "schema": [
+    { "id": "name", "label": "Name", "type": "text" },
+    { "id": "email", "label": "Email", "type": "email" }
+  ],
+  "aiTemplate": "<style>.ai-contact-list-12345 .title { color: {{titleColor}}; } .ai-contact-list-12345 .add-new-btn { background-color: {{buttonBgColor}}; margin-bottom: 1rem; }</style><div class=\\"p-6 bg-white rounded-xl shadow-lg border border-gray-100\\"><div class=\\"flex justify-between items-center mb-6\\"><h3 class=\\"text-2xl font-bold title\\">{{title}}</h3><button class=\\"add-new-btn px-4 py-2 text-white rounded-lg font-semibold hover:opacity-90 transition\\">{{addButtonText}}</button></div><div class=\\"form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden\\"></div><div class=\\"data-display space-y-3 w-full overflow-x-auto\\"></div><div class=\\"pagination-controls mt-6 flex justify-center gap-2\\"></div></div><template id=\\"displayTemplate\\"><div class=\\"flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow\\"><div class=\\"flex-1\\"><p class=\\"font-bold text-gray-900\\">{{data.name}}</p><p class=\\"text-sm text-gray-500\\">{{data.email}}</p></div><div class=\\"flex gap-2\\"><button class=\\"edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
   "properties": {
     "title": "Contact List",
     "addButtonText": "Add Contact",
-    "containerBg": "#ffffff",
-    "containerPadding": "24px",
-    "radius": "12px",
-    "borderColor": "#f3f4f6",
-    "boxShadow": "0 10px 15px -3px rgba(0,0,0,0.1)",
     "titleColor": "#111827",
-    "titleSize": "24px",
-    "buttonBgColor": "#3b82f6",
-    "btnRadius": "8px",
-    "btnPadding": "8px 16px",
-    "schema_fields": [
-      { "id": "name", "label": "Name", "type": "text" },
-      { "id": "email", "label": "Email", "type": "email" }
-    ]
+    "borderColor": "#e5e7eb",
+    "buttonBgColor": "#3b82f6"
   },
   "editableProps": [
     { "key": "title", "label": "Title", "type": "text" },
-    { "key": "containerBg", "label": "Background Color", "type": "color" },
+    { "key": "addButtonText", "label": "Add Button Text", "type": "text" },
     { "key": "titleColor", "label": "Title Color", "type": "color" },
+    { "key": "borderColor", "label": "Border Color", "type": "color" },
     { "key": "buttonBgColor", "label": "Button Color", "type": "color" }
   ],
-  "script": "
-  const schema = properties.schema_fields || [];
+  "script": "const schema = properties.schema_fields || [];
 const dataDisplay = container.querySelector('.data-display');
 const formContainer = container.querySelector('.form-container');
 const addButton = container.querySelector('.add-new-btn');
 const paginationControls = container.querySelector('.pagination-controls');
-const titleElement = container.querySelector('h2, h3');
+const titleElement = container.querySelector('h2, h3'); // Select the header
 
 let editingRowId = null;
 let currentRows = [];
@@ -5403,11 +5418,11 @@ const rowsPerPage = 20;
 
 if (titleElement) {
     titleElement.textContent = properties.title;
-    titleElement.style.color = properties.titleColor;
+    if (properties.titleColor) titleElement.style.color = properties.titleColor;
 }
 if (addButton) {
     addButton.textContent = properties.addButtonText;
-    addButton.style.backgroundColor = properties.buttonBgColor;
+    if (properties.buttonBgColor) addButton.style.backgroundColor = properties.buttonBgColor;
 }
 
 // 1. DATA MUTATION CONFIGURATION
@@ -5450,49 +5465,91 @@ const runCrossTableMutations = async (mode, formData, sitemember_id) => {
 
 // 3. FETCH & RENDER (With Privacy & Boolean Fixes)
 const fetchAndRenderRows = async () => {
+    // PRIVACY: Stop if hideData is on
     if (properties.hideData) return;
+
     try {
         const skip = currentPage * rowsPerPage;
         const res = await api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage);
         currentRows = res.data?.rows || res.rows || [];
         dataDisplay.innerHTML = '';
         const tmpl = container.querySelector('#displayTemplate').innerHTML;
+
         currentRows.forEach(row => {
             const div = document.createElement('div');
             const rowData = { ...row.data };
+
             schema.forEach(f => {
-                if (f.type === 'boolean') rowData[f.id] = (rowData[f.id] === true || rowData[f.id] === 'true') ? 'true' : 'false';
+                // ✅ BOOLEAN DISPLAY FIX
+                if (f.type === 'boolean') {
+                    const val = rowData[f.id];
+                    // Forces strict string 'true' or 'false'
+                    rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false';
+                }
+
+                // RELATION FIX
                 if (f.type === 'relation' && rowData[f.id]) {
                     const d = rowData[f.id].data || rowData[f.id];
-                    rowData[f.id].display_label = d[f.id] || Object.values(d).find(v => typeof v !== 'object') || '---';
+                    let label = d[f.id];
+                    if (!label) label = Object.values(d).filter(v => typeof v !== 'object')[0];
+                    rowData[f.id].display_label = label || '---';
                 }
+                // ✅ FILE/IMAGE DISPLAY FIX
+            if (rowData[f.id] && (f.type === 'file' || f.type === 'image')) {
+                // If the template expects a string, we give it the URL.
+                // But if the AI template logic (Mustache) isn't set up for images, 
+                // we can force HTML injection here if we modify the Mustache template dynamically, 
+                // but usually, we just ensure the URL is clean.
+                // For now, ensure it's treated as a string URL.
+                rowData[f.id] = String(rowData[f.id]);
+            }
             });
-            div.innerHTML = Mustache.render(tmpl, { data: rowData, row_id: row.row_id });
+
+            div.innerHTML = Mustache.render(tmpl, {
+                data: rowData,
+                row_id: row.row_id
+            });
             dataDisplay.appendChild(div);
         });
+        
+        // Update pagination buttons after rendering rows
         renderPagination();
-    } catch (err) { console.error(err); }
+        
+    } catch (err) {
+        console.error(err);
+    }
 };
 
 // 4. PAGINATION LOGIC
 const renderPagination = () => {
     if (!paginationControls) return;
     paginationControls.innerHTML = '';
-    const createBtn = (text, disabled, onClick) => {
-        const btn = document.createElement('button');
-        btn.textContent = text;
-        // Use property for style instead of hardcoded class
-        btn.style.padding = '4px 12px';
-        btn.style.border = '1px solid ' + properties.borderColor;
-        btn.style.borderRadius = '4px';
-        btn.disabled = disabled;
-        btn.style.opacity = disabled ? '0.5' : '1';
-        btn.onclick = onClick;
-        return btn;
+
+    const prevBtn = document.createElement('button');
+    prevBtn.textContent = 'Previous';
+    prevBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    prevBtn.disabled = currentPage === 0;
+    prevBtn.onclick = () => {
+        if (currentPage > 0) {
+            currentPage--;
+            fetchAndRenderRows();
+        }
     };
-    paginationControls.appendChild(createBtn('Previous', currentPage === 0, () => { currentPage--; fetchAndRenderRows(); }));
-    paginationControls.appendChild(createBtn('Next', currentRows.length < rowsPerPage, () => { currentPage++; fetchAndRenderRows(); }));
+    paginationControls.appendChild(prevBtn);
+
+    const nextBtn = document.createElement('button');
+    nextBtn.textContent = 'Next';
+    nextBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed';
+    nextBtn.disabled = currentRows.length < rowsPerPage;
+    nextBtn.onclick = () => {
+        if (currentRows.length === rowsPerPage) {
+            currentPage++;
+            fetchAndRenderRows();
+        }
+    };
+    paginationControls.appendChild(nextBtn);
 };
+
 // 5. FORM GENERATION
 const generateForm = async (initialData = {}) => {
     formContainer.innerHTML = '';
@@ -5729,5 +5786,5 @@ renderPagination();
 
 
 
-
 #endregion nontabletestingai
+
