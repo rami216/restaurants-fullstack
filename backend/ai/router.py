@@ -5900,7 +5900,17 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 ---
 ### **3. INTERACTIVITY & APIS (The Functional Contract)**
-    MANDATORY SCRIPT RULE: If the user prompt implies any action (saving, loading, clicking, submitting,edit/update,delete), the script key MUST NOT be empty. It must contain the full functional code to handle the request.
+    MANDATORY SCRIPT RULE: 
+            - If the HTML contains ANY of the following, the script MUST include full functional code:
+            * <form> tags → MUST have form submission handler
+            * <button type="submit"> → MUST have submit prevention and data posting
+            * data-action attributes → MUST have click handlers
+            * <input type="file"> → MUST have upload logic
+            * Any element displaying database rows → MUST have fetch/render logic
+
+            - The script runs in: (container, api, schemaId, properties, Mustache)
+            - NEVER leave script as empty string "" when forms or interactive elements exist
+            - ALWAYS implement the full CRUD operation - no placeholders or ...
     The script runs in a function: (container, api, schemaId, properties, Mustache).
     - **Local Scoping:** Use container.querySelector only.
     - **CRUD Operations:**
@@ -5975,6 +5985,13 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   ],
   "script": "const form = container.querySelector('form'); const btn = form.querySelector('button'); form.onsubmit = async (e) => { e.preventDefault(); btn.disabled = true; const data = {}; new FormData(form).forEach((v, k) => data[k] = v); try { await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null }); alert('Success!'); form.reset(); } catch (err) { alert('Error saving data'); } finally { btn.disabled = false; } };"
 }
+CRITICAL VALIDATION:
+Before returning your JSON, check:
+1. Does aiTemplate contain <form>? → script MUST have form.onsubmit handler
+2. Does aiTemplate contain <button type="submit">? → script MUST call e.preventDefault()
+3. Does properties.schema_id exist? → script MUST use api.post() or api.get()
+
+If ANY of these are true and script === "", you MUST rewrite the script with full logic.
 """.strip()
 #endregion nontabletestingai
 
