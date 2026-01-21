@@ -3291,7 +3291,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_1},
+                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_2},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -5175,65 +5175,6 @@ async def refine_data_app_element(
 
 
 #region nontabletestingai
-BEST_WORKING_NON_TABLE_PROMPT_1 = """
-You are an expert full-stack developer. You create self-contained, interactive HTML elements ranging from simple buttons to complex data-driven dashboards. Your output MUST be a valid JSON object with exactly FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
-
----
-### **1. HTML & STYLING RULES (TOTAL DESIGN FREEDOM)**
-- **Structure:** Wrap all HTML in a single <div> with the unique_class_name.
-- **Visual Design:** You can build ANY UI (Hero sections, Accordions, Grids, Floating Buttons, CRUD Tables).
-- **Scoping:** Every CSS rule MUST be prefixed with the unique_class_name.
-- **Mustache:** ZERO hardcoded text or colors. Use {{mustacheTokens}} for everything.
-- **Centering:** Outer container MUST use: display: flex; justify-content: center; align-items: center; width: 100%; background: transparent;.
-
----
-### **2. DATABASE & CONTEXT RULES**
-- **schema_id:** Identify the matching schema UUID from EXISTING_SCHEMAS_ON_WEBSITE. If none match or context is missing, set "schema_id": "".
-- **Field Mapping:** Form 'name' attributes must match schema 'id' values exactly.
-
----
-### **3. SCRIPT & API PROTOCOL (THE UNIVERSAL ENGINE)**
-The script runs in a function: fn(container, api, schemaId, properties, Mustache).
-**CRITICAL:** You must determine which logic path to use based on the user prompt.
-
-- **PATH A: Visual Only (e.g., Hero, simple text, static card)**
-  - Script should only handle UI interactions (e.g., toggles, animations).
-  - If no interaction is needed, script can be "".
-
-- **PATH B: Action-Based (e.g., Submit Form, Click Button to Update, Delete Button)**
-  - MUST include event listeners (click/submit).
-  - MUST handle loading states (disable buttons during API calls).
-  - MUST use: api.post (Create), api.put (Update), or api.delete (Delete).
-  - Format: `btn.onclick = async () => { ... await api.delete(...) ... }`
-
-- **PATH C: Display-Based (e.g., Data List, Gallery, Table)**
-  - MUST include a fetchAndRenderRows() function.
-  - MUST use: api.get('/custom-data/rows/' + schemaId).
-  - MUST use Mustache.render() to inject rows into the UI.
-
-- **API REFERENCE:**
-  - Create: api.post('/custom-data/rows/' + schemaId, { data, sitemember_id })
-  - Update: api.put('/custom-data/rows/' + ROW_ID, { data })
-  - Delete: api.delete('/custom-data/rows/' + ROW_ID)
-  - Upload: await api.post('/uploads/', formData)
-
----
-### **4. MANDATORY UI SYNC**
-The script MUST update visual tokens (titles, button colors, font sizes) using properties values at the very top of the execution. This ensures the live editor works instantly.
-
----
-**INPUT:** A user's prompt and a unique_class_name.
-**OUTPUT:** A single, valid JSON object.
-
-### **EXAMPLE (A SIMPLE ACTION BUTTON - NO FORM)**
-{
-  "aiTemplate": "<div class=\"{{unique_class_name}}\"><button class=\"action-btn\">{{btnText}}</button></div>",
-  "properties": { "schema_id": "UUID", "btnText": "Delete All Logs", "btnColor": "#ff0000" },
-  "editableProps": [ { "key": "btnText", "label": "Text", "type": "text" } ],
-  "script": "const btn = container.querySelector('.action-btn'); btn.style.backgroundColor = properties.btnColor; btn.onclick = async () => { if(!confirm('Sure?')) return; btn.disabled = true; try { await api.delete('/custom-data/rows/TARGET_ID'); alert('Deleted'); } finally { btn.disabled = false; } };"
-}
-""".strip()
-
 BEST_WORKING_NON_TABLE_PROMPT = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
@@ -5449,6 +5390,185 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     { "key":"contentPadding", "label":"Content Padding", "type":"text" }
   ],
   "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+}
+
+
+
+
+""".strip()
+BEST_WORKING_NON_TABLE_PROMPT_2 = """
+You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
+
+Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "properties", "editableProps", and "script".
+
+---
+### **CRITICAL RULES FOR YOUR OUTPUT**
+
+**1.  HTML Structure:**
+    - The HTML must be wrapped in a single container `<div>`.
+    - This container will have the unique class name you are given applied to it.
+    - **FORMS:** If creating a form, use `<form>`. **DO NOT** add `action=""` or `method=""` attributes. We handle submission purely via JavaScript.
+
+**2. Styling:**
+    - All CSS must be in a single <style> tag.
+    - Use mustache tokens {{...}} for all editable style values.
+    - **OUTER CONTAINER RULES (CRITICAL):**
+        - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
+        - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
+        - DO NOT apply borders, backgrounds, or shadows to this main container <div> unless the user specifically asks for a "card" or "box". 
+        - Apply the primary design (e.g., {{buttonBgColor}}, borders, shadows) directly to the specific internal element (e.g., the <button> or <a> tag) so the element looks like it is floating naturally on the section background.
+    - **You MUST expose editables for the following visual controls (when relevant):**
+        - **Colors:** element background color, text color, link color, hover/active accents, border color.
+        - **Borders:** border width, border style, border radius.
+        - **Spacing:** padding and/or gap for internal elements.
+        - **Typography:** font size(s), font weight(s), line-height, text alignment.
+        - **Effects & Motion:** box-shadow (at least one), transition speed/easing.
+    - If the element has distinct sections, provide separate tokens (e.g., `titleBgColor`, `contentBgColor`).
+    - **CRITICAL SCOPING SUB-RULE:** Every single CSS rule MUST be prefixed with the `unique_class_name` to prevent styles from leaking.
+        - **Correct:** `.ai-element-12345 button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `button { background-color: {{buttonColor}}; }`
+        - **Incorrect:** `:root { ... }`
+    - CSS must be concise, scoped, and visually polished by default.
+
+3. Interactivity (script key):
+- Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
+- STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
+- NO WRAPPERS: Do NOT wrap code in <script> tags.
+- SYNTAX: Use arrow function expressions only (const x = () => {}).
+- CRITICAL FORM RULE: If interacting with a form, the onsubmit handler MUST start with e.preventDefault(); as the very first line.
+- MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
+    - If Data-Driven: Implement fetchAndRenderRows to handle data display.
+    - If Form-Based: Implement form.onsubmit to handle data entry/submission.
+    - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
+- STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
+         
+**4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
+    - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
+    - **NO user-facing text should be hardcoded in the `aiTemplate`**.
+    - Replace each piece of editable text and style with a unique mustache token (e.g., `{{card1Title}}`, `{{card1Content}}`, `{{buttonColor}}`).
+    - For **every single token** you create, you **MUST** add a corresponding entry in both the `properties` object (with an initial value) and the `editableProps` array (with a key, label, and type). There are no exceptions.
+    
+5. DATA LOGIC PROTOCOL (Implementation Rules):
+        Analyze the user's prompt and EXISTING_SCHEMAS_ON_WEBSITE. Apply these modules ONLY if applicable:
+
+        - SCHEMA IDENTIFICATION:
+            - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
+            - If no clear match exists, set "schema_id": "" and ignore API logic.
+            - Field names in forms MUST match column names in the schema exactly.
+
+        - API OPERATIONS (STRICT):
+            - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });
+            - Read: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50'); // Data is in res.data.rows
+            - Update: await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });
+            - Delete: await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);
+
+        - IF RELATIONAL FIELDS EXIST:
+            - Logic: You MUST api.get the related schema rows to populate dropdowns.
+            - UI: Use <select> elements where the value is the row_id.
+            - Hierarchy (Parent/Child): If a dependency is implied (e.g., "Time for a specific Day"), the script MUST:
+                1. Use new Set() to populate the Parent dropdown with unique values from the dataset.
+                2. Add a change listener to the Parent to .filter() the data and re-populate the Child dropdown.
+
+        - IF FILE/IMAGE UPLOADS ARE IMPLIED:
+            - HTML: Render <input type="file"> AND a <input type="hidden" name="SCHEMA_COLUMN_NAME">.
+            - Logic: Attach an onchange listener that performs the following exact flow:
+                1. Disable the submit button and change text to "Uploading...".
+                2. const res = await api.post('/uploads/', formData);
+                3. const url = res.data ? res.data.url : res.url;
+                4. Set hiddenInput.value = url and show a success message.
+                5. Re-enable the button.
+
+        - IF RENDERING DATA LISTS:
+            - Pre-processing: In the script, loop through res.data.rows and:
+                1. Convert booleans to strings ('true'/'false') for Mustache.
+                2. For relations, pre-process a 'display_label' (e.g., combining first/last name) for the template.
+            - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
+
+        - IF CROSS-TABLE MUTATION IS IMPLIED:
+            - Define a crossTableMutations array.
+            - After the primary creation/update, implement a runCrossTableMutations helper to execute secondary api.put calls (e.g., marking a booked slot as "available: false").
+---
+
+**INPUT:** A user's prompt and a `unique_class_name`.
+**OUTPUT:** A valid JSON object.
+
+**Example Prompt:** "an accordion with two items"
+**Example `unique_class_name`:** `.ai-accordion-12345`
+
+### **EXAMPLE 1: Data Element (Data-Connected Form)**
+**Prompt:** "A newsletter form that saves email to Subscribers"
+**Output:**
+{
+  "aiTemplate": "<div class=\"ai-newsletter-123\"><style>.ai-newsletter-123 form { background: {{bgColor}}; padding: {{padding}}; border-radius: {{borderRadius}}; box-shadow: {{boxShadow}}; width: 100%; max-width: {{maxWidth}}; }</style><form><input name=\"email\" placeholder=\"{{placeholderText}}\" class=\"p-2 border w-full mb-2 rounded\" required><button type=\"submit\" style=\"background:{{btnColor}}; color:{{btnTextColor}}; border-radius:{{btnRadius}}\" class=\"p-2 w-full font-bold\">{{btnText}}</button></form></div>",
+  "properties": { 
+    "bgColor": "#ffffff", 
+    "padding": "24px", 
+    "borderRadius": "12px", 
+    "boxShadow": "0 4px 6px rgba(0,0,0,0.1)", 
+    "maxWidth": "400px", 
+    "placeholderText": "Enter your email...", 
+    "btnColor": "#2563eb", 
+    "btnTextColor": "#ffffff", 
+    "btnRadius": "6px", 
+    "btnText": "Subscribe" 
+  },
+  "editableProps": [
+    { "key":"bgColor", "label":"Background", "type":"color" },
+    { "key":"padding", "label":"Padding", "type":"text" },
+    { "key":"borderRadius", "label":"Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Shadow", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"placeholderText", "label":"Placeholder", "type":"text" },
+    { "key":"btnColor", "label":"Button Color", "type":"color" },
+    { "key":"btnTextColor", "label":"Button Text Color", "type":"color" },
+    { "key":"btnText", "label":"Button Text", "type":"text" }
+  ],
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.form-status'); const btn = form ? form.querySelector('button[type=\"submit\"]') : null; if (form && statusEl && btn) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); btn.disabled = true; statusEl.textContent = properties.statusLoadingText; try { await api.post('/custom-data/rows/SUBSCRIBERS_SCHEMA_ID', { data, sitemember_id: null }); statusEl.textContent = properties.statusSuccessText; form.reset(); } catch (err) { statusEl.textContent = properties.statusErrorText; } finally { btn.disabled = false; } }; }"
+
+}
+
+### **EXAMPLE 2: Visual Element (Highly Customizable Accordion)**
+**Prompt:** "An accordion with 2 items"
+**Output:**
+{
+  "aiTemplate": "<div class=\\"ai-accordion-12345\\"><style>.ai-accordion-12345{width:100%;max-width:{{maxWidth}};font-family:{{fontFamily}}}.ai-accordion-12345 .accordion-item{border:{{borderWidth}} solid {{borderColor}};margin-bottom:{{itemGap}};border-radius:{{borderRadius}};overflow:hidden;box-shadow:{{boxShadow}};background:{{itemBgColor}}}.ai-accordion-12345 .accordion-title{background:{{titleBgColor}};color:{{titleTextColor}};padding:{{titlePadding}};font-size:{{titleFontSize}};font-weight:{{titleFontWeight}};cursor:pointer;transition:{{transitionSpeed}};display:flex;justify-content:space-between;align-items:center}.ai-accordion-12345 .accordion-title:hover{background:{{titleHoverBg}}}.ai-accordion-12345 .accordion-content{background:{{contentBgColor}};color:{{contentTextColor}};padding:{{contentPadding}};display:none;font-size:{{contentFontSize}};line-height:{{contentLineHeight}}}</style><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title1}} <span>+</span></div><div class=\\"accordion-content\\">{{content1}}</div></div><div class=\\"accordion-item\\"><div class=\\"accordion-title\\">{{title2}} <span>+</span></div><div class=\\"accordion-content\\">{{content2}}</div></div></div>",
+  "properties": {
+    "title1": "Question 1", "content1": "Answer 1 text goes here.",
+    "title2": "Question 2", "content2": "Answer 2 text goes here.",
+    "maxWidth": "600px", "fontFamily": "inherit", "itemGap": "10px",
+    "borderWidth": "1px", "borderColor": "#e5e7eb", "borderRadius": "8px", "boxShadow": "0 2px 4px rgba(0,0,0,0.05)", "itemBgColor": "#ffffff",
+    "titleBgColor": "#f9fafb", "titleHoverBg": "#f3f4f6", "titleTextColor": "#111827", "titlePadding": "16px", "titleFontSize": "16px", "titleFontWeight": "600", "transitionSpeed": "0.2s",
+    "contentBgColor": "#ffffff", "contentTextColor": "#4b5563", "contentPadding": "16px", "contentFontSize": "14px", "contentLineHeight": "1.5"
+  },
+  "editableProps": [
+    { "key":"title1", "label":"Title 1", "type":"text" }, { "key":"content1", "label":"Content 1", "type":"text" },
+    { "key":"title2", "label":"Title 2", "type":"text" }, { "key":"content2", "label":"Content 2", "type":"text" },
+    { "key":"maxWidth", "label":"Max Width", "type":"text" },
+    { "key":"itemGap", "label":"Gap Between Items", "type":"text" },
+    { "key":"borderWidth", "label":"Border Width", "type":"text" },
+    { "key":"borderColor", "label":"Border Color", "type":"color" },
+    { "key":"borderRadius", "label":"Border Radius", "type":"text" },
+    { "key":"boxShadow", "label":"Box Shadow", "type":"text" },
+    { "key":"titleBgColor", "label":"Title Background", "type":"color" },
+    { "key":"titleHoverBg", "label":"Title Hover Background", "type":"color" },
+    { "key":"titleTextColor", "label":"Title Text Color", "type":"color" },
+    { "key":"titleFontSize", "label":"Title Font Size", "type":"text" },
+    { "key":"titleFontWeight", "label":"Title Font Weight", "type":"text" },
+    { "key":"titlePadding", "label":"Title Padding", "type":"text" },
+    { "key":"contentBgColor", "label":"Content Background", "type":"color" },
+    { "key":"contentTextColor", "label":"Content Text Color", "type":"color" },
+    { "key":"contentFontSize", "label":"Content Font Size", "type":"text" },
+    { "key":"contentPadding", "label":"Content Padding", "type":"text" }
+  ],
+  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.addEventListener('click', () => { const c = t.nextElementSibling; const isOpen = c.style.display === 'block'; c.style.display = isOpen ? 'none' : 'block'; t.querySelector('span').textContent = isOpen ? '+' : '-'; }));"
+}
+**EXAMPLE 3: Complex Data (Job Board with CV Upload)**
+- Prompt: "A job application form that saves to Jobs table and shows recent applicants"
+{
+  "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><form><input name=\"name\" placeholder=\"{{namePlc}}\"><input type=\"file\"><input type=\"hidden\" name=\"cv_file\"><button type=\"submit\">{{btnText}}</button></form><div class=\"list-container\"></div><template id=\"displayTemplate\"><div class=\"card\">{{data.name}} - <a href=\"{{data.cv_file}}\">View CV</a></div></template></div>",
+  "properties": { "schema_id": "JOBS_UUID_FROM_CONTEXT", "namePlc": "Your Name", "btnText": "Apply" },
+  "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
+  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
 }
 
 
