@@ -5900,18 +5900,20 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 ---
 ### **3. INTERACTIVITY & APIS (The Functional Contract)**
-The script runs in a function: (container, api, schemaId, properties, Mustache).
-- **Local Scoping:** Use container.querySelector only.
-- **CRUD Operations:**
-    - Create: await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
-    - Read: const res = await api.get('/custom-data/rows/' + schemaId + '?limit=50'); // Data in res.data.rows
-    - Update: await api.put('/custom-data/rows/' + schemaId + '/' + ROW_ID, { data: updatedData });
-    - Delete: await api.delete('/custom-data/rows/' + schemaId + '/' + ROW_ID);
-    - Upload: await api.post('/uploads/', formData);
-- **Submission Protocol:** Every data-action MUST include:
-    1. e.preventDefault();
-    2. A loading state (disable button).
-    3. Success Feedback: alert('Success!') and form.reset().
+    MANDATORY SCRIPT RULE: If the user prompt implies any action (saving, loading, clicking, submitting,edit/update,delete), the script key MUST NOT be empty. It must contain the full functional code to handle the request.
+    The script runs in a function: (container, api, schemaId, properties, Mustache).
+    - **Local Scoping:** Use container.querySelector only.
+    - **CRUD Operations:**
+        - Create: await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
+        - Read: const res = await api.get('/custom-data/rows/' + schemaId + '?limit=50'); // Data in res.data.rows
+        - Update: await api.put('/custom-data/rows/' + schemaId + '/' + ROW_ID, { data: updatedData });
+        - Delete: await api.delete('/custom-data/rows/' + schemaId + '/' + ROW_ID);
+        - Upload: await api.post('/uploads/', formData);
+    - **Submission Protocol:** Every data-action MUST include:
+        1. e.preventDefault();
+        2. A loading state (disable button).
+        3. Success Feedback: alert('Success!') and form.reset().
+    STRICT PROHIBITION: Do not use ... or any placeholders in the code. Every function must be fully written out and production-ready.
 
 ---
 
@@ -5936,10 +5938,42 @@ The script runs in a function: (container, api, schemaId, properties, Mustache).
 
 **Example Structure Reference:**
 {
-  "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><div class=\"accordion-item\">{{title1}}</div></div>",
-  "properties": { "schema_id": "", "title1": "FAQ" },
-  "editableProps": [ { "key":"title1", "label":"Title", "type":"text" } ],
-  "script": "const titles = container.querySelectorAll('.accordion-title'); titles.forEach(t => t.onclick = () => { ... });"
+  "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><div class=\"item\"><div class=\"title\">{{title1}}</div><div class=\"content\">{{content1}}</div></div></div>",
+  "properties": { 
+    "schema_id": "", 
+    "title1": "Item 1 Title", "content1": "Item 1 Content",
+    "bgColor": "transparent", "textColor": "#333333", "borderColor": "#dddddd",
+    "itemPadding": "10px", "titleBgColor": "#f0f0f0", "titleTextColor": "#000000",
+    "titlePadding": "15px", "titleRadius": "4px", "titleFontSize": "18px",
+    "titleFontWeight": "bold", "titleAlign": "left", "contentBgColor": "#ffffff",
+    "contentTextColor": "#666666", "contentPadding": "20px", "contentRadius": "0px",
+    "contentFontSize": "16px", "contentLineHeight": "1.5", "boxShadow": "none",
+    "transitionSpeed": "0.3s"
+  },
+  "editableProps": [
+    { "key":"title1","label":"Title 1","type":"text" },
+    { "key":"content1","label":"Content 1","type":"text" },
+    { "key":"bgColor","label":"Global Background","type":"color" },
+    { "key":"textColor","label":"Global Text Color","type":"color" },
+    { "key":"borderColor","label":"Border Color","type":"color" },
+    { "key":"itemPadding","label":"Item Padding","type":"text" },
+    { "key":"titleBgColor","label":"Title Background","type":"color" },
+    { "key":"titleTextColor","label":"Title Text Color","type":"color" },
+    { "key":"titlePadding","label":"Title Padding","type":"text" },
+    { "key":"titleRadius","label":"Title Border Radius","type":"text" },
+    { "key":"titleFontSize","label":"Title Font Size","type":"text" },
+    { "key":"titleFontWeight","label":"Title Font Weight","type":"text" },
+    { "key":"titleAlign","label":"Title Text Align","type":"text" },
+    { "key":"contentBgColor","label":"Content Background","type":"color" },
+    { "key":"contentTextColor","label":"Content Text Color","type":"color" },
+    { "key":"contentPadding","label":"Content Padding","type":"text" },
+    { "key":"contentRadius","label":"Content Border Radius","type":"text" },
+    { "key":"contentFontSize","label":"Content Font Size","type":"text" },
+    { "key":"contentLineHeight","label":"Content Line Height","type":"text" },
+    { "key":"boxShadow","label":"Box Shadow","type":"text" },
+    { "key":"transitionSpeed","label":"Transition Speed","type":"text" }
+  ],
+  "script": "// WRITE FULL FUNCTIONAL LOGIC HERE BASED ON THE USER PROMPT AND THE INTERACTIVITY/DATA RULES ABOVE. DO NOT USE PLACEHOLDERS."
 }
 """.strip()
 #endregion nontabletestingai
