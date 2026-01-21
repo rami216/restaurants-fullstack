@@ -3176,6 +3176,51 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A single, valid JSON object with FOUR keys only.
 
+---
+
+## EXAMPLE 1: SIMPLE FORM (No table, just submit data)
+
+**Example Prompt:** "A contact form with name and email that saves to Subscribers table"
+**Example `unique_class_name`:** `.ai-form-456`
+**Example Prompt:** "A contact list manager with name and email fields"
+**Example `unique_class_name`:** `.ai-element-12345`
+{
+  "aiTemplate": "<div class=\\"ai-form-456\\" style=\\"background: transparent; width: 100%; display: flex; justify-content: center; align-items: center;\\"><style>.ai-form-456 form { background: {{formBg}}; padding: {{formPadding}}; border-radius: {{formRadius}}; box-shadow: {{formShadow}}; max-width: {{maxWidth}}; width: 100%; } .ai-form-456 input, .ai-form-456 button { width: 100%; padding: 10px; margin-bottom: 12px; border-radius: 6px; } .ai-form-456 input { border: 1px solid #ddd; } .ai-form-456 button { background: {{btnBg}}; color: {{btnColor}}; border: none; font-weight: bold; cursor: pointer; transition: opacity 0.3s; } .ai-form-456 button:hover { opacity: 0.9; } .ai-form-456 button:disabled { opacity: 0.6; }</style><form><h2 style=\\"color: {{titleColor}}; text-align: center; margin-bottom: 20px;\\">{{formTitle}}</h2><input type=\\"text\\" name=\\"name\\" placeholder=\\"{{namePh}}\\" required><input type=\\"email\\" name=\\"email\\" placeholder=\\"{{emailPh}}\\" required><button type=\\"submit\\">{{submitText}}</button><span class=\\"status\\" style=\\"display: block; text-align: center; margin-top: 10px; font-size: 14px;\\"></span></form></div>",
+  "properties": {
+    "formBg": "#ffffff",
+    "formPadding": "32px",
+    "formRadius": "12px",
+    "formShadow": "0 4px 12px rgba(0,0,0,0.1)",
+    "maxWidth": "500px",
+    "titleColor": "#1f2937",
+    "btnBg": "#3b82f6",
+    "btnColor": "#ffffff",
+    "formTitle": "Contact Us",
+    "namePh": "Your Name",
+    "emailPh": "Your Email",
+    "submitText": "Submit"
+  },
+  "editableProps": [
+    {"key": "formBg", "label": "Form Background", "type": "color"},
+    {"key": "formPadding", "label": "Padding", "type": "text"},
+    {"key": "formRadius", "label": "Border Radius", "type": "text"},
+    {"key": "formShadow", "label": "Shadow", "type": "text"},
+    {"key": "maxWidth", "label": "Max Width", "type": "text"},
+    {"key": "titleColor", "label": "Title Color", "type": "color"},
+    {"key": "btnBg", "label": "Button Color", "type": "color"},
+    {"key": "btnColor", "label": "Button Text", "type": "color"},
+    {"key": "formTitle", "label": "Title", "type": "text"},
+    {"key": "namePh", "label": "Name Placeholder", "type": "text"},
+    {"key": "emailPh", "label": "Email Placeholder", "type": "text"},
+    {"key": "submitText", "label": "Submit Text", "type": "text"}
+  ],
+  "script": "const form = container.querySelector('form'); const statusEl = container.querySelector('.status'); if (form) { form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); const submitBtn = form.querySelector('button'); const oldText = submitBtn.innerText; submitBtn.disabled = true; submitBtn.innerText = 'Submitting...'; try { await api.post('/custom-data/rows/' + schemaId, { data: data, sitemember_id: properties.sitemember_id || null }); if (statusEl) { statusEl.textContent = 'Success!'; statusEl.style.color = '#10b981'; } else { alert('Success!'); } form.reset(); } catch (err) { console.error(err); if (statusEl) { statusEl.textContent = 'Error'; statusEl.style.color = '#ef4444'; } else { alert('Error'); } } finally { submitBtn.disabled = false; submitBtn.innerText = oldText; } }; }"
+}
+
+---
+
+## EXAMPLE 2: DATA TABLE (With list view, edit, delete, pagination)
+
 **Example Output:**
 {
   "aiTemplate": "<style>.ai-element-12345 .title { color: {{titleColor}}; } .ai-element-12345 .add-new-btn { background-color: {{buttonBgColor}}; margin-bottom: 1rem; }</style><div class=\\"p-6 bg-white rounded-xl shadow-lg border border-gray-100\\"><div class=\\"flex justify-between items-center mb-6\\"><h3 class=\\"text-2xl font-bold title\\">{{title}}</h3><button class=\\"add-new-btn px-4 py-2 text-white rounded-lg font-semibold hover:opacity-90 transition\\">{{addButtonText}}</button></div><div class=\\"form-container mb-8 p-6 bg-gray-50 rounded-xl border border-gray-200 hidden\\"></div><div class=\\"data-display space-y-3 w-full overflow-x-auto\\"></div><div class=\\"pagination-controls mt-6 flex justify-center gap-2\\"></div></div><template id=\\"displayTemplate\\"><div class=\\"flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow\\"><div class=\\"flex-1\\"><p class=\\"font-bold text-gray-900\\">{{data.name}}</p><p class=\\"text-sm text-gray-500\\">{{data.email}}</p></div><div class=\\"flex gap-2\\"><button class=\\"edit-btn px-3 py-1 text-blue-600 hover:bg-blue-50 rounded\\" data-row-id=\\"{{row_id}}\\">Edit</button><button class=\\"delete-btn px-3 py-1 text-red-600 hover:bg-red-50 rounded\\" data-row-id=\\"{{row_id}}\\">Delete</button></div></div></template>",
