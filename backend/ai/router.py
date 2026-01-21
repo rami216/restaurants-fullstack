@@ -3032,7 +3032,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         -   Set `addButton.style.backgroundColor = properties.buttonBgColor`.
     -   Initial Load Guard: The script MUST check if (properties.hideData) return; at the very beginning of the fetchAndRenderRows function to prevent private data from loading.
     -   State Management: It MUST manage state for currentPage (0-indexed), rowsPerPage (e.g., 20), and totalRows.
-    -   **Accessing Field Definitions:** You **MUST** get field definitions from `properties.all_schemas`. Find the schema by matching the `schemaId`, then access its `fields` array. Store this in a variable called `schema`.
+    -   **Accessing Field Definitions:** You **MUST** get field definitions from `properties.all_schemas`. Find the schema by matching the `schemaId`, then access its `fields` array. Store this in a variable called `schema` for use throughout the script.
     -   **Form Generation (STYLING CRITICAL):** The script **MUST** dynamically generate a `<form>` and its input fields inside the `form-container` (for data tables) OR handle the static form submission (for simple forms).
         -   The `<form>` element MUST have class: `grid grid-cols-1 md:grid-cols-2 gap-4`.
         -   Every `<label>` created MUST have class: `block text-sm font-semibold text-gray-700 mb-1`.
@@ -3049,7 +3049,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                         - If 'Child' (filtered): Show the specific concatenation (e.g., "10:00 - 12:00").
                 5.  The `value` for the `<option>` must be the `row_id`.
                 -   **DO NOT** use `if/else` blocks to hardcode the display key. The logic must be fully dynamic.
-        -   IF field type is 'file' or 'image':
+        -   IF a field's type is 'file' or 'image':
                 1- Create an <input type="file">.
                 2- Create a <input type="hidden" name="FIELD_ID"> to store the URL.
                 3- Add an onchange listener to the file input:
@@ -3057,7 +3057,8 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 const file = e.target.files[0];
                 if (!file) return;
                 
-                const btn = form.querySelector('button[type="submit"]') || form.querySelector('button');
+                // FIX: Select button safely (without relying on type="submit")
+                const btn = form.querySelector('button');
                 const oldText = btn ? btn.innerText : 'Submit';
                 
                 if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; }
@@ -3065,11 +3066,17 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 try {
                     const formData = new FormData();
                     formData.append('file', file);
+                    
+                    // FIX: Use 'api.post' to ensure it hits the backend URL, not the frontend
                     const res = await api.post('/uploads/', formData);
+                    
+                    // Handle different response structures
                     const url = res.data ? res.data.url : res.url;
                     
                     if (url) {
                         hiddenUrl.value = url;
+                        
+                        // Visual success
                         const msg = document.createElement('span');
                         msg.className = 'text-xs text-green-600 block mt-1';
                         msg.innerText = '\\u2713 Ready';
