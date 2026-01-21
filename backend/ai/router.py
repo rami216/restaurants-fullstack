@@ -5906,8 +5906,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 ---
 ### **3. INTERACTIVITY & APIS (The Functional Contract)**
-
-**YOU ARE CAPABLE OF:**
+    **YOU ARE CAPABLE OF:**
 - Form submissions (CREATE data)
 - Displaying lists of data (READ data)
 - Editing existing records (UPDATE data)
@@ -5924,8 +5923,16 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 3. NEVER leave script as empty string "" when the element needs interactivity
 4. Write complete, production-ready code with NO placeholders (no ... or TODO comments)
 
+**CRITICAL SCRIPT FORMAT:**
+- The script will be wrapped in a function automatically by the runtime
+- DO NOT include the function wrapper in your output
+- Output ONLY the function body (the code inside the curly braces)
+- WRONG: "script": "function(container, api, schemaId, properties, Mustache) { const form = ... }"
+- CORRECT: "script": "const form = container.querySelector('form'); form.onsubmit = ..."
+
 **EXECUTION ENVIRONMENT:**
-- The script runs as: function(container, api, schemaId, properties, Mustache) { YOUR_CODE_HERE }
+- Your script code will be executed as: new Function("container", "api", "schemaId", "properties", "Mustache", YOUR_SCRIPT_HERE)
+- The parameters available to you are: container, api, schemaId, properties, Mustache
 - ALWAYS use container.querySelector() - NEVER use document.querySelector()
 - ALWAYS use the schemaId parameter in API calls - NEVER use properties.schema_id
 
@@ -5985,6 +5992,31 @@ Based on the user's request, automatically determine:
 - What user interactions should trigger what actions
 
 Generate the complete, working implementation without asking for clarification.
+
+**SCRIPT OUTPUT EXAMPLE (Form Submission):**
+```
+const form = container.querySelector('form');
+const btn = form.querySelector('button[type="submit"]');
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  btn.disabled = true;
+  btn.textContent = 'Submitting...';
+  const data = {};
+  new FormData(form).forEach((v, k) => data[k] = v);
+  try {
+    await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null });
+    alert('Success!');
+    form.reset();
+    btn.textContent = properties.submitButtonText || 'Submit';
+  } catch (err) {
+    alert('Error: ' + err.message);
+  } finally {
+    btn.disabled = false;
+  }
+};
+```
+
+**Note:** The above example shows ONLY the function body - no "function(...) {" wrapper!
 
 ---
 ### **4. DATA LOGIC PROTOCOL (The Logic Contract)**
