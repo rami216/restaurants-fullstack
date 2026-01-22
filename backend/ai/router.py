@@ -5502,13 +5502,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 4. Set hiddenInput.value = url and show a success message.
                 5. Re-enable the button.
 
-       - **IF RENDERING DATA LISTS (STRICT PROTOCOL):**
-        - **Data Structure:** The API sends rows as `{"row_id": "...", "data": {"field": "value"}}`.
-        - **TEMPLATING:** You MUST use the full path in your template tokens.
-            - Correct: `{{data.name}}`, `{{data.email}}`.
-            - Relational: `{{data.rel_field.data.display_val}}`.
-        - **RENDERING:** Pass the ENTIRE row object to Mustache.
-            - Logic: `rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(template, row); container.appendChild(div); });`
+      - **IF RENDERING DATA LISTS (STRICT PROTOCOL):**
+        - **Data Structure:** The API sends rows as `{"row_id": "...", "data": {"field_id": "value"}}`.
+        - **TEMPLATING:** For regular fields, you MUST use `{{data.field_id}}`.
+            - **CRITICAL:** For relational fields, the data object contains a nested object. You MUST access it correctly (e.g., `{{data.project.data.project_title}}`).
+        - **RENDERING:** Pass the **ENTIRE row object** to Mustache.
+            - **Logic:** `rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(template, row); container.appendChild(div); });`
                 
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
@@ -5599,10 +5598,11 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
   "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
 }
-### **EXAMPLE: Paginated List (Subscribers)**
+### **EXAMPLE 4: Paginated List (Subscribers)**
 **Prompt:** "List names and emails from Subscribers with pagination"
+**Output:**
 {
-  "aiTemplate": "<div class=\\"{{unique_class_name}}\\"><h3>{{title}}</h3><div class=\\"list-container\\"></div><div class=\\"pagination\\"></div><template id=\\"itemTemplate\\"><div class=\\"item\\"><strong>{{data.name}}</strong>: {{data.email}}</div></template></div>",
+  "aiTemplate": "<div class=\"{{unique_class_name}}\"><h3>{{title}}</h3><div class=\"list-container\"></div><div class=\"pagination\"></div><template id=\"itemTemplate\"><div class=\"item\">{{data.name}} ({{data.email}})</div></template></div>",
   "properties": { "title": "Subscribers List", "schema_id": "74b2b340-5d25-4c47-b668-4515e0135da6" },
   "editableProps": [ { "key": "title", "label": "Title", "type": "text" } ],
   "script": "const list = container.querySelector('.list-container'); const pag = container.querySelector('.pagination'); const temp = container.querySelector('#itemTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 10; let totalRows = 0; const fetchRows = async () => { try { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); const { rows, total } = res.data; totalRows = total; list.innerHTML = ''; rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(temp, row); list.appendChild(div); }); renderPagination(); } catch (err) { console.error(err); } }; const renderPagination = () => { pag.innerHTML = ''; const pages = Math.ceil(totalRows / rowsPerPage); if(pages <= 1) return; const prev = document.createElement('button'); prev.innerText = 'Prev'; prev.disabled = currentPage === 0; prev.onclick = () => { currentPage--; fetchRows(); }; const next = document.createElement('button'); next.innerText = 'Next'; next.disabled = currentPage >= pages - 1; next.onclick = () => { currentPage++; fetchRows(); }; pag.appendChild(prev); pag.appendChild(next); }; fetchRows();"
