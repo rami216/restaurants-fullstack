@@ -355,11 +355,11 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       });
 
       // --- SAFETY STRIPPER: Remove unwanted alerts if GPT ignores instructions ---
-      let cleanScript = data.script || "";
-      if (cleanScript.includes("alert(")) {
-        console.warn("Stripped placeholder alert from AI script.");
-        cleanScript = "";
-      }
+      // let cleanScript = data.script || "";
+      // if (cleanScript.includes("alert(")) {
+      //   console.warn("Stripped placeholder alert from AI script.");
+      //   cleanScript = "";
+      // }
 
       const aiEl: ElementType = {
         element_id: newElementId,
@@ -372,7 +372,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         },
         aiPayload: {
           ...data,
-          script: cleanScript,
+          script: data.script,
           id: `ai_payload_${Date.now()}`,
         },
       };

@@ -186,7 +186,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
     let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
-      ""
+      "",
     );
 
     // Protect the displayTemplate from the first render pass
@@ -197,7 +197,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
     if (templateContent) {
       htmlOnly = htmlOnly.replace(
         templateContent,
-        '<div id="displayTemplate-placeholder"></div>'
+        '<div id="displayTemplate-placeholder"></div>',
       );
     }
 
@@ -206,7 +206,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
     if (templateContent) {
       const placeholder = ref.current.querySelector(
-        "#displayTemplate-placeholder"
+        "#displayTemplate-placeholder",
       );
       if (placeholder) {
         const tempDiv = document.createElement("div");
@@ -229,7 +229,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "schemaId",
           "properties",
           "Mustache",
-          jsBody
+          jsBody,
         );
         // Pass merged properties to the script so it can interact with live data
         fn(ref.current, apiClient, schemaId, processedProps, Mustache);
@@ -266,7 +266,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   onGeneratePage,
 }) => {
   const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>(
-    {}
+    {},
   );
 
   const [pageAiPrompt, setPageAiPrompt] = useState("");
@@ -366,7 +366,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         />;
       } else {
         const hasHover = Object.keys(style).some((k) =>
-          k.startsWith("--hover-")
+          k.startsWith("--hover-"),
         );
         return wrap(
           <div
@@ -394,7 +394,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 {props.name || "Category Name"}
               </h4>
             </div>
-          </div>
+          </div>,
         );
       }
     }
@@ -432,7 +432,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               {/* Uses the hydrated price from priceRegistry */}$
               {Number(props.base_price || 0).toFixed(2)}
             </p>
-          </div>
+          </div>,
         );
       }
     } else if (effectiveType === "FORM") {
@@ -442,7 +442,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             key={element.aiPayload?.id || element.element_id}
             element={element}
             isPreview={isPreview} // ✅ Pass down the isPreview prop
-          />
+          />,
         );
       } else {
         const buttonStyle = props.submitButton?.style || {};
@@ -474,7 +474,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 {props.submitButton?.text || "Submit"}
               </button>
             </form>
-          </div>
+          </div>,
         );
       }
     }
@@ -486,7 +486,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           key={element.aiPayload?.id || element.element_id}
           element={element}
           isPreview={isPreview} // ✅ Pass down the isPreview prop
-        />
+        />,
       );
     }
 
@@ -508,7 +508,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             (e.currentTarget as HTMLImageElement).src =
               "https://placehold.co/600x400/fecaca/991b1b?text=Error";
           }}
-        />
+        />,
       );
     } else if (effectiveType === "BUTTON") {
       return wrap(<button style={style}>{props.text || "Button"}</button>);
@@ -518,7 +518,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           {(props.items || []).map((item: string, i: number) => (
             <li key={i}>{item}</li>
           ))}
-        </ul>
+        </ul>,
       );
     } else if (effectiveType === "ACCORDION") {
       return wrap(<Accordion items={props.items || []} style={style} />);
@@ -529,7 +529,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           props={props}
           subdomain={websiteData?.subdomain}
           editMode={true}
-        />
+        />,
       );
     } else if (effectiveType === "REGISTER_FORM") {
       return wrap(
@@ -538,7 +538,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           props={props}
           subdomain={websiteData?.subdomain}
           editMode={true}
-        />
+        />,
       );
     } else if (effectiveType === "MAP") {
       return wrap(
@@ -552,7 +552,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             referrerPolicy="no-referrer-when-downgrade"
             title="Google Map"
           />
-        </div>
+        </div>,
       );
     } else if (effectiveType === "VIDEO") {
       // Card + video (builder: keep it non-interactive to avoid accidental play)
@@ -584,7 +584,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               style={{ ...vidStyle, pointerEvents: "none" }}
             />
           </div>
-        </div>
+        </div>,
       );
     } else if (effectiveType === "DROPDOWN") {
       return wrap(
@@ -595,13 +595,13 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               {opt.text}
             </option>
           ))}
-        </select>
+        </select>,
       );
     } else {
       return wrap(
         <div className="border p-2 bg-gray-300 text-black rounded">
           Unknown Element
-        </div>
+        </div>,
       );
     }
   }
@@ -686,7 +686,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             <div className="flex items-center space-x-4">
               {navbar.items.map((item: NavbarItem) => {
                 const targetPage = websiteData?.pages.find(
-                  (p) => p.slug === item.link_url
+                  (p) => p.slug === item.link_url,
                 );
                 const itemStyle = navbar.properties?.itemStyle || {};
 
@@ -836,7 +836,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
                   // 3. Animation Configuration
                   const { initial, animate, transition } = getMotionConfig(
-                    subProps.animation
+                    subProps.animation,
                   );
 
                   return (
