@@ -5472,13 +5472,21 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Field names in forms MUST match column names in the schema exactly.
 
         - API OPERATIONS (STRICT):
-            - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
-            - Read (Paginated): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');
-            - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
-            - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: mergedData, sitemember_id: properties.sitemember_id || null });
-                - CRITICAL: You MUST fetch the current row and merge its data with your updates first to prevent wiping out other columns.
-                - CRITICAL: The URL path must be the ROW_ID only. Do NOT include the Schema ID in the path for updates.
-            - Delete Row: await api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=' + (properties.sitemember_id || ''));
+            - **API CALL SYNTAX (CRITICAL):**
+                - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
+                - CORRECT: `const res = await api.get(\`/custom-data/rows/\${schemaId}/\${rowId}\`);`
+                - WRONG: `const res = await api.get\`/custom-data/rows/\${schemaId}\`;` (missing parentheses)
+            - Create: await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
+            - Read (Paginated): const response = await api.get(`/custom-data/rows/${schemaId}?skip=${skip}&limit=${limit}`); 
+                - The response is { "rows": [], "total": 0 }
+                - Access rows: const { rows, total } = response.data;
+            - **Fetch Single Row: const response = await api.get(\`/custom-data/rows/\${schemaId}/\${rowId}\`);**
+                - **The response is the row object directly, NOT wrapped in an array**
+                - **Access data: const rowData = response.data.data;**
+            - Update Row: await api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null });
+                - CRITICAL: Fetch the current row FIRST and merge to preserve other fields
+                - CRITICAL: The URL path is just the rowId, NOT schema_id/row_id
+            - Delete Row: await api.delete('/custom-data/rows/' + rowId);
 
         - IF RELATIONAL FIELDS EXIST:
             - Logic: You MUST api.get the related schema rows to populate dropdowns.
@@ -5504,12 +5512,38 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
 
         - IF CROSS-TABLE MUTATION IS IMPLIED:
-            - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
-            - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
-              1- The script MUST first fetch the existing row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + SELECTED_ROW_ID);.
-              2- The script MUST merge the new status into the existing data: const mergedData = { ...res.data.rows[0].data, available: false };.
-              3- The script MUST then perform the update: await api.put('/custom-data/rows/' + SELECTED_ROW_ID, { data: mergedData });.
-        - CRITICAL: Do NOT use api.post (Create) if you are modifying a record that already exists.
+            - Logic: If updating an existing record (e.g., "mark slot as booked"), use api.put with the row_id
+            - DATA PRESERVATION RULE (CRITICAL): 
+                1. Fetch the existing row: `const res = await api.get(\`/custom-data/rows/\${schemaId}/\${selectedRowId}\`);`
+                2. Extract current data: `const currentData = res.data.data;`
+                3. Merge with updates: `const mergedData = { ...currentData, available: false };`
+                4. Update: `await api.put(\`/custom-data/rows/\${selectedRowId}\`, { data: mergedData });`
+            - CRITICAL: Do NOT use api.post (Create) when modifying existing records
+    
+                **Example:**
+                ```javascript
+                form.onsubmit = async (e) => { 
+                e.preventDefault(); 
+                const selectedTimeId = timeSelect.value; 
+                btn.disabled = true; 
+                
+                // 1. Fetch the current row data
+                const res = await api.get(`/custom-data/rows/${schemaId}/${selectedTimeId}`); 
+                const currentData = res.data.data;
+                
+                // 2. Merge the update
+                const mergedData = { ...currentData, available: false }; 
+                
+                // 3. Update the row
+                await api.put(`/custom-data/rows/${selectedTimeId}`, { data: mergedData }); 
+                
+                statusEl.textContent = 'Success!'; 
+                btn.disabled = false; 
+                form.reset(); 
+                fetchAndPopulateDays(); 
+                };
+                ```
+       
 
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
