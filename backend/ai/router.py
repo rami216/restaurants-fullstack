@@ -5474,20 +5474,30 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
-                - CORRECT: `const res = await api.get(\`/custom-data/rows/\${schemaId}/\${rowId}\`);`
+                - CORRECT: `const response = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${skip}&limit=\${limit}\`);`
                 - WRONG: `const res = await api.get\`/custom-data/rows/\${schemaId}\`;` (missing parentheses)
-            - Create: await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
-            - Read (Paginated): const response = await api.get(`/custom-data/rows/${schemaId}?skip=${skip}&limit=${limit}`); 
-                - The response is { "rows": [], "total": 0 }
-                - Access rows: const { rows, total } = response.data;
-            - **Fetch Single Row: const response = await api.get(\`/custom-data/rows/\${schemaId}/\${rowId}\`);**
-                - **The response is the row object directly, NOT wrapped in an array**
-                - **Access data: const rowData = response.data.data;**
-            - Update Row: await api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null });
-                - CRITICAL: Fetch the current row FIRST and merge to preserve other fields
-                - CRITICAL: The URL path is just the rowId, NOT schema_id/row_id
-            - Delete Row: await api.delete('/custom-data/rows/' + rowId);
-
+            
+            - **Create:** `await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });`
+            
+            - **Read (Paginated):** `const response = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${skip}&limit=\${limit}\`);`
+                - The response format is: `{ "rows": [], "total": 0 }`
+                - Access data: `const { rows, total } = response.data;`
+            
+            - **Fetch Single Row (for Cross-Table Updates):**
+                - Call: `const res = await api.get(\`/custom-data/rows/\${schemaId}?row_id=\${rowId}\`);`
+                - **CRITICAL:** The API returns ALL rows, NOT filtered. You MUST manually find the target row.
+                - **Find the row:** `const targetRow = res.data.rows.find(r => r.row_id === rowId);`
+                - **Always verify:** `if (!targetRow) { statusEl.textContent = 'Error: Row not found'; return; }`
+                - **Access data:** `const currentData = targetRow.data;`
+            
+            - **Update Row:** `await api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null });`
+                - **CRITICAL:** Fetch the current row FIRST using the method above, then merge to preserve other fields
+                - **CRITICAL:** The URL path is ONLY the rowId, NOT schema_id/row_id
+                - **Example:** `const mergedData = { ...targetRow.data, available: false };`
+            
+            - **Delete Row:** `await api.delete('/custom-data/rows/' + rowId);`
+            
+            
         - IF RELATIONAL FIELDS EXIST:
             - Logic: You MUST api.get the related schema rows to populate dropdowns.
             - UI: Use <select> elements where the value is the **row.row_id**.
@@ -5511,38 +5521,54 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 2. For relations, pre-process a 'display_label' (e.g., combining first/last name) for the template.
             - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
 
-        - IF CROSS-TABLE MUTATION IS IMPLIED:
+        - **IF CROSS-TABLE MUTATION IS IMPLIED:**
             - Logic: If updating an existing record (e.g., "mark slot as booked"), use api.put with the row_id
             - DATA PRESERVATION RULE (CRITICAL): 
-                1. Fetch the existing row: `const res = await api.get(\`/custom-data/rows/\${schemaId}/\${selectedRowId}\`);`
-                2. Extract current data: `const currentData = res.data.data;`
-                3. Merge with updates: `const mergedData = { ...currentData, available: false };`
-                4. Update: `await api.put(\`/custom-data/rows/\${selectedRowId}\`, { data: mergedData });`
-            - CRITICAL: Do NOT use api.post (Create) when modifying existing records
-    
-                **Example:**
-                ```javascript
-                form.onsubmit = async (e) => { 
-                e.preventDefault(); 
-                const selectedTimeId = timeSelect.value; 
-                btn.disabled = true; 
+                1. Fetch rows with the target: `const res = await api.get('/custom-data/rows/' + schemaId + '?row_id=' + selectedRowId);`
+                2. **Find the specific row:** `const targetRow = res.data.rows.find(r => r.row_id === selectedRowId);`
+                3. **Check if found:** `if (!targetRow) { statusEl.textContent = 'Error!'; return; }`
+                4. Merge with updates: `const mergedData = { ...targetRow.data, available: false };`
+                5. Update: `await api.put('/custom-data/rows/' + selectedRowId, { data: mergedData });`
+            - CRITICAL: Do NOT use res.data.rows[0] - always use .find() to locate the correct row
+            
+            **Complete Example:**
+            ```javascript
+            form.onsubmit = async (e) => { 
+            e.preventDefault(); 
+            const selectedTimeId = timeSelect.value; 
+            btn.disabled = true; 
+            statusEl.textContent = 'Processing...';
+            
+            try {
+                // 1. Fetch the rows (API returns all rows, not filtered)
+                const res = await api.get('/custom-data/rows/' + schemaId + '?row_id=' + selectedTimeId); 
                 
-                // 1. Fetch the current row data
-                const res = await api.get(`/custom-data/rows/${schemaId}/${selectedTimeId}`); 
-                const currentData = res.data.data;
+                // 2. Find the specific row we want to update
+                const targetRow = res.data.rows.find(r => r.row_id === selectedTimeId);
                 
-                // 2. Merge the update
-                const mergedData = { ...currentData, available: false }; 
+                // 3. Check if we found it
+                if (!targetRow) {
+                statusEl.textContent = 'Error: Slot not found';
+                btn.disabled = false;
+                return;
+                }
                 
-                // 3. Update the row
-                await api.put(`/custom-data/rows/${selectedTimeId}`, { data: mergedData }); 
+                // 4. Merge the update with existing data
+                const mergedData = { ...targetRow.data, available: false }; 
                 
-                statusEl.textContent = 'Success!'; 
-                btn.disabled = false; 
+                // 5. Update the row
+                await api.put('/custom-data/rows/' + selectedTimeId, { data: mergedData }); 
+                
+                statusEl.textContent = 'Booking successful!'; 
                 form.reset(); 
                 fetchAndPopulateDays(); 
-                };
-                ```
+            } catch (err) {
+                statusEl.textContent = 'Error: ' + err.message;
+            } finally {
+                btn.disabled = false;
+            }
+            };
+            ```
        
 
 **INPUT:** A user's prompt and a `unique_class_name`.
