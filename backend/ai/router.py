@@ -5451,9 +5451,10 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - If Data-Driven: Implement fetchAndRenderRows to handle data display.
         - If Form-Based: Implement form.onsubmit to handle data entry/submission.
         - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
-        - **Pagination & State Management:** The script MUST manage state for currentPage (0-indexed), rowsPerPage (default 20), and totalRows. It MUST render "Previous" and "Next" buttons. Buttons MUST be disabled when on the first or last page, and clicking them MUST update currentPage and re-fetch the data
     - STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
-         
+    - **Pagination & State Management:** The script MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (default 20), and `totalRows`.
+        - It MUST render "Previous" and "Next" buttons. Buttons MUST be disabled appropriately.
+        
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     - **NO user-facing text should be hardcoded in the `aiTemplate`**.
@@ -5501,14 +5502,13 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 4. Set hiddenInput.value = url and show a success message.
                 5. Re-enable the button.
 
-        - IF RENDERING DATA LISTS (STRICT PROTOCOL):
-            - DATA PRE-PROCESSING (MANDATORY): Before rendering, you MUST create a new "flattened" array from the API response.
-                . Correct Logic: const itemsToRender = res.data.rows.map(row => ({ ...row.data, row_id: row.row_id }));
-            - TEMPLATING: Because you flattened the data, your aiTemplate tokens MUST be simple and direct.
-                . Correct: {{name}}, {{email}}, {{phone}}.
-                . Incorrect: {{data.name}} (This will fail if you use the flattening logic above).
-            - INJECTION: Use a single innerHTML call to update the container:
-                . container.querySelector('.list-container').innerHTML = itemsToRender.map(item => Mustache.render(template, item)).join('');
+       - **IF RENDERING DATA LISTS (STRICT PROTOCOL):**
+        - **Data Structure:** The API sends rows as `{"row_id": "...", "data": {"field": "value"}}`.
+        - **TEMPLATING:** You MUST use the full path in your template tokens.
+            - Correct: `{{data.name}}`, `{{data.email}}`.
+            - Relational: `{{data.rel_field.data.display_val}}`.
+        - **RENDERING:** Pass the ENTIRE row object to Mustache.
+            - Logic: `rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(template, row); container.appendChild(div); });`
                 
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
@@ -5599,14 +5599,13 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
   "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
 }
-### **EXAMPLE 4: Paginated List (Subscribers)**
+### **EXAMPLE: Paginated List (Subscribers)**
 **Prompt:** "List names and emails from Subscribers with pagination"
-**Output:**
 {
-  "aiTemplate": "<div class=\"{{unique_class_name}}\"><h3>{{title}}</h3><div class=\"list-container\"></div><div class=\"pagination\"></div><template id=\"itemTemplate\"><div class=\"item\">{{data.name}} ({{data.email}})</div></template></div>",
-  "properties": { "title": "Subscribers List" },
+  "aiTemplate": "<div class=\\"{{unique_class_name}}\\"><h3>{{title}}</h3><div class=\\"list-container\\"></div><div class=\\"pagination\\"></div><template id=\\"itemTemplate\\"><div class=\\"item\\"><strong>{{data.name}}</strong>: {{data.email}}</div></template></div>",
+  "properties": { "title": "Subscribers List", "schema_id": "74b2b340-5d25-4c47-b668-4515e0135da6" },
   "editableProps": [ { "key": "title", "label": "Title", "type": "text" } ],
-  "script": "const list = container.querySelector('.list-container'); const pag = container.querySelector('.pagination'); const temp = container.querySelector('#itemTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 10; const fetchRows = async () => { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); list.innerHTML = res.data.rows.map(row => Mustache.render(temp, row)).join(''); renderControls(res.data.total); }; const renderControls = (total) => { pag.innerHTML = ''; const pages = Math.ceil(total / rowsPerPage); if(pages <= 1) return; const next = document.createElement('button'); next.innerText = 'Next'; next.disabled = currentPage >= pages - 1; next.onclick = () => { currentPage++; fetchRows(); }; pag.appendChild(next); }; fetchRows();"
+  "script": "const list = container.querySelector('.list-container'); const pag = container.querySelector('.pagination'); const temp = container.querySelector('#itemTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 10; let totalRows = 0; const fetchRows = async () => { try { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); const { rows, total } = res.data; totalRows = total; list.innerHTML = ''; rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(temp, row); list.appendChild(div); }); renderPagination(); } catch (err) { console.error(err); } }; const renderPagination = () => { pag.innerHTML = ''; const pages = Math.ceil(totalRows / rowsPerPage); if(pages <= 1) return; const prev = document.createElement('button'); prev.innerText = 'Prev'; prev.disabled = currentPage === 0; prev.onclick = () => { currentPage--; fetchRows(); }; const next = document.createElement('button'); next.innerText = 'Next'; next.disabled = currentPage >= pages - 1; next.onclick = () => { currentPage++; fetchRows(); }; pag.appendChild(prev); pag.appendChild(next); }; fetchRows();"
 }
 
 
