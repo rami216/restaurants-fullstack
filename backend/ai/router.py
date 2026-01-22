@@ -5509,12 +5509,26 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - IF FILE/IMAGE UPLOADS ARE IMPLIED:
             - HTML: Render <input type="file"> AND a <input type="hidden" name="SCHEMA_COLUMN_NAME">.
             - Logic: Attach an onchange listener that performs the following exact flow:
-                1. Disable the submit button and change text to "Uploading...".
-                2. const res = await api.post('/uploads/', formData);
-                3. const url = res.data ? res.data.url : res.url;
-                4. Set hiddenInput.value = url and show a success message.
-                5. Re-enable the button.
-
+                1. **Disable the submit button:** `btn.disabled = true;`
+                2. **Show upload status:** `btn.textContent = 'Uploading...';`
+                3. **Create and send form data:** 
+                ```javascript
+                const formData = new FormData();
+                formData.append('file', e.target.files[0]);
+                const res = await api.post('/uploads/', formData);
+                    ```
+                4. **Store the URL:** `hiddenInput.value = res.data ? res.data.url : res.url;`
+                5. **Re-enable button:** `btn.disabled = false; btn.textContent = properties.btnText;`
+                - **CRITICAL VALIDATION (MUST INCLUDE):**
+                    - **In form.onsubmit, check if file was uploaded:**
+                        ```javascript
+                                if (!hiddenInput.value) {
+                                statusEl.textContent = 'Please upload a file first';
+                                btn.disabled = false;
+                                return;
+                                }
+                        ```
+                    - This prevents submitting the form with an empty file field
         - IF RENDERING DATA LISTS:
             - Pre-processing: In the script, loop through res.data.rows and:
                 1. Convert booleans to strings ('true'/'false') for Mustache.
@@ -5650,7 +5664,61 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><form><input name=\"name\" placeholder=\"{{namePlc}}\"><input type=\"file\"><input type=\"hidden\" name=\"cv_file\"><button type=\"submit\">{{btnText}}</button></form><div class=\"list-container\"></div><template id=\"displayTemplate\"><div class=\"card\">{{data.name}} - <a href=\"{{data.cv_file}}\">View CV</a></div></template></div>",
   "properties": { "schema_id": "JOBS_UUID_FROM_CONTEXT", "namePlc": "Your Name", "btnText": "Apply" },
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
-  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
+  "script": "
+  const form = container.querySelector('form');
+const fileInput = container.querySelector('input[type="file"]');
+const hiddenInput = container.querySelector('input[name="cv_file"]');
+const list = container.querySelector('.list-container');
+const btn = form.querySelector('button');
+// Fallback for status display if element doesn't exist in template
+const statusEl = container.querySelector('.status') || { set textContent(val) { alert(val); } };
+
+/* 1. File Upload Logic */
+fileInput.onchange = async (e) => {
+  if (!e.target.files[0]) return;
+  btn.disabled = true;
+  const formData = new FormData();
+  formData.append('file', e.target.files[0]);
+  try {
+    const res = await api.post('/uploads/', formData);
+    hiddenInput.value = res.data ? res.data.url : res.url;
+  } catch (err) {
+    statusEl.textContent = 'File upload failed.';
+  } finally {
+    btn.disabled = false;
+  }
+};
+
+/* 2. Submit Logic with Validation */
+form.onsubmit = async (e) => {
+  e.preventDefault();
+
+  // CRITICAL: Validate file was uploaded
+  if (!hiddenInput.value) {
+    statusEl.textContent = 'Please upload a file first';
+    return;
+  }
+
+  const data = {};
+  new FormData(form).forEach((v, k) => data[k] = v);
+  
+  await api.post('/custom-data/rows/' + schemaId, { data });
+  form.reset();
+  hiddenInput.value = ''; // Clear hidden input for next entry
+  fetchRows();
+};
+
+/* 3. Render Logic */
+const fetchRows = async () => {
+  const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10');
+  const template = container.querySelector('#displayTemplate').innerHTML;
+  list.innerHTML = res.data.rows.map(row => 
+    Mustache.render(template, { data: row.data })
+  ).join('');
+};
+
+fetchRows();
+  "
 }
 
 
