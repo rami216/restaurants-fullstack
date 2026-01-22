@@ -5475,7 +5475,8 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
             - Read (Paginated): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');
             - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
-            - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: updatedData, sitemember_id: properties.sitemember_id || null });
+            - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: mergedData, sitemember_id: properties.sitemember_id || null });
+                - CRITICAL: You MUST fetch the current row and merge its data with your updates first to prevent wiping out other columns.
                 - CRITICAL: The URL path must be the ROW_ID only. Do NOT include the Schema ID in the path for updates.
             - Delete Row: await api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=' + (properties.sitemember_id || ''));
 
@@ -5503,7 +5504,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
 
         - IF CROSS-TABLE MUTATION IS IMPLIED:
-           - If the user's intent is to change the status of a specific item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put targeting the row_id selected in the dropdown. Do NOT use api.post unless the prompt specifically asks to "create" or "add" a new record.
+            - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
+            - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
+              1- The script MUST first fetch the existing row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + SELECTED_ROW_ID);.
+              2- The script MUST merge the new status into the existing data: const mergedData = { ...res.data.rows[0].data, available: false };.
+              3- The script MUST then perform the update: await api.put('/custom-data/rows/' + SELECTED_ROW_ID, { data: mergedData });.
+        - CRITICAL: Do NOT use api.post (Create) if you are modifying a record that already exists.
 
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
