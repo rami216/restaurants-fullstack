@@ -5471,6 +5471,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             
         - SCHEMA IDENTIFICATION:
             - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
+            - CRITICAL: In the script, always use the schemaId variable provided in the function arguments for API calls. DO NOT use properties.schema_id
             - If no clear match exists, set "schema_id": "" and ignore API logic.
             - Field names in forms MUST match column names in the schema exactly.
 
