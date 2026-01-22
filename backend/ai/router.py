@@ -3291,7 +3291,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": new_rami_prompt_no_table},
+                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_2},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -3306,14 +3306,14 @@ async def generate_ai_element(
         content = resp.choices[0].message.content
         payload = json.loads(content)
         # 🔍 DEBUG: Log the raw AI response
-        print("=" * 80)
-        print("🤖 RAW AI RESPONSE:")
-        print("=" * 80)
-        print(json.dumps(payload, indent=2))
-        print("=" * 80)
-        print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
-        print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
-        print("=" * 80)
+        # print("=" * 80)
+        # print("🤖 RAW AI RESPONSE:")
+        # print("=" * 80)
+        # print(json.dumps(payload, indent=2))
+        # print("=" * 80)
+        # print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
+        # print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
+        # print("=" * 80)
         # Strip <script> wrapper if present
         if isinstance(payload.get("script"), str):
             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
@@ -3321,8 +3321,8 @@ async def generate_ai_element(
                 payload["script"] = m.group(1).strip()
 
         # 🔍 ADD THIS DEBUG
-        print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
-        print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
+        # print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
+        # print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
         # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
         # This is needed for the script to dynamically fetch related data
         all_schemas_for_script = [
