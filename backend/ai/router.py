@@ -5472,10 +5472,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Field names in forms MUST match column names in the schema exactly.
 
         - API OPERATIONS (STRICT):
-            - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: null });
-            - Read: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50'); // Data is in res.data.rows
-            - Update: await api.put('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID, { data: updatedData });
-            - Delete: await api.delete('/custom-data/rows/' + SCHEMA_ID + '/' + ROW_ID);
+            - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
+            - Read (Paginated): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');
+            - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
+            - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: updatedData, sitemember_id: properties.sitemember_id || null });
+                - CRITICAL: The URL path must be the ROW_ID only. Do NOT include the Schema ID in the path for updates.
+            - Delete Row: await api.delete('/custom-data/rows/' + ROW_ID + '?sitemember_id=' + (properties.sitemember_id || ''));
 
         - IF RELATIONAL FIELDS EXIST:
             - Logic: You MUST api.get the related schema rows to populate dropdowns.
