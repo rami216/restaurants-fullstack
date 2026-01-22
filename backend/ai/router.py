@@ -5442,16 +5442,17 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - CSS must be concise, scoped, and visually polished by default.
 
 3. Interactivity (script key):
-- Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
-- STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
-- NO WRAPPERS: Do NOT wrap code in <script> tags.
-- SYNTAX: Use arrow function expressions only (const x = () => {}).
-- CRITICAL FORM RULE: If interacting with a form, the onsubmit handler MUST start with e.preventDefault(); as the very first line.
-- MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
-    - If Data-Driven: Implement fetchAndRenderRows to handle data display.
-    - If Form-Based: Implement form.onsubmit to handle data entry/submission.
-    - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
-- STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
+    - Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
+    - STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
+    - NO WRAPPERS: Do NOT wrap code in <script> tags.
+    - SYNTAX: Use arrow function expressions only (const x = () => {}).
+    - CRITICAL FORM RULE: If interacting with a form, the onsubmit handler MUST start with e.preventDefault(); as the very first line.
+    - MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
+        - If Data-Driven: Implement fetchAndRenderRows to handle data display.
+        - If Form-Based: Implement form.onsubmit to handle data entry/submission.
+        - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
+        - **Pagination & State Management:** The script MUST manage state for currentPage (0-indexed), rowsPerPage (default 20), and totalRows. It MUST render "Previous" and "Next" buttons. Buttons MUST be disabled when on the first or last page, and clicking them MUST update currentPage and re-fetch the data
+    - STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
          
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -5473,7 +5474,9 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
         - API OPERATIONS (STRICT):
             - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
-            - Read (Paginated): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');
+            - **Read (Paginated):** api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage). 
+                - **Response Structure:** Expect the response to be { data: { rows: [], total: 0 } }.
+                
             - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
             - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: mergedData, sitemember_id: properties.sitemember_id || null });
                 - CRITICAL: You MUST fetch the current row and merge its data with your updates first to prevent wiping out other columns.
