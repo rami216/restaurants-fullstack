@@ -5483,6 +5483,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Hierarchy (Parent/Child): If a dependency is implied (e.g., "Time for a specific Day"), the script MUST:
                 1. Use new Set() to populate the Parent dropdown with unique values from the dataset.
                 2. Add a change listener to the Parent to .filter() the data and re-populate the Child dropdown.
+                3. Immediately after populating the Parent dropdown, the script MUST automatically call the Child fetch function for the first available Parent value to ensure the Child dropdown is never empty on load.
 
         - IF FILE/IMAGE UPLOADS ARE IMPLIED:
             - HTML: Render <input type="file"> AND a <input type="hidden" name="SCHEMA_COLUMN_NAME">.
@@ -5500,9 +5501,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
 
         - IF CROSS-TABLE MUTATION IS IMPLIED:
-            - Define a crossTableMutations array.
-            - After the primary creation/update, implement a runCrossTableMutations helper to execute secondary api.put calls (e.g., marking a booked slot as "available: false").
----
+           - If the user's intent is to change the status of a specific item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put targeting the row_id selected in the dropdown. Do NOT use api.post unless the prompt specifically asks to "create" or "add" a new record.
 
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A valid JSON object.
