@@ -5474,8 +5474,9 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
         - API OPERATIONS (STRICT):
             - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
-            - **Read (Paginated):** api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage). 
-                - **Response Structure:** Expect the response to be { data: { rows: [], total: 0 } }.
+            - Read (List & Render): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage);
+                . CRITICAL: Access the array of records via res.data.rows.
+                . CRITICAL: Access the total count for pagination via res.data.total.
                 
             - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
             - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: mergedData, sitemember_id: properties.sitemember_id || null });
@@ -5501,10 +5502,14 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 5. Re-enable the button.
 
         - IF RENDERING DATA LISTS (STRICT PROTOCOL):
-            - Rendering Logic: You MUST pass the entire row object directly to Mustache without flattening it.
-            - Template Tokens: In the aiTemplate, you MUST access fields using the {{data.field_id}} syntax (e.g., {{data.name}}, {{data.email}}).
-            - Iteration: Use a loop or .map() in the script to render each row: const html = rows.map(row => Mustache.render(template, row)).join('');.
-            - Row ID: Since you are passing the whole row, you can access the ID via {{row_id}} in the template for Edit/Delete buttons.
+            - DATA PRE-PROCESSING (MANDATORY): Before rendering, you MUST create a new "flattened" array from the API response.
+                . Correct Logic: const itemsToRender = res.data.rows.map(row => ({ ...row.data, row_id: row.row_id }));
+            - TEMPLATING: Because you flattened the data, your aiTemplate tokens MUST be simple and direct.
+                . Correct: {{name}}, {{email}}, {{phone}}.
+                . Incorrect: {{data.name}} (This will fail if you use the flattening logic above).
+            - INJECTION: Use a single innerHTML call to update the container:
+                . container.querySelector('.list-container').innerHTML = itemsToRender.map(item => Mustache.render(template, item)).join('');
+                
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
             - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
