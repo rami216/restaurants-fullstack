@@ -5497,12 +5497,15 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 4. Set hiddenInput.value = url and show a success message.
                 5. Re-enable the button.
 
-        - IF RENDERING DATA LISTS:
-            - Pre-processing: In the script, loop through res.data.rows and:
-                1. Convert booleans to strings ('true'/'false') for Mustache.
-                2. For relations, pre-process a 'display_label' (e.g., combining first/last name) for the template.
-            - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
-
+        - IF RENDERING DATA LISTS (CRITICAL):
+            - Data Nesting Awareness: Remember that actual column values are nested inside a data object (e.g., row.data.email).
+            - Mandatory Pre-processing: Before rendering, you MUST map through res.data.rows to create a "flat" array of objects so Mustache can access variables without the data. prefix.
+            - Flattening Logic: - Correct: const displayRows = res.data.rows.map(row => ({ ...row.data, row_id: row.row_id }));
+                - Boolean Fix: During this mapping, convert all booleans to strings (e.g., row.data.available ? 'True' : 'False').
+                - Relational Labels: Create a display_label (e.g., row.data.first_name + ' ' + row.data.last_name) if the template needs combined fields.
+            - Template Execution: Pass the newly flattened array to Mustache.
+                - Correct: Mustache.render(template, { subscribers: displayRows });
+                
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
             - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
