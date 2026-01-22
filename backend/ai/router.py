@@ -3320,6 +3320,9 @@ async def generate_ai_element(
             if m:
                 payload["script"] = m.group(1).strip()
 
+        # 🔍 ADD THIS DEBUG
+        print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
+        print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
         # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
         # This is needed for the script to dynamically fetch related data
         all_schemas_for_script = [
