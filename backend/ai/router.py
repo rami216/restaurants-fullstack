@@ -5462,6 +5462,10 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 5. DATA LOGIC PROTOCOL (Implementation Rules):
         Analyze the user's prompt and EXISTING_SCHEMAS_ON_WEBSITE. Apply these modules ONLY if applicable:
 
+        - **IDENTIFIER RULE (CRITICAL):**
+            - The unique identifier for ANY row in ANY schema is ALWAYS **"row_id"** (e.g., row.row_id). 
+            - **NEVER use "row.id"**. Any API update or delete call using "row.id" will fail.
+            
         - SCHEMA IDENTIFICATION:
             - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
             - If no clear match exists, set "schema_id": "" and ignore API logic.
@@ -5475,7 +5479,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
         - IF RELATIONAL FIELDS EXIST:
             - Logic: You MUST api.get the related schema rows to populate dropdowns.
-            - UI: Use <select> elements where the value is the row_id.
+            - UI: Use <select> elements where the value is the **row.row_id**.
             - Hierarchy (Parent/Child): If a dependency is implied (e.g., "Time for a specific Day"), the script MUST:
                 1. Use new Set() to populate the Parent dropdown with unique values from the dataset.
                 2. Add a change listener to the Parent to .filter() the data and re-populate the Child dropdown.
@@ -5581,8 +5585,6 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
   "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
 }
-
-
 
 
 """.strip()
