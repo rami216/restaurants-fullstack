@@ -5423,6 +5423,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **2. Styling:**
     - All CSS must be in a single <style> tag.
     - Use mustache tokens {{...}} for all editable style values.
+    - **DYNAMIC LIST STYLING (CRITICAL):** If the element renders a list of items (e.g., `.item`, `.card`), you **MUST** explicitly define CSS for that class (padding, border, background, min-height). NEVER leave a dynamic item class unstyled.
     - **OUTER CONTAINER RULES (CRITICAL):**
         - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
         - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
