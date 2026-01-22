@@ -5442,17 +5442,16 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
     - CSS must be concise, scoped, and visually polished by default.
 
 3. Interactivity (script key):
-    - Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
-    - STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
-    - NO WRAPPERS: Do NOT wrap code in <script> tags.
-    - SYNTAX: Use arrow function expressions only (const x = () => {}).
-    - CRITICAL FORM RULE: If interacting with a form, the onsubmit handler MUST start with e.preventDefault(); as the very first line.
-    - MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
-        - If Data-Driven: Implement fetchAndRenderRows to handle data display.
-        - If Form-Based: Implement form.onsubmit to handle data entry/submission.
-        - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
-        - **Pagination & State Management:** The script MUST manage state for currentPage (0-indexed), rowsPerPage (default 20), and totalRows. It MUST render "Previous" and "Next" buttons. Buttons MUST be disabled when on the first or last page, and clicking them MUST update currentPage and re-fetch the data
-    - STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
+- Provide a JavaScript string executed inside a function (container, api, schemaId, properties, Mustache).
+- STRICT LOCAL SCOPING: Use container.querySelector (NOT document.querySelector).
+- NO WRAPPERS: Do NOT wrap code in <script> tags.
+- SYNTAX: Use arrow function expressions only (const x = () => {}).
+- CRITICAL FORM RULE: If interacting with a form, the onsubmit handler MUST start with e.preventDefault(); as the very first line.
+- MODULAR CONSTRUCTION: Only include logic modules relevant to the prompt:
+    - If Data-Driven: Implement fetchAndRenderRows to handle data display.
+    - If Form-Based: Implement form.onsubmit to handle data entry/submission.
+    - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
+- STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
          
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
@@ -5474,9 +5473,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
         - API OPERATIONS (STRICT):
             - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
-            - **Read (Paginated):** api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage). 
-                - **Response Structure:** Expect the response to be { data: { rows: [], total: 0 } }.
-                
+            - Read (Paginated): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?limit=50');
             - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
             - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: mergedData, sitemember_id: properties.sitemember_id || null });
                 - CRITICAL: You MUST fetch the current row and merge its data with your updates first to prevent wiping out other columns.
@@ -5500,15 +5497,12 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 4. Set hiddenInput.value = url and show a success message.
                 5. Re-enable the button.
 
-        - IF RENDERING DATA LISTS (CRITICAL):
-            - Data Nesting Awareness: Remember that actual column values are nested inside a data object (e.g., row.data.email).
-            - Mandatory Pre-processing: Before rendering, you MUST map through res.data.rows to create a "flat" array of objects so Mustache can access variables without the data. prefix.
-            - Flattening Logic: - Correct: const displayRows = res.data.rows.map(row => ({ ...row.data, row_id: row.row_id }));
-                - Boolean Fix: During this mapping, convert all booleans to strings (e.g., row.data.available ? 'True' : 'False').
-                - Relational Labels: Create a display_label (e.g., row.data.first_name + ' ' + row.data.last_name) if the template needs combined fields.
-            - Template Execution: Pass the newly flattened array to Mustache.
-                - Correct: Mustache.render(template, { subscribers: displayRows });
-                
+        - IF RENDERING DATA LISTS:
+            - Pre-processing: In the script, loop through res.data.rows and:
+                1. Convert booleans to strings ('true'/'false') for Mustache.
+                2. For relations, pre-process a 'display_label' (e.g., combining first/last name) for the template.
+            - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
+
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
             - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
@@ -5601,6 +5595,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 
 """.strip()
+
 BEST_WORKING_NON_TABLE_PROMPT_2_TEST_1 = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
