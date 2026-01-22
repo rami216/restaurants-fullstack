@@ -5418,7 +5418,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **1.  HTML Structure:**
     - The HTML must be wrapped in a single container `<div>`.
     - This container will have the unique class name you are given applied to it.
-    - **FORMS:** If creating a form, use `<form>`. **DO NOT** add `action=""` or `method=""` attributes. We handle submission purely via JavaScript.
+    **FORMS:** If creating a form, use `<form onsubmit="return false;">` to prevent default navigation. We handle submission purely via JavaScript.
 
 **2. Styling:**
     - All CSS must be in a single <style> tag.
@@ -5661,67 +5661,11 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **EXAMPLE 3: Complex Data (Job Board with CV Upload)**
 - Prompt: "A job application form that saves to Jobs table and shows recent applicants"
 {
-  "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><form><input name=\"name\" placeholder=\"{{namePlc}}\"><input type=\"file\"><input type=\"hidden\" name=\"cv_file\"><button type=\"submit\">{{btnText}}</button></form><div class=\"list-container\"></div><template id=\"displayTemplate\"><div class=\"card\">{{data.name}} - <a href=\"{{data.cv_file}}\">View CV</a></div></template></div>",
+  "aiTemplate": "<div class=\"{{unique_class_name}}\"><style>...</style><form onsubmit=\"return false;\"><input name=\"name\" placeholder=\"{{namePlc}}\"><input type=\"file\"><input type=\"hidden\" name=\"cv_file\"><button type=\"submit\">{{btnText}}</button></form><div class=\"list-container\"></div><template id=\"displayTemplate\"><div class=\"card\">{{data.name}} - <a href=\"{{data.cv_file}}\">View CV</a></div></template></div>",
   "properties": { "schema_id": "JOBS_UUID_FROM_CONTEXT", "namePlc": "Your Name", "btnText": "Apply" },
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
-  "script": "
-  const form = container.querySelector('form');
-const fileInput = container.querySelector('input[type="file"]');
-const hiddenInput = container.querySelector('input[name="cv_file"]');
-const list = container.querySelector('.list-container');
-const btn = form.querySelector('button');
-// Fallback for status display if element doesn't exist in template
-const statusEl = container.querySelector('.status') || { set textContent(val) { alert(val); } };
-
-/* 1. File Upload Logic */
-fileInput.onchange = async (e) => {
-  if (!e.target.files[0]) return;
-  btn.disabled = true;
-  const formData = new FormData();
-  formData.append('file', e.target.files[0]);
-  try {
-    const res = await api.post('/uploads/', formData);
-    hiddenInput.value = res.data ? res.data.url : res.url;
-  } catch (err) {
-    statusEl.textContent = 'File upload failed.';
-  } finally {
-    btn.disabled = false;
-  }
-};
-
-/* 2. Submit Logic with Validation */
-form.onsubmit = async (e) => {
-  e.preventDefault();
-
-  // CRITICAL: Validate file was uploaded
-  if (!hiddenInput.value) {
-    statusEl.textContent = 'Please upload a file first';
-    return;
-  }
-
-  const data = {};
-  new FormData(form).forEach((v, k) => data[k] = v);
-  
-  await api.post('/custom-data/rows/' + schemaId, { data });
-  form.reset();
-  hiddenInput.value = ''; // Clear hidden input for next entry
-  fetchRows();
-};
-
-/* 3. Render Logic */
-const fetchRows = async () => {
-  const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10');
-  const template = container.querySelector('#displayTemplate').innerHTML;
-  list.innerHTML = res.data.rows.map(row => 
-    Mustache.render(template, { data: row.data })
-  ).join('');
-};
-
-fetchRows();
-  "
+  "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); fileInput.onchange = async (e) => { if (!e.target.files[0]) return; btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); try { const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; } catch (err) { btn.disabled = false; } finally { btn.disabled = false; } }; form.onsubmit = async (e) => { e.preventDefault(); if (!hiddenInput.value) return; const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); form.reset(); hiddenInput.value = ''; fetchRows(); }; const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); const template = container.querySelector('#displayTemplate').innerHTML; list.innerHTML = res.data.rows.map(row => Mustache.render(template, { data: row.data })).join(''); }; fetchRows();"
 }
-
-
 """.strip()
 
 BEST_WORKING_NON_TABLE_PROMPT_2_TEST_1 = """
