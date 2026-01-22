@@ -5423,7 +5423,6 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **2. Styling:**
     - All CSS must be in a single <style> tag.
     - Use mustache tokens {{...}} for all editable style values.
-    - **DYNAMIC LIST STYLING (CRITICAL):** If the element renders a list of items (e.g., `.item`, `.card`), you **MUST** explicitly define CSS for that class (padding, border, background, min-height). NEVER leave a dynamic item class unstyled.
     - **OUTER CONTAINER RULES (CRITICAL):**
         - The main container <div> (using the `unique_class_name`) MUST have `background: transparent;` and `width: 100%;` by default.
         - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
@@ -5452,10 +5451,9 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
         - If Data-Driven: Implement fetchAndRenderRows to handle data display.
         - If Form-Based: Implement form.onsubmit to handle data entry/submission.
         - If Relational: Implement separate api.get calls for related_schema_id fields to populate dropdowns or lookups.
+        - **Pagination & State Management:** The script MUST manage state for currentPage (0-indexed), rowsPerPage (default 20), and totalRows. It MUST render "Previous" and "Next" buttons. Buttons MUST be disabled when on the first or last page, and clicking them MUST update currentPage and re-fetch the data
     - STRICT PROHIBITION: Do NOT include alert(), console.log(), or any placeholder popups. All code must be fully functional.
-    - **Pagination & State Management:** The script MUST manage state for `currentPage` (0-indexed), `rowsPerPage` (default 20), and `totalRows`.
-        - It MUST render "Previous" and "Next" buttons. Buttons MUST be disabled appropriately.
-        
+         
 **4.  JSON Sync & Editable Content (MOST IMPORTANT RULE):**
     - You **MUST** make the component fully editable. Go through the HTML in your `aiTemplate` and find **EVERY** piece of text a user would want to change (all headings, titles, paragraphs, button text, etc.).
     - **NO user-facing text should be hardcoded in the `aiTemplate`**.
@@ -5471,16 +5469,13 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
             
         - SCHEMA IDENTIFICATION:
             - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
-            - CRITICAL: In the script, always use the schemaId variable provided in the function arguments for API calls. DO NOT use properties.schema_id
             - If no clear match exists, set "schema_id": "" and ignore API logic.
             - Field names in forms MUST match column names in the schema exactly.
 
         - API OPERATIONS (STRICT):
-            - CRITICAL: ALWAYS use String Concatenation (+) for API paths. DO NOT use template literals (backticks) to avoid JSON syntax errors.
             - Create: await api.post('/custom-data/rows/' + SCHEMA_ID, { data: rowData, sitemember_id: properties.sitemember_id || null });
-            - Read (List & Render): const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage);
-                . CRITICAL: Access the array of records via res.data.rows.
-                . CRITICAL: Access the total count for pagination via res.data.total.
+            - **Read (Paginated):** api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage). 
+                - **Response Structure:** Expect the response to be { data: { rows: [], total: 0 } }.
                 
             - Fetch Single Row: const res = await api.get('/custom-data/rows/' + SCHEMA_ID + '?row_id=' + ROW_ID);
             - Update ANY Row (Universal): await api.put('/custom-data/rows/' + ROW_ID, { data: mergedData, sitemember_id: properties.sitemember_id || null });
@@ -5505,13 +5500,11 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 4. Set hiddenInput.value = url and show a success message.
                 5. Re-enable the button.
 
-      - **IF RENDERING DATA LISTS (STRICT PROTOCOL):**
-        - **Data Structure:** The API sends rows as `{"row_id": "...", "data": {"field_id": "value"}}`.
-        - **TEMPLATING:** For regular fields, you MUST use `{{data.field_id}}`.
-            - **CRITICAL:** For relational fields, the data object contains a nested object. You MUST access it correctly (e.g., `{{data.project.data.project_title}}`).
-        - **RENDERING:** Pass the **ENTIRE row object** to Mustache.
-            - **Logic:** `rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(template, row); container.appendChild(div); });`
-                
+        - IF RENDERING DATA LISTS (STRICT PROTOCOL):
+            - Rendering Logic: You MUST pass the entire row object directly to Mustache without flattening it.
+            - Template Tokens: In the aiTemplate, you MUST access fields using the {{data.field_id}} syntax (e.g., {{data.name}}, {{data.email}}).
+            - Iteration: Use a loop or .map() in the script to render each row: const html = rows.map(row => Mustache.render(template, row)).join('');.
+            - Row ID: Since you are passing the whole row, you can access the ID via {{row_id}} in the template for Edit/Delete buttons.
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
             - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
@@ -5606,13 +5599,14 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 **Output:**
 {
   "aiTemplate": "<div class=\"{{unique_class_name}}\"><h3>{{title}}</h3><div class=\"list-container\"></div><div class=\"pagination\"></div><template id=\"itemTemplate\"><div class=\"item\">{{data.name}} ({{data.email}})</div></template></div>",
-  "properties": { "title": "Subscribers List", "schema_id": "74b2b340-5d25-4c47-b668-4515e0135da6" },
+  "properties": { "title": "Subscribers List" },
   "editableProps": [ { "key": "title", "label": "Title", "type": "text" } ],
-  "script": "const list = container.querySelector('.list-container'); const pag = container.querySelector('.pagination'); const temp = container.querySelector('#itemTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 10; let totalRows = 0; const fetchRows = async () => { try { const res = await api.get('/custom-data/rows/' + schemaId + '?skip=' + (currentPage * rowsPerPage) + '&limit=' + rowsPerPage); const { rows, total } = res.data; totalRows = total; list.innerHTML = ''; rows.forEach(row => { const div = document.createElement('div'); div.innerHTML = Mustache.render(temp, row); list.appendChild(div); }); renderPagination(); } catch (err) { console.error(err); } }; const renderPagination = () => { pag.innerHTML = ''; const pages = Math.ceil(totalRows / rowsPerPage); if(pages <= 1) return; const prev = document.createElement('button'); prev.innerText = 'Prev'; prev.disabled = currentPage === 0; prev.onclick = () => { currentPage--; fetchRows(); }; const next = document.createElement('button'); next.innerText = 'Next'; next.disabled = currentPage >= pages - 1; next.onclick = () => { currentPage++; fetchRows(); }; pag.appendChild(prev); pag.appendChild(next); }; fetchRows();"
+  "script": "const list = container.querySelector('.list-container'); const pag = container.querySelector('.pagination'); const temp = container.querySelector('#itemTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 10; const fetchRows = async () => { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); list.innerHTML = res.data.rows.map(row => Mustache.render(temp, row)).join(''); renderControls(res.data.total); }; const renderControls = (total) => { pag.innerHTML = ''; const pages = Math.ceil(total / rowsPerPage); if(pages <= 1) return; const next = document.createElement('button'); next.innerText = 'Next'; next.disabled = currentPage >= pages - 1; next.onclick = () => { currentPage++; fetchRows(); }; pag.appendChild(next); }; fetchRows();"
 }
 
 
 """.strip()
+
 BEST_WORKING_NON_TABLE_PROMPT_2_TEST_1 = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
