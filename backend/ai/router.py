@@ -5500,11 +5500,15 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
                 4. Set hiddenInput.value = url and show a success message.
                 5. Re-enable the button.
 
-        - IF RENDERING DATA LISTS (STRICT PROTOCOL):
-            - Rendering Logic: You MUST pass the entire row object directly to Mustache without flattening it.
-            - Template Tokens: In the aiTemplate, you MUST access fields using the {{data.field_id}} syntax (e.g., {{data.name}}, {{data.email}}).
-            - Iteration: Use a loop or .map() in the script to render each row: const html = rows.map(row => Mustache.render(template, row)).join('');.
-            - Row ID: Since you are passing the whole row, you can access the ID via {{row_id}} in the template for Edit/Delete buttons.
+        - IF RENDERING DATA LISTS (CRITICAL):
+            - Data Nesting Awareness: Remember that actual column values are nested inside a data object (e.g., row.data.email).
+            - Mandatory Pre-processing: Before rendering, you MUST map through res.data.rows to create a "flat" array of objects so Mustache can access variables without the data. prefix.
+            - Flattening Logic: - Correct: const displayRows = res.data.rows.map(row => ({ ...row.data, row_id: row.row_id }));
+                - Boolean Fix: During this mapping, convert all booleans to strings (e.g., row.data.available ? 'True' : 'False').
+                - Relational Labels: Create a display_label (e.g., row.data.first_name + ' ' + row.data.last_name) if the template needs combined fields.
+            - Template Execution: Pass the newly flattened array to Mustache.
+                - Correct: Mustache.render(template, { subscribers: displayRows });
+                
         - IF CROSS-TABLE MUTATION IS IMPLIED:
             - Logic: If the goal is to change the status of an existing item (e.g., "mark a slot as booked"), the onsubmit handler MUST use api.put with the specific row_id selected in the dropdown.
             - DATA PRESERVATION RULE (CRITICAL): Zygoflow api.put replaces the entire data object. To prevent wiping out other column values (like day or time):
@@ -5594,19 +5598,9 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "editableProps": [ { "key": "btnText", "label": "Button Text", "type": "text" } ],
   "script": "const form = container.querySelector('form'); const fileInput = container.querySelector('input[type=\"file\"]'); const hiddenInput = container.querySelector('input[name=\"cv_file\"]'); const list = container.querySelector('.list-container'); const btn = form.querySelector('button'); /* 1. File Upload Logic */ fileInput.onchange = async (e) => { btn.disabled = true; const formData = new FormData(); formData.append('file', e.target.files[0]); const res = await api.post('/uploads/', formData); hiddenInput.value = res.data ? res.data.url : res.url; btn.disabled = false; }; /* 2. Submit Logic */ form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); await api.post('/custom-data/rows/' + schemaId, { data }); fetchRows(); }; /* 3. Render Logic */ const fetchRows = async () => { const res = await api.get('/custom-data/rows/' + schemaId + '?limit=10'); list.innerHTML = res.data.rows.map(row => Mustache.render(container.querySelector('#displayTemplate').innerHTML, { data: row.data })).join(''); }; fetchRows();"
 }
-### **EXAMPLE 4: Paginated List (Subscribers)**
-**Prompt:** "List names and emails from Subscribers with pagination"
-**Output:**
-{
-  "aiTemplate": "<div class=\"{{unique_class_name}}\"><h3>{{title}}</h3><div class=\"list-container\"></div><div class=\"pagination\"></div><template id=\"itemTemplate\"><div class=\"item\">{{data.name}} ({{data.email}})</div></template></div>",
-  "properties": { "title": "Subscribers List" },
-  "editableProps": [ { "key": "title", "label": "Title", "type": "text" } ],
-  "script": "const list = container.querySelector('.list-container'); const pag = container.querySelector('.pagination'); const temp = container.querySelector('#itemTemplate').innerHTML; let currentPage = 0; const rowsPerPage = 10; const fetchRows = async () => { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${currentPage * rowsPerPage}&limit=${rowsPerPage}`); list.innerHTML = res.data.rows.map(row => Mustache.render(temp, row)).join(''); renderControls(res.data.total); }; const renderControls = (total) => { pag.innerHTML = ''; const pages = Math.ceil(total / rowsPerPage); if(pages <= 1) return; const next = document.createElement('button'); next.innerText = 'Next'; next.disabled = currentPage >= pages - 1; next.onclick = () => { currentPage++; fetchRows(); }; pag.appendChild(next); }; fetchRows();"
-}
 
 
 """.strip()
-
 BEST_WORKING_NON_TABLE_PROMPT_2_TEST_1 = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
 
