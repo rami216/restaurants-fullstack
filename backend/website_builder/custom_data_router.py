@@ -160,7 +160,8 @@ async def get_rows_for_schema(
     db: AsyncSession = Depends(get_db),
     skip: int = Query(0, ge=0, description="Number of rows to skip"),
     # ✅ THE FIX: Increased the maximum limit to 1000
-    limit: int = Query(20, ge=1, le=1000, description="Number of rows to return")
+    limit: int = Query(20, ge=1, le=1000, description="Number of rows to return"),
+    sitemember_id: Optional[UUID] = Query(None, description="Filter by site member ID")  # ✅ ADD THIS
 ):
     """
     Fetches rows for a given schema with pagination.
@@ -170,14 +171,33 @@ async def get_rows_for_schema(
         raise HTTPException(status_code=404, detail="Schema not found.")
 
     # 1. Get the total count of rows for the frontend to calculate pages
-    count_query = select(func.count(CustomDataRow.row_id)).where(CustomDataRow.schema_id == schema_id)
+    # count_query = select(func.count(CustomDataRow.row_id)).where(CustomDataRow.schema_id == schema_id)
+    # total_result = await db.execute(count_query)
+    # total_rows = total_result.scalar_one()
+
+    # # 2. Get the paginated subset of rows
+    # result = await db.execute(
+    #     select(CustomDataRow)
+    #     .where(CustomDataRow.schema_id == schema_id)
+    #     .order_by(CustomDataRow.created_at.desc())
+    #     .offset(skip)
+    #     .limit(limit)
+    # )
+    # rows = result.scalars().all()
+    base_query = select(CustomDataRow).where(CustomDataRow.schema_id == schema_id)
+    
+    # ✅ ADD THIS: Filter by sitemember_id if provided
+    if sitemember_id is not None:
+        base_query = base_query.where(CustomDataRow.sitemember_id == sitemember_id)
+
+    # 2. Get the total count
+    count_query = select(func.count(CustomDataRow.row_id)).select_from(base_query.subquery())
     total_result = await db.execute(count_query)
     total_rows = total_result.scalar_one()
 
-    # 2. Get the paginated subset of rows
+    # 3. Get the paginated subset
     result = await db.execute(
-        select(CustomDataRow)
-        .where(CustomDataRow.schema_id == schema_id)
+        base_query
         .order_by(CustomDataRow.created_at.desc())
         .offset(skip)
         .limit(limit)
