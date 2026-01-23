@@ -160,10 +160,10 @@ const EditableCartItem = ({
 
   // Selections
   const [editedQuantity, setEditedQuantity] = React.useState<number>(
-    item.quantity
+    item.quantity,
   );
   const [editedExtras, setEditedExtras] = React.useState<Set<string>>(
-    new Set(item.selectedExtras.map((e) => e.extra_id))
+    new Set(item.selectedExtras.map((e) => e.extra_id)),
   );
   const [editedOptions, setEditedOptions] = React.useState<
     Record<string, string>
@@ -172,7 +172,7 @@ const EditableCartItem = ({
   // Pricing
   const [basePrice, setBasePrice] = React.useState<number>(0); // inferred
   const [editedUnitPrice, setEditedUnitPrice] = React.useState<number>(
-    Number(item.unitPrice || 0)
+    Number(item.unitPrice || 0),
   );
 
   const toNum = (v: any) => (Number.isFinite(Number(v)) ? Number(v) : 0);
@@ -185,10 +185,10 @@ const EditableCartItem = ({
       try {
         const [extrasRes, optionsRes] = await Promise.all([
           saasApi.get<Extra[]>(
-            `/menu-item-extras/extras-for-item/${item.itemId}`
+            `/menu-item-extras/extras-for-item/${item.itemId}`,
           ),
           saasApi.get<PublicOptionGroup[]>(
-            `/menu-item-options/options-for-item/${item.itemId}`
+            `/menu-item-options/options-for-item/${item.itemId}`,
           ),
         ]);
         if (cancelled) return;
@@ -211,7 +211,7 @@ const EditableCartItem = ({
         // Infer base price from cart unitPrice minus current selected adjustments
         const extrasSum = (item.selectedExtras || []).reduce(
           (acc, e: any) => acc + toNum(e.price),
-          0
+          0,
         );
         let optionsSum = 0;
         for (const group of options) {
@@ -222,7 +222,7 @@ const EditableCartItem = ({
         }
         const inferred = Math.max(
           0,
-          toNum(item.unitPrice) - extrasSum - optionsSum
+          toNum(item.unitPrice) - extrasSum - optionsSum,
         );
         setBasePrice(inferred);
 
@@ -260,7 +260,7 @@ const EditableCartItem = ({
         const choice = group?.choices.find((c) => c.choice_id === choiceId);
         return acc + (choice ? toNum(choice.price_adjustment) : 0);
       },
-      0
+      0,
     );
 
     const base = basePrice > 0 ? basePrice : toNum(item.unitPrice); // fallback
@@ -288,7 +288,7 @@ const EditableCartItem = ({
     if (isLoading) return;
     // Build updated selections
     const newSelectedExtras = allExtras.filter((e) =>
-      editedExtras.has(e.extra_id)
+      editedExtras.has(e.extra_id),
     );
     const newSelectedOptions: Record<string, string> = {};
     allOptions.forEach((group) => {
@@ -459,7 +459,7 @@ const CartView = ({
     if (websiteData.payment_method === "stripe") {
       saasApi
         .get(
-          `/users-stripe-account/public/stripe-key/${websiteData.website_id}`
+          `/users-stripe-account/public/stripe-key/${websiteData.website_id}`,
         )
         .then((res) => {
           if (res.data.publishableKey) {
@@ -486,7 +486,7 @@ const CartView = ({
       })
       .then((res) => setClientSecret(res.data.clientSecret || ""))
       .catch(() =>
-        setPiError("Could not initialize checkout. Please try again.")
+        setPiError("Could not initialize checkout. Please try again."),
       );
   }, [cart, websiteData]);
 
@@ -720,142 +720,6 @@ const normalizeBackground = (bg?: string) => {
 };
 // frontend/src/components/builder/PublicCanvas.tsx
 
-// const GatedContent: React.FC<{
-//   elementProps: any;
-//   children: React.ReactNode;
-//   isLoggedIn: boolean;
-//   websiteData: PublicWebsiteData;
-//   isPageGate?: boolean; // ✅ 1. ADD A NEW PROP to identify page-level checks
-// }> = ({
-//   elementProps,
-//   children,
-//   isLoggedIn,
-//   websiteData,
-//   isPageGate = false,
-// }) => {
-//   const [visibility, setVisibility] = useState<
-//     "loading" | "visible" | "hidden"
-//   >("loading");
-//   const [hiddenReason, setHiddenReason] = useState<"auth" | "purchase" | null>(
-//     null
-//   );
-//   const purchaseCacheRef = useRef<Record<string, boolean>>({});
-
-//   useEffect(() => {
-//     const checkVisibility = async () => {
-//       const v = elementProps?.visibility || {};
-
-//       // Rule: Anonymous Only
-//       if (v.requiresAnonymous && isLoggedIn) {
-//         setVisibility("hidden");
-//         return;
-//       }
-
-//       // Rule: Login Required
-//       if (v.requiresAuth && !isLoggedIn) {
-//         setVisibility("hidden");
-//         return;
-//       }
-//       // ✅ ADD THIS NEW RULE: Admin Emails Required
-//       const adminEmails = v.admin_emails || [];
-//       if (adminEmails.length > 0) {
-//         if (!isLoggedIn) {
-//           setVisibility("hidden"); // Must be logged in to be an admin
-//           return;
-//         }
-//         // Get the current member's email from localStorage
-//         const currentUserEmail = localStorage.getItem(
-//           `siteMemberEmail:${websiteData?.subdomain}`
-//         );
-//         if (!currentUserEmail || !adminEmails.includes(currentUserEmail)) {
-//           setVisibility("hidden"); // Hide if the current user's email is not in the list
-//           return;
-//         }
-//       }
-
-//       // Helper function to check purchase status & use cache
-//       const checkPurchase = async (productId: string): Promise<boolean> => {
-//         const memberId = localStorage.getItem(
-//           `siteMemberId:${websiteData?.subdomain}`
-//         );
-//         if (!isLoggedIn || !memberId) return false;
-
-//         const cacheKey = `${memberId}_${productId}`;
-//         if (typeof purchaseCacheRef.current[cacheKey] !== "undefined") {
-//           return purchaseCacheRef.current[cacheKey];
-//         }
-//         try {
-//           const params = new URLSearchParams({
-//             website_id: String(websiteData.website_id),
-//             member_id: memberId,
-//             product_id: productId,
-//           });
-//           const { data: hasPurchase } = await saasApi.get<boolean>(
-//             `/users-stripe-account/${
-//               websiteData.subdomain
-//             }/has-purchase?${params.toString()}`
-//           );
-//           purchaseCacheRef.current[cacheKey] = !!hasPurchase;
-//           return !!hasPurchase;
-//         } catch {
-//           purchaseCacheRef.current[cacheKey] = false;
-//           return false;
-//         }
-//       };
-
-//       // Rule: Must have purchased a product
-//       if (v.required_product_id) {
-//         const hasRequiredProduct = await checkPurchase(v.required_product_id);
-//         if (!hasRequiredProduct) {
-//           setVisibility("hidden");
-//           return;
-//         }
-//       }
-
-//       // ✅ NEW: Rule: Must NOT have purchased a product
-//       if (v.forbidden_product_id) {
-//         const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
-//         if (hasForbiddenProduct) {
-//           setVisibility("hidden");
-//           return;
-//         }
-//       }
-
-//       // If no rules hide the content, show it
-//       setVisibility("visible");
-//     };
-
-//     checkVisibility();
-//   }, [
-//     JSON.stringify(elementProps?.visibility || {}),
-//     isLoggedIn,
-//     websiteData?.subdomain,
-//     websiteData?.website_id,
-//   ]);
-
-//   if (visibility === "loading") {
-//     return (
-//       <div className="p-4 text-center text-gray-400">Loading Content...</div>
-//     );
-//   }
-//   if (visibility === "hidden") {
-//     const isContainer =
-//       elementProps?.padding || elementProps?.display || elementProps?.style;
-//     if (isContainer) {
-//       return (
-//         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
-//           <h4 className="font-semibold">Content Locked</h4>
-//           <p className="text-sm mt-1">
-//             This content is not available for your account.
-//           </p>
-//         </div>
-//       );
-//     }
-//     return null;
-//   }
-//   return <>{children}</>;
-// };
-
 const GatedContent: React.FC<{
   elementProps: any;
   children: React.ReactNode;
@@ -893,7 +757,7 @@ const GatedContent: React.FC<{
       const adminEmails = v.admin_emails || [];
       if (adminEmails.length > 0) {
         const currentUserEmail = localStorage.getItem(
-          `siteMemberEmail:${websiteData?.subdomain}`
+          `siteMemberEmail:${websiteData?.subdomain}`,
         );
         if (
           !isLoggedIn ||
@@ -932,7 +796,7 @@ const GatedContent: React.FC<{
       // --- Your existing purchase logic remains the same ---
       const checkPurchase = async (productId: string): Promise<boolean> => {
         const memberId = localStorage.getItem(
-          `siteMemberId:${websiteData?.subdomain}`
+          `siteMemberId:${websiteData?.subdomain}`,
         );
         if (!isLoggedIn || !memberId) return false;
         const cacheKey = `${memberId}_${productId}`;
@@ -948,7 +812,7 @@ const GatedContent: React.FC<{
           const { data: hasPurchase } = await saasApi.get<boolean>(
             `/users-stripe-account/${
               websiteData.subdomain
-            }/has-purchase?${params.toString()}`
+            }/has-purchase?${params.toString()}`,
           );
           purchaseCacheRef.current[cacheKey] = !!hasPurchase;
           return !!hasPurchase;
@@ -1120,7 +984,7 @@ const MainContent = ({
                   {sec.subsections.map((sub) => {
                     const subProps = sub.properties || {};
                     const { initial, animate, transition } = getMotionConfig(
-                      subProps.animation
+                      subProps.animation,
                     );
                     const subsectionStyle = buildSubsectionStyle(subProps);
 
@@ -1163,90 +1027,13 @@ const MainContent = ({
 interface AiElementRunnerProps {
   element: ElementType;
   isPreview: boolean;
+  websiteData: PublicWebsiteData; // ✅ ADD THIS
 }
-
-// const AiElementRunner: React.FC<AiElementRunnerProps> = ({
-//   element,
-//   isPreview,
-// }) => {
-//   const { aiPayload } = element;
-//   const ref = useRef<HTMLDivElement>(null);
-
-//   useLayoutEffect(() => {
-//     if (!aiPayload || !ref.current) return;
-//     const processedProps = { ...(aiPayload.properties || {}) };
-
-//     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
-//       if (processedProps[key])
-//         processedProps[key] = resolveImageSrc(processedProps[key]);
-//     }
-
-//     let htmlOnly = (aiPayload.aiTemplate || "").replace(
-//       /<script[\s\S]*?<\/script>/g,
-//       ""
-//     );
-
-//     // ✅ THE FIX: Protect the displayTemplate from the first render pass
-//     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
-//     const templateMatch = htmlOnly.match(templateRegex);
-//     const templateContent = templateMatch ? templateMatch[0] : "";
-
-//     // Temporarily replace the template with a placeholder
-//     if (templateContent) {
-//       htmlOnly = htmlOnly.replace(
-//         templateContent,
-//         '<div id="displayTemplate-placeholder"></div>'
-//       );
-//     }
-
-//     // Now, render the main container. This is safe and will not destroy the template's {{...}} tags.
-//     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
-
-//     // Put the original, untouched template back into the DOM where the placeholder was.
-//     if (templateContent) {
-//       const placeholder = ref.current.querySelector(
-//         "#displayTemplate-placeholder"
-//       );
-//       if (placeholder) {
-//         const tempDiv = document.createElement("div");
-//         tempDiv.innerHTML = templateContent;
-//         const templateElement = tempDiv.firstChild;
-//         if (templateElement) {
-//           placeholder.replaceWith(templateElement);
-//         }
-//       }
-//     }
-
-//     // Now the script can run and find the fully intact template.
-//     if (aiPayload.script) {
-//       const jsBody = aiPayload.script
-//         .replace(/^\s*<script[^>]*>/, "")
-//         .replace(/<\/script>\s*$/, "");
-//       try {
-//         const schemaId = element.properties?.schema_id;
-//         const apiClient = isPreview ? saasApi : api;
-
-//         const fn = new Function(
-//           "container",
-//           "api",
-//           "schemaId",
-//           "properties",
-//           "Mustache",
-//           jsBody
-//         );
-//         fn(ref.current, apiClient, schemaId, element.properties, Mustache);
-//       } catch (jsErr) {
-//         console.error("Error running AI script:", jsErr);
-//       }
-//     }
-//   }, [aiPayload, element.properties, isPreview]);
-
-//   return <div ref={ref} />;
-// };
 
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   element,
   isPreview,
+  websiteData, // ✅ ADD THIS
 }) => {
   const { aiPayload } = element;
   const ref = useRef<HTMLDivElement>(null);
@@ -1267,7 +1054,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
     let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
-      ""
+      "",
     );
 
     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
@@ -1277,7 +1064,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
     if (templateContent) {
       htmlOnly = htmlOnly.replace(
         templateContent,
-        '<div id="displayTemplate-placeholder"></div>'
+        '<div id="displayTemplate-placeholder"></div>',
       );
     }
 
@@ -1286,7 +1073,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
     if (templateContent) {
       const placeholder = ref.current.querySelector(
-        "#displayTemplate-placeholder"
+        "#displayTemplate-placeholder",
       );
       if (placeholder) {
         const tempDiv = document.createElement("div");
@@ -1310,9 +1097,14 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "schemaId",
           "properties",
           "Mustache",
-          jsBody
+          jsBody,
         );
-        fn(ref.current, apiClient, schemaId, processedProps, Mustache);
+        // ✅ ADD subdomain to properties so AI scripts can access it
+        const propsWithSubdomain = {
+          ...processedProps,
+          subdomain: websiteData.subdomain,
+        };
+        fn(ref.current, apiClient, schemaId, propsWithSubdomain, Mustache); // ✅ USE propsWithSubdomain, not processedProps
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
@@ -1377,14 +1169,14 @@ const MenuItemDetails = ({
 
   const handleAddToCartClick = () => {
     const extrasList = itemExtras.filter((extra) =>
-      selectedExtras.has(extra.extra_id)
+      selectedExtras.has(extra.extra_id),
     );
     const optionsDict: Record<string, string> = {};
     for (const group of itemOptions) {
       const selectedChoiceId = selectedOptions[group.group_id];
       if (selectedChoiceId) {
         const choice = group.choices.find(
-          (c) => c.choice_id === selectedChoiceId
+          (c) => c.choice_id === selectedChoiceId,
         );
         if (choice) optionsDict[group.group_name] = choice.name;
       }
@@ -1559,11 +1351,11 @@ export const CategoryMenuInCanvas = ({
   const [locationId, setLocationId] = useState(locations[0]?.location_id || "");
   const [items, setItems] = useState<MenuItem[]>([]);
   const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
-    null
+    null,
   );
   const [extras, setExtras] = useState<Record<string, Extra[]>>({});
   const [options, setOptions] = useState<Record<string, PublicOptionGroup[]>>(
-    {}
+    {},
   );
   const [isLoadingDetails, setIsLoadingDetails] = useState(false);
 
@@ -1571,7 +1363,7 @@ export const CategoryMenuInCanvas = ({
     if (!locationId) return;
     saasApi
       .get<MenuItem[]>(
-        `/locations/${locationId}/menu?category_id=${categoryId}`
+        `/locations/${locationId}/menu?category_id=${categoryId}`,
       )
       .then((r) => setItems(r.data))
       .catch(() => setItems([]));
@@ -1588,7 +1380,7 @@ export const CategoryMenuInCanvas = ({
       const [extrasResponse, optionsResponse] = await Promise.all([
         api.get<Extra[]>(`/menu-item-extras/extras-for-item/${menuItemId}`),
         api.get<PublicOptionGroup[]>(
-          `/menu-item-options/options-for-item/${menuItemId}`
+          `/menu-item-options/options-for-item/${menuItemId}`,
         ),
       ]);
       setExtras((prev) => ({ ...prev, [menuItemId]: extrasResponse.data }));
@@ -1694,7 +1486,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   websiteData,
 }) => {
   const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>(
-    {}
+    {},
   );
 
   const { cartCount, addToCart } = useCart(); // ✅ Get addToCart from the hook here
@@ -1706,11 +1498,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
   const [expandedMenuItemId, setExpandedMenuItemId] = useState<string | null>(
-    null
+    null,
   );
   const [extras, setExtras] = useState<Record<string, Extra[]>>({});
   const [options, setOptions] = useState<Record<string, PublicOptionGroup[]>>(
-    {}
+    {},
   );
 
   const [isLoadingDetails, setIsLoadingDetails] = useState(false); // A single loading state
@@ -1733,7 +1525,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         options[menuItemId]
           ? Promise.resolve({ data: options[menuItemId] })
           : api.get<PublicOptionGroup[]>(
-              `/menu-item-options/options-for-item/${menuItemId}`
+              `/menu-item-options/options-for-item/${menuItemId}`,
             ),
       ]);
       console.log("OPTIONS API RESPONSE:", optionsResponse.data);
@@ -1777,7 +1569,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     const checkAuthStatus = () => {
       if (typeof window !== "undefined") {
         const token = localStorage.getItem(
-          `siteToken:${websiteData.subdomain}`
+          `siteToken:${websiteData.subdomain}`,
         );
         setIsLoggedIn(!!token);
         // You could also decode the token here to get the user's role if needed
@@ -1841,7 +1633,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           member_id: memberId,
           success_url,
           cancel_url,
-        }
+        },
       );
 
       const redirect = data?.checkout_url || data?.url;
@@ -1876,10 +1668,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         const normalized = /^https?:\/\//i.test(raw)
           ? raw
           : raw
-          ? raw.startsWith("/")
-            ? raw
-            : `/${raw}`
-          : "/";
+            ? raw.startsWith("/")
+              ? raw
+              : `/${raw}`
+            : "/";
 
         // internal?
         const isExternal = /^https?:\/\//i.test(normalized);
@@ -1957,7 +1749,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     });
 
     const hasLogout = items.some(
-      (ni: NavbarItem) => (ni.link_url || "").trim().toLowerCase() === "/logout"
+      (ni: NavbarItem) =>
+        (ni.link_url || "").trim().toLowerCase() === "/logout",
     );
 
     const finalItems: NavbarItem[] =
@@ -2222,6 +2015,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             <AiElementRunner
               element={element}
               isPreview={true} // <-- This is the crucial part
+              websiteData={websiteData} // ✅ ADD THIS
             />
           ) : (
             <div className="rounded-lg overflow-hidden shadow">
@@ -2311,6 +2105,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 <AiElementRunner
                   element={{ ...element, properties: props }}
                   isPreview={false}
+                  websiteData={websiteData} // ✅ ADD THIS
                 />
 
                 {props.chatEnabled && props.whatsappNumber && (
@@ -2393,6 +2188,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
           <AiElementRunner
             element={element}
             isPreview={true} // <-- This is the crucial part
+            websiteData={websiteData} // ✅ ADD THIS
           />
 
           {showWA && (
@@ -2406,7 +2202,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                 openWhatsApp(
                   props.whatsappNumber,
                   props.chatMessage ||
-                    `Hi! I'm interested in ${props.item_name || "this item"}`
+                    `Hi! I'm interested in ${props.item_name || "this item"}`,
                 );
               }}
             >
