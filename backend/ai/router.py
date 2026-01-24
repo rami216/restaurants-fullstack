@@ -6193,9 +6193,11 @@ Is this a file upload?
             
             - **Create:** `await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });`
             
-            - **Read (Paginated):** `const response = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${skip}&limit=\${limit}\`);`
-                - The response format is: `{ "rows": [], "total": 0 }`
-                - Access data: `const { rows, total } = response.data;`
+            - **Read (List & Render):** - **HARD CONSTRAINT:** You MUST ALWAYS append `?limit=50` (or `skip/limit`) to the URL.
+                - **CORRECT:** `const res = await api.get(\`/custom-data/rows/\${schemaId}?limit=50\`);`
+                - **WRONG:** `const res = await api.get(\`/custom-data/rows/\${schemaId}\`);` (This will fail!)
+                - Access data: `const rows = res.data.rows;`
+                - **Formatting Safety:** When rendering numbers (like prices), ALWAYS convert to number first: `Number(row.data.price).toFixed(2)`.
             
             - **Fetch Single Row (for Cross-Table Updates):**
                 - Call: `const res = await api.get(\`/custom-data/rows/\${schemaId}?row_id=\${rowId}\`);`
