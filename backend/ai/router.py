@@ -8280,7 +8280,7 @@ Is this a file upload?
                 - **WRONG:** `const res = await api.get(\`/custom-data/rows/\${schemaId}\`);` (This will fail!)
                 - Access data: `const rows = res.data.rows;`
                 - **Formatting Safety:** When rendering numbers (like prices), ALWAYS convert to number first: `Number(row.data.price).toFixed(2)`.
-            
+                - **BOOLEAN SAFETY:** When filtering or checking booleans in JavaScript, you MUST check both types: `(row.data.field === true || row.data.field === 'true')`.
             - **Fetch Single Row (for Cross-Table Updates):**
                 - Call: `const res = await api.get(\`/custom-data/rows/\${schemaId}?row_id=\${rowId}\`);`
                 - **CRITICAL:** The API returns ALL rows, NOT filtered. You MUST manually find the target row.
