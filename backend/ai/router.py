@@ -6989,22 +6989,98 @@ Is this a file upload?
                                 }
                                 };
                 ```
-                **6. SMART FORM STATE (Create vs. Update):**
-                - **CONTEXT:** If the form manages a single record for the user (1-to-1 relationship).
-                - **LOGIC:** 1. Fetch the user's data.
-                  2. **IF EMPTY (`rows.length === 0`):** Do **NOT** show an error like "Not Found". Instead, initialize in **Create Mode** (empty inputs, POST on submit).
-                  3. **IF EXISTS (`rows.length > 0`):** Initialize in **Update Mode** (pre-fill inputs, PUT on submit).
-                  4. **Script Pattern:**
-                     ```javascript
-                     let editingRowId = null; 
-                     // ... inside fetch ...
-                     if (res.data.rows.length > 0) {
-                         const row = res.data.rows[0];
-                         editingRowId = row.row_id;
-                         // populate inputs...
-                     } 
-                     // If 0 rows, editingRowId remains null, form stays empty. No error shown.
-                     ```
+                - **IF SINGLE-RECORD-PER-USER (Profile/Settings Pattern):**
+                    - **TRIGGER KEYWORDS:** "user profile", "my profile", "user settings", "my preferences", "profile card"
+                    - **CRITICAL RULE:** Do NOT show "Profile not found" errors. Gracefully handle both create and update.
+            
+                        **IMPLEMENTATION PATTERN:**
+                            ```javascript
+                                        const currentUserId = typeof window !== 'undefined' 
+                                        ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+                                        : null;
+                                        
+                                        if (!currentUserId) {
+                                        container.innerHTML = '<p class="text-center p-4 text-gray-500">Please log in to view your profile</p>';
+                                        return;
+                                        }
+                                        
+                                        let existingRowId = null;
+                                        const displayDiv = container.querySelector('.profile-display');
+                                        const form = container.querySelector('form');
+                                        const btn = form.querySelector('button[type="submit"]');
+                                        
+                                        const fetchProfile = async () => {
+                                        try {
+                                            const res = await api.get(`/custom-data/rows/${schemaId}?sitemember_id=${currentUserId}&limit=1`);
+                                            const rows = res.data.rows;
+                                            
+                                            if (rows.length > 0) {
+                                            const profile = rows[0];
+                                            existingRowId = profile.row_id;
+                                            
+                                            // Display mode: show data
+                                            displayDiv.querySelector('.username').textContent = profile.data.username || 'N/A';
+                                            displayDiv.querySelector('.name').textContent = profile.data.name || 'N/A';
+                                            displayDiv.querySelector('.email').textContent = profile.data.email || 'N/A';
+                                            
+                                            // Form mode: pre-fill inputs
+                                            form.username.value = profile.data.username || '';
+                                            form.name.value = profile.data.name || '';
+                                            form.email.value = profile.data.email || '';
+                                            }
+                                            // If rows.length === 0, existingRowId stays null, form stays empty (create mode)
+                                            
+                                        } catch (err) {
+                                            console.error('Profile fetch error:', err);
+                                        }
+                                        };
+                                        
+                                        form.onsubmit = async (e) => {
+                                        e.preventDefault();
+                                        const data = {};
+                                        new FormData(form).forEach((v, k) => data[k] = v);
+                                        
+                                        btn.disabled = true;
+                                        btn.textContent = 'Saving...';
+                                        
+                                        try {
+                                            if (existingRowId) {
+                                            // UPDATE existing profile
+                                            const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${existingRowId}`);
+                                            const targetRow = res.data.rows.find(r => r.row_id === existingRowId);
+                                            
+                                            if (!targetRow) {
+                                                alert('Error: Profile not found');
+                                                return;
+                                            }
+                                            
+                                            const mergedData = { ...targetRow.data, ...data };
+                                            await api.put(`/custom-data/rows/${existingRowId}`, { 
+                                                data: mergedData, 
+                                                sitemember_id: currentUserId 
+                                            });
+                                            } else {
+                                            // CREATE new profile
+                                            await api.post('/custom-data/rows/' + schemaId, { 
+                                                data, 
+                                                sitemember_id: currentUserId 
+                                            });
+                                            }
+                                            
+                                            existingRowId = null;
+                                            fetchProfile();
+                                            form.style.display = 'none'; // Hide form after save
+                                            
+                                        } catch (err) {
+                                            alert('Failed to save profile');
+                                        } finally {
+                                            btn.disabled = false;
+                                            btn.textContent = 'Save Changes';
+                                        }
+                                        };
+                                        
+                                        fetchProfile();
+                            ```
         - **USER-SCOPING DECISION EXAMPLES:**
         
             **Example 1 - APPLY USER SCOPING:**
