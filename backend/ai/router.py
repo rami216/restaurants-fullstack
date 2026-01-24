@@ -6381,13 +6381,55 @@ Is this a file upload?
             → Keywords detected: "my bookings"
             → Action: Add currentUserId logic, filter by sitemember_id
             
-        - IF RELATIONAL FIELDS EXIST:
-            - Logic: You MUST api.get the related schema rows to populate dropdowns.
-            - UI: Use <select> elements where the value is the **row.row_id**.
-            - Hierarchy (Parent/Child): If a dependency is implied (e.g., "Time for a specific Day"), the script MUST:
-                1. Use new Set() to populate the Parent dropdown with unique values from the dataset.
-                2. Add a change listener to the Parent to .filter() the data and re-populate the Child dropdown.
-                3. Immediately after populating the Parent dropdown, the script MUST automatically call the Child fetch function for the first available Parent value to ensure the Child dropdown is never empty on load.
+       - **IF CROSS-TABLE MUTATION IS IMPLIED:**
+            - Logic: If updating an existing record (e.g., "mark slot as booked"), use api.put with the row_id
+            - DATA PRESERVATION RULE (CRITICAL): 
+                1. Fetch rows with the target: `const res = await api.get('/custom-data/rows/' + schemaId + '?row_id=' + selectedRowId);`
+                2. **Find the specific row:** `const targetRow = res.data.rows.find(r => r.row_id === selectedRowId);`
+                3. **Check if found:** `if (!targetRow) { statusEl.textContent = 'Error!'; return; }`
+                4. Merge with updates: `const mergedData = { ...targetRow.data, available: false };`
+                5. Update: `await api.put('/custom-data/rows/' + selectedRowId, { data: mergedData });`
+            - CRITICAL: Do NOT use res.data.rows[0] - always use .find() to locate the correct row
+    
+                    **Complete Example:**
+                ```javascript
+                    form.onsubmit = async (e) => { 
+                    e.preventDefault(); 
+                    const selectedTimeId = timeSelect.value; 
+                    btn.disabled = true; 
+                    statusEl.textContent = 'Processing...';
+                    
+                    try {
+                        // 1. Fetch the rows (API returns all rows, not filtered)
+                        const res = await api.get('/custom-data/rows/' + schemaId + '?row_id=' + selectedTimeId); 
+                        
+                        // 2. Find the specific row we want to update
+                        const targetRow = res.data.rows.find(r => r.row_id === selectedTimeId);
+                        
+                        // 3. Check if we found it
+                        if (!targetRow) {
+                        statusEl.textContent = 'Error: Slot not found';
+                        btn.disabled = false;
+                        return;
+                        }
+                        
+                        // 4. Merge the update with existing data
+                        const mergedData = { ...targetRow.data, available: false }; 
+                        
+                        // 5. Update the row
+                        await api.put('/custom-data/rows/' + selectedTimeId, { data: mergedData }); 
+                        
+                        statusEl.textContent = 'Booking successful!'; 
+                        form.reset(); 
+                        fetchAndPopulateDays(); 
+                    } catch (err) {
+                        statusEl.textContent = 'Error: ' + err.message;
+                    } finally {
+                        btn.disabled = false;
+                    }
+                    };
+                ```
+
 
         - IF FILE/IMAGE UPLOADS ARE IMPLIED:
             - HTML: Render <input type="file"> AND a <input type="hidden" name="SCHEMA_COLUMN_NAME">.
