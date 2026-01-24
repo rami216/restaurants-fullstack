@@ -6989,6 +6989,22 @@ Is this a file upload?
                                 }
                                 };
                 ```
+                **6. SMART FORM STATE (Create vs. Update):**
+                - **CONTEXT:** If the form manages a single record for the user (1-to-1 relationship).
+                - **LOGIC:** 1. Fetch the user's data.
+                  2. **IF EMPTY (`rows.length === 0`):** Do **NOT** show an error like "Not Found". Instead, initialize in **Create Mode** (empty inputs, POST on submit).
+                  3. **IF EXISTS (`rows.length > 0`):** Initialize in **Update Mode** (pre-fill inputs, PUT on submit).
+                  4. **Script Pattern:**
+                     ```javascript
+                     let editingRowId = null; 
+                     // ... inside fetch ...
+                     if (res.data.rows.length > 0) {
+                         const row = res.data.rows[0];
+                         editingRowId = row.row_id;
+                         // populate inputs...
+                     } 
+                     // If 0 rows, editingRowId remains null, form stays empty. No error shown.
+                     ```
         - **USER-SCOPING DECISION EXAMPLES:**
         
             **Example 1 - APPLY USER SCOPING:**
