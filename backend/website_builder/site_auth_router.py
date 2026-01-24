@@ -12,7 +12,7 @@ from database import get_db
 from .models import Website
 from .site_auth_models import SiteMember
 import bcrypt, jwt, os, random, string
-
+import traceback # Add this at the top
 router = APIRouter(prefix="/site-auth", tags=["Site Auth"])
 
 # --- JWT config (separate from owner JWT) ---
@@ -160,38 +160,48 @@ async def login(subdomain: str, body: LoginDTO, db: AsyncSession = Depends(get_d
 
 @router.post("/{subdomain}/confirm-code")
 async def confirm_code(subdomain: str, body: CodeConfirmationRequest, db: AsyncSession = Depends(get_db)):
-    website = await get_website_by_subdomain(subdomain, db)
-    member = await db.scalar(
-        select(SiteMember).where(
-            SiteMember.website_id == website.website_id,
-            SiteMember.email == body.email,
+    try: # <--- Start Try Block
+        website = await get_website_by_subdomain(subdomain, db)
+        member = await db.scalar(
+            select(SiteMember).where(
+                SiteMember.website_id == website.website_id,
+                SiteMember.email == body.email,
+            )
         )
-    )
-    if not member:
-        raise HTTPException(404, "User not found.")
+        if not member:
+            raise HTTPException(404, "User not found.")
+        
+        if member.is_active:
+            raise HTTPException(400, "Account already confirmed.")
+
+        # --- SAFE DATETIME CHECK HERE ---
+        expires = member.confirmation_code_expires
+        if not expires or expires.replace(tzinfo=None) < datetime.utcnow():
+            raise HTTPException(400, "Code has expired.")
+
+        if not member.confirmation_code or not verify_password(body.code, member.confirmation_code):
+            raise HTTPException(400, "Invalid confirmation code.")
+
+        member.is_active = True
+        member.confirmation_code = None
+        member.confirmation_code_expires = None
+        await db.commit()
+
+        token = create_site_jwt(str(member.member_id), str(website.website_id), member.role)
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "member_id": str(member.member_id),
+        }
+
+    except HTTPException as h:
+        raise h # Let normal HTTP exceptions pass
+    except Exception as e:
+        # This will print the REAL error to your terminal
+        print("!!!!!!!!!!!!! CRITICAL ERROR !!!!!!!!!!!!!")
+        traceback.print_exc() 
+        raise HTTPException(500, f"Server Error: {str(e)}")
     
-    if member.is_active:
-        raise HTTPException(400, "Account already confirmed.")
-
-    if not member.confirmation_code_expires or member.confirmation_code_expires < datetime.utcnow():
-        raise HTTPException(400, "Code has expired.")
-
-    if not verify_password(body.code, member.confirmation_code):
-        raise HTTPException(400, "Invalid confirmation code.")
-
-    member.is_active = True
-    member.confirmation_code = None
-    member.confirmation_code_expires = None
-    await db.commit()
-
-    # If code is valid, generate and return login tokens
-    token = create_site_jwt(str(member.member_id), str(website.website_id), member.role)
-    return {
-        "access_token": token,
-        "token_type": "bearer",
-        "member_id": str(member.member_id),
-    }
-
 @router.get("/{subdomain}/me", response_model=SiteMemberPublic)
 async def me(ctx = Depends(site_member_required)):
     m = ctx["member"]
