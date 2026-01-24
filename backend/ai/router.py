@@ -6296,6 +6296,64 @@ Is this a file upload?
                                 - Do NOT add sitemember_id to API calls
                                 - Use: `await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });`
                                 - This shows ALL data regardless of who created it
+                    **5. Update/Delete - verify ownership:**
+                ```javascript
+                                // ✅ CORRECT: Always pass sitemember_id in PUT/DELETE requests
+                                
+                                // For UPDATE:
+                                btn.onclick = async () => {
+                                const index = parseInt(btn.getAttribute('data-index'));
+                                const rowId = rows[index].row_id;
+                                btn.disabled = true;
+                                btn.textContent = 'Saving...';
+                                
+                                try {
+                                    const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
+                                    const targetRow = res.data.rows.find(r => r.row_id === rowId);
+                                    
+                                    if (!targetRow) {
+                                    alert('Error: Row not found');
+                                    btn.disabled = false;
+                                    btn.textContent = 'Edit';
+                                    return;
+                                    }
+                                    
+                                    const mergedData = { ...targetRow.data, completed: true }; // Example update
+                                    
+                                    // ✅ CRITICAL: Pass sitemember_id in the request body
+                                    await api.put(`/custom-data/rows/${rowId}`, { 
+                                    data: mergedData,
+                                    sitemember_id: currentUserId  // ← MUST INCLUDE THIS
+                                    });
+                                    
+                                    fetchAndRenderRows();
+                                } catch (err) {
+                                    alert('Failed to update. Please try again.');
+                                    btn.disabled = false;
+                                    btn.textContent = 'Edit';
+                                }
+                                };
+                                
+                                // For DELETE:
+                                btn.onclick = async () => {
+                                if (!confirm('Are you sure you want to delete this item?')) return;
+                                
+                                const index = parseInt(btn.getAttribute('data-index'));
+                                const rowId = rows[index].row_id;
+                                btn.disabled = true;
+                                btn.textContent = 'Deleting...';
+                                
+                                try {
+                                    // ✅ CRITICAL: Pass sitemember_id as query parameter
+                                    await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${currentUserId}`);
+                                    fetchAndRenderRows();
+                                } catch (err) {
+                                    alert('Failed to delete. Please try again.');
+                                    btn.disabled = false;
+                                    btn.textContent = 'Delete';
+                                }
+                                };
+                ```
         - **USER-SCOPING DECISION EXAMPLES:**
         
             **Example 1 - APPLY USER SCOPING:**
@@ -6574,6 +6632,11 @@ Is this a file upload?
   "properties": { "schema_id": "SUBSCRIBERS_SCHEMA_ID", "prevText": "Previous", "nextText": "Next" },
   "editableProps": [ { "key": "prevText", "label": "Previous Button", "type": "text" }, { "key": "nextText", "label": "Next Button", "type": "text" } ],
   "script": "const grid = container.querySelector('.grid'); const prevBtn = container.querySelector('.prev'); const nextBtn = container.querySelector('.next'); let currentPage = 0; const limit = 4; let rows = []; const fetchAndRenderRows = async () => { const skip = currentPage * limit; const response = await api.get(`/custom-data/rows/${properties.schema_id}?skip=${skip}&limit=${limit}`); rows = response.data.rows; const { total } = response.data; grid.innerHTML = rows.map((row, index) => `<div class=\"card\"><div class=\"name\">${row.data.name}</div><div class=\"email\">${row.data.email}</div><div class=\"actions\"><button class=\"edit\" data-index=\"${index}\">Edit</button><button class=\"delete\" data-index=\"${index}\">Delete</button></div></div>`).join(''); prevBtn.disabled = currentPage === 0; nextBtn.disabled = (currentPage + 1) * limit >= total; attachEventListeners(); }; const attachEventListeners = () => { container.querySelectorAll('.edit').forEach(btn => { btn.onclick = async () => { const index = parseInt(btn.getAttribute('data-index')); const rowId = rows[index].row_id; btn.disabled = true; btn.textContent = 'Saving...'; try { const res = await api.get(`/custom-data/rows/${properties.schema_id}?row_id=${rowId}`); const targetRow = res.data.rows.find(r => r.row_id === rowId); if (!targetRow) { alert('Error: Row not found'); btn.disabled = false; btn.textContent = 'Edit'; return; } const mergedData = { ...targetRow.data, name: targetRow.data.name + ' (Verified)' }; await api.put(`/custom-data/rows/${rowId}`, { data: mergedData }); fetchAndRenderRows(); } catch (err) { alert('Failed to update. Please try again.'); btn.disabled = false; btn.textContent = 'Edit'; } }; }); container.querySelectorAll('.delete').forEach(btn => { btn.onclick = async () => { if (!confirm('Are you sure you want to delete this subscriber?')) return; const index = parseInt(btn.getAttribute('data-index')); const rowId = rows[index].row_id; btn.disabled = true; btn.textContent = 'Deleting...'; try { await api.delete(`/custom-data/rows/${rowId}`); fetchAndRenderRows(); } catch (err) { alert('Failed to delete. Please try again.'); btn.disabled = false; btn.textContent = 'Delete'; } }; }); }; prevBtn.onclick = () => { if (currentPage > 0) { currentPage--; fetchAndRenderRows(); } }; nextBtn.onclick = () => { currentPage++; fetchAndRenderRows(); }; fetchAndRenderRows();"
+}
+**EXAMPLE 5: Editable Task List with Inline Editing**
+- Prompt: "A task manager where logged in users can edit their tasks inline"
+{
+  "script": "... when edit is clicked, replace the card with an editable form, then on save, call api.put with the updated data and sitemember_id ..."
 }
 
 """.strip()
