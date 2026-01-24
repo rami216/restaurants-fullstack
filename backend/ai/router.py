@@ -3291,7 +3291,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_3_log_in_or_not},
+                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_3},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
