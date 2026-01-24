@@ -6238,6 +6238,9 @@ Is this a file upload?
                             **3. Filter API reads by user:**
                 ```javascript
                                 const response = await api.get(`/custom-data/rows/${schemaId}?sitemember_id=${currentUserId}&skip=${skip}&limit=${limit}`);
+                               **CRITICAL EXCEPTION FOR DROPDOWNS:**
+                                - Do **NOT** add `sitemember_id` filtering when fetching **Relational/Reference** data (e.g., Slots, Categories, Locations) unless the prompt explicitly says "My Categories".
+                                - Reference data is usually public/system-wide. Only filter the *Main List* by user. 
                 ```
                             
                             **4. Save with user ID:**
@@ -6429,6 +6432,13 @@ Is this a file upload?
                     }
                     };
                 ```
+        - IF RELATIONAL FIELDS EXIST:
+            - Logic: You MUST api.get the related schema rows to populate dropdowns.
+            - UI: Use <select> elements where the value is the **row.row_id**.
+            - Hierarchy (Parent/Child): If a dependency is implied (e.g., "Time for a specific Day"), the script MUST:
+                1. Use new Set() to populate the Parent dropdown with unique values from the dataset.
+                2. Add a change listener to the Parent to .filter() the data and re-populate the Child dropdown.
+                3. Immediately after populating the Parent dropdown, the script MUST automatically call the Child fetch function for the first available Parent value to ensure the Child dropdown is never empty on load.
 
 
         - IF FILE/IMAGE UPLOADS ARE IMPLIED:
