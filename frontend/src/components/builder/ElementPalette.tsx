@@ -290,57 +290,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   const [aiDataViewPrompt, setAiDataViewPrompt] = useState("");
   const [isGeneratingDataView, setIsGeneratingDataView] = useState(false);
 
-  // const handleGenerateAi = async () => {
-  //   if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
-  //   setLoadingAi(true);
-  //   try {
-  //     // --- FIX 1: Generate a unique ID and class name BEFORE the API call ---
-  //     const newElementId = `ai_${Date.now()}`;
-  //     // Create a short, unique class name from the ID
-  //     const uniqueClassName = `ai-element-${newElementId.substring(3, 10)}`;
-
-  //     // --- FIX 2: Send the unique_class_name in the request body ---
-  //     const { data } = await api.post("/ai/generate-ai-element", {
-  //       prompt: aiPrompt,
-  //       unique_class_name: uniqueClassName, // Pass the class name (without a dot)
-  //       website_id: websiteId,
-  //     });
-
-  //     // Use the pre-generated ID for the new element
-  //     const aiEl: ElementType = {
-  //       element_id: newElementId,
-  //       element_type: "AI",
-  //       position: 999,
-  //       properties: {},
-  //       aiPayload: {
-  //         ...data,
-  //         id: `ai_payload_${Date.now()}`,
-  //       },
-  //     };
-
-  //     // The rest of your state update logic is correct
-  //     if (!selectedSubsectionId || !activePage) return;
-  //     const updatedPage = {
-  //       ...activePage,
-  //       sections: activePage.sections.map((sec) => ({
-  //         ...sec,
-  //         subsections: sec.subsections.map((sub) =>
-  //           sub.subsection_id === selectedSubsectionId
-  //             ? { ...sub, elements: [...sub.elements, aiEl] }
-  //             : sub
-  //         ),
-  //       })),
-  //     };
-  //     onUpdate(updatedPage);
-  //     setAiPrompt("");
-  //   } catch (err) {
-  //     console.error(err);
-  //     alert("AI generation failed");
-  //   } finally {
-  //     setLoadingAi(false);
-  //   }
-  // };
-
   const handleGenerateAi = async () => {
     if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setLoadingAi(true);
@@ -384,7 +333,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
           subsections: sec.subsections.map((sub) =>
             sub.subsection_id === selectedSubsectionId
               ? { ...sub, elements: [...sub.elements, aiEl] }
-              : sub
+              : sub,
           ),
         })),
       };
@@ -411,7 +360,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
           prompt: aiDataAppPrompt,
           website_id: websiteId,
           unique_class_name: unique_class_name, // Send the class name to the backend
-        }
+        },
       );
 
       const newElement: ElementType = {
@@ -430,7 +379,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
           subsections: sec.subsections.map((sub) =>
             sub.subsection_id === selectedSubsectionId
               ? { ...sub, elements: [...sub.elements, newElement] }
-              : sub
+              : sub,
           ),
         })),
       };
@@ -456,7 +405,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
           prompt: aiDataViewPrompt, // Use the new state
           website_id: websiteId,
           unique_class_name: unique_class_name,
-        }
+        },
       );
 
       const newElement: ElementType = {
@@ -474,7 +423,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
           subsections: sec.subsections.map((sub) =>
             sub.subsection_id === selectedSubsectionId
               ? { ...sub, elements: [...sub.elements, newElement] }
-              : sub
+              : sub,
           ),
         })),
       };
@@ -495,7 +444,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       if (selectedLocationId) {
         try {
           const response = await api.get(
-            `/locations/${selectedLocationId}/menu`
+            `/locations/${selectedLocationId}/menu`,
           );
           setMenuItems(response.data);
         } catch (error) {

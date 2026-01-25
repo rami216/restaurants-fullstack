@@ -52,7 +52,7 @@ function BuilderManager() {
   });
   const [locations, setLocations] = useState<Location[]>([]);
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
-    null
+    null,
   );
   const [categories, setCategories] = useState<Category[]>([]);
   const [restaurantId, setRestaurantId] = useState<string | null>(null);
@@ -67,7 +67,7 @@ function BuilderManager() {
   const isTempId = (id: string) =>
     typeof id === "string" &&
     !id.match(
-      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i
+      /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
     );
 
   const handleMoveSection = (sectionId: string, direction: "up" | "down") => {
@@ -129,7 +129,7 @@ function BuilderManager() {
         console.warn(
           "[builder] /builder/website returned:",
           websiteRes?.status,
-          websiteRes?.data
+          websiteRes?.data,
         );
         setWebsiteData(null);
         setOriginalWebsiteData(null);
@@ -219,10 +219,10 @@ function BuilderManager() {
 
       // --- 2. Process Page Content Creates and Updates ---
       const activePageData = websiteData.pages.find(
-        (p) => p.page_id === activePageId
+        (p) => p.page_id === activePageId,
       );
       const originalPageData = originalWebsiteData.pages.find(
-        (p) => p.page_id === activePageId
+        (p) => p.page_id === activePageId,
       );
 
       if (!activePageData || !originalPageData)
@@ -319,7 +319,7 @@ function BuilderManager() {
         if (
           !isEqual(
             websiteData.navbar.properties,
-            originalWebsiteData.navbar.properties
+            originalWebsiteData.navbar.properties,
           )
         ) {
           await api.put(`/builder/navbars/${websiteData.navbar.navbar_id}`, {
@@ -343,7 +343,7 @@ function BuilderManager() {
     setWebsiteData({
       ...websiteData,
       pages: websiteData.pages.map((p) =>
-        p.page_id === updatedPage.page_id ? updatedPage : p
+        p.page_id === updatedPage.page_id ? updatedPage : p,
       ),
     });
   };
@@ -383,7 +383,7 @@ function BuilderManager() {
   const selectedItem = findSelectedItem();
   const handleDeleteItem = async (
     itemToDelete: any,
-    type: Selection["type"]
+    type: Selection["type"],
   ) => {
     if (!itemToDelete || !type) return;
 
@@ -406,7 +406,7 @@ function BuilderManager() {
       // A. If it's a Data App, delete its schema from the DB immediately.
       if (isDataApp && itemToDelete.properties?.schema_id) {
         await api.delete(
-          `/builder/schemas/by-element/${itemToDelete.element_id}`
+          `/builder/schemas/by-element/${itemToDelete.element_id}`,
         );
       }
 
@@ -431,11 +431,11 @@ function BuilderManager() {
     } catch (error) {
       console.error(
         "An error occurred during immediate deletion of associated resources:",
-        error
+        error,
       );
       // We can alert the user but still proceed to remove the item from the UI
       alert(
-        "An error occurred while trying to delete associated data. The element will be removed from the page, but please save your work to finalize all changes."
+        "An error occurred while trying to delete associated data. The element will be removed from the page, but please save your work to finalize all changes.",
       );
     }
 
@@ -454,7 +454,7 @@ function BuilderManager() {
       let updatedSections = activePage.sections;
       if (type === "section") {
         updatedSections = activePage.sections.filter(
-          (s) => s.section_id !== idToDelete
+          (s) => s.section_id !== idToDelete,
         );
       } else {
         updatedSections = activePage.sections.map((s) => ({
@@ -463,7 +463,7 @@ function BuilderManager() {
             .map((sub) => ({
               ...sub,
               elements: sub.elements.filter(
-                (el) => el.element_id !== idToDelete
+                (el) => el.element_id !== idToDelete,
               ),
             }))
             .filter((sub) => sub.subsection_id !== idToDelete),
@@ -601,7 +601,7 @@ function BuilderManager() {
       // Replace the old section with the refined one
       const updatedSections = activePage.sections.map((sec) =>
         // Use the new variable here as well
-        sec.section_id === currentSection.section_id ? refinedSection : sec
+        sec.section_id === currentSection.section_id ? refinedSection : sec,
       );
 
       updateWebsiteData({ ...activePage, sections: updatedSections });
@@ -675,7 +675,7 @@ function BuilderManager() {
   // HELPER 2: Builds a simple HTML representation for standard elements.
   function buildHtmlForElement(
     element: Element,
-    uniqueClassName: string
+    uniqueClassName: string,
   ): string {
     const props = element.properties || {};
     let htmlOnly = "";
@@ -732,7 +732,7 @@ function BuilderManager() {
               `<div style="margin-bottom: 1rem;">
                    <label style="display: block; font-size: 0.875rem; font-weight: 500; margin-bottom: 0.25rem;">${field.label}</label>
                    <input type="text" name="${field.label}" placeholder="${field.placeholder}" style="width: 100%; padding: 0.5rem; border: 1px solid #ccc; border-radius: 4px;" />
-                 </div>`
+                 </div>`,
           )
           .join("");
 
@@ -760,7 +760,7 @@ function BuilderManager() {
         const accordionItems = (props.items || [])
           .map(
             (item: AccordionItem) =>
-              `<div style="border: 1px solid #ddd; margin-bottom: 5px;"><h3 style="margin:0; padding: 10px; background-color: #f7f7f7;">${item.question}</h3><div style="padding: 10px;">${item.answer}</div></div>`
+              `<div style="border: 1px solid #ddd; margin-bottom: 5px;"><h3 style="margin:0; padding: 10px; background-color: #f7f7f7;">${item.question}</h3><div style="padding: 10px;">${item.answer}</div></div>`,
           )
           .join("");
         htmlOnly = `<div>${accordionItems}</div>`;
@@ -781,7 +781,7 @@ function BuilderManager() {
         const options = (props.options || [])
           .map(
             (opt: any) =>
-              `<option value="${opt.action_value}">${opt.text}</option>`
+              `<option value="${opt.action_value}">${opt.text}</option>`,
           )
           .join("");
         htmlOnly = `<select style="border: 1px solid #ccc; padding: 8px; border-radius: 4px;">${labelOption}${options}</select>`;
@@ -808,7 +808,7 @@ function BuilderManager() {
 
     try {
       const currentElement = JSON.parse(
-        JSON.stringify(selectedItem)
+        JSON.stringify(selectedItem),
       ) as Element;
 
       let currentState: AiElementPayload;
@@ -819,13 +819,13 @@ function BuilderManager() {
         originalEditableProps = currentElement.aiPayload.editableProps;
       } else {
         originalEditableProps = getEditablePropsForType(
-          currentElement.element_type
+          currentElement.element_type,
         );
         currentState = {
           id: `ai_payload_new_${Date.now()}`,
           aiTemplate: buildHtmlForElement(
             currentElement,
-            `ai-element-${currentElement.element_id.split("-")[0]}`
+            `ai-element-${currentElement.element_id.split("-")[0]}`,
           ),
           script: undefined,
           properties: currentElement.properties,
@@ -839,7 +839,7 @@ function BuilderManager() {
           prompt,
           currentState: currentState,
           website_id: websiteData?.website_id,
-        }
+        },
       );
 
       // Safely merge the original properties with the AI's response.
@@ -874,7 +874,7 @@ function BuilderManager() {
         subsections: section.subsections.map((sub) => ({
           ...sub,
           elements: sub.elements.map((el) =>
-            el.element_id === currentElement.element_id ? refinedElement : el
+            el.element_id === currentElement.element_id ? refinedElement : el,
           ),
         })),
       }));
@@ -909,7 +909,7 @@ function BuilderManager() {
           prompt,
           currentState,
           website_id: websiteData.website_id,
-        }
+        },
       );
 
       // Create the updated element
@@ -928,7 +928,7 @@ function BuilderManager() {
             // --- ✅ THE FIX IS HERE ---
             el.element_id === (selectedItem as Element).element_id
               ? refinedElement
-              : el
+              : el,
           ),
         })),
       }));
@@ -942,6 +942,44 @@ function BuilderManager() {
     }
   };
 
+  // const handleGeneratePage = async (prompt: string) => {
+  //   if (!activePage || !prompt.trim()) return;
+
+  //   try {
+  //     const { data } = await api.post("/ai/generate-ai-page", {
+  //       prompt,
+  //       website_id: websiteData?.website_id,
+  //     });
+
+  //     // Ensure data.sections is an array before mapping
+  //     const sectionsFromAI = data.sections || [];
+
+  //     const newSectionsWithIds = sectionsFromAI.map(
+  //       (section: any, index: number) => ({
+  //         ...section,
+  //         section_id: `section_${Date.now()}_${Math.random()}`,
+  //         section_type: section.section_type || "default",
+  //         position: index,
+  //         // THE FIX: Add a fallback to an empty array if subsections are missing
+  //         subsections: (section.subsections || []).map((sub: any) => ({
+  //           ...sub,
+  //           subsection_id: `subsection_${Date.now()}_${Math.random()}`,
+  //           // THE FIX: Add a fallback to an empty array if elements are missing
+  //           elements: (sub.elements || []).map((el: any) => ({
+  //             ...el,
+  //             element_id: `element_${Date.now()}_${Math.random()}`,
+  //           })),
+  //         })),
+  //       })
+  //     );
+
+  //     const updatedPage = { ...activePage, sections: newSectionsWithIds };
+  //     updateWebsiteData(updatedPage);
+  //   } catch (err) {
+  //     console.error("AI page generation failed:", err);
+  //     alert("AI page generation failed. Please check the console.");
+  //   }
+  // };
   const handleGeneratePage = async (prompt: string) => {
     if (!activePage || !prompt.trim()) return;
 
@@ -960,17 +998,24 @@ function BuilderManager() {
           section_id: `section_${Date.now()}_${Math.random()}`,
           section_type: section.section_type || "default",
           position: index,
-          // THE FIX: Add a fallback to an empty array if subsections are missing
+          // Fallback for subsections
           subsections: (section.subsections || []).map((sub: any) => ({
             ...sub,
             subsection_id: `subsection_${Date.now()}_${Math.random()}`,
-            // THE FIX: Add a fallback to an empty array if elements are missing
+            // Fallback for elements
             elements: (sub.elements || []).map((el: any) => ({
               ...el,
               element_id: `element_${Date.now()}_${Math.random()}`,
+              // ✅ CRITICAL FIX 1: Ensure element_type is set correctly
+              element_type: el.element_type || "AI",
+              // ✅ CRITICAL FIX 2: Initialize properties as an empty object if missing.
+              // The backend requires this field to be a Dict, not undefined/null.
+              properties: el.properties || {},
+              // ✅ CRITICAL FIX 3: Ensure aiPayload is passed through
+              aiPayload: el.aiPayload || null,
             })),
           })),
-        })
+        }),
       );
 
       const updatedPage = { ...activePage, sections: newSectionsWithIds };
@@ -980,14 +1025,13 @@ function BuilderManager() {
       alert("AI page generation failed. Please check the console.");
     }
   };
-
   const previewHref = websiteData
     ? buildPublicUrl({
         subdomain: websiteData.subdomain,
         slug: "/", // or current page's slug if you want deep-link preview
         primaryDomain: websiteData.primary_custom_domain ?? null,
         primaryDomainVerified: Boolean(
-          websiteData.primary_custom_domain_status
+          websiteData.primary_custom_domain_status,
         ),
       })
     : "#";
@@ -1068,13 +1112,13 @@ function BuilderManager() {
                 <div className="flex items-center gap-3 bg-white/10 rounded-md px-3 py-2">
                   {(() => {
                     const limitUsd = Number(
-                      websiteData.ai_spend_limit_usd ?? 0
+                      websiteData.ai_spend_limit_usd ?? 0,
                     );
                     const spentUsd = Number(websiteData.monthly_spend_usd ?? 0);
                     const totalCredits = Math.round(limitUsd * 1000);
                     const usedCredits = Math.min(
                       totalCredits,
-                      Math.round(spentUsd * 1000)
+                      Math.round(spentUsd * 1000),
                     );
                     const remaining = Math.max(0, totalCredits - usedCredits);
                     const pct =
@@ -1107,7 +1151,7 @@ function BuilderManager() {
                 <button
                   onClick={() =>
                     router.push(
-                      `/builder/websites/${websiteData.website_id}/payments`
+                      `/builder/websites/${websiteData.website_id}/payments`,
                     )
                   }
                   className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-3 rounded"
