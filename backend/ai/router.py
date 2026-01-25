@@ -88,11 +88,11 @@ The value is an array of Section Objects.
 
 **3. ELEMENT STRUCTURE (Rich Components):**
    - **CRITICAL:** Do NOT generate basic primitives (like `TEXT` or `IMAGE`).
-   - You MUST generate **Self-Contained AI Components** for every part of the page (Hero, Grid, Footer, Pricing Table).
+   - You MUST generate **Self-Contained AI Components** for every part of the page.
    - **JSON Structure for Elements:**
      ```json
      {
-       "element_type": "AI_COMPONENT",
+       "element_type": "AI",
        "aiPayload": {
          "aiTemplate": "<div class='unique-class'> ... HTML ... </div>",
          "properties": { ... default values ... },
@@ -101,7 +101,6 @@ The value is an array of Section Objects.
        }
      }
      ```
-
 ---
 
 ### **COMPONENT GENERATION RULES (How to build `aiPayload`)**
@@ -155,7 +154,7 @@ For every element in the `elements` array, follow these strict rules (adapted fr
           "properties": { "style": { "width": "100%", "maxWidth": "1200px", "textAlign": "center" } },
           "elements": [
             {
-              "element_type": "AI_COMPONENT",
+              "element_type": "AI",
               "aiPayload": {
                 "aiTemplate": "<div class='ai-hero-001' style='color:{{textColor}}'><style>.ai-hero-001 h1 { font-size: {{titleSize}}; margin-bottom: 20px; } .ai-hero-001 button:hover { opacity: 0.9; }</style><h1>{{title}}</h1><p style='font-size:1.25rem; color:{{subColor}}; margin-bottom: 30px;'>{{subtitle}}</p><button style='background:{{btnColor}}; color:white; padding: 12px 32px; border-radius: 8px; border:none; font-weight:bold; font-size:1.1rem; cursor: pointer;'>{{btnText}}</button></div>",
                 "properties": {
