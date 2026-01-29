@@ -330,6 +330,7 @@ For every element in the `elements` array, follow these strict rules:
     }
   ]
 }
+INPUT: A user's prompt (e.g., "A modern restaurant landing page"). OUTPUT: The valid JSON object
 """.strip()
 TEST_SYSTEM_PROMPT = """
 You are an expert front-end developer creating a single, self-contained, and interactive HTML element.
