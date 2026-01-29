@@ -244,6 +244,7 @@ For every element in the `elements` array, follow these strict rules:
    - Replace ALL text, colors, and layout values in `aiTemplate` with Mustache tokens (e.g., `{{title}}`, `{{btnColor}}`).
    - Create a corresponding key in `properties` and `editableProps` for **EVERY** token.
    - **Required Editables:** Colors (bg, text, accent), Spacing (padding, gap), Typography (size, weight), Content (headings, descriptions).
+   - **IMAGE RULE:** If a property is an image source (e.g., `src`, `backgroundImage`), you MUST set its type to `"image"` in `editableProps`.
 
 **C. INTERACTIVITY:**
    - **NO FORMS:** Do NOT generate `<form>` tags or input fields. Use visual buttons/links only.
