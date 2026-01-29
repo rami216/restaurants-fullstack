@@ -101,13 +101,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       if (!websiteData?.website_id) return;
       try {
         const { data } = await api.get(
-          `/users-stripe-account/builder/websites/${websiteData.website_id}/products`
+          `/users-stripe-account/builder/websites/${websiteData.website_id}/products`,
         );
         setProducts(
           (data || []).map((p: any) => ({
             product_id: p.product_id,
             name: p.name,
-          }))
+          })),
         );
       } catch (e) {
         console.warn("Failed to load products for interactivity", e);
@@ -268,14 +268,14 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const handleDeleteNavbarItem = async (
     itemId: string,
     itemText: string,
-    itemSlug: string
+    itemSlug: string,
   ) => {
     const msg = `Delete the "${itemText}" page and navbar link?\n\nThis will permanently delete the page and its content.`;
     if (!confirm(msg)) return;
 
     try {
       const page = (websiteData?.pages || []).find(
-        (p: any) => p.slug === itemSlug
+        (p: any) => p.slug === itemSlug,
       );
       if (page) {
         await deletePageUnified(page.page_id);
@@ -337,7 +337,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
   const handleImageUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
-    propertyName: string // 'backgroundImage' | 'src' | 'image_url' | ...
+    propertyName: string, // 'backgroundImage' | 'src' | 'image_url' | ...
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -378,9 +378,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       // URL.revokeObjectURL(objUrl);
     }
   };
+  // Add this helper function inside the component, near handleAiPropLocalChange
+
   const handleVideoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
-    propertyName: "src"
+    propertyName: "src",
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -396,7 +398,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
       const { data: signed } = await api.post(
         "/uploads/video/signed-url",
-        formData
+        formData,
       );
       const { upload_url, public_url, content_type } = signed;
 
@@ -510,7 +512,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                           handleDeleteNavbarItem(
                             item.item_id,
                             item.text,
-                            item.link_url
+                            item.link_url,
                           )
                         }
                         className="p-1 text-red-600 hover:bg-red-100 rounded-full"
@@ -699,7 +701,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 }}
                 onBecameProtected={async () => {
                   await api.post(
-                    `/builder/ensure-auth-pages/${websiteData!.website_id}`
+                    `/builder/ensure-auth-pages/${websiteData!.website_id}`,
                   );
                 }}
                 products={products}
@@ -737,7 +739,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   const toggleNavbarStyle = (
     styleKey: string,
     onValue: string,
-    offValue: string
+    offValue: string,
   ) => {
     const currentVal = websiteData?.navbar?.properties?.itemStyle?.[styleKey];
     const newVal = currentVal === onValue ? offValue : onValue;
@@ -787,7 +789,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 element.element_id === updatedItem.element_id &&
                 selectionType === "element"
                   ? updatedItem
-                  : element
+                  : element,
               ),
             };
           }),
@@ -1019,7 +1021,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           onChange={(next) => updateItem({ ...selectedItem, properties: next })}
           onBecameProtected={async () => {
             await api.post(
-              `/builder/ensure-auth-pages/${websiteData!.website_id}`
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`,
             );
           }}
           products={products}
@@ -1079,7 +1081,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 if (!isNaN(columns) && columns > 0) {
                   handlePropertyChange(
                     "gridTemplateColumns",
-                    `repeat(${columns}, 1fr)`
+                    `repeat(${columns}, 1fr)`,
                   );
                 }
               }}
@@ -1153,7 +1155,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 onChange={(e) =>
                   handleAnimationChange(
                     "type",
-                    e.target.value as AnimationProps["type"]
+                    e.target.value as AnimationProps["type"],
                   )
                 }
                 className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
@@ -1270,7 +1272,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           onChange={(next) => updateItem({ ...selectedItem, properties: next })}
           onBecameProtected={async () => {
             await api.post(
-              `/builder/ensure-auth-pages/${websiteData!.website_id}`
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`,
             );
           }}
           products={products}
@@ -1301,7 +1303,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const updateField = (
       idx: number,
       key: "label" | "name" | "placeholder" | "type",
-      value: string
+      value: string,
     ) => {
       const next = [...fields];
       next[idx] = { ...next[idx], [key]: value };
@@ -1324,7 +1326,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const removeField = (idx: number) => {
       handlePropertyChange(
         "fields",
-        fields.filter((_: any, i: number) => i !== idx)
+        fields.filter((_: any, i: number) => i !== idx),
       );
     };
 
@@ -1545,7 +1547,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const toggleStyle = (
       styleKey: string,
       onValue: string,
-      offValue: string
+      offValue: string,
     ) => {
       const currentVal = selectedItem.properties.style?.[styleKey];
       handleStyleChange(styleKey, currentVal === onValue ? offValue : onValue);
@@ -1554,12 +1556,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     const toggleNameStyle = (
       styleKey: string,
       onValue: string,
-      offValue: string
+      offValue: string,
     ) => {
       const currentVal = selectedItem.properties.nameStyle?.[styleKey];
       handleNameStyleChange(
         styleKey,
-        currentVal === onValue ? offValue : onValue
+        currentVal === onValue ? offValue : onValue,
       );
     };
 
@@ -1700,7 +1702,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     onChange={(e) =>
                       handleAnimationChange(
                         "duration",
-                        parseFloat(e.target.value)
+                        parseFloat(e.target.value),
                       )
                     }
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
@@ -1717,7 +1719,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     onChange={(e) =>
                       handleAnimationChange(
                         "repeat",
-                        parseInt(e.target.value, 10)
+                        parseInt(e.target.value, 10),
                       )
                     }
                     className="mt-1 block w-full border-gray-300 rounded-md shadow-sm p-2"
@@ -1937,7 +1939,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         const handleOptionChange = (
           index: number,
           key: "text" | "action_value",
-          value: string
+          value: string,
         ) => {
           const newOptions = [...(selectedItem.properties.options || [])];
           newOptions[index] = { ...newOptions[index], [key]: value };
@@ -1951,7 +1953,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         };
         const removeDropdownOption = (index: number) => {
           const newOptions = (selectedItem.properties.options || []).filter(
-            (_: any, i: number) => i !== index
+            (_: any, i: number) => i !== index,
           );
           handlePropertyChange("options", newOptions);
         };
@@ -2005,13 +2007,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         handleOptionChange(
                           index,
                           "action_value",
-                          e.target.value
+                          e.target.value,
                         )
                       }
                       className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
                     />
                   </div>
-                )
+                ),
               )}
               <button
                 onClick={addDropdownOption}
@@ -2202,7 +2204,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         const handleFieldChange = (
           index: number,
           key: "label" | "placeholder",
-          value: string
+          value: string,
         ) => {
           const newFields = [...(selectedItem.properties.fields || [])];
           newFields[index] = { ...newFields[index], [key]: value };
@@ -2222,8 +2224,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           handlePropertyChange(
             "fields",
             (selectedItem.properties.fields || []).filter(
-              (_: any, i: number) => i !== index
-            )
+              (_: any, i: number) => i !== index,
+            ),
           );
         };
         const handleButtonPropChange = (key: string, value: string) => {
@@ -2365,13 +2367,13 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                           handleFieldChange(
                             index,
                             "placeholder",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
                       />
                     </div>
-                  )
+                  ),
                 )}
               </div>
               <button
@@ -2462,7 +2464,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         const handleAccordionChange = (
           index: number,
           key: "question" | "answer",
-          value: string
+          value: string,
         ) => {
           const next = [...(selectedItem.properties.items || [])];
           next[index] = { ...next[index], [key]: value };
@@ -2482,8 +2484,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           handlePropertyChange(
             "items",
             (selectedItem.properties.items || []).filter(
-              (_: any, i: number) => i !== index
-            )
+              (_: any, i: number) => i !== index,
+            ),
           );
         };
 
@@ -2518,7 +2520,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                           handleAccordionChange(
                             index,
                             "question",
-                            e.target.value
+                            e.target.value,
                           )
                         }
                         className="block w-full border-gray-300 rounded-md shadow-sm p-1 text-sm"
@@ -2534,7 +2536,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         rows={3}
                       />
                     </div>
-                  )
+                  ),
                 )}
               </div>
               <button
@@ -2662,7 +2664,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             if (isShippable) {
               // Logic to ENABLE and sync the product
               const response = await api.post(
-                `/checkout/sync-product/${selectedItem.properties.item_id}`
+                `/checkout/sync-product/${selectedItem.properties.item_id}`,
               );
               updateItem({
                 ...selectedItem,
@@ -2677,7 +2679,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             } else {
               // Logic to DISABLE and un-sync the product
               await api.post(
-                `/checkout/unsync-product/${selectedItem.properties.item_id}`
+                `/checkout/unsync-product/${selectedItem.properties.item_id}`,
               );
               updateItem({
                 ...selectedItem,
@@ -2793,6 +2795,35 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             aiPayload: newPayload,
           });
         };
+        // 2. Define the image upload handler SECOND (it uses the function above)
+        const handleAiImageUpload = async (
+          event: React.ChangeEvent<HTMLInputElement>,
+          key: string,
+        ) => {
+          const file = event.target.files?.[0];
+          if (!file) return;
+
+          setIsUploading(true);
+          const formData = new FormData();
+          formData.append("file", file);
+
+          try {
+            const response = await api.post("/uploads/image", formData, {
+              headers: { "Content-Type": "multipart/form-data" },
+            });
+
+            const { image_url } = response.data;
+            if (!image_url) throw new Error("No image_url returned");
+
+            // Update the AI property with the new relative URL
+            handleAiPropLocalChange(key, image_url);
+          } catch (error) {
+            console.error("AI Image upload failed:", error);
+            alert("Image upload failed.");
+          } finally {
+            setIsUploading(false);
+          }
+        };
 
         editorBody = (
           <div className="space-y-4">
@@ -2833,6 +2864,34 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     }
                     className="w-full h-10 p-1 rounded border"
                   />
+                )}
+                {/* IMAGE UPLOADER - ADD THIS */}
+                {field.type === "image" && (
+                  <div className="space-y-2">
+                    {/* Preview Image */}
+                    {aiProps[field.key] && (
+                      <img
+                        src={resolveImageSrc(aiProps[field.key])}
+                        alt="Preview"
+                        className="w-full h-32 object-cover rounded border bg-gray-50"
+                      />
+                    )}
+
+                    {/* Upload Button */}
+                    <div className="flex items-center gap-2">
+                      <label className="cursor-pointer w-full flex items-center justify-center gap-2 p-2 border-2 border-dashed border-gray-300 rounded text-sm text-blue-600 hover:bg-blue-50 transition-colors">
+                        <Upload size={16} />
+                        {isUploading ? "Uploading..." : "Upload Image"}
+                        <input
+                          type="file"
+                          className="hidden"
+                          accept="image/*"
+                          disabled={isUploading}
+                          onChange={(e) => handleAiImageUpload(e, field.key)}
+                        />
+                      </label>
+                    </div>
+                  </div>
                 )}
               </div>
             ))}
@@ -3248,7 +3307,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           onChange={(next) => updateItem({ ...selectedItem, properties: next })}
           onBecameProtected={async () => {
             await api.post(
-              `/builder/ensure-auth-pages/${websiteData!.website_id}`
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`,
             );
           }}
           products={products}
@@ -3327,7 +3386,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         }
                         disabled={
                           activePage?.sections.findIndex(
-                            (s) => s.section_id === selectedItem.section_id
+                            (s) => s.section_id === selectedItem.section_id,
                           ) === 0
                         }
                         className="p-2 rounded-full hover:bg-gray-200 disabled:opacity-50 disabled:cursor-not-allowed"
@@ -3341,7 +3400,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         }
                         disabled={
                           activePage?.sections.findIndex(
-                            (s) => s.section_id === selectedItem.section_id
+                            (s) => s.section_id === selectedItem.section_id,
                           ) ===
                           activePage.sections.length - 1
                         }
@@ -3456,11 +3515,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     {(() => {
                       const navSlugs = new Set(
                         (websiteData?.navbar?.items || []).map(
-                          (i: NavbarItem) => i.link_url
-                        )
+                          (i: NavbarItem) => i.link_url,
+                        ),
                       );
                       const standalonePages = (websiteData?.pages || []).filter(
-                        (p: Page) => p.slug !== "/" && !navSlugs.has(p.slug)
+                        (p: Page) => p.slug !== "/" && !navSlugs.has(p.slug),
                       );
 
                       if (standalonePages.length === 0) {
@@ -3541,7 +3600,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                                       onClick={() =>
                                         handleDeleteStandalonePage(
                                           p.page_id,
-                                          p.title
+                                          p.title,
                                         )
                                       }
                                       className="p-1 text-red-600 hover:bg-red-100 rounded-full"

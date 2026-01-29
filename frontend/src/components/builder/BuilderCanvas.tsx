@@ -92,8 +92,16 @@ interface AiElementRunnerProps {
 
 //   useLayoutEffect(() => {
 //     if (!aiPayload || !ref.current) return;
-//     const processedProps = { ...(aiPayload.properties || {}) };
 
+//     // ✅ THE FIX: Merge sources to prevent empty displays on new elements
+//     // 1. aiPayload.properties provides the base (titles, content, etc.)
+//     // 2. element.properties provides the live overrides (price registry, manual edits)
+//     const processedProps = {
+//       ...(aiPayload.properties || {}),
+//       ...(element.properties || {}),
+//     };
+
+//     // Process image URLs for both content and style
 //     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
 //       if (processedProps[key])
 //         processedProps[key] = resolveImageSrc(processedProps[key]);
@@ -101,41 +109,36 @@ interface AiElementRunnerProps {
 
 //     let htmlOnly = (aiPayload.aiTemplate || "").replace(
 //       /<script[\s\S]*?<\/script>/g,
-//       ""
+//       "",
 //     );
 
-//     // ✅ THE FIX: Protect the displayTemplate from the first render pass
+//     // Protect the displayTemplate from the first render pass
 //     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
 //     const templateMatch = htmlOnly.match(templateRegex);
 //     const templateContent = templateMatch ? templateMatch[0] : "";
 
-//     // Temporarily replace the template with a placeholder
 //     if (templateContent) {
 //       htmlOnly = htmlOnly.replace(
 //         templateContent,
-//         '<div id="displayTemplate-placeholder"></div>'
+//         '<div id="displayTemplate-placeholder"></div>',
 //       );
 //     }
 
-//     // Now, render the main container. This is safe and will not destroy the template's {{...}} tags.
+//     // ✅ Render using the MERGED properties
 //     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
-//     // Put the original, untouched template back into the DOM where the placeholder was.
 //     if (templateContent) {
 //       const placeholder = ref.current.querySelector(
-//         "#displayTemplate-placeholder"
+//         "#displayTemplate-placeholder",
 //       );
 //       if (placeholder) {
 //         const tempDiv = document.createElement("div");
 //         tempDiv.innerHTML = templateContent;
 //         const templateElement = tempDiv.firstChild;
-//         if (templateElement) {
-//           placeholder.replaceWith(templateElement);
-//         }
+//         if (templateElement) placeholder.replaceWith(templateElement);
 //       }
 //     }
 
-//     // Now the script can run and find the fully intact template.
 //     if (aiPayload.script) {
 //       const jsBody = aiPayload.script
 //         .replace(/^\s*<script[^>]*>/, "")
@@ -149,13 +152,15 @@ interface AiElementRunnerProps {
 //           "schemaId",
 //           "properties",
 //           "Mustache",
-//           jsBody
+//           jsBody,
 //         );
-//         fn(ref.current, apiClient, schemaId, element.properties, Mustache);
+//         // Pass merged properties to the script so it can interact with live data
+//         fn(ref.current, apiClient, schemaId, processedProps, Mustache);
 //       } catch (jsErr) {
 //         console.error("Error running AI script:", jsErr);
 //       }
 //     }
+//     // Dependency on element.properties ensures it re-renders on price updates
 //   }, [aiPayload, element.properties, isPreview]);
 
 //   return <div ref={ref} />;
@@ -170,26 +175,44 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
 
-    // ✅ THE FIX: Merge sources to prevent empty displays on new elements
-    // 1. aiPayload.properties provides the base (titles, content, etc.)
-    // 2. element.properties provides the live overrides (price registry, manual edits)
+    // Merge sources
     const processedProps = {
       ...(aiPayload.properties || {}),
       ...(element.properties || {}),
     };
 
-    // Process image URLs for both content and style
-    for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
-      if (processedProps[key])
-        processedProps[key] = resolveImageSrc(processedProps[key]);
+    // --- START: SMARTER IMAGE RESOLVER ---
+    // 1. Standard keys that always need resolving
+    const keysToResolve = new Set([
+      "src",
+      "poster",
+      "image_url",
+      "backgroundImage",
+    ]);
+
+    // 2. Dynamically add keys from editableProps if they are type 'image'
+    if (aiPayload.editableProps) {
+      aiPayload.editableProps.forEach((prop: any) => {
+        if (prop.type === "image") {
+          keysToResolve.add(prop.key);
+        }
+      });
     }
+
+    // 3. Resolve URLs
+    keysToResolve.forEach((key) => {
+      if (processedProps[key]) {
+        processedProps[key] = resolveImageSrc(processedProps[key]);
+      }
+    });
+    // --- END: SMARTER IMAGE RESOLVER ---
 
     let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
       "",
     );
 
-    // Protect the displayTemplate from the first render pass
+    // Protect displayTemplate
     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
     const templateMatch = htmlOnly.match(templateRegex);
     const templateContent = templateMatch ? templateMatch[0] : "";
@@ -201,8 +224,13 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       );
     }
 
-    // ✅ Render using the MERGED properties
-    ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
+    // Render with Mustache
+    try {
+      ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
+    } catch (e) {
+      console.error("Mustache render error:", e);
+      ref.current.innerHTML = "Error rendering element";
+    }
 
     if (templateContent) {
       const placeholder = ref.current.querySelector(
@@ -231,13 +259,11 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "Mustache",
           jsBody,
         );
-        // Pass merged properties to the script so it can interact with live data
         fn(ref.current, apiClient, schemaId, processedProps, Mustache);
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
     }
-    // Dependency on element.properties ensures it re-renders on price updates
   }, [aiPayload, element.properties, isPreview]);
 
   return <div ref={ref} />;
