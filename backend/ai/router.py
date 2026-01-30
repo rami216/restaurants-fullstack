@@ -322,7 +322,7 @@ For every element in the `elements` array, follow these strict rules:
               "aiPayload": {
                 "aiTemplate": "<div class='ai-img-01'><img src='{{src}}' style='width:100%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.2);' /></div>",
                 "properties": { "src": "https://placehold.co/600x400/222/fff?text=Food+Image" },
-                "editableProps": [ {"key":"src","label":"Image URL","type":"text"} ],
+                "editableProps": [ {"key":"src","label":"Image URL","type":"image"} ],
                 "script": ""
               }
             }
