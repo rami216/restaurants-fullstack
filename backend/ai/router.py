@@ -5029,18 +5029,42 @@ const generateForm = async (initialData = {}) => {
 };
 
 // 6. EVENT LISTENERS
+
 container.addEventListener('click', async (e) => {
     // Edit Button
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
-        editingRowId = editBtn.dataset.rowId;
-        const row = currentRows.find(r => r.row_id === editingRowId);
-        if (row) {
-            editingOwnerId = row.sitemember_id; // <--- ADD THIS: Capture the original owner
-            generateForm(row.data);
+        const rowId = editBtn.dataset.rowId;
+        
+        // 1. Show loading state on the button
+        const originalText = editBtn.innerText;
+        editBtn.innerText = 'Loading...';
+        editBtn.disabled = true;
+
+        try {
+            // 2. FORCE FETCH the single row to get the real sitemember_id
+            const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
+            const rows = res.data?.rows || res.rows || [];
+            const targetRow = rows.find(r => r.row_id === rowId);
+
+            if (targetRow) {
+                editingRowId = rowId;
+                editingOwnerId = targetRow.sitemember_id; // ✅ Now this is guaranteed to be correct
+                generateForm(targetRow.data);
+            } else {
+                alert('Row not found');
+            }
+        } catch (err) {
+            console.error('Fetch error:', err);
+            alert('Failed to load item details.');
+        } finally {
+            // 3. Reset button state
+            editBtn.innerText = originalText;
+            editBtn.disabled = false;
         }
     }
-    // Delete Button
+    
+    // ... delete logic (keep existing) ...
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
         if (confirm('Delete?')) {
