@@ -8516,6 +8516,12 @@ Is this a file upload?
         - To ensure horizontal centering within the section, the main container MUST use: `display: flex; justify-content: center; align-items: center;`.
         - DO NOT apply borders, backgrounds, or shadows to this main container <div> unless the user specifically asks for a "card" or "box". 
         - Apply the primary design (e.g., {{buttonBgColor}}, borders, shadows) directly to the specific internal element (e.g., the <button> or <a> tag) so the element looks like it is floating naturally on the section background.
+    - **RESPONSIVENESS (CRITICAL FOR LISTS):**
+        - If rendering a collection of items (cards, menu items, features), you **MUST** use CSS Grid for the layout container.
+        - **Mandatory CSS Pattern:** `display: grid; grid-template-columns: repeat(auto-fit, minmax({{cardMinWidth}}, 1fr)); gap: {{gap}}; width: 100%;`
+        - Create a `{{cardMinWidth}}` property (default usually '280px' or '300px').
+        - **Why?** This ensures items automatically stack vertically on mobile phones and spread out on desktops without writing media queries.
+        - **Image Safety:** Ensure all images inside cards have `width: 100%; height: auto; object-fit: cover;` to prevent overflow.
     - **You MUST expose editables for the following visual controls (when relevant):**
         - **Colors:** element background color, text color, link color, hover/active accents, border color.
         - **Borders:** border width, border style, border radius.
