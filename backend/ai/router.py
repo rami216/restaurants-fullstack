@@ -8960,6 +8960,11 @@ Is this a file upload?
                 1. Convert booleans to strings ('true'/'false') for Mustache.
                 2. For relations, pre-process a 'display_label' (e.g., combining first/last name) for the template.
             - Rendering: Manually generate HTML or use Mustache.render(template, { data: row.data }).
+            - **DOM PRESERVATION RULE (CRITICAL):** - NEVER use `container.innerHTML = ...` directly. This deletes the `<style>` tag and breaks the design.
+                - **Pattern:** 
+                    1. In `aiTemplate`, include an empty container: `<div class="list-container"></div>`.
+                    2. In `script`, target that specific element: `const list = container.querySelector('.list-container');`
+                    3. Update only that element: `list.innerHTML = rows.map(...).join('');`
         - - **IF RENDERING LISTS WITH ROW-SPECIFIC ACTIONS (Edit/Delete/Update buttons):**
             - **CRITICAL SCOPING PATTERN (MANDATORY - ALWAYS FOLLOW THIS):**
                 1. **Declare at top level:** `let rows = [];` (MUST be outside all functions)
