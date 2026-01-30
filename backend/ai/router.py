@@ -215,6 +215,7 @@ The value is an array of Section Objects.
    - **Granularity Rule:** Break content down! Do NOT bundle a whole hero into one element.
      - **BAD:** One Element containing Headline + Subtitle + Button.
      - **GOOD:** Element 1 (Headline) -> Element 2 (Subtitle) -> Element 3 (Button).
+     - **Footer/Lists:** Do NOT bundle links into one element. "Privacy Policy" must be ONE element. "Terms" must be a SEPARATE element.
    - **JSON Structure:**
      ```json
      {
@@ -260,7 +261,7 @@ For every element in the `elements` array, follow these strict rules:
 3.  **Features Grid:** Use a single Element containing a CSS Grid (`display: grid`) for perfect card alignment.
 4.  **Content/About:** A 50/50 split layout.
 5.  **Pricing:** A layout with 3 pricing cards.
-6.  **Footer:** Simple columns with links and copyright.
+6.  **Footer:** Use a `row` subsection. Create **separate elements** for each link (Privacy, Terms, Contact) so they can be clicked individually.
 
 ---
 
@@ -320,8 +321,37 @@ For every element in the `elements` array, follow these strict rules:
               "element_type": "AI",
               "aiPayload": {
                 "aiTemplate": "<div class='ai-img-01'><img src='{{src}}' style='width:100%; border-radius:16px; box-shadow:0 10px 25px rgba(0,0,0,0.2);' /></div>",
-                "properties": { "src": "[https://placehold.co/600x400/222/fff?text=Food+Image](https://placehold.co/600x400/222/fff?text=Food+Image)" },
+                "properties": { "src": "https://placehold.co/600x400/222/fff?text=Food+Image" },
                 "editableProps": [ {"key":"src","label":"Image URL","type":"text"} ],
+                "script": ""
+              }
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "section_type": "footer",
+      "properties": { "display": "flex", "flexDirection": "column", "alignItems": "center", "style": { "backgroundColor": "#000", "padding": "2rem" } },
+      "subsections": [
+        {
+          "properties": { "style": { "display": "flex", "flexDirection": "row", "gap": "20px", "justifyContent": "center" } },
+          "elements": [
+            {
+              "element_type": "AI",
+              "aiPayload": {
+                "aiTemplate": "<div class='ai-link-01'><a style='color:{{color}}; text-decoration:none; cursor:pointer;'>{{text}}</a></div>",
+                "properties": { "text": "Privacy Policy", "color": "#9ca3af" },
+                "editableProps": [ {"key":"text","label":"Text","type":"text"}, {"key":"color","label":"Color","type":"color"} ],
+                "script": ""
+              }
+            },
+            {
+              "element_type": "AI",
+              "aiPayload": {
+                "aiTemplate": "<div class='ai-link-02'><a style='color:{{color}}; text-decoration:none; cursor:pointer;'>{{text}}</a></div>",
+                "properties": { "text": "Terms of Service", "color": "#9ca3af" },
+                "editableProps": [ {"key":"text","label":"Text","type":"text"}, {"key":"color","label":"Color","type":"color"} ],
                 "script": ""
               }
             }
