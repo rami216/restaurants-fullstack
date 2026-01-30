@@ -290,16 +290,34 @@ async def update_data_row(
     row_data: RowUpdate,
     db: AsyncSession = Depends(get_db)
 ):
-    # This logic remains the same.
     row_to_update = await db.get(CustomDataRow, row_id)
     if not row_to_update:
         raise HTTPException(status_code=404, detail="Row not found.")
     
-    if row_to_update.sitemember_id is not None:
-        if row_to_update.sitemember_id != row_data.sitemember_id:
-            raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
+    # --- START OF NEW LOGIC ---
     
+    # Check if this is an Admin override
+    # We convert to string to safely compare UUIDs vs the text "admin"
+    is_admin_override = str(row_data.sitemember_id) == "admin"
+
+    if not is_admin_override:
+        # Only enforce ownership check if NOT admin
+        if row_to_update.sitemember_id is not None:
+            # We explicitly check if IDs are different
+            if str(row_to_update.sitemember_id) != str(row_data.sitemember_id):
+                raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
+    
+    # --- END OF NEW LOGIC ---
+
+    # If it was an admin override, we usually want to PRESERVE the original owner,
+    # not overwrite it with the string "admin" (which might fail UUID validation later).
+    # If not admin, we update the owner to the new value (transfer ownership).
+    if not is_admin_override:
+        row_to_update.sitemember_id = row_data.sitemember_id
+    
+    # Update the actual data content
     row_to_update.data = row_data.data
+    
     await db.commit()
     await db.refresh(row_to_update)
     return row_to_update

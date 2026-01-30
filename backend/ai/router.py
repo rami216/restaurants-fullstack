@@ -4996,17 +4996,19 @@ const generateForm = async (initialData = {}) => {
             }
         }
 
-        const currentUser = properties.sitemember_id || null;
+        const currentUser = properties.sitemember_id || "admin";
         try {
             if (editingRowId) {
-                // UPDATE: Send 'editingOwnerId' to satisfy backend check (preserves original owner)
+                // ✅ UPDATE: Send 'currentUser'. 
+                // - If Admin: Sends "admin". Backend sees "admin", skips check, preserves original owner.
+                // - If User: Sends "User123". Backend checks "User123" == RowOwner.
                 await api.put(`/custom-data/rows/${editingRowId}`, { 
                     data, 
-                    sitemember_id: editingOwnerId 
+                    sitemember_id: currentUser 
                 });
-                await runCrossTableMutations('update', data, editingOwnerId);
+                await runCrossTableMutations('update', data, currentUser);
             } else {
-                // CREATE: Use the current logged-in user (e.g. Admin or User)
+                // ✅ CREATE: Assign owner as the current user (or "admin")
                 await api.post(`/custom-data/rows/${schemaId}`, { 
                     data, 
                     sitemember_id: currentUser 
@@ -5031,7 +5033,6 @@ const generateForm = async (initialData = {}) => {
 // 6. EVENT LISTENERS
 
 container.addEventListener('click', async (e) => {
-    // Edit Button
     const editBtn = e.target.closest('.edit-btn');
     if (editBtn) {
         const rowId = editBtn.dataset.rowId;
@@ -5042,14 +5043,14 @@ container.addEventListener('click', async (e) => {
         editBtn.disabled = true;
 
         try {
-            // 2. FORCE FETCH the single row to get the real sitemember_id
+            // 2. Fetch fresh data for the form (Good practice!)
             const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
             const rows = res.data?.rows || res.rows || [];
             const targetRow = rows.find(r => r.row_id === rowId);
 
             if (targetRow) {
-                editingRowId = rowId;
-                editingOwnerId = targetRow.sitemember_id; // ✅ Now this is guaranteed to be correct
+                editingRowId = rowId; 
+                // Note: We no longer need to capture 'editingOwnerId' here.
                 generateForm(targetRow.data);
             } else {
                 alert('Row not found');
@@ -5073,13 +5074,13 @@ container.addEventListener('click', async (e) => {
             const originalText = deleteBtn.innerText;
             deleteBtn.innerText = '...';
             deleteBtn.disabled = true;
-
+            const currentUser = properties.sitemember_id || "admin";
             try {
-                const sitemember_id = properties.sitemember_id || null;
+                
                 const rowId = deleteBtn.dataset.rowId;
                 
                
-                await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`);
+                await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${currentUser}`);
                 
                 if (rowElement) rowElement.remove();
                 currentRows = currentRows.filter(r => r.row_id !== rowId);
