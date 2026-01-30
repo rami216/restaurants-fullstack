@@ -4700,6 +4700,7 @@ const paginationControls = container.querySelector('.pagination-controls');
 const titleElement = container.querySelector('h2, h3'); // Select the header
 
 let editingRowId = null;
+let editingOwnerId = null; // <--- ADD THIS
 let currentRows = [];
 let currentPage = 0;
 const rowsPerPage = 20;
@@ -4995,14 +4996,22 @@ const generateForm = async (initialData = {}) => {
             }
         }
 
-        const sitemember_id = properties.sitemember_id || null;
+        const currentUser = properties.sitemember_id || null;
         try {
             if (editingRowId) {
-                await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id });
-                await runCrossTableMutations('update', data, sitemember_id);
+                // UPDATE: Send 'editingOwnerId' to satisfy backend check (preserves original owner)
+                await api.put(`/custom-data/rows/${editingRowId}`, { 
+                    data, 
+                    sitemember_id: editingOwnerId 
+                });
+                await runCrossTableMutations('update', data, editingOwnerId);
             } else {
-                await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id });
-                await runCrossTableMutations('create', data, sitemember_id);
+                // CREATE: Use the current logged-in user (e.g. Admin or User)
+                await api.post(`/custom-data/rows/${schemaId}`, { 
+                    data, 
+                    sitemember_id: currentUser 
+                });
+                await runCrossTableMutations('create', data, currentUser);
             }
             alert('Success!');
             editingRowId = null;
@@ -5026,9 +5035,11 @@ container.addEventListener('click', async (e) => {
     if (editBtn) {
         editingRowId = editBtn.dataset.rowId;
         const row = currentRows.find(r => r.row_id === editingRowId);
-        if (row) generateForm(row.data);
+        if (row) {
+            editingOwnerId = row.sitemember_id; // <--- ADD THIS: Capture the original owner
+            generateForm(row.data);
+        }
     }
-
     // Delete Button
     const deleteBtn = e.target.closest('.delete-btn');
     if (deleteBtn) {
@@ -5062,10 +5073,10 @@ container.addEventListener('click', async (e) => {
 if (addButton) {
     addButton.onclick = () => {
         editingRowId = null;
+        editingOwnerId = null; // <--- ADD THIS: Reset for new rows
         generateForm();
     };
 }
-
 
 renderPagination();
 
