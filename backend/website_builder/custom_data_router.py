@@ -296,32 +296,31 @@ async def update_data_row(
     
     # --- START OF NEW LOGIC ---
     
-    # Check if this is an Admin override
-    # We convert to string to safely compare UUIDs vs the text "admin"
-    is_admin_override = str(row_data.sitemember_id) == "admin"
+    # Use the "Nil UUID" (All Zeros) to represent Admin Override
+    # This passes Pydantic validation because it is a valid UUID format
+    ADMIN_OVERRIDE_UUID = "00000000-0000-0000-0000-000000000000"
+    
+    is_admin_override = str(row_data.sitemember_id) == ADMIN_OVERRIDE_UUID
 
     if not is_admin_override:
         # Only enforce ownership check if NOT admin
         if row_to_update.sitemember_id is not None:
-            # We explicitly check if IDs are different
             if str(row_to_update.sitemember_id) != str(row_data.sitemember_id):
                 raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
     
     # --- END OF NEW LOGIC ---
 
-    # If it was an admin override, we usually want to PRESERVE the original owner,
-    # not overwrite it with the string "admin" (which might fail UUID validation later).
-    # If not admin, we update the owner to the new value (transfer ownership).
+    # If it is a normal user update, update the owner field.
+    # If it is Admin, we DO NOT update the owner (we keep the original student as the owner).
     if not is_admin_override:
         row_to_update.sitemember_id = row_data.sitemember_id
     
-    # Update the actual data content
+    # Update the data
     row_to_update.data = row_data.data
     
     await db.commit()
     await db.refresh(row_to_update)
     return row_to_update
-
 
 @router.delete("/rows/{row_id}", status_code=204)
 async def delete_data_row(

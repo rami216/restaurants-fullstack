@@ -4996,7 +4996,7 @@ const generateForm = async (initialData = {}) => {
             }
         }
 
-        const currentUser = properties.sitemember_id || "admin";
+        const currentUser = properties.sitemember_id || "00000000-0000-0000-0000-000000000000";
         try {
             if (editingRowId) {
                 // ✅ UPDATE: Send 'currentUser'. 
@@ -5074,7 +5074,7 @@ container.addEventListener('click', async (e) => {
             const originalText = deleteBtn.innerText;
             deleteBtn.innerText = '...';
             deleteBtn.disabled = true;
-            const currentUser = properties.sitemember_id || "admin";
+            const currentUser = properties.sitemember_id || "00000000-0000-0000-0000-000000000000";
             try {
                 
                 const rowId = deleteBtn.dataset.rowId;
