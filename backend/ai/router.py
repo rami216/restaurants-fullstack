@@ -3894,10 +3894,9 @@ Apply the specific rules below based on the detected type.
 **2. Script Preservation:**
    - The current script contains complex logic for Pagination (`fetchAndRenderRows`), Auth (`sitemember_id`), and Relational Dropdowns.
    - **DO NOT REWRITE THE SCRIPT FROM SCRATCH.**
-   - Only modify specific parts of the script if the user asks for logic changes (e.g., "make the form upload files", "add a confirmation").
-   - **NEVER** remove the `sitemember_id` logic or the `00000000-0000-0000-0000-000000000000` admin fallback.
-   - **NEVER** remove the `runCrossTableMutations` function if it exists.
-
+   - Only modify specific parts of the script if the user asks for logic changes.
+   - **NEVER** remove the `sitemember_id` logic.
+   
 **3. API & LOGIC STANDARDS (Use ONLY if modifying script logic):**
    If the user request requires changing API calls or adding file uploads, you MUST follow these patterns exactly:
 
@@ -3944,12 +3943,25 @@ Apply the specific rules below based on the detected type.
    - Update `properties` (colors, texts).
    - Update `<style>` tag in `aiTemplate`.
    - Ensure the CSS class scoping (using the unique class name) is preserved.
+   
+   **5. VISUAL LOGIC & CONDITIONAL STYLING (CRITICAL):**
+   - **MUSTACHE IS LOGIC-LESS.** You CANNOT use `{{#if}}`, `{{eq}}`, `{{?}}`, or ternary operators inside the HTML `aiTemplate`.
+   - **HOW TO DO IT:**
+     1. In the `script` (inside `fetchAndRenderRows`), calculate the specific style or class string based on the data.
+     2. Add this new string as a property to `rowData`.
+     3. Use that simple property in the `aiTemplate`.
 
-**5. MUSTACHE TEMPLATE LOGIC (CRITICAL):**
-   - Mustache is "logic-less". You CANNOT use `{{#if}}`, `{{eq}}`, or `{{else}}` inside the HTML template.
-   - **Incorrect:** `style="color: {{#if active}}red{{/if}}"`
-   - **Correct:** 1. In the `script`, calculate the value: `rowData.titleColor = (rowData.active === 'true') ? 'red' : 'black';`
-     2. In the `aiTemplate`, use the variable: `style="color: {{data.titleColor}}"`
+   **Example: "Make border green if accepted"**
+   * **WRONG (HTML):** `<div class="{{#if data.accepted}}border-green{{/if}}">`
+   * **CORRECT (Script):**
+       ```javascript
+       // Inside currentRows.forEach loop...
+       const isAccepted = (row.data.accepted === true || row.data.accepted === 'true');
+       // Create a new display property just for the template
+       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
+       ```
+   * **CORRECT (HTML):** `<div class="... {{data.borderClass}}">`
+
 ---
 
 ### **RULES FOR TYPE B: VISUAL ELEMENT (Standard UI)**
