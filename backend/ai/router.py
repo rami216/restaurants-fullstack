@@ -3864,6 +3864,7 @@ Your output MUST be a single, complete, valid JSON object with the fully updated
 5.  **Special Rule for Forms : If the component is a form, pay special attention to the `properties.fields` array which defines its structure. **Do not add, remove, or alter the items in this array** unless the user's prompt is explicitly about adding, removing, or changing a specific form field. Focus style changes on the `properties.style` or `properties.submitButton.style` objects.
 """.strip()
 
+
 REFINE_MASTER_PROMPT_1 = """
 You are an expert full-stack component architect. Your job is to modify an existing component's JSON state based on a USER_PROMPT. 
 
@@ -3909,8 +3910,7 @@ Apply the specific rules below based on the detected type.
 
    - **FILE UPLOAD PATTERN (Must be inside form.onsubmit):**
      If the prompt implies uploading files (e.g., "add CV upload"), update the HTML to include `<input type="file" name="TARGET_FIELD">` and inject this specific logic inside the `form.onsubmit` handler **before** the data save call:
-     
-     ```javascript
+```javascript
      // Inside form.onsubmit... e.preventDefault();
      const fileInput = container.querySelector('input[type="file"]');
      if (fileInput && fileInput.files.length > 0) {
@@ -3937,30 +3937,12 @@ Apply the specific rules below based on the detected type.
          }
      }
      // ... Proceed to save data ...
-     ```
+```
 
 **4. Styling Data Apps:**
    - Update `properties` (colors, texts).
    - Update `<style>` tag in `aiTemplate`.
    - Ensure the CSS class scoping (using the unique class name) is preserved.
-   
-   **5. VISUAL LOGIC & CONDITIONAL STYLING (CRITICAL):**
-   - **MUSTACHE IS LOGIC-LESS.** You CANNOT use `{{#if}}`, `{{eq}}`, `{{?}}`, or ternary operators inside the HTML `aiTemplate`.
-   - **HOW TO DO IT:**
-     1. In the `script` (inside `fetchAndRenderRows`), calculate the specific style or class string based on the data.
-     2. Add this new string as a property to `rowData`.
-     3. Use that simple property in the `aiTemplate`.
-
-   **Example: "Make border green if accepted"**
-   * **WRONG (HTML):** `<div class="{{#if data.accepted}}border-green{{/if}}">`
-   * **CORRECT (Script):**
-       ```javascript
-       // Inside currentRows.forEach loop...
-       const isAccepted = (row.data.accepted === true || row.data.accepted === 'true');
-       // Create a new display property just for the template
-       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
-       ```
-   * **CORRECT (HTML):** `<div class="... {{data.borderClass}}">`
 
 ---
 
@@ -3985,13 +3967,29 @@ Apply the specific rules below based on the detected type.
 ### **UNIVERSAL RULES (APPLY TO BOTH)**
 
 1. **Preserve IDs:** Do not change the `unique_class_name` or any `element_id`.
+
 2. **Preserve Prop Definitions:** Do not remove items from `editableProps` unless the feature they control is being removed.
-3. **Sync Editable Props (CRITICAL):** - If you add a NEW mustache token to `aiTemplate` (e.g. `{{subHeading}}`), you **MUST** add it to `properties` AND `editableProps`.
+
+3. **Sync Editable Props (CRITICAL):**
+   - If you add a NEW mustache token to `aiTemplate` (e.g. `{{subHeading}}`), you **MUST** add it to `properties` AND `editableProps`.
    - **`editableProps` Format:** `[{ "key": "subHeading", "label": "Sub Heading", "type": "text" }]`.
    - Supported types: `text`, `color`, `image`, `number`.
-4. **Valid JSON:** The output must be parseable JSON. Escape all quotes in HTML/Script strings.
-""".strip()
 
+4. **Valid JSON:** The output must be parseable JSON. Escape all quotes in HTML/Script strings.
+
+5. **NO LOGIC IN HTML (STRICT):**
+   - The HTML template (including `aiTemplate` and `displayTemplate`) MUST NOT contain logic like `{{#if}}`, `{{eq}}`, `{{?}}`, or ternary operators.
+   - **MANDATORY:** Calculate all conditional styles, classes, or display values in the JavaScript `script` (inside the render loop or event handlers), save them as new properties on the data object (e.g., `row.data.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200'`), and use those simple properties in the HTML (e.g., `class="{{data.borderClass}}"`).
+   - **Example:**
+     * **WRONG (HTML):** `<div class="{{#if data.accepted}}border-green{{/if}}">`
+     * **CORRECT (Script):**
+```javascript
+       // Inside currentRows.forEach loop or render function...
+       const isAccepted = (row.data.accepted === true || row.data.accepted === 'true');
+       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
+```
+     * **CORRECT (HTML):** `<div class="... {{data.borderClass}}">`
+""".strip()
 
 # @router.post("/refine-element", response_model=Dict[str, Any])
 # async def refine_element(
