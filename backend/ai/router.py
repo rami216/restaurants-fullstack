@@ -3943,6 +3943,7 @@ Apply the specific rules below based on the detected type.
    - Update `properties` (colors, texts).
    - Update `<style>` tag in `aiTemplate`.
    - Ensure the CSS class scoping (using the unique class name) is preserved.
+   - **CRITICAL:** Follow Universal Rule #5. Do NOT use `{{#if}}` in the HTML. Calculate classes in JS first.
 
 ---
 
