@@ -4037,31 +4037,22 @@ async def refine_element(
     user: User = Depends(get_current_active_user),
 ):
     try:
+        # Guard: need website_id to log usage
         if not body.website_id:
             raise HTTPException(status_code=400, detail="website_id is required")
 
-        # --- STEP 1: GATHER CONTEXT (CRITICAL) ---
-        # If this is a Data App, we need to give the AI the *actual* DB schema context
-        # AND a list of other schemas in case the user wants to add a Relation.
-        
+        # 1. PREPARE CONTEXT
+        # We need to give the AI context about existing schemas so it can create relations if asked.
         current_props = body.currentState.get("properties", {})
         target_schema_id = current_props.get("schema_id")
         
         schema_context_str = ""
-        
         if target_schema_id:
-            # Fetch ALL schemas to allow creating new relations
             all_schemas_result = await db.execute(
-                select(CustomDataSchema)
-                .where(CustomDataSchema.website_id == body.website_id)
+                select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
             )
             all_schemas = all_schemas_result.scalars().all()
-            
-            # Format for the prompt
-            schemas_list = [
-                {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
-                for s in all_schemas
-            ]
+            schemas_list = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas]
             schema_context_str = f"\n\nCONTEXT: EXISTING_WEBSITE_SCHEMAS: {json.dumps(schemas_list)}"
 
         user_content = (
@@ -4070,12 +4061,12 @@ async def refine_element(
             f"{schema_context_str}"
         )
 
-        # --- STEP 2: AI CALL ---
+        # 2. CALL AI
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": REFINE_MASTER_PROMPT_1}, # Use the NEW prompt we wrote previously
+                {"role": "system", "content": REFINE_MASTER_PROMPT}, 
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -4083,37 +4074,33 @@ async def refine_element(
 
         payload = json.loads(resp.choices[0].message.content)
 
-        # --- STEP 3: DATABASE SYNCHRONIZATION (THE FIX) ---
-        # Check if the AI updated the schema fields. If so, save to DB.
+        # 3. 🛑 DATABASE SYNC (THE MISSING PIECE) 🛑
+        # Check if the AI returned a modified schema. If so, update the DB.
         
         new_props = payload.get("properties", {})
-        # AI might put it in 'schema_fields' or 'schema' depending on how it interpreted the prompt
-        new_schema_fields = new_props.get("schema_fields") or new_props.get("schema")
         
-        # We only update DB if:
-        # 1. We have a target schema ID (it's a data app)
-        # 2. The AI actually returned a schema array
-        if target_schema_id and new_schema_fields:
+        # The AI might return the fields in 'schema_fields' OR 'schema' depending on how it interpreted the prompt.
+        # We check both.
+        ai_schema_fields = new_props.get("schema_fields") or new_props.get("schema") or payload.get("schema")
+
+        if target_schema_id and ai_schema_fields:
             try:
-                # Fetch the specific schema record
+                print(f"🔄 Attempting to sync schema {target_schema_id}...")
+                
+                # A. Get the actual schema record from DB
                 db_schema = await db.get(CustomDataSchema, target_schema_id)
                 
                 if db_schema:
-                    print(f"🔄 Syncing Schema {target_schema_id} with new fields from AI...")
-                    
-                    # Update the fields in the database
-                    db_schema.fields = new_schema_fields
-                    
-                    # Commit the change so the backend accepts new data
+                    # B. Update the fields column
+                    db_schema.fields = ai_schema_fields
                     await db.commit()
+                    print(f"✅ Schema {target_schema_id} updated in DB successfully.")
                     
-                    # Update the payload properties to match strict format expected by frontend
-                    new_props["schema_fields"] = new_schema_fields
-                    # Ensure 'schema_id' is preserved
+                    # C. Standardize the payload for the frontend
+                    new_props["schema_fields"] = ai_schema_fields
                     new_props["schema_id"] = target_schema_id 
                     
-                    # Refresh the 'all_schemas' prop in the payload so the frontend dropdowns work
-                    # (Re-fetching ensures we have the latest state)
+                    # D. Refresh 'all_schemas' so frontend dropdowns work immediately
                     refresh_result = await db.execute(
                         select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
                     )
@@ -4124,37 +4111,45 @@ async def refine_element(
                     ]
                     
                     payload["properties"] = new_props
+                else:
+                    print(f"⚠️ Schema {target_schema_id} not found in DB.")
                     
             except Exception as db_err:
-                print(f"❌ Failed to sync schema to DB: {db_err}")
-                # We don't raise here, we let it return the UI update, 
-                # but log the error. Ideally, this shouldn't fail.
+                print(f"❌ DATABASE UPDATE FAILED: {db_err}")
+                # Important: Do not silence this error if you are debugging
+                raise HTTPException(status_code=500, detail=f"Database schema update failed: {db_err}")
 
-        # --- STEP 4: CLEANUP & RETURN ---
+        # 4. CLEANUP SCRIPT TAGS
         if isinstance(payload.get("script"), str):
             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
             if m:
                 payload["script"] = m.group(1).strip()
 
-        # Track usage
+        # 5. TRACK USAGE
         usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        
         await track_ai_usage(
             db=db,
             website_id=body.website_id,
             user_id=user.id,
             model=getattr(resp, "model", AI_DEFAULT_MODEL),
             feature="refine_element",
-            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
             meta={"state_keys": list((body.currentState or {}).keys())[:10]},
         )
 
         return payload
 
+    except HTTPException:
+        raise
+    except (json.JSONDecodeError, KeyError) as e:
+        raise HTTPException(status_code=500, detail=f"Refine failed to parse AI output: {e}")
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"refine-element failed: {e}")
-
+        raise HTTPException(status_code=500, detail=f"Refine failed: {e}")
   #endregion
   
   
