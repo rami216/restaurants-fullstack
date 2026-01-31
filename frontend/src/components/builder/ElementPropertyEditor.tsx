@@ -1276,6 +1276,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             );
           }}
           products={products}
+          isSubscribed={isSubscribed} // <--- ADD THIS LINE
         />
       </div>
     );
