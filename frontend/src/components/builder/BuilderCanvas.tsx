@@ -581,7 +581,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         </div>,
       );
     } else if (effectiveType === "VIDEO") {
-      // Card + video (builder: keep it non-interactive to avoid accidental play)
+      // Card + video
       const cardStyle = props.style || {};
       const titleStyle = props.titleStyle || {};
       const metaStyle = props.metaStyle || {};
@@ -590,25 +590,66 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       const src = props.src ? resolveImageSrc(props.src) : "";
       const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
 
+      // Builder state for toggling
+      const [isOpen, setIsOpen] = React.useState(false);
+      const isExpandable = !!props.isExpandable;
+
+      // In Builder, we might want it open by default to see what we are editing,
+      // or strictly follow the toggle. Let's strictly follow toggle.
+
+      const showVideo = !isExpandable || isOpen;
+
       return wrap(
         <div
-          className="bg-white border rounded-xl shadow p-4 space-y-2"
+          className={`bg-white border rounded-xl shadow overflow-hidden ${
+            isExpandable
+              ? "cursor-pointer hover:bg-gray-50 transition-colors"
+              : ""
+          }`}
           style={cardStyle}
+          // Allow clicking to toggle only if expandable
+          onClick={() => isExpandable && setIsOpen(!isOpen)}
         >
-          <div className="flex items-baseline justify-between">
-            <h4 style={titleStyle}>{props.title || "Video title"}</h4>
-            <span style={metaStyle}>{props.length || ""}</span>
+          <div className="flex items-center justify-between p-4">
+            <div className="flex-1">
+              <h4 style={titleStyle}>{props.title || "Video title"}</h4>
+              <span style={metaStyle}>{props.length || ""}</span>
+            </div>
+            {isExpandable && (
+              // Simple chevron icon
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            )}
           </div>
 
-          <div className="relative">
-            {/* Block pointer events in the builder to keep selection easy */}
-            <div className="absolute inset-0 z-10" />
-            <video
-              src={src}
-              poster={poster}
-              controls={Boolean(props.controls)}
-              style={{ ...vidStyle, pointerEvents: "none" }}
-            />
+          {/* Video Container */}
+          <div
+            className={`transition-all duration-300 ease-in-out overflow-hidden ${
+              showVideo ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+            <div className="relative p-4 pt-0">
+              {/* Block pointer events in builder */}
+              <div className="absolute inset-0 z-10" />
+              <video
+                src={src}
+                poster={poster}
+                controls={Boolean(props.controls)}
+                style={{ ...vidStyle, pointerEvents: "none", width: "100%" }}
+              />
+            </div>
           </div>
         </div>,
       );

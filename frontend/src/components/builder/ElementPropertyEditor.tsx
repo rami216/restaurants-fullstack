@@ -3183,6 +3183,25 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
             {/* Styles */}
             <div>
+              {/* Behavior Options */}
+              <div>
+                <h4 className="text-md font-medium text-gray-800 mb-2">
+                  Behavior
+                </h4>
+                <label className="flex items-center gap-2 p-2 border rounded bg-gray-50 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={!!props.isExpandable}
+                    onChange={(e) =>
+                      handlePropertyChange("isExpandable", e.target.checked)
+                    }
+                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                  />
+                  <span className="text-sm text-gray-700">
+                    Collapsible (Click title to expand)
+                  </span>
+                </label>
+              </div>
               <h4 className="text-md font-medium text-gray-800 mb-2">
                 Card Style
               </h4>

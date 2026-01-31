@@ -2327,23 +2327,65 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       const src = props.src ? resolveImageSrc(props.src) : "";
       const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
 
+      // State is managed locally for each video component instance
+      const [isOpen, setIsOpen] = useState(false);
+      const isExpandable = !!props.isExpandable;
+      const showVideo = !isExpandable || isOpen;
+
       return (
-        <div
-          className="bg-white border rounded-xl shadow p-4 space-y-2"
+        <motion.div
+          className={`bg-white border rounded-xl shadow overflow-hidden ${
+            isExpandable
+              ? "cursor-pointer hover:bg-gray-50 transition-colors"
+              : ""
+          }`}
           style={cardStyle}
+          initial={initial}
+          animate={animate}
+          transition={transition}
+          onClick={() => isExpandable && setIsOpen(!isOpen)}
         >
-          <div className="flex items-baseline justify-between">
-            <h4 style={titleStyle}>{props.title || "Video title"}</h4>
-            <span style={metaStyle}>{props.length || ""}</span>
+          <div className="flex items-center justify-between p-4">
+            <div className="flex-1">
+              <h4 style={titleStyle}>{props.title || "Video title"}</h4>
+              <span style={metaStyle}>{props.length || ""}</span>
+            </div>
+            {isExpandable && (
+              <svg
+                xmlns="http://www.w3.org/2000/svg"
+                width="20"
+                height="20"
+                viewBox="0 0 24 24"
+                fill="none"
+                stroke="currentColor"
+                strokeWidth="2"
+                strokeLinecap="round"
+                strokeLinejoin="round"
+                className={`transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+              >
+                <polyline points="6 9 12 15 18 9"></polyline>
+              </svg>
+            )}
           </div>
 
-          <video
-            src={src}
-            poster={poster}
-            controls={Boolean(props.controls)}
-            style={vidStyle}
-          />
-        </div>
+          <div
+            className={`transition-all duration-300 ease-in-out overflow-hidden ${
+              showVideo ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
+            }`}
+          >
+            {/* We wrap video in a div with padding so the video doesn't 
+               jerk visually when the container height animates 
+            */}
+            <div className="p-4 pt-0" onClick={(e) => e.stopPropagation()}>
+              <video
+                src={src}
+                poster={poster}
+                controls={Boolean(props.controls)}
+                style={vidStyle}
+              />
+            </div>
+          </div>
+        </motion.div>
       );
     } else if (effectiveType === "MENU_ITEM") {
       // 1. DATA INITIALIZATION
