@@ -3887,18 +3887,16 @@ Apply the specific rules below based on the detected type.
 ### **RULES FOR TYPE A: DATA APP (Schema-Driven CRUD)**
 *Triggered when "schema" exists.*
 
-**1. Modifying Fields (Columns):**
-   - If the user adds/removes/renames a field, you MUST update:
-     - The `schema` array (add `{id, label, type}`).
-     - The `displayTemplate` HTML (add `{{data.field_id}}` or `{{data.field_id.display_label}}` for relations).
-     - **DO NOT** manually update the `<form>` in the script. The script is dynamic and builds the form based on `properties.schema_fields`.
+**1. SCHEMA LOCK (CRITICAL):**
+   - **DO NOT** add, remove, or rename fields in the `"schema"` array. The database structure is locked for this operation.
+   - You can ONLY change how the *existing* data is displayed (HTML) or processed (Script).
 
-**2. Script Preservation (CRITICAL):**
+**2. Script Preservation:**
    - The current script contains complex logic for Pagination (`fetchAndRenderRows`), Auth (`sitemember_id`), and Relational Dropdowns.
    - **DO NOT REWRITE THE SCRIPT FROM SCRATCH.**
-   - Only modify specific parts of the script if the user asks for logic changes (e.g., "sort by date", "filter by user").
+   - Only modify specific parts of the script if the user asks for logic changes (e.g., "make the form upload files", "add a confirmation").
    - **NEVER** remove the `sitemember_id` logic or the `00000000-0000-0000-0000-000000000000` admin fallback.
-   - **NEVER** remove the `runCrossTableMutations` function.
+   - **NEVER** remove the `runCrossTableMutations` function if it exists.
 
 **3. API & LOGIC STANDARDS (Use ONLY if modifying script logic):**
    If the user request requires changing API calls or adding file uploads, you MUST follow these patterns exactly:
@@ -3910,25 +3908,36 @@ Apply the specific rules below based on the detected type.
      - **Delete:** `await api.delete('/custom-data/rows/' + rowId + '?sitemember_id=' + sitemember_id);`
      - **Formatting:** Always cast numbers: `Number(row.data.price)` and check booleans: `(val === true || val === 'true')`.
 
-   - **FILE UPLOAD PATTERN:**
-     - HTML: Render `<input type="file" name="EXACT_SCHEMA_FIELD_NAME">`.
-     - Script: Handle inside `form.onsubmit` (NOT onchange).
+   - **FILE UPLOAD PATTERN (Must be inside form.onsubmit):**
+     If the prompt implies uploading files (e.g., "add CV upload"), update the HTML to include `<input type="file" name="TARGET_FIELD">` and inject this specific logic inside the `form.onsubmit` handler **before** the data save call:
+     
      ```javascript
-     // Inside form.onsubmit...
+     // Inside form.onsubmit... e.preventDefault();
      const fileInput = container.querySelector('input[type="file"]');
      if (fileInput && fileInput.files.length > 0) {
-         btn.textContent = 'Uploading...';
+         // Visual feedback
+         const btn = form.querySelector('button[type="submit"]');
+         if(btn) { btn.textContent = 'Uploading...'; btn.disabled = true; }
+
          try {
              const formData = new FormData();
              formData.append('file', fileInput.files[0]);
+             
+             // Call Backend
              const uploadRes = await api.post('/uploads/', formData);
              const url = uploadRes.data ? uploadRes.data.url : uploadRes.url;
+             
+             // Map to data field - Input Name MUST match Schema Field ID
              const fieldName = fileInput.getAttribute('name');
-             data[fieldName] = url; // Map URL to schema field
+             data[fieldName] = url; 
+             
          } catch (err) {
-             alert('Upload failed'); return;
+             alert('File upload failed. Please try again.');
+             if(btn) btn.disabled = false;
+             return; // Stop submission
          }
      }
+     // ... Proceed to save data ...
      ```
 
 **4. Styling Data Apps:**
@@ -4030,6 +4039,8 @@ Apply the specific rules below based on the detected type.
 #         import traceback; traceback.print_exc()
 #         raise HTTPException(status_code=500, detail=f"refine-element failed: {e}")
 
+# website_builder/stripe_checkout_router.py (or wherever your router is)
+
 @router.post("/refine-element", response_model=Dict[str, Any])
 async def refine_element(
     body: RefineStateRequest,
@@ -4037,116 +4048,52 @@ async def refine_element(
     user: User = Depends(get_current_active_user),
 ):
     try:
-        # Guard: need website_id to log usage
         if not body.website_id:
             raise HTTPException(status_code=400, detail="website_id is required")
 
-        # 1. PREPARE CONTEXT
-        # We need to give the AI context about existing schemas so it can create relations if asked.
-        current_props = body.currentState.get("properties", {})
-        target_schema_id = current_props.get("schema_id")
-        
-        schema_context_str = ""
-        if target_schema_id:
-            all_schemas_result = await db.execute(
-                select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
-            )
-            all_schemas = all_schemas_result.scalars().all()
-            schemas_list = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas]
-            schema_context_str = f"\n\nCONTEXT: EXISTING_WEBSITE_SCHEMAS: {json.dumps(schemas_list)}"
-
+        # 1. Build the User Prompt
+        # We NO LONGER pass the entire list of website schemas.
+        # We only pass the current state so the AI focuses on refining WHAT IS THERE.
         user_content = (
             f'USER_PROMPT: "{body.prompt}"\n\n'
             f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
-            f"{schema_context_str}"
         )
 
-        # 2. CALL AI
+        # 2. Call AI with the UI/Logic-Focused Prompt
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": REFINE_MASTER_PROMPT}, 
+                {"role": "system", "content": REFINE_MASTER_PROMPT_1}, # Use the NEW prompt below
                 {"role": "user",   "content": user_content},
             ],
-            temperature=0.2,
+            temperature=0.2, # Low temperature for code precision
         )
 
+        # 3. Parse Response
         payload = json.loads(resp.choices[0].message.content)
 
-        # 3. 🛑 DATABASE SYNC (THE MISSING PIECE) 🛑
-        # Check if the AI returned a modified schema. If so, update the DB.
-        
-        new_props = payload.get("properties", {})
-        
-        # The AI might return the fields in 'schema_fields' OR 'schema' depending on how it interpreted the prompt.
-        # We check both.
-        ai_schema_fields = new_props.get("schema_fields") or new_props.get("schema") or payload.get("schema")
-
-        if target_schema_id and ai_schema_fields:
-            try:
-                print(f"🔄 Attempting to sync schema {target_schema_id}...")
-                
-                # A. Get the actual schema record from DB
-                db_schema = await db.get(CustomDataSchema, target_schema_id)
-                
-                if db_schema:
-                    # B. Update the fields column
-                    db_schema.fields = ai_schema_fields
-                    await db.commit()
-                    print(f"✅ Schema {target_schema_id} updated in DB successfully.")
-                    
-                    # C. Standardize the payload for the frontend
-                    new_props["schema_fields"] = ai_schema_fields
-                    new_props["schema_id"] = target_schema_id 
-                    
-                    # D. Refresh 'all_schemas' so frontend dropdowns work immediately
-                    refresh_result = await db.execute(
-                        select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
-                    )
-                    refreshed_schemas = refresh_result.scalars().all()
-                    new_props["all_schemas"] = [
-                        {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
-                        for s in refreshed_schemas
-                    ]
-                    
-                    payload["properties"] = new_props
-                else:
-                    print(f"⚠️ Schema {target_schema_id} not found in DB.")
-                    
-            except Exception as db_err:
-                print(f"❌ DATABASE UPDATE FAILED: {db_err}")
-                # Important: Do not silence this error if you are debugging
-                raise HTTPException(status_code=500, detail=f"Database schema update failed: {db_err}")
-
-        # 4. CLEANUP SCRIPT TAGS
+        # 4. Clean Script Tags (Security/Stability)
         if isinstance(payload.get("script"), str):
             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
             if m:
                 payload["script"] = m.group(1).strip()
 
-        # 5. TRACK USAGE
+        # 5. Track Usage
         usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        
         await track_ai_usage(
             db=db,
             website_id=body.website_id,
             user_id=user.id,
             model=getattr(resp, "model", AI_DEFAULT_MODEL),
             feature="refine_element",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
+            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
             meta={"state_keys": list((body.currentState or {}).keys())[:10]},
         )
 
         return payload
 
-    except HTTPException:
-        raise
-    except (json.JSONDecodeError, KeyError) as e:
-        raise HTTPException(status_code=500, detail=f"Refine failed to parse AI output: {e}")
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Refine failed: {e}")
