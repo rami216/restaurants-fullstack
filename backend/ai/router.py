@@ -3945,6 +3945,11 @@ Apply the specific rules below based on the detected type.
    - Update `<style>` tag in `aiTemplate`.
    - Ensure the CSS class scoping (using the unique class name) is preserved.
 
+**5. MUSTACHE TEMPLATE LOGIC (CRITICAL):**
+   - Mustache is "logic-less". You CANNOT use `{{#if}}`, `{{eq}}`, or `{{else}}` inside the HTML template.
+   - **Incorrect:** `style="color: {{#if active}}red{{/if}}"`
+   - **Correct:** 1. In the `script`, calculate the value: `rowData.titleColor = (rowData.active === 'true') ? 'red' : 'black';`
+     2. In the `aiTemplate`, use the variable: `style="color: {{data.titleColor}}"`
 ---
 
 ### **RULES FOR TYPE B: VISUAL ELEMENT (Standard UI)**
