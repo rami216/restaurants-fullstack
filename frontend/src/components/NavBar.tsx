@@ -2,14 +2,14 @@
 
 import { useState } from "react";
 import Link from "next/link";
-import { usePathname, useRouter } from "next/navigation"; // Import useRouter
+import { usePathname, useRouter } from "next/navigation";
 import cn from "classnames";
 import { FiMenu, FiX } from "react-icons/fi";
 import { useAuth } from "@/context/AuthContext";
 
 export default function NavBar() {
   const pathname = usePathname();
-  const router = useRouter(); // Initialize the router
+  const router = useRouter();
   const [isOpen, setIsOpen] = useState(false);
 
   const { user, logout } = useAuth();
@@ -19,17 +19,21 @@ export default function NavBar() {
     setIsOpen(false);
   };
 
-  // NEW: Handler for the create website button
   const handleCreateWebsiteClick = () => {
     router.push("/createwebsite");
-    setIsOpen(false); // Also close mobile menu if open
+    setIsOpen(false);
   };
 
-  const links = [
-    { label: "How it works", href: "/how-it-works" },
-    { label: "ask us", href: "/ask" },
-    { label: "Pricing", href: "/pricing" },
-  ];
+  // ✅ UPDATED: Conditionally define links based on user status
+  const links = user
+    ? [
+        { label: "Main", href: "/main" }, // Show only Main when logged in
+      ]
+    : [
+        { label: "How it works", href: "/how-it-works" }, // Show these when logged out
+        { label: "ask us", href: "/ask" },
+        { label: "Pricing", href: "/pricing" },
+      ];
 
   return (
     <nav className="bg-white shadow-md relative z-50">
@@ -50,7 +54,7 @@ export default function NavBar() {
                     "transition-colors",
                     active
                       ? "text-blue-700 font-semibold"
-                      : "text-gray-600 hover:text-gray-900"
+                      : "text-gray-600 hover:text-gray-900",
                   )}
                 >
                   {label}
@@ -67,7 +71,7 @@ export default function NavBar() {
                   "transition-colors",
                   pathname === "/login"
                     ? "text-blue-700 font-semibold"
-                    : "text-gray-600 hover:text-gray-900"
+                    : "text-gray-600 hover:text-gray-900",
                 )}
               >
                 Login
@@ -77,7 +81,6 @@ export default function NavBar() {
 
           {user && (
             <>
-              {/* UPDATED: Added the "Create Website" button */}
               <li>
                 <button
                   onClick={handleCreateWebsiteClick}
@@ -90,10 +93,10 @@ export default function NavBar() {
                 <Link
                   href="/ai-database"
                   className={cn(
-                    "...",
+                    "transition-colors",
                     pathname === "/ai-database"
                       ? "text-blue-700 font-semibold"
-                      : "text-gray-600 hover:text-gray-900"
+                      : "text-gray-600 hover:text-gray-900",
                   )}
                 >
                   ai database
@@ -104,16 +107,15 @@ export default function NavBar() {
                 <Link
                   href="/orders"
                   className={cn(
-                    "...",
+                    "transition-colors",
                     pathname === "/orders"
                       ? "text-blue-700 font-semibold"
-                      : "text-gray-600 hover:text-gray-900"
+                      : "text-gray-600 hover:text-gray-900",
                   )}
                 >
                   Orders
                 </Link>
               </li>
-              {/* --- THIS IS THE NEW BILLING LINK --- */}
               <li>
                 <Link
                   href="/billingPage"
@@ -121,13 +123,12 @@ export default function NavBar() {
                     "transition-colors",
                     pathname === "/billingPage"
                       ? "text-blue-700 font-semibold"
-                      : "text-gray-600 hover:text-gray-900"
+                      : "text-gray-600 hover:text-gray-900",
                   )}
                 >
                   Billing
                 </Link>
               </li>
-              {/* --- END OF CHANGE --- */}
               <li>
                 <button
                   onClick={handleLogout}
@@ -154,11 +155,12 @@ export default function NavBar() {
       <div
         className={cn(
           "fixed top-0 left-0 h-full w-64 bg-white shadow-lg transform transition-transform md:hidden",
-          { "-translate-x-full": !isOpen, "translate-x-0": isOpen }
+          { "-translate-x-full": !isOpen, "translate-x-0": isOpen },
         )}
       >
         <div className="p-4">
           <ul className="flex flex-col space-y-4">
+            {/* The conditional links logic works here automatically too */}
             {links.map(({ label, href }) => {
               const active = pathname === href;
               return (
@@ -169,7 +171,7 @@ export default function NavBar() {
                       "block transition-colors",
                       active
                         ? "text-blue-700 font-semibold"
-                        : "text-gray-600 hover:text-gray-900"
+                        : "text-gray-600 hover:text-gray-900",
                     )}
                     onClick={() => setIsOpen(false)}
                   >
@@ -187,7 +189,7 @@ export default function NavBar() {
                     "block transition-colors",
                     pathname === "/login"
                       ? "text-blue-700 font-semibold"
-                      : "text-gray-600 hover:text-gray-900"
+                      : "text-gray-600 hover:text-gray-900",
                   )}
                   onClick={() => setIsOpen(false)}
                 >
@@ -198,7 +200,6 @@ export default function NavBar() {
 
             {user && (
               <>
-                {/* UPDATED: Added the "Create Website" button for mobile */}
                 <li>
                   <button
                     onClick={handleCreateWebsiteClick}
@@ -214,7 +215,7 @@ export default function NavBar() {
                       "block transition-colors",
                       pathname === "/orders"
                         ? "text-blue-700 font-semibold"
-                        : "text-gray-600 hover:text-gray-900"
+                        : "text-gray-600 hover:text-gray-900",
                     )}
                     onClick={() => setIsOpen(false)}
                   >
