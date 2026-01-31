@@ -720,12 +720,171 @@ const normalizeBackground = (bg?: string) => {
 };
 // frontend/src/components/builder/PublicCanvas.tsx
 
+// const GatedContent: React.FC<{
+//   elementProps: any;
+//   children: React.ReactNode;
+//   isLoggedIn: boolean;
+//   websiteData: PublicWebsiteData;
+//   isPageGate?: boolean; // Prop to identify page-level checks
+// }> = ({
+//   elementProps,
+//   children,
+//   isLoggedIn,
+//   websiteData,
+//   isPageGate = false,
+// }) => {
+//   const router = useRouter(); // Use the router hook
+//   const [visibility, setVisibility] = useState<
+//     "loading" | "visible" | "hidden" | "gone"
+//   >("loading");
+//   const purchaseCacheRef = useRef<Record<string, boolean>>({});
+
+//   useEffect(() => {
+//     const checkVisibility = async () => {
+//       const v = elementProps?.visibility || {};
+
+//       // Helper for creating the correct redirect path based on domain
+//       const getRedirectPath = (slug: string) => {
+//         if (typeof window === "undefined") return slug;
+//         const isMainHost =
+//           window.location.hostname === "zygoflow.com" ||
+//           window.location.hostname === "www.zygoflow.com";
+//         const base = isMainHost ? `/${websiteData.subdomain}` : "";
+//         return `${base}${slug}`;
+//       };
+
+//       // --- Rule: Admin Emails Required ---
+//       const adminEmails = v.admin_emails || [];
+//       if (adminEmails.length > 0) {
+//         const currentUserEmail = localStorage.getItem(
+//           `siteMemberEmail:${websiteData?.subdomain}`,
+//         );
+//         if (
+//           !isLoggedIn ||
+//           !currentUserEmail ||
+//           !adminEmails.includes(currentUserEmail)
+//         ) {
+//           if (isPageGate) {
+//             router.push(getRedirectPath("/login")); // Redirect if it's a page gate
+//             return;
+//           }
+//           setVisibility("hidden");
+//           return;
+//         }
+//       }
+
+//       // --- Rule: Login Required (for any member) ---
+//       if (v.requiresAuth && !isLoggedIn) {
+//         if (isPageGate) {
+//           router.push(getRedirectPath("/login")); // Redirect if it's a page gate
+//           return;
+//         }
+//         setVisibility("hidden");
+//         return;
+//       }
+
+//       // --- Rule: Anonymous Only ---
+//       if (v.requiresAnonymous && isLoggedIn) {
+//         if (isPageGate) {
+//           router.push(getRedirectPath("/")); // Redirect to home if a logged-in user tries to access
+//           return;
+//         }
+//         setVisibility("hidden");
+//         return;
+//       }
+
+//       // --- Your existing purchase logic remains the same ---
+//       const checkPurchase = async (productId: string): Promise<boolean> => {
+//         const memberId = localStorage.getItem(
+//           `siteMemberId:${websiteData?.subdomain}`,
+//         );
+//         if (!isLoggedIn || !memberId) return false;
+//         const cacheKey = `${memberId}_${productId}`;
+//         if (typeof purchaseCacheRef.current[cacheKey] !== "undefined") {
+//           return purchaseCacheRef.current[cacheKey];
+//         }
+//         try {
+//           const params = new URLSearchParams({
+//             website_id: String(websiteData.website_id),
+//             member_id: memberId,
+//             product_id: productId,
+//           });
+//           const { data: hasPurchase } = await saasApi.get<boolean>(
+//             `/users-stripe-account/${
+//               websiteData.subdomain
+//             }/has-purchase?${params.toString()}`,
+//           );
+//           purchaseCacheRef.current[cacheKey] = !!hasPurchase;
+//           return !!hasPurchase;
+//         } catch {
+//           purchaseCacheRef.current[cacheKey] = false;
+//           return false;
+//         }
+//       };
+
+//       if (v.required_product_id) {
+//         const hasRequiredProduct = await checkPurchase(v.required_product_id);
+//         if (!hasRequiredProduct) {
+//           setVisibility("hidden");
+//           return;
+//         }
+//       }
+
+//       // ✅ 2. HIDE ON PURCHASE (The Button Logic)
+//       // If user HAS bought it, we want it GONE, not locked.
+//       if (v.forbidden_product_id) {
+//         const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
+//         if (hasForbiddenProduct) {
+//           setVisibility("gone");
+//           return;
+//         }
+//       }
+//       // ✅ 3. REQUIRE PURCHASE (The Content Logic)
+//       // If user HAS NOT bought it, we want it LOCKED.
+
+//       // If no rules hide the content, show it
+//       setVisibility("visible");
+//     };
+
+//     checkVisibility();
+//   }, [
+//     JSON.stringify(elementProps?.visibility || {}),
+//     isLoggedIn,
+//     websiteData?.subdomain,
+//     websiteData?.website_id,
+//     isPageGate,
+//     router,
+//   ]);
+
+//   if (visibility === "loading") {
+//     return (
+//       <div className="p-4 text-center text-gray-400">Loading Content...</div>
+//     );
+//   }
+//   if (visibility === "hidden") {
+//     const isContainer =
+//       elementProps?.padding || elementProps?.display || elementProps?.style;
+//     if (isContainer && !isPageGate) {
+//       // Don't show "Content Locked" for a full page, as it's redirecting
+//       return (
+//         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
+//           <h4 className="font-semibold">Content Locked</h4>
+//           <p className="text-sm mt-1">
+//             This content is not available for your account.
+//           </p>
+//         </div>
+//       );
+//     }
+//     return null;
+//   }
+//   return <>{children}</>;
+// };
 const GatedContent: React.FC<{
   elementProps: any;
   children: React.ReactNode;
   isLoggedIn: boolean;
   websiteData: PublicWebsiteData;
-  isPageGate?: boolean; // Prop to identify page-level checks
+  isPageGate?: boolean;
 }> = ({
   elementProps,
   children,
@@ -733,17 +892,18 @@ const GatedContent: React.FC<{
   websiteData,
   isPageGate = false,
 }) => {
-  const router = useRouter(); // Use the router hook
+  const router = useRouter();
+  // ✅ 1. Update state type to handle specific hidden reasons
   const [visibility, setVisibility] = useState<
-    "loading" | "visible" | "hidden"
+    "loading" | "visible" | "locked" | "gone"
   >("loading");
+
   const purchaseCacheRef = useRef<Record<string, boolean>>({});
 
   useEffect(() => {
     const checkVisibility = async () => {
       const v = elementProps?.visibility || {};
 
-      // Helper for creating the correct redirect path based on domain
       const getRedirectPath = (slug: string) => {
         if (typeof window === "undefined") return slug;
         const isMainHost =
@@ -753,7 +913,7 @@ const GatedContent: React.FC<{
         return `${base}${slug}`;
       };
 
-      // --- Rule: Admin Emails Required ---
+      // --- Rule: Admin Emails (Security Lock) ---
       const adminEmails = v.admin_emails || [];
       if (adminEmails.length > 0) {
         const currentUserEmail = localStorage.getItem(
@@ -765,35 +925,35 @@ const GatedContent: React.FC<{
           !adminEmails.includes(currentUserEmail)
         ) {
           if (isPageGate) {
-            router.push(getRedirectPath("/login")); // Redirect if it's a page gate
+            router.push(getRedirectPath("/login"));
             return;
           }
-          setVisibility("hidden");
+          setVisibility("locked"); // Security = Locked
           return;
         }
       }
 
-      // --- Rule: Login Required (for any member) ---
+      // --- Rule: Login Required (Auth Lock) ---
       if (v.requiresAuth && !isLoggedIn) {
         if (isPageGate) {
-          router.push(getRedirectPath("/login")); // Redirect if it's a page gate
+          router.push(getRedirectPath("/login"));
           return;
         }
-        setVisibility("hidden");
+        setVisibility("locked"); // Not logged in = Locked
         return;
       }
 
-      // --- Rule: Anonymous Only ---
+      // --- Rule: Anonymous Only (e.g. Login Page) ---
       if (v.requiresAnonymous && isLoggedIn) {
         if (isPageGate) {
-          router.push(getRedirectPath("/")); // Redirect to home if a logged-in user tries to access
+          router.push(getRedirectPath("/"));
           return;
         }
-        setVisibility("hidden");
+        setVisibility("gone"); // Logged in user shouldn't see "Login" button -> Just vanish
         return;
       }
 
-      // --- Your existing purchase logic remains the same ---
+      // --- Helper ---
       const checkPurchase = async (productId: string): Promise<boolean> => {
         const memberId = localStorage.getItem(
           `siteMemberId:${websiteData?.subdomain}`,
@@ -822,23 +982,26 @@ const GatedContent: React.FC<{
         }
       };
 
-      if (v.required_product_id) {
-        const hasRequiredProduct = await checkPurchase(v.required_product_id);
-        if (!hasRequiredProduct) {
-          setVisibility("hidden");
-          return;
-        }
-      }
-
+      // ✅ 2. HIDE ON PURCHASE (The Button Logic)
+      // If user HAS bought it, we want it GONE, not locked.
       if (v.forbidden_product_id) {
         const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
         if (hasForbiddenProduct) {
-          setVisibility("hidden");
+          setVisibility("gone");
           return;
         }
       }
 
-      // If no rules hide the content, show it
+      // ✅ 3. REQUIRE PURCHASE (The Content Logic)
+      // If user HAS NOT bought it, we want it LOCKED.
+      if (v.required_product_id) {
+        const hasRequiredProduct = await checkPurchase(v.required_product_id);
+        if (!hasRequiredProduct) {
+          setVisibility("locked");
+          return;
+        }
+      }
+
       setVisibility("visible");
     };
 
@@ -857,11 +1020,19 @@ const GatedContent: React.FC<{
       <div className="p-4 text-center text-gray-400">Loading Content...</div>
     );
   }
-  if (visibility === "hidden") {
+
+  // ✅ 4. RENDER "GONE" (Return null)
+  if (visibility === "gone") {
+    return null;
+  }
+
+  // ✅ 5. RENDER "LOCKED" (Show the box)
+  if (visibility === "locked") {
     const isContainer =
       elementProps?.padding || elementProps?.display || elementProps?.style;
+
+    // Optional: You can filter this further to only show the box for Sections
     if (isContainer && !isPageGate) {
-      // Don't show "Content Locked" for a full page, as it's redirecting
       return (
         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
           <h4 className="font-semibold">Content Locked</h4>
@@ -873,8 +1044,10 @@ const GatedContent: React.FC<{
     }
     return null;
   }
+
   return <>{children}</>;
 };
+
 const MainContent = ({
   currentPage,
   activeCategory,
