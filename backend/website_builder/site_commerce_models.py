@@ -64,3 +64,7 @@ class SitePurchase(Base):
 
     status = Column(String, nullable=False, default="paid")  # "paid", "refunded", etc.
     created_at = Column(DateTime(timezone=True), server_default=func.now())
+    # ✅ ADD THESE MISSING COLUMNS:
+    payment_intent_id = Column(String, nullable=True) # To track the Stripe ID
+    amount_paid = Column(Numeric(10, 2), nullable=True) # To store $20.00
+    currency = Column(String, nullable=True) # To store 'usd'

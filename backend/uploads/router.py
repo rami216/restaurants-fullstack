@@ -17,7 +17,7 @@ SUPABASE_URL = os.environ["SUPABASE_URL"].rstrip("/")
 SUPABASE_SERVICE_ROLE_KEY = os.environ["SUPABASE_SERVICE_ROLE_KEY"]
 
 SUPABASE_BUCKET = os.getenv("SUPABASE_BUCKET", "menu_item_images")
-SUPABASE_VIDEO_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "all_vids")
+SUPABASE_VIDEO_BUCKET = os.getenv("SUPABASE_VIDEO_BUCKET", "allvids")
 WEBSITE_FILES_BUCKET = os.getenv("SUPABASE_WEBSITE_BUCKET", "website-uploads")
 SUPABASE_FOLDER_PREFIX = os.getenv("SUPABASE_FOLDER_PREFIX", "").strip("/")
 
