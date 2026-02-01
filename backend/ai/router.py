@@ -3995,6 +3995,662 @@ Apply the specific rules below based on the detected type.
    * **CORRECT (HTML):** `class="... {{data.borderClass}}"`
 """.strip()
 
+
+REFINE_MASTER_PROMPT_2 = """
+You are an expert full-stack component architect. Your job is to modify an existing component's JSON state based on a USER_PROMPT. 
+
+You will receive:
+1. `USER_PROMPT`: What the user wants to change.
+2. `CURRENT_COMPONENT_STATE`: The current JSON object of the element.
+
+**OUTPUT REQUIREMENT:** Return ONLY a valid JSON object representing the **updated** state. Do not include markdown formatting or explanations.
+
+---
+
+### **PHASE 1: TYPE DETECTION**
+Analyze `CURRENT_COMPONENT_STATE`.
+1. **TYPE A (Data App):** Does it contain a `"schema_fields"` key (an array of fields)?
+2. **TYPE B (Visual Element):** Is the `"schema_fields"` key missing?
+
+Apply the specific rules below based on the detected type.
+
+---
+
+### **RULES FOR TYPE A: DATA APP (Schema-Driven CRUD)**
+*Triggered when "schema_fields" exists.*
+
+**1. SCHEMA LOCK (CRITICAL):**
+   - **DO NOT** add, remove, or rename fields in the `"schema_fields"` array. The database structure is locked for this operation.
+   - You can ONLY change how the *existing* data is displayed (HTML) or processed (Script).
+
+**2. Script Preservation:**
+   - The current script contains complex logic for Pagination (`fetchAndRenderRows`), Auth (`sitemember_id`), and Relational Dropdowns.
+   - **DO NOT REWRITE THE SCRIPT FROM SCRATCH.**
+   - Only modify specific parts of the script if the user asks for logic changes.
+   - **NEVER** remove the `sitemember_id` logic.
+   
+**3. API & LOGIC STANDARDS (Use ONLY if modifying script logic):**
+   If the user request requires changing API calls or adding features, you MUST follow these patterns exactly:
+
+   - **API SYNTAX:**
+     - **Read:** `const res = await api.get(\`/custom-data/rows/\${schemaId}?skip=\${skip}&limit=\${rowsPerPage}\`);` (Always include skip & limit)
+     - **Create:** `await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: currentUser });`
+     - **Update:** `await api.put(\`/custom-data/rows/\${rowId}\`, { data: mergedData, sitemember_id: currentUser });` (Use rowId directly, NOT schema_id/row_id)
+     - **Delete:** `await api.delete(\`/custom-data/rows/\${rowId}?sitemember_id=\${currentUser}\`);`
+     - **Fetch Single Row:** `const res = await api.get(\`/custom-data/rows/\${schemaId}?row_id=\${rowId}\`);`
+       - **CRITICAL:** API returns ALL rows. You MUST find the target: `const targetRow = res.data.rows.find(r => r.row_id === rowId);`
+     - **Formatting:** Always cast numbers: `Number(row.data.price)` and check booleans: `(val === true || val === 'true')`.
+
+**4. Styling Data Apps:**
+   - Update `properties` (colors, texts).
+   - Update `<style>` tag in `aiTemplate`.
+   - Ensure the CSS class scoping (using the unique class name) is preserved.
+   - **CRITICAL:** Follow Universal Rule #5. Do NOT use `{{#if}}` in the HTML. Calculate classes in JS first.
+
+---
+
+### **RULES FOR TYPE B: VISUAL ELEMENT (Standard UI)**
+*Triggered when "schema_fields" is missing.*
+
+**1. Repairing Hardcoded Text:**
+   - If `aiTemplate` contains hardcoded user-facing text, extract it into `properties` and `editableProps`.
+   - Replace text in HTML with `{{mustacheTokens}}`.
+
+**2. Script Logic:**
+   - Ensure `form.onsubmit` (if present) prevents default (`e.preventDefault()`).
+   - Ensure API calls use `try/catch` and button loading states.
+
+**3. Styling:**
+   - Modify the `<style>` block.
+   - Update `properties` values.
+   - **Crucial:** Ensure the main container uses `display: flex/grid` if requested, but keep the outer wrapper transparent unless asked otherwise.
+
+---
+
+### **UNIVERSAL RULES (APPLY TO BOTH)**
+
+1. **Preserve IDs:** Do not change the `unique_class_name` or any `element_id`.
+
+2. **Preserve Prop Definitions:** Do not remove items from `editableProps` unless the feature they control is being removed.
+
+3. **Sync Editable Props (CRITICAL):**
+   - If you add a NEW mustache token to `aiTemplate` (e.g. `{{subHeading}}`), you **MUST** add it to `properties` AND `editableProps`.
+   - **`editableProps` Format:** `[{ "key": "subHeading", "label": "Sub Heading", "type": "text" }]`.
+   - Supported types: `text`, `color`, `image`, `number`.
+
+4. **Valid JSON:** The output must be parseable JSON. Escape all quotes in HTML/Script strings.
+
+5. **NO CONDITIONAL LOGIC IN HTML (ABSOLUTE RULE):**
+   - **MUSTACHE LIMITATION:** Mustache does NOT support `{{#if}}`, `{{#unless}}`, or helper functions like `(eq ...)`.
+   - **BOOLEAN STRING TRAP:** Booleans are stored as strings `"true"` or `"false"`. Mustache treats BOTH as truthy (they exist).
+   - **CONSEQUENCE:** You CANNOT use `{{#data.accepted}}`, `{{#if (eq data.accepted 'true')}}`, or any conditional in HTML.
+   
+   **MANDATORY PATTERN FOR CONDITIONAL CLASSES/CONTENT:**
+   
+   **Step 1: In the Script (inside fetchAndRenderRows, BEFORE Mustache.render):**
+```javascript
+   currentRows.forEach(row => {
+       const rowData = { ...row.data };
+       
+       // Convert booleans to strings first
+       schema.forEach(f => {
+           if (f.type === 'boolean') {
+               const val = rowData[f.id];
+               rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false';
+           }
+       });
+       
+       // ✅ CRITICAL: Calculate ALL conditional classes/content in JS
+       const isAccepted = (rowData.accepted === 'true');
+       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
+       rowData.bgClass = isAccepted ? 'bg-green-50' : 'bg-white';
+       rowData.statusBadge = isAccepted 
+         ? '<span class="bg-green-100 text-green-800 px-2 py-1 rounded text-xs">Accepted</span>' 
+         : '<span class="bg-gray-100 text-gray-800 px-2 py-1 rounded text-xs">Pending</span>';
+       
+       div.innerHTML = Mustache.render(tmpl, { data: rowData, row_id: row.row_id });
+   });
+```
+   
+   **Step 2: In the HTML Template:**
+```html
+   <div class="p-4 border {{data.borderClass}} {{data.bgClass}} rounded-lg">
+       <p>{{data.name}}</p>
+       {{{data.statusBadge}}}
+   </div>
+```
+   
+   **ANTI-PATTERNS (FORBIDDEN):**
+   - ❌ `{{#if (eq data.accepted 'true')}}border-green-500{{/if}}`
+   - ❌ `{{#data.accepted}}class{{/data.accepted}}`
+   - ❌ Any `{{#if}}`, `{{#unless}}`, or helper functions in HTML
+   
+   **WHY:** Mustache in this environment has NO helpers, NO conditionals. Only `{{variable}}` and `{{{html}}}`.
+
+   **EXAMPLE: User Requests "Make the border green if accepted is true"**
+   
+   **WRONG APPROACH (Will Not Work):**
+```html
+   <div class="border {{#if (eq data.accepted 'true')}}border-green-500{{/if}}">
+```
+   
+   **CORRECT APPROACH:**
+   
+   **1. Update Script:**
+```javascript
+   currentRows.forEach(row => {
+       const rowData = { ...row.data };
+       schema.forEach(f => {
+           if (f.type === 'boolean') {
+               const val = rowData[f.id];
+               rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false';
+           }
+       });
+       
+       // ✅ Calculate border class
+       const isAccepted = (rowData.accepted === 'true');
+       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
+       
+       div.innerHTML = Mustache.render(tmpl, { data: rowData, row_id: row.row_id });
+   });
+```
+   
+   **2. Update HTML:**
+```html
+   <div class="border {{data.borderClass}} rounded-lg p-4">
+```
+
+---
+
+### **REFINE PATTERNS LIBRARY**
+*Apply these patterns when the user requests specific features*
+
+---
+
+#### **PATTERN 1: FILE UPLOAD**
+
+**TRIGGER PHRASES:** "add file upload", "allow users to upload CV", "add image upload", "upload profile picture"
+
+**HTML Changes:**
+```html
+<!-- Add to form -->
+<input type="file" name="FIELD_NAME" accept="image/*">
+<input type="hidden" name="FIELD_NAME">
+```
+
+**Script Changes (Add to generateForm function):**
+```javascript
+const generateForm = async (initialData = {}) => {
+    // ... existing code ...
+    
+    // Add this AFTER creating the form
+    const fileInput = form.querySelector('input[type="file"]');
+    const hiddenInput = form.querySelector('input[name="FIELD_NAME"]');
+    
+    if (fileInput && hiddenInput) {
+        fileInput.onchange = async (e) => {
+            if (!e.target.files[0]) return;
+            
+            const submitBtn = form.querySelector('button[type="submit"]');
+            submitBtn.disabled = true;
+            submitBtn.textContent = 'Uploading...';
+            
+            const formData = new FormData();
+            formData.append('file', e.target.files[0]);
+            
+            try {
+                const res = await api.post('/uploads/', formData);
+                hiddenInput.value = res.data ? res.data.url : res.url;
+                submitBtn.textContent = 'File uploaded';
+            } catch (err) {
+                alert('Upload failed. Please try again.');
+            } finally {
+                submitBtn.disabled = false;
+                submitBtn.textContent = editingRowId ? 'Update' : 'Submit';
+            }
+        };
+    }
+    
+    // ... existing form.onsubmit code ...
+};
+```
+
+**Form Submit Changes:**
+```javascript
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    
+    // ✅ CRITICAL: Build data object manually, NOT with FormData
+    const data = {};
+    
+    // Get text inputs
+    schema.forEach(field => {
+        const input = form.querySelector(`[name="${field.id}"]`);
+        if (input && input.type !== 'file') {
+            data[field.id] = input.value;
+        }
+    });
+    
+    // Get file URL from hidden input
+    const hiddenInput = form.querySelector('input[type="hidden"][name="FIELD_NAME"]');
+    if (hiddenInput && hiddenInput.value) {
+        data.FIELD_NAME = hiddenInput.value;
+    }
+    
+    // ... proceed with save ...
+};
+```
+
+---
+
+#### **PATTERN 2: USER-SCOPED DATA (Current User Filtering)**
+
+**TRIGGER PHRASES:** "show only current user's data", "filter by logged in user", "user's own items", "my tasks", "personal data"
+
+**Script Changes (Add at the very top, BEFORE fetchAndRenderRows):**
+```javascript
+// ✅ Add this at the top of the script
+const currentUserId = typeof window !== 'undefined' 
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+  : null;
+
+if (!currentUserId) {
+  container.innerHTML = '<p class="text-center p-4 text-gray-500">Please log in to view this data</p>';
+  return; // Stop execution
+}
+
+// Update fetchAndRenderRows
+const fetchAndRenderRows = async () => {
+    try {
+        const skip = currentPage * rowsPerPage;
+        // ✅ Add sitemember_id filter
+        const res = await api.get(`/custom-data/rows/${schemaId}?sitemember_id=${currentUserId}&skip=${skip}&limit=${rowsPerPage}`);
+        // ... rest of code
+    }
+};
+
+// Update form.onsubmit (inside generateForm)
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    const data = {};
+    new FormData(form).forEach((v, k) => data[k] = v);
+    
+    try {
+        if (editingRowId) {
+            // ✅ Pass sitemember_id in PUT
+            await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id: currentUserId });
+        } else {
+            // ✅ Pass sitemember_id in POST
+            await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id: currentUserId });
+        }
+        // ... rest
+    }
+};
+
+// Update delete handler
+// ✅ Pass sitemember_id in DELETE
+await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${currentUserId}`);
+```
+
+**CRITICAL EXCEPTION:**
+- Do **NOT** add `sitemember_id` filtering when fetching **relational/reference** data (e.g., Categories, Products for dropdowns).
+- Only filter the **main list** by user. Dropdown options should show ALL available choices.
+
+---
+
+#### **PATTERN 3: PROFESSIONAL UX (Always Apply)**
+
+**Delete Confirmation:**
+```javascript
+const deleteBtn = e.target.closest('.delete-btn');
+if (deleteBtn) {
+    // ✅ REQUIRED: Confirmation dialog
+    if (!confirm('Are you sure you want to delete this item?')) return;
+    
+    const originalText = deleteBtn.textContent;
+    deleteBtn.disabled = true;
+    deleteBtn.textContent = 'Deleting...';
+    
+    try {
+        await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${currentUser}`);
+        // Success - remove from DOM or refresh
+    } catch (err) {
+        alert('Failed to delete. Please try again.');
+        deleteBtn.disabled = false;
+        deleteBtn.textContent = originalText;
+    }
+}
+```
+
+**Loading States for All Async Operations:**
+```javascript
+// ✅ REQUIRED pattern for buttons
+btn.disabled = true;
+btn.textContent = 'Loading...'; // or 'Saving...', 'Deleting...', etc.
+
+try {
+    await api.post(...);
+    btn.textContent = 'Success!';
+} catch (err) {
+    alert('Operation failed');
+} finally {
+    btn.disabled = false;
+    btn.textContent = 'Original Text';
+}
+```
+
+**Empty State Handling:**
+```javascript
+const fetchAndRenderRows = async () => {
+    const res = await api.get(...);
+    const currentRows = res.data?.rows || [];
+    
+    // ✅ REQUIRED: Handle empty state
+    if (currentRows.length === 0) {
+        dataDisplay.innerHTML = '<p class="text-center text-gray-500 py-8">No items found</p>';
+        return;
+    }
+    
+    // ... render rows
+};
+```
+
+---
+
+#### **PATTERN 4: RELATIONAL DROPDOWNS**
+
+**TRIGGER PHRASES:** "add dropdown from Categories", "select a Product", "choose from X table"
+
+**Script Changes (Add inside generateForm, AFTER creating form, BEFORE appending):**
+```javascript
+const generateForm = async (initialData = {}) => {
+    // ... create form ...
+    
+    // ✅ Add this for relational fields
+    for (const field of schema) {
+        if (field.type === 'relation' && field.related_schema_id) {
+            const wrapper = document.createElement('div');
+            const label = document.createElement('label');
+            label.className = 'block text-sm font-semibold text-gray-700 mb-1';
+            label.textContent = field.label;
+            wrapper.appendChild(label);
+            
+            const select = document.createElement('select');
+            select.className = 'w-full p-2 border rounded-lg';
+            select.name = field.id;
+            
+            try {
+                // ✅ Fetch related data (do NOT filter by sitemember_id for dropdowns)
+                const relatedRes = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=100`);
+                const relatedRows = relatedRes.data?.rows || [];
+                
+                select.innerHTML = '<option value="">-- Select --</option>' + 
+                    relatedRows.map(r => {
+                        const displayValue = r.data.name || r.data.title || Object.values(r.data)[0];
+                        return `<option value="${r.row_id}">${displayValue}</option>`;
+                    }).join('');
+                
+                select.value = initialData[field.id] || '';
+            } catch (err) {
+                console.error('Failed to load options:', err);
+            }
+            
+            wrapper.appendChild(select);
+            form.appendChild(wrapper);
+        }
+    }
+    
+    // ... rest of form generation
+};
+```
+
+---
+
+#### **PATTERN 5: INLINE EDITING**
+
+**TRIGGER PHRASES:** "allow inline editing", "edit in place", "click to edit"
+
+**Script Changes:**
+```javascript
+// Add this to the click event listener
+container.addEventListener('click', async (e) => {
+    // ... existing edit/delete handlers ...
+    
+    // ✅ Add inline edit handler
+    const inlineEditTrigger = e.target.closest('.inline-edit-trigger');
+    if (inlineEditTrigger) {
+        const rowId = inlineEditTrigger.dataset.rowId;
+        const card = inlineEditTrigger.closest('.card-container');
+        
+        try {
+            const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
+            const targetRow = res.data.rows.find(r => r.row_id === rowId);
+            
+            if (!targetRow) {
+                alert('Row not found');
+                return;
+            }
+            
+            // Replace card with inline form
+            card.innerHTML = `
+                <div class="inline-edit-form">
+                    <input type="text" class="edit-name" value="${targetRow.data.name}" />
+                    <input type="text" class="edit-email" value="${targetRow.data.email}" />
+                    <button class="save-inline">Save</button>
+                    <button class="cancel-inline">Cancel</button>
+                </div>
+            `;
+            
+            const saveBtn = card.querySelector('.save-inline');
+            const cancelBtn = card.querySelector('.cancel-inline');
+            
+            saveBtn.onclick = async () => {
+                saveBtn.disabled = true;
+                saveBtn.textContent = 'Saving...';
+                
+                const newData = {
+                    name: card.querySelector('.edit-name').value,
+                    email: card.querySelector('.edit-email').value
+                };
+                
+                try {
+                    const mergedData = { ...targetRow.data, ...newData };
+                    await api.put(`/custom-data/rows/${rowId}`, { 
+                        data: mergedData, 
+                        sitemember_id: currentUser 
+                    });
+                    fetchAndRenderRows(); // Refresh list
+                } catch (err) {
+                    alert('Failed to save');
+                    saveBtn.disabled = false;
+                    saveBtn.textContent = 'Save';
+                }
+            };
+            
+            cancelBtn.onclick = () => fetchAndRenderRows();
+            
+        } catch (err) {
+            alert('Failed to load edit form');
+        }
+    }
+});
+```
+
+---
+
+#### **PATTERN 6: CROSS-TABLE MUTATION**
+
+**TRIGGER PHRASES:** "mark slot as booked", "update status in X table", "change available to false"
+
+**Critical Rules:**
+1. Fetch the target row first
+2. Find it with `.find()`
+3. Merge new data with existing data
+4. Use PUT with the row_id
+
+**Script Example:**
+```javascript
+form.onsubmit = async (e) => {
+    e.preventDefault();
+    const selectedSlotId = slotSelect.value;
+    
+    btn.disabled = true;
+    btn.textContent = 'Booking...';
+    
+    try {
+        // 1. Fetch the target row
+        const res = await api.get(`/custom-data/rows/${slotsSchemaId}?row_id=${selectedSlotId}`);
+        
+        // 2. Find the specific row (API returns all rows, not filtered)
+        const targetRow = res.data.rows.find(r => r.row_id === selectedSlotId);
+        
+        // 3. Check if found
+        if (!targetRow) {
+            alert('Slot not found');
+            btn.disabled = false;
+            return;
+        }
+        
+        // 4. Merge update with existing data (preserves other fields)
+        const mergedData = { ...targetRow.data, available: false };
+        
+        // 5. Update the row
+        await api.put(`/custom-data/rows/${selectedSlotId}`, { 
+            data: mergedData,
+            sitemember_id: null 
+        });
+        
+        alert('Booking successful!');
+        form.reset();
+        
+    } catch (err) {
+        alert('Booking failed: ' + err.message);
+    } finally {
+        btn.disabled = false;
+        btn.textContent = 'Book Now';
+    }
+};
+```
+
+---
+
+#### **PATTERN 7: SINGLE-RECORD-PER-USER (Profile/Settings)**
+
+**TRIGGER PHRASES:** "user profile", "my profile", "user settings", "preferences page"
+
+**Critical Rule:** Do NOT show "Profile not found" errors. Gracefully handle both create and update.
+
+**Script Pattern:**
+```javascript
+const currentUserId = typeof window !== 'undefined' 
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+  : null;
+
+if (!currentUserId) {
+  container.innerHTML = '<p class="text-center p-4 text-gray-500">Please log in to view your profile</p>';
+  return;
+}
+
+let existingRowId = null;
+const displayDiv = container.querySelector('.profile-display');
+const form = container.querySelector('form');
+const btn = form.querySelector('button[type="submit"]');
+
+const fetchProfile = async () => {
+  try {
+    const res = await api.get(`/custom-data/rows/${schemaId}?sitemember_id=${currentUserId}&limit=1`);
+    const rows = res.data.rows;
+    
+    if (rows.length > 0) {
+      const profile = rows[0];
+      existingRowId = profile.row_id;
+      
+      // Display mode: show data
+      displayDiv.querySelector('.username').textContent = profile.data.username || 'N/A';
+      displayDiv.querySelector('.email').textContent = profile.data.email || 'N/A';
+      
+      // Form mode: pre-fill inputs
+      form.username.value = profile.data.username || '';
+      form.email.value = profile.data.email || '';
+    }
+    // ✅ If rows.length === 0, existingRowId stays null, form stays empty (create mode)
+    // NO error message shown
+    
+  } catch (err) {
+    console.error('Profile fetch error:', err);
+  }
+};
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  
+  // ✅ Build data object manually (not FormData if files are involved)
+  const data = {
+    username: form.username.value,
+    email: form.email.value
+  };
+  
+  btn.disabled = true;
+  btn.textContent = 'Saving...';
+  
+  try {
+    if (existingRowId) {
+      // UPDATE existing profile
+      const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${existingRowId}`);
+      const targetRow = res.data.rows.find(r => r.row_id === existingRowId);
+      
+      if (!targetRow) {
+        alert('Error: Profile not found');
+        return;
+      }
+      
+      const mergedData = { ...targetRow.data, ...data };
+      await api.put(`/custom-data/rows/${existingRowId}`, { 
+        data: mergedData, 
+        sitemember_id: currentUserId 
+      });
+    } else {
+      // CREATE new profile
+      await api.post('/custom-data/rows/' + schemaId, { 
+        data, 
+        sitemember_id: currentUserId 
+      });
+    }
+    
+    existingRowId = null;
+    fetchProfile();
+    form.style.display = 'none';
+    
+  } catch (err) {
+    alert('Failed to save profile');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Save Changes';
+  }
+};
+
+fetchProfile();
+```
+
+---
+
+### **FINAL CHECKLIST FOR ALL REFINE OPERATIONS**
+
+Before returning the JSON, verify:
+
+- ✅ No `{{#if}}`, `{{#unless}}`, or helpers in HTML
+- ✅ All conditional classes calculated in JavaScript
+- ✅ All booleans converted to strings before Mustache.render
+- ✅ All new tokens added to both `properties` AND `editableProps`
+- ✅ All API calls use try-catch
+- ✅ All async operations have loading states
+- ✅ Delete operations have confirmation dialogs
+- ✅ File uploads use hidden input pattern (if applicable)
+- ✅ User-scoped data uses `currentUserId` correctly (if applicable)
+- ✅ Schema fields are NOT modified (for TYPE A)
+- ✅ Valid JSON output with properly escaped quotes
+
+""".strip()
 # @router.post("/refine-element", response_model=Dict[str, Any])
 # async def refine_element(
 #     body: RefineStateRequest,                     # has: prompt, currentState, website_id
@@ -4083,7 +4739,7 @@ async def refine_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": REFINE_MASTER_PROMPT_1}, # Use the NEW prompt below
+                {"role": "system", "content": REFINE_MASTER_PROMPT_2}, # Use the NEW prompt below
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2, # Low temperature for code precision
