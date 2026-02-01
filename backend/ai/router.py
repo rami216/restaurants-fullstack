@@ -4016,6 +4016,67 @@ Apply the specific rules below based on the detected type.
 
 ---
 
+### **PHASE 2: REPAIR BROKEN PATTERNS (CRITICAL - CHECK FIRST)**
+
+Before making any changes, scan the `CURRENT_COMPONENT_STATE` for these BROKEN patterns and FIX them:
+
+**1. BROKEN CONDITIONAL LOGIC IN HTML:**
+   - **Scan for:** `{{#if}}`, `{{#unless}}`, `{{#eq}}`, or any Mustache helpers in `aiTemplate`
+   - **If found:** This is BROKEN and will not work. You MUST fix it.
+   - **How to fix:**
+     1. Find all conditionals in the HTML template
+     2. Move the logic to the JavaScript (inside `fetchAndRenderRows`, before `Mustache.render`)
+     3. Calculate the class/content as a variable
+     4. Replace the conditional with a simple `{{variable}}`
+   
+   **Example Repair:**
+   
+   **BROKEN (in CURRENT_COMPONENT_STATE):**
+```html
+   <div class="border {{#if (eq data.accepted 'true')}}border-green-500{{/if}}">
+```
+   
+   **FIXED (your output):**
+   
+   **1. In Script (add before Mustache.render):**
+```javascript
+   currentRows.forEach(row => {
+       const rowData = { ...row.data };
+       
+       schema.forEach(f => {
+           if (f.type === 'boolean') {
+               const val = rowData[f.id];
+               rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false';
+           }
+       });
+       
+       // ✅ Calculate conditional class
+       const isAccepted = (rowData.accepted === 'true');
+       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
+       
+       div.innerHTML = Mustache.render(tmpl, { data: rowData, row_id: row.row_id });
+   });
+```
+   
+   **2. In HTML:**
+```html
+   <div class="border {{data.borderClass}} rounded-lg">
+```
+
+**2. BROKEN FILE UPLOAD PATTERN:**
+   - **Scan for:** `FormData` being used to build the data object when forms have file inputs
+   - **If found:** This will cause files to be saved as `{}` instead of URLs
+   - **How to fix:** Build the data object manually, using the hidden input value for file fields
+
+**3. MISSING USER SCOPING:**
+   - **Scan for:** The user's request mentions "current user", "logged in user", "my data"
+   - **Check:** Does the script have `currentUserId` logic?
+   - **If missing:** Add the user-scoped pattern from the library
+
+---
+
+---
+
 ### **RULES FOR TYPE A: DATA APP (Schema-Driven CRUD)**
 *Triggered when "schema_fields" exists.*
 
