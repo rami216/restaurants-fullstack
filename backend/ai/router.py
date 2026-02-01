@@ -3978,18 +3978,21 @@ Apply the specific rules below based on the detected type.
 
 4. **Valid JSON:** The output must be parseable JSON. Escape all quotes in HTML/Script strings.
 
-5. **NO LOGIC IN HTML (STRICT):**
-   - The HTML template (including `aiTemplate` and `displayTemplate`) MUST NOT contain logic like `{{#if}}`, `{{eq}}`, `{{?}}`, or ternary operators.
-   - **MANDATORY:** Calculate all conditional styles, classes, or display values in the JavaScript `script` (inside the render loop or event handlers), save them as new properties on the data object (e.g., `row.data.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200'`), and use those simple properties in the HTML (e.g., `class="{{data.borderClass}}"`).
-   - **Example:**
-     * **WRONG (HTML):** `<div class="{{#if data.accepted}}border-green{{/if}}">`
-     * **CORRECT (Script):**
-```javascript
-       // Inside currentRows.forEach loop or render function...
-       const isAccepted = (row.data.accepted === true || row.data.accepted === 'true');
-       rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
-```
-     * **CORRECT (HTML):** `<div class="... {{data.borderClass}}">`
+5. **NO LOGIC IN HTML & BOOLEAN TRAP (STRICT):**
+   - **THE "FALSE" STRING TRAP:** In the script, booleans are often converted to strings like `"false"`. Mustache treats `"false"` as **TRUE** (it exists).
+   - **CONSEQUENCE:** You CANNOT use `{{#data.accepted}}class{{/data.accepted}}` in HTML. It will apply the class even if the value is "false".
+   - **MANDATORY FIX:** You must calculate the **entire class string** in JavaScript logic and pass it as a simple variable.
+   
+   **Example Pattern:**
+   * **WRONG (HTML):** `class="{{#data.accepted}}border-green{{/data.accepted}}"`
+   * **CORRECT (Script):**
+     ```javascript
+     // Inside the render loop...
+     const isAccepted = (row.data.accepted === true || row.data.accepted === 'true');
+     // Calculate the specific class string based on the boolean
+     rowData.borderClass = isAccepted ? 'border-green-500' : 'border-gray-200';
+     ```
+   * **CORRECT (HTML):** `class="... {{data.borderClass}}"`
 """.strip()
 
 # @router.post("/refine-element", response_model=Dict[str, Any])
