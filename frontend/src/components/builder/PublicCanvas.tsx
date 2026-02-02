@@ -1210,6 +1210,9 @@ const MainContent = ({
                   ...containerStyle,
                   ...(isLast ? { flexGrow: 1 } : {}),
                   boxSizing: "border-box", // ✅ Add this
+                  width: "100%",
+                  maxWidth: "100%",
+                  overflow: "visible", // ✅ Change from hidden
                 }}
                 className={isLast ? "last-section" : undefined}
               >
@@ -1221,8 +1224,10 @@ const MainContent = ({
                     justifyContent: p.justifyContent,
                     alignItems: p.alignItems,
                     gap: p.gap,
-                    boxSizing: "border-box", // ✅ Add this
-                    maxWidth: "100%", // ✅ Add this
+                    boxSizing: "border-box",
+                    maxWidth: "100%",
+                    width: "100%", // ✅ ADD THIS
+                    overflow: "visible", // ✅ ADD THIS
                   }}
                 >
                   {sec.subsections.map((sub) => {
@@ -2364,14 +2369,12 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     const userStyle = subProps.style || {};
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
-    // 1. Define the base layout with strict mobile overrides
     let base: React.CSSProperties = {};
 
     if (subProps.display === "grid") {
       base = {
         display: "grid",
         gap: subProps.gap ?? "1.5rem",
-        // Force 1 column on mobile, no exceptions
         gridTemplateColumns: isMobile
           ? "1fr"
           : (subProps.gridTemplateColumns ??
@@ -2381,25 +2384,22 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       base = {
         display: "flex",
         gap: subProps.gap ?? "1.5rem",
-        // Force vertical stack on mobile
         flexDirection: isMobile
           ? "column"
           : (subProps.flexDirection ?? "column"),
         justifyContent: subProps.justifyContent ?? "flex-start",
-        // Align items to stretch to fill the full width
         alignItems: "stretch",
       };
     }
 
-    // 2. Build the final style object
     const finalStyle: React.CSSProperties = {
       ...base,
       ...userStyle,
 
-      // FORCE FULL WIDTH ON MOBILE - with proper constraints
-      width: isMobile ? "100%" : userStyle.width || "100%",
-      maxWidth: isMobile ? "100%" : userStyle.maxWidth || "none", // ✅ Changed from 100vw
-      minWidth: isMobile ? "0" : "auto", // ✅ Changed from 100%
+      // ✅ CRITICAL MOBILE WIDTH FIXES
+      width: isMobile ? "100%" : userStyle.width || "auto",
+      maxWidth: isMobile ? "none" : userStyle.maxWidth || "none", // ✅ Changed to "none"
+      minWidth: isMobile ? "auto" : "auto", // ✅ Changed to "auto"
       boxSizing: "border-box",
 
       // POSITIONING
@@ -2409,10 +2409,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       right: withUnit(userStyle.right),
       bottom: withUnit(userStyle.bottom),
 
-      // PADDING - Ensure we don't squeeze the content
-      padding: isMobile ? "1rem" : userStyle.padding || "1rem",
+      // PADDING
+      padding: isMobile ? "0.5rem" : userStyle.padding || "1rem", // ✅ Reduced mobile padding
 
-      overflow: userStyle.position === "relative" ? "visible" : "hidden",
+      overflow: "visible", // ✅ Changed from conditional to always visible
       zIndex: userStyle.position === "relative" ? 50 : "auto",
     };
 
@@ -2812,15 +2812,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       return (
         <motion.div
           style={{
-            ...style,
             width: "100%",
-            maxWidth: "100%", // ✅ Add this
-            boxSizing: "border-box", // ✅ Add this
+            maxWidth: "600px", // ✅ ADD A REASONABLE MAX WIDTH
+            margin: "0 auto", // ✅ CENTER IT
+            boxSizing: "border-box",
           }}
           initial={initial}
           animate={animate}
           transition={transition}
-          className="w-full px-4 md:px-0" // ✅ Changed from px-2 to px-4 for better spacing
+          className="w-full px-6 py-4 md:px-0" // ✅ Increased mobile padding to px-6
         >
           <FormRenderer element={element} websiteData={websiteData} />
         </motion.div>
@@ -2837,7 +2837,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   if (!currentPage) return <div className="p-8">Page not found</div>;
 
   return (
-    <div className="bg-white m-0 p-0 w-full overflow-x-hidden flex flex-col min-h-[100svh]">
+    <div
+      className="bg-white m-0 p-0 w-full flex flex-col min-h-[100svh]"
+      style={{
+        overflowX: "hidden",
+        maxWidth: "100vw",
+        boxSizing: "border-box",
+      }}
+    >
       {/* ✅ FIX: Pass cartCount as a prop to the NavBar */}
       <NavBar cartCount={cartCount} />
 
