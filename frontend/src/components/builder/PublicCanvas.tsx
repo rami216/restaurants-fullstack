@@ -2600,50 +2600,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
   const withUnit = (v: any) => (typeof v === "number" ? `${v}px` : v);
 
-  // const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
-  //   const userStyle = subProps.style || {};
-  //   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
-  //   // 1. Define the base layout (Grid or Flex)
-  //   const base: React.CSSProperties =
-  //     subProps.display === "grid"
-  //       ? {
-  //           display: "grid",
-  //           gap: subProps.gap ?? "1rem",
-  //           gridTemplateColumns:
-  //             subProps.gridTemplateColumns ??
-  //             `repeat(${subProps.gridColumns ?? 2}, 1fr)`,
-  //         }
-  //       : {
-  //           display: "flex",
-  //           gap: subProps.gap ?? "1rem",
-  //           flexDirection: subProps.flexDirection ?? "column",
-  //           justifyContent: subProps.justifyContent ?? "flex-start",
-  //           alignItems: subProps.alignItems ?? "stretch",
-  //         };
-
-  //   // 2. Build the final style object
-  //   const finalStyle: React.CSSProperties = {
-  //     ...base,
-  //     ...userStyle, // Spread user styles to allow specific overrides (like padding)
-
-  //     // POSITIONING LOGIC (Synchronized with withUnit)
-  //     position: userStyle.position || "static",
-  //     top: withUnit(userStyle.top),
-  //     left: withUnit(userStyle.left),
-  //     right: withUnit(userStyle.right),
-  //     bottom: withUnit(userStyle.bottom),
-
-  //     // CLIPPING & VISIBILITY
-  //     // Match the Builder's p-4 class if no specific padding is set
-  //     padding: userStyle.padding || "1rem",
-  //     // Crucial: Allow relative items to move outside their box without disappearing
-  //     overflow: userStyle.position === "relative" ? "visible" : "hidden",
-  //     // Lift relative items above standard layout flow
-  //     zIndex: userStyle.position === "relative" ? 50 : "auto",
-  //   };
-
-  //   return finalStyle;
-  // };
   const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
     const userStyle = subProps.style || {};
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
