@@ -42,6 +42,7 @@ import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new componen
 import { useCart, CartItem } from "@/context/CartContext";
 // At the top of PublicCanvas component, after the imports:
 // ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
+// ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
 const PublicVideoElement = ({ props }: { props: any }) => {
   const src = props.src ? resolveImageSrc(props.src) : "";
   const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
@@ -50,7 +51,13 @@ const PublicVideoElement = ({ props }: { props: any }) => {
   // If enabled, this renders absolutely to fill the parent container (subsection)
   if (props.isBackground) {
     return (
-      <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
+      <div
+        className="absolute inset-0 w-full h-full z-0 overflow-hidden"
+        style={{
+          pointerEvents: "none", // CRITICAL: Allows scrolling and clicking items on top
+          borderRadius: props.videoStyle?.borderRadius || "0px",
+        }}
+      >
         {src && (
           <video
             src={src}
@@ -2650,14 +2657,13 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
     if (subProps.display === "grid") {
       base.gridTemplateColumns = isMobile
-        ? "minmax(0, 1fr)" // Prevents grid blowouts
+        ? "minmax(0, 1fr)"
         : (subProps.gridTemplateColumns ??
           `repeat(${subProps.gridColumns ?? 2}, 1fr)`);
     } else {
       base.flexDirection = isMobile
         ? "column"
         : (subProps.flexDirection ?? "column");
-      // "stretch" ensures children like forms fill the horizontal space
       base.alignItems = isMobile
         ? "stretch"
         : (subProps.alignItems ?? "stretch");
@@ -2670,14 +2676,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       ...userStyle,
 
       // ✅ STYLES TO PREVENT SHRINKING
-      // On mobile, we force the subsection to be the full width of the Section
       width: isMobile ? "100%" : userStyle.width || "100%",
       maxWidth: isMobile ? "100%" : userStyle.maxWidth || "none",
-      flexShrink: isMobile ? 0 : (userStyle.flexShrink ?? 1), // Prevent parent flex from squeezing it
+      flexShrink: isMobile ? 0 : (userStyle.flexShrink ?? 1),
       flexGrow: isMobile ? 1 : (userStyle.flexGrow ?? 0),
 
-      // POSITIONING
-      position: userStyle.position || "static",
+      // ✅ CRITICAL FIX: Default to 'relative' instead of 'static'
+      // This ensures background videos (absolute) stay INSIDE this box
+      position: userStyle.position || "relative",
+
       top: withUnit(userStyle.top),
       left: withUnit(userStyle.left),
       right: withUnit(userStyle.right),
@@ -2687,7 +2694,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       padding: isMobile ? "1rem" : userStyle.padding || "1rem",
       margin: isMobile ? "0 auto" : userStyle.margin || "0",
       boxSizing: "border-box",
-      overflow: "visible", // Ensure shadows/animations aren't clipped
+      overflow: "visible",
       zIndex: userStyle.position === "relative" ? 50 : "auto",
     };
 
