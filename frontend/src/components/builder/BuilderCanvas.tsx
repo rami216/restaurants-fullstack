@@ -28,58 +28,80 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
   const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
 
   // --- 1. BACKGROUND MODE RENDER ---
-  // Renders a full-cover video behind other content
   if (props.isBackground) {
     return (
-      <div
-        className="absolute inset-0 w-full h-full overflow-hidden"
-        style={{
-          zIndex: 0, // Ensures it sits behind other elements in the subsection
-          pointerEvents: "none", // Prevents video interactions in builder
-        }}
-      >
-        {src ? (
-          <video
-            src={src}
-            poster={poster}
-            autoPlay={props.autoPlay !== false}
-            muted={props.muted !== false}
-            loop={props.loop !== false}
-            className="absolute inset-0 w-full h-full object-cover"
-          />
-        ) : (
-          // Visual placeholder so you can see it's there when empty
-          <div className="absolute inset-0 bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 m-2 rounded opacity-50">
-            <span className="text-gray-500 font-medium">
-              Empty Background Video
-            </span>
-          </div>
-        )}
-
-        {/* Optional Dark Overlay (controlled by slider in properties) */}
+      <>
+        {/* A. The Video Layer (Behind everything, non-interactive) */}
         <div
-          className="absolute inset-0 bg-black"
-          style={{ opacity: props.overlayOpacity || 0 }}
-        />
-      </div>
+          className="absolute inset-0 w-full h-full overflow-hidden"
+          style={{
+            zIndex: 0, // Force it to the back
+            pointerEvents: "none", // Let clicks pass through to Text/Buttons
+          }}
+        >
+          {src ? (
+            <video
+              src={src}
+              poster={poster}
+              autoPlay={props.autoPlay !== false}
+              muted={props.muted !== false}
+              loop={props.loop !== false}
+              className="absolute inset-0 w-full h-full object-cover"
+            />
+          ) : (
+            <div className="absolute inset-0 bg-gray-100/50 flex items-center justify-center">
+              <span className="text-gray-400 text-xs">Empty Background</span>
+            </div>
+          )}
+
+          {/* Dark Overlay */}
+          <div
+            className="absolute inset-0 bg-black"
+            style={{ opacity: props.overlayOpacity || 0 }}
+          />
+        </div>
+
+        {/* B. The "Builder Handle" (Sits on top, Interactive) 
+            This allows you to SELECT the video even when it's in the background 
+        */}
+        <div
+          className="absolute top-2 right-2 z-50 flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs px-2 py-1 rounded cursor-pointer border border-blue-300 shadow-sm transition-opacity opacity-50 hover:opacity-100"
+          style={{ pointerEvents: "auto" }} // This captures the click!
+          title="Click to select Background Video"
+        >
+          <svg
+            xmlns="http://www.w3.org/2000/svg"
+            width="12"
+            height="12"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2"
+            strokeLinecap="round"
+            strokeLinejoin="round"
+          >
+            <polygon points="23 7 16 12 23 17 23 7"></polygon>
+            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+          </svg>
+          <span className="font-medium">Background Video</span>
+        </div>
+      </>
     );
   }
 
-  // --- 2. STANDARD CARD MODE RENDER ---
-  // Renders the standard UI card with title, meta, and expandable logic
+  // --- 2. STANDARD CARD MODE RENDER (No Changes) ---
   const cardStyle = props.style || {};
   const titleStyle = props.titleStyle || {};
   const metaStyle = props.metaStyle || {};
   const vidStyle = props.videoStyle || {};
 
-  // State is safe here
   const [isOpen, setIsOpen] = React.useState(false);
   const isExpandable = !!props.isExpandable;
   const showVideo = !isExpandable || isOpen;
 
   return (
     <div
-      className={`bg-white border rounded-xl shadow overflow-hidden ${
+      className={`bg-white border rounded-xl shadow overflow-hidden relative ${
         isExpandable ? "cursor-pointer hover:bg-gray-50 transition-colors" : ""
       }`}
       style={cardStyle}
@@ -114,7 +136,6 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
         }`}
       >
         <div className="relative p-4 pt-0">
-          {/* Block pointer events in builder so you don't accidentally play it while editing */}
           <div className="absolute inset-0 z-10" />
           <video
             src={src}
