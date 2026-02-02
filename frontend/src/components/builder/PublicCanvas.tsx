@@ -43,16 +43,43 @@ import { useCart, CartItem } from "@/context/CartContext";
 // At the top of PublicCanvas component, after the imports:
 // ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
 const PublicVideoElement = ({ props }: { props: any }) => {
+  const src = props.src ? resolveImageSrc(props.src) : "";
+  const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
+
+  // --- 1. BACKGROUND MODE RENDER ---
+  // If enabled, this renders absolutely to fill the parent container (subsection)
+  if (props.isBackground) {
+    return (
+      <div className="absolute inset-0 w-full h-full z-0 overflow-hidden pointer-events-none">
+        {src && (
+          <video
+            src={src}
+            poster={poster}
+            autoPlay={props.autoPlay !== false}
+            muted={props.muted !== false} // Muted is usually required for autoplay
+            loop={props.loop !== false}
+            playsInline // Essential for mobile backgrounds
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        )}
+        {/* Dark Overlay (controlled by opacity property) */}
+        <div
+          className="absolute inset-0 bg-black"
+          style={{ opacity: props.overlayOpacity || 0 }}
+        />
+      </div>
+    );
+  }
+
+  // --- 2. STANDARD CARD MODE RENDER ---
+  // Existing logic for the interactive, animated card
   const { initial, animate, transition } = getMotionConfig(props.animation);
   const cardStyle = props.style || {};
   const titleStyle = props.titleStyle || {};
   const metaStyle = props.metaStyle || {};
   const vidStyle = props.videoStyle || {};
 
-  const src = props.src ? resolveImageSrc(props.src) : "";
-  const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
-
-  // ✅ Hooks are allowed here because this is a real Component
+  // Hooks are allowed here
   const [isOpen, setIsOpen] = useState(false);
   const isExpandable = !!props.isExpandable;
   const showVideo = !isExpandable || isOpen;
@@ -84,7 +111,9 @@ const PublicVideoElement = ({ props }: { props: any }) => {
             strokeWidth="2"
             strokeLinecap="round"
             strokeLinejoin="round"
-            className={`transform transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`}
+            className={`transform transition-transform duration-200 ${
+              isOpen ? "rotate-180" : ""
+            }`}
           >
             <polyline points="6 9 12 15 18 9"></polyline>
           </svg>
@@ -96,12 +125,13 @@ const PublicVideoElement = ({ props }: { props: any }) => {
           showVideo ? "max-h-[800px] opacity-100" : "max-h-0 opacity-0"
         }`}
       >
+        {/* Stop propagation so clicking controls doesn't close the accordion */}
         <div className="p-4 pt-0" onClick={(e) => e.stopPropagation()}>
           <video
             src={src}
             poster={poster}
             controls={Boolean(props.controls)}
-            style={vidStyle}
+            style={{ ...vidStyle, width: "100%" }}
           />
         </div>
       </div>

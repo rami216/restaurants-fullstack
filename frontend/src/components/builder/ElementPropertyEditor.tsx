@@ -3081,44 +3081,79 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
         editorBody = (
           <div className="space-y-4">
-            {/* Title */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Title
+            {/* --- 1. BACKGROUND MODE TOGGLE --- */}
+            <div className="p-4 bg-blue-50 border border-blue-100 rounded-lg">
+              <label className="flex items-center gap-3 cursor-pointer">
+                <input
+                  type="checkbox"
+                  className="w-5 h-5 text-blue-600 rounded focus:ring-blue-500"
+                  checked={!!props.isBackground}
+                  onChange={(e) =>
+                    handlePropertyChange("isBackground", e.target.checked)
+                  }
+                />
+                <div>
+                  <span className="block text-sm font-medium text-blue-900">
+                    Use as Background Video
+                  </span>
+                  <span className="block text-xs text-blue-700">
+                    Stretches to fill the container (subsection) and sits behind
+                    other content.
+                  </span>
+                </div>
               </label>
-              <input
-                className="mt-1 block w-full border rounded-md p-2"
-                value={props.title || ""}
-                onChange={(e) => handlePropertyChange("title", e.target.value)}
-              />
             </div>
 
-            {/* Length */}
-            <div>
-              <label className="block text-sm font-medium text-gray-700">
-                Length
-              </label>
-              <input
-                className="mt-1 block w-full border rounded-md p-2"
-                placeholder="e.g. 03:21"
-                value={props.length || ""}
-                onChange={(e) => handlePropertyChange("length", e.target.value)}
-              />
-            </div>
+            {/* --- 2. STANDARD FIELDS (Hidden if Background) --- */}
+            {!props.isBackground && (
+              <>
+                {/* Title */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Title
+                  </label>
+                  <input
+                    className="mt-1 block w-full border rounded-md p-2"
+                    value={props.title || ""}
+                    onChange={(e) =>
+                      handlePropertyChange("title", e.target.value)
+                    }
+                  />
+                </div>
 
+                {/* Length */}
+                <div>
+                  <label className="block text-sm font-medium text-gray-700">
+                    Length
+                  </label>
+                  <input
+                    className="mt-1 block w-full border rounded-md p-2"
+                    placeholder="e.g. 03:21"
+                    value={props.length || ""}
+                    onChange={(e) =>
+                      handlePropertyChange("length", e.target.value)
+                    }
+                  />
+                </div>
+              </>
+            )}
+
+            {/* --- 3. COMMON FIELDS (Preview & Upload) --- */}
             {/* Video preview */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
                 Preview
               </label>
-              <video
-                src={props.src ? resolveImageSrc(props.src) : undefined}
-                poster={
-                  props.poster ? resolveImageSrc(props.poster) : undefined
-                }
-                controls
-                style={{ width: "100%", borderRadius: "10px" }}
-              />
+              <div className="relative rounded-lg overflow-hidden bg-black">
+                <video
+                  src={props.src ? resolveImageSrc(props.src) : undefined}
+                  poster={
+                    props.poster ? resolveImageSrc(props.poster) : undefined
+                  }
+                  controls
+                  style={{ width: "100%", maxHeight: "200px" }}
+                />
+              </div>
             </div>
 
             {/* Upload video */}
@@ -3135,7 +3170,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 className="w-full flex items-center justify-center text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
                 disabled={isUploading}
               >
-                {isUploading ? "Uploading..." : "Upload video"}
+                {isUploading ? "Uploading..." : "Upload video file"}
               </button>
             </div>
             {/* Progress bar */}
@@ -3148,12 +3183,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               </div>
             )}
 
-            {/* Poster upload (optional) – reuse your image upload helper */}
+            {/* Poster upload */}
             <div>
               <label className="block text-sm font-medium text-gray-700">
-                Poster
+                Poster / Thumbnail
               </label>
-              <div className="flex items-center gap-2">
+              <div className="flex items-center gap-2 mt-1">
                 <img
                   src={
                     props.poster
@@ -3161,9 +3196,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       : "https://placehold.co/160x90?text=Poster"
                   }
                   alt="poster"
-                  className="w-40 h-24 object-cover rounded border bg-gray-100"
+                  className="w-24 h-16 object-cover rounded border bg-gray-100"
                 />
-                <div>
+                <div className="flex-1">
                   <input
                     type="file"
                     accept="image/*"
@@ -3173,127 +3208,206 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                   />
                   <button
                     onClick={() => posterInputRef.current?.click()}
-                    className="text-sm text-blue-600 hover:text-blue-800 p-2 border-dashed border-2 rounded-md"
+                    className="text-sm text-blue-600 hover:text-blue-800 underline"
                   >
-                    Upload poster
+                    Change poster image
                   </button>
                 </div>
               </div>
             </div>
 
-            {/* Styles */}
-            <div>
-              {/* Behavior Options */}
-              <div>
-                <h4 className="text-md font-medium text-gray-800 mb-2">
-                  Behavior
+            {/* --- 4. BACKGROUND SPECIFIC SETTINGS --- */}
+            {props.isBackground && (
+              <div className="border-t pt-4">
+                <h4 className="text-md font-medium text-gray-800 mb-3">
+                  Background Settings
                 </h4>
-                <label className="flex items-center gap-2 p-2 border rounded bg-gray-50 cursor-pointer">
+
+                {/* Overlay Opacity */}
+                <div className="mb-4">
+                  <div className="flex justify-between">
+                    <label className="block text-sm text-gray-600 mb-1">
+                      Overlay Opacity (Darken)
+                    </label>
+                    <span className="text-xs text-gray-500">
+                      {Math.round((props.overlayOpacity || 0) * 100)}%
+                    </span>
+                  </div>
                   <input
-                    type="checkbox"
-                    checked={!!props.isExpandable}
+                    type="range"
+                    min="0"
+                    max="0.9"
+                    step="0.1"
+                    className="w-full"
+                    value={props.overlayOpacity || 0}
                     onChange={(e) =>
-                      handlePropertyChange("isExpandable", e.target.checked)
+                      handlePropertyChange(
+                        "overlayOpacity",
+                        parseFloat(e.target.value),
+                      )
                     }
-                    className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
                   />
-                  <span className="text-sm text-gray-700">
-                    Collapsible (Click title to expand)
-                  </span>
-                </label>
-              </div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">
-                Card Style
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="border rounded p-2"
-                  placeholder="Background color"
-                  value={props.style?.backgroundColor || "#ffffff"}
-                  onChange={(e) =>
-                    handleStyleChange("backgroundColor", e.target.value)
-                  }
-                />
-                <input
-                  className="border rounded p-2"
-                  placeholder="Padding (e.g. 1rem)"
-                  value={props.style?.padding || "1rem"}
-                  onChange={(e) => handleStyleChange("padding", e.target.value)}
-                />
-              </div>
-            </div>
+                </div>
 
-            <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">
-                Title Style
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="border rounded p-2"
-                  placeholder="Font size"
-                  value={props.titleStyle?.fontSize || "1.125rem"}
-                  onChange={(e) =>
-                    handleTitleStyleChange("fontSize", e.target.value)
-                  }
-                />
-                <input
-                  type="color"
-                  className="h-10 border rounded"
-                  value={props.titleStyle?.color || "#111827"}
-                  onChange={(e) =>
-                    handleTitleStyleChange("color", e.target.value)
-                  }
-                />
+                {/* Playback Controls */}
+                <div className="grid grid-cols-2 gap-y-2">
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded text-blue-600"
+                      checked={props.autoPlay !== false} // Default true
+                      onChange={(e) =>
+                        handlePropertyChange("autoPlay", e.target.checked)
+                      }
+                    />
+                    Autoplay
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded text-blue-600"
+                      checked={props.loop !== false} // Default true
+                      onChange={(e) =>
+                        handlePropertyChange("loop", e.target.checked)
+                      }
+                    />
+                    Loop
+                  </label>
+                  <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer">
+                    <input
+                      type="checkbox"
+                      className="rounded text-blue-600"
+                      checked={props.muted !== false} // Default true
+                      onChange={(e) =>
+                        handlePropertyChange("muted", e.target.checked)
+                      }
+                    />
+                    Muted (Required for Autoplay)
+                  </label>
+                </div>
               </div>
-            </div>
+            )}
 
-            <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">
-                Meta Style
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="border rounded p-2"
-                  placeholder="Font size"
-                  value={props.metaStyle?.fontSize || ".875rem"}
-                  onChange={(e) =>
-                    handleMetaStyleChange("fontSize", e.target.value)
-                  }
-                />
-                <input
-                  type="color"
-                  className="h-10 border rounded"
-                  value={props.metaStyle?.color || "#6b7280"}
-                  onChange={(e) =>
-                    handleMetaStyleChange("color", e.target.value)
-                  }
-                />
-              </div>
-            </div>
+            {/* --- 5. STANDARD STYLES (Hidden if Background) --- */}
+            {!props.isBackground && (
+              <>
+                <div className="border-t pt-4">
+                  {/* Behavior Options */}
+                  <div className="mb-4">
+                    <h4 className="text-md font-medium text-gray-800 mb-2">
+                      Behavior
+                    </h4>
+                    <label className="flex items-center gap-2 p-2 border rounded bg-gray-50 cursor-pointer">
+                      <input
+                        type="checkbox"
+                        checked={!!props.isExpandable}
+                        onChange={(e) =>
+                          handlePropertyChange("isExpandable", e.target.checked)
+                        }
+                        className="rounded border-gray-300 text-blue-600 focus:ring-blue-500"
+                      />
+                      <span className="text-sm text-gray-700">
+                        Collapsible (Click title to expand)
+                      </span>
+                    </label>
+                  </div>
 
-            <div>
-              <h4 className="text-md font-medium text-gray-800 mb-2">
-                Video Style
-              </h4>
-              <div className="grid grid-cols-2 gap-3">
-                <input
-                  className="border rounded p-2"
-                  placeholder="Width (e.g. 100%)"
-                  value={props.videoStyle?.width || "100%"}
-                  onChange={(e) =>
-                    handleVideoStyleChange("width", e.target.value)
-                  }
-                />
-                <input
-                  className="border rounded p-2"
-                  placeholder="Border radius (e.g. 10px)"
-                  value={props.videoStyle?.borderRadius || "10px"}
-                  onChange={(e) =>
-                    handleVideoStyleChange("borderRadius", e.target.value)
-                  }
-                />
-              </div>
-            </div>
+                  <h4 className="text-md font-medium text-gray-800 mb-2">
+                    Card Style
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="border rounded p-2"
+                      placeholder="Background color"
+                      value={props.style?.backgroundColor || "#ffffff"}
+                      onChange={(e) =>
+                        handleStyleChange("backgroundColor", e.target.value)
+                      }
+                    />
+                    <input
+                      className="border rounded p-2"
+                      placeholder="Padding (e.g. 1rem)"
+                      value={props.style?.padding || "1rem"}
+                      onChange={(e) =>
+                        handleStyleChange("padding", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-medium text-gray-800 mb-2">
+                    Title Style
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="border rounded p-2"
+                      placeholder="Font size"
+                      value={props.titleStyle?.fontSize || "1.125rem"}
+                      onChange={(e) =>
+                        handleTitleStyleChange("fontSize", e.target.value)
+                      }
+                    />
+                    <input
+                      type="color"
+                      className="h-10 border rounded"
+                      value={props.titleStyle?.color || "#111827"}
+                      onChange={(e) =>
+                        handleTitleStyleChange("color", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-medium text-gray-800 mb-2">
+                    Meta Style
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="border rounded p-2"
+                      placeholder="Font size"
+                      value={props.metaStyle?.fontSize || ".875rem"}
+                      onChange={(e) =>
+                        handleMetaStyleChange("fontSize", e.target.value)
+                      }
+                    />
+                    <input
+                      type="color"
+                      className="h-10 border rounded"
+                      value={props.metaStyle?.color || "#6b7280"}
+                      onChange={(e) =>
+                        handleMetaStyleChange("color", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <h4 className="text-md font-medium text-gray-800 mb-2">
+                    Video Style
+                  </h4>
+                  <div className="grid grid-cols-2 gap-3">
+                    <input
+                      className="border rounded p-2"
+                      placeholder="Width (e.g. 100%)"
+                      value={props.videoStyle?.width || "100%"}
+                      onChange={(e) =>
+                        handleVideoStyleChange("width", e.target.value)
+                      }
+                    />
+                    <input
+                      className="border rounded p-2"
+                      placeholder="Border radius (e.g. 10px)"
+                      value={props.videoStyle?.borderRadius || "10px"}
+                      onChange={(e) =>
+                        handleVideoStyleChange("borderRadius", e.target.value)
+                      }
+                    />
+                  </div>
+                </div>
+              </>
+            )}
 
             {/* Visibility panel reuse (as with other elements) */}
             <VisibilityEditor

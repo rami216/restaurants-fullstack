@@ -24,15 +24,55 @@ import saasApi from "@/lib/saasApi";
 
 // ✅ DEFINE THIS SEPARATE COMPONENT (Outside BuilderCanvas)
 const BuilderVideoElement = ({ props }: { props: any }) => {
+  const src = props.src ? resolveImageSrc(props.src) : "";
+  const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
+
+  // --- 1. BACKGROUND MODE RENDER ---
+  // Renders a full-cover video behind other content
+  if (props.isBackground) {
+    return (
+      <div
+        className="absolute inset-0 w-full h-full overflow-hidden"
+        style={{
+          zIndex: 0, // Ensures it sits behind other elements in the subsection
+          pointerEvents: "none", // Prevents video interactions in builder
+        }}
+      >
+        {src ? (
+          <video
+            src={src}
+            poster={poster}
+            autoPlay={props.autoPlay !== false}
+            muted={props.muted !== false}
+            loop={props.loop !== false}
+            className="absolute inset-0 w-full h-full object-cover"
+          />
+        ) : (
+          // Visual placeholder so you can see it's there when empty
+          <div className="absolute inset-0 bg-gray-100 flex items-center justify-center border-2 border-dashed border-gray-300 m-2 rounded opacity-50">
+            <span className="text-gray-500 font-medium">
+              Empty Background Video
+            </span>
+          </div>
+        )}
+
+        {/* Optional Dark Overlay (controlled by slider in properties) */}
+        <div
+          className="absolute inset-0 bg-black"
+          style={{ opacity: props.overlayOpacity || 0 }}
+        />
+      </div>
+    );
+  }
+
+  // --- 2. STANDARD CARD MODE RENDER ---
+  // Renders the standard UI card with title, meta, and expandable logic
   const cardStyle = props.style || {};
   const titleStyle = props.titleStyle || {};
   const metaStyle = props.metaStyle || {};
   const vidStyle = props.videoStyle || {};
 
-  const src = props.src ? resolveImageSrc(props.src) : "";
-  const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
-
-  // ✅ State is safe here
+  // State is safe here
   const [isOpen, setIsOpen] = React.useState(false);
   const isExpandable = !!props.isExpandable;
   const showVideo = !isExpandable || isOpen;
@@ -74,7 +114,7 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
         }`}
       >
         <div className="relative p-4 pt-0">
-          {/* Block pointer events in builder */}
+          {/* Block pointer events in builder so you don't accidentally play it while editing */}
           <div className="absolute inset-0 z-10" />
           <video
             src={src}
@@ -87,7 +127,6 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
     </div>
   );
 };
-
 const withUnit = (v: any) =>
   typeof v === "number" || (typeof v === "string" && /^-?\d+(\.\d+)?$/.test(v))
     ? `${v}px`
