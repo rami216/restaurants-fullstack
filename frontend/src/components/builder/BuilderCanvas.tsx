@@ -30,13 +30,20 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
   // --- 1. BACKGROUND MODE RENDER ---
   if (props.isBackground) {
     return (
-      <>
-        {/* A. The Video Layer (Behind everything, non-interactive) */}
+      <div
+        className="w-full h-full min-h-[50px] relative group" // 'relative' keeps the absolute video inside!
+        style={{
+          // We let the builder wrapper control the size, but we ensure this fills it
+          minHeight: src ? "100%" : "100px",
+        }}
+      >
+        {/* A. The Video Layer (Bottom Layer) */}
         <div
           className="absolute inset-0 w-full h-full overflow-hidden"
           style={{
-            zIndex: 0, // Force it to the back
-            pointerEvents: "none", // Let clicks pass through to Text/Buttons
+            zIndex: 0,
+            pointerEvents: "none", // CRITICAL: Allows clicks to pass through to Text/Buttons on top
+            borderRadius: props.videoStyle?.borderRadius || "0px",
           }}
         >
           {src ? (
@@ -49,30 +56,32 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
               className="absolute inset-0 w-full h-full object-cover"
             />
           ) : (
-            <div className="absolute inset-0 bg-gray-100/50 flex items-center justify-center">
-              <span className="text-gray-400 text-xs">Empty Background</span>
+            // Placeholder when no video is uploaded yet
+            <div className="absolute inset-0 bg-blue-50/50 flex items-center justify-center border-2 border-dashed border-blue-300 m-1 rounded">
+              <span className="text-blue-400 text-xs font-semibold">
+                Background Video Placeholder
+              </span>
             </div>
           )}
 
-          {/* Dark Overlay */}
+          {/* Overlay (Controlled by Opacity Slider) */}
           <div
-            className="absolute inset-0 bg-black"
+            className="absolute inset-0 bg-black transition-opacity duration-300"
             style={{ opacity: props.overlayOpacity || 0 }}
           />
         </div>
 
-        {/* B. The "Builder Handle" (Sits on top, Interactive) 
-            This allows you to SELECT the video even when it's in the background 
-        */}
+        {/* B. The "Selection Handle" (Top Layer - Only visible in Builder) */}
+        {/* This allows you to click/select the video even though the video itself ignores clicks */}
         <div
-          className="absolute top-2 right-2 z-50 flex items-center gap-1 bg-blue-100 hover:bg-blue-200 text-blue-700 text-xs px-2 py-1 rounded cursor-pointer border border-blue-300 shadow-sm transition-opacity opacity-50 hover:opacity-100"
-          style={{ pointerEvents: "auto" }} // This captures the click!
-          title="Click to select Background Video"
+          className="absolute top-2 right-2 z-50 flex items-center gap-2 px-2 py-1.5 bg-blue-600 text-white text-xs rounded shadow-lg cursor-pointer hover:bg-blue-700 transition-all opacity-80 hover:opacity-100"
+          style={{ pointerEvents: "auto" }} // CRITICAL: Catches the click to select this element
+          title="Click here to select and edit the background video"
         >
           <svg
             xmlns="http://www.w3.org/2000/svg"
-            width="12"
-            height="12"
+            width="14"
+            height="14"
             viewBox="0 0 24 24"
             fill="none"
             stroke="currentColor"
@@ -80,21 +89,25 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
             strokeLinecap="round"
             strokeLinejoin="round"
           >
-            <polygon points="23 7 16 12 23 17 23 7"></polygon>
-            <rect x="1" y="5" width="15" height="14" rx="2" ry="2"></rect>
+            <path d="M15 10l5 5-5 5" />
+            <path d="M4 4v7a4 4 0 0 0 4 4h12" />
           </svg>
-          <span className="font-medium">Background Video</span>
+          <span className="font-bold">Select Video</span>
         </div>
-      </>
+
+        {/* C. Helper Border (Optional: Helps you see the element bounds while hovering) */}
+        <div className="absolute inset-0 border-2 border-blue-400 opacity-0 group-hover:opacity-30 pointer-events-none transition-opacity" />
+      </div>
     );
   }
 
-  // --- 2. STANDARD CARD MODE RENDER (No Changes) ---
+  // --- 2. STANDARD CARD MODE RENDER (Original Logic) ---
   const cardStyle = props.style || {};
   const titleStyle = props.titleStyle || {};
   const metaStyle = props.metaStyle || {};
   const vidStyle = props.videoStyle || {};
 
+  // Standard interactive state
   const [isOpen, setIsOpen] = React.useState(false);
   const isExpandable = !!props.isExpandable;
   const showVideo = !isExpandable || isOpen;
@@ -105,7 +118,11 @@ const BuilderVideoElement = ({ props }: { props: any }) => {
         isExpandable ? "cursor-pointer hover:bg-gray-50 transition-colors" : ""
       }`}
       style={cardStyle}
-      onClick={() => isExpandable && setIsOpen(!isOpen)}
+      onClick={(e) => {
+        // If expandable, toggle open.
+        // NOTE: The parent builder wrapper likely handles the "Selection" event.
+        if (isExpandable) setIsOpen(!isOpen);
+      }}
     >
       <div className="flex items-center justify-between p-4">
         <div className="flex-1">
