@@ -1116,6 +1116,195 @@ const GatedContent: React.FC<{
   return <>{children}</>;
 };
 
+// const MainContent = ({
+//   currentPage,
+//   activeCategory,
+//   setActiveCategory,
+//   websiteData,
+//   lastSectionRef,
+//   renderElement,
+//   isLoggedIn,
+//   buildSubsectionStyle,
+//   addToCart,
+// }: {
+//   currentPage: Page | undefined;
+//   activeCategory: string | null;
+//   setActiveCategory: (id: string | null) => void;
+//   websiteData: PublicWebsiteData;
+//   lastSectionRef: React.RefObject<HTMLDivElement | null>;
+//   renderElement: (element: ElementType) => React.ReactNode;
+//   isLoggedIn: boolean;
+//   buildSubsectionStyle: (props: any) => React.CSSProperties;
+//   addToCart: (item: CartItem) => void;
+// }) => {
+//   if (activeCategory) {
+//     return (
+//       <>
+//         <div className="p-4">
+//           <button
+//             onClick={() => setActiveCategory(null)}
+//             className="text-blue-600 underline mb-4"
+//           >
+//             ← Back to "{currentPage?.title}"
+//           </button>
+//         </div>
+//         <CategoryMenuInCanvas
+//           locations={websiteData.locations}
+//           categoryId={activeCategory}
+//           onAddToCart={addToCart}
+//         />
+//       </>
+//     );
+//   }
+
+//   return (
+//     <GatedContent
+//       elementProps={currentPage?.properties}
+//       isLoggedIn={isLoggedIn}
+//       websiteData={websiteData}
+//     >
+//       <div className="space-y-0 flex-1 flex flex-col">
+//         {currentPage?.sections.map((sec, idx) => {
+//           const isMobile =
+//             typeof window !== "undefined" && window.innerWidth < 768;
+//           const isLast = idx === currentPage.sections.length - 1;
+//           const p = sec.properties || {};
+//           const styleProps = p.style || {};
+
+//           // 1. Get the background from the correct source
+//           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
+
+//           // 2. Normalize it correctly (handling gradients vs images)
+//           let backgroundImage: string | undefined;
+//           if (typeof rawBg === "string" && rawBg.trim()) {
+//             backgroundImage = rawBg.startsWith("linear-gradient")
+//               ? rawBg
+//               : normalizeBackground(rawBg);
+//           }
+
+//           const containerStyle: React.CSSProperties = {
+//             // 1. Layout & Sizing (Force full width)
+//             width: "100%",
+//             maxWidth: "100vw",
+//             boxSizing: "border-box",
+//             overflowX: "hidden", // Prevent horizontal side-scrolling
+
+//             // 2. Base Flexbox Logic
+//             // Force column on mobile so elements don't squeeze side-by-side
+//             display: "flex",
+//             flexDirection: isMobile
+//               ? "column"
+//               : (p.flexDirection ?? styleProps.flexDirection ?? "column"),
+
+//             // Stretch items to 100% width on mobile, otherwise use saved alignment
+//             alignItems: isMobile
+//               ? "stretch"
+//               : (p.alignItems ?? styleProps.alignItems ?? "center"),
+
+//             justifyContent:
+//               p.justifyContent ?? styleProps.justifyContent ?? "flex-start",
+//             gap: p.gap ?? styleProps.gap,
+
+//             // 3. Visuals & Background
+//             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
+//             ...styleProps,
+//             ...(backgroundImage ? { backgroundImage } : {}),
+
+//             // Background Image Handling
+//             ...(backgroundImage && backgroundImage.startsWith("url(")
+//               ? {
+//                   backgroundSize: "cover",
+//                   backgroundPosition: "center",
+//                   backgroundRepeat: "no-repeat",
+//                 }
+//               : {}),
+
+//             // 4. Spacing
+//             // Reduce padding slightly on mobile to give the form more room
+//             padding:
+//               p.padding ??
+//               styleProps.padding ??
+//               (isMobile ? "1rem 0.5rem" : "2rem"),
+//             ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
+//           };
+
+//           return (
+//             <GatedContent
+//               key={sec.section_id}
+//               elementProps={sec.properties}
+//               isLoggedIn={isLoggedIn}
+//               websiteData={websiteData}
+//             >
+//               <div
+//                 ref={isLast ? lastSectionRef : undefined}
+//                 style={{
+//                   ...containerStyle,
+//                   ...(isLast ? { flexGrow: 1 } : {}),
+//                   boxSizing: "border-box", // ✅ Add this
+//                   width: "100%",
+//                   maxWidth: "100%",
+//                   overflow: "visible", // ✅ Change from hidden
+//                 }}
+//                 className={isLast ? "last-section" : undefined}
+//               >
+//                 <div
+//                   className="w-full flex flex-wrap"
+//                   style={{
+//                     display: p.display || "flex",
+//                     flexDirection: p.flexDirection,
+//                     justifyContent: p.justifyContent,
+//                     alignItems: p.alignItems,
+//                     gap: p.gap,
+//                     boxSizing: "border-box",
+//                     maxWidth: "100%",
+//                     width: "100%", // ✅ ADD THIS
+//                     overflow: "visible", // ✅ ADD THIS
+//                   }}
+//                 >
+//                   {sec.subsections.map((sub) => {
+//                     const subProps = sub.properties || {};
+//                     const { initial, animate, transition } = getMotionConfig(
+//                       subProps.animation,
+//                     );
+//                     const subsectionStyle = buildSubsectionStyle(subProps);
+
+//                     return (
+//                       <GatedContent
+//                         key={sub.subsection_id}
+//                         elementProps={sub.properties}
+//                         isLoggedIn={isLoggedIn}
+//                         websiteData={websiteData}
+//                       >
+//                         <motion.div
+//                           style={subsectionStyle}
+//                           initial={initial}
+//                           animate={animate}
+//                           transition={transition}
+//                         >
+//                           {sub.elements.map((el) => (
+//                             <GatedContent
+//                               key={el.element_id}
+//                               elementProps={el.properties}
+//                               isLoggedIn={isLoggedIn}
+//                               websiteData={websiteData}
+//                             >
+//                               {renderElement(el)}
+//                             </GatedContent>
+//                           ))}
+//                         </motion.div>
+//                       </GatedContent>
+//                     );
+//                   })}
+//                 </div>
+//               </div>
+//             </GatedContent>
+//           );
+//         })}
+//       </div>
+//     </GatedContent>
+//   );
+// };
+
 const MainContent = ({
   currentPage,
   activeCategory,
@@ -1157,22 +1346,21 @@ const MainContent = ({
     );
   }
 
+  const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
   return (
     <GatedContent
       elementProps={currentPage?.properties}
       isLoggedIn={isLoggedIn}
       websiteData={websiteData}
     >
-      <div className="space-y-0 flex-1 flex flex-col">
+      <div className="space-y-0 flex-1 flex flex-col w-full">
         {currentPage?.sections.map((sec, idx) => {
           const isLast = idx === currentPage.sections.length - 1;
           const p = sec.properties || {};
           const styleProps = p.style || {};
 
-          // 1. Get the background from the correct source
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
-
-          // 2. Normalize it correctly (handling gradients vs images)
           let backgroundImage: string | undefined;
           if (typeof rawBg === "string" && rawBg.trim()) {
             backgroundImage = rawBg.startsWith("linear-gradient")
@@ -1180,21 +1368,32 @@ const MainContent = ({
               : normalizeBackground(rawBg);
           }
 
+          // ✅ 1. Rewrite Section Container Style
           const containerStyle: React.CSSProperties = {
+            width: "100%",
+            maxWidth: "100vw",
+            boxSizing: "border-box",
+            overflowX: "hidden",
+            display: "flex",
+            flexDirection: "column",
+            alignItems: "center", // Center content horizontally
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
-            padding: p.padding ?? styleProps.padding,
-            display: p.display ?? styleProps.display,
-            flexDirection: p.flexDirection ?? styleProps.flexDirection,
-            justifyContent: p.justifyContent ?? styleProps.justifyContent,
-            alignItems: p.alignItems ?? styleProps.alignItems,
-            gap: p.gap ?? styleProps.gap,
             ...styleProps,
             ...(backgroundImage ? { backgroundImage } : {}),
-            // Ensure image covers the full section
             ...(backgroundImage && backgroundImage.startsWith("url(")
-              ? { backgroundSize: "cover", backgroundPosition: "center" }
+              ? {
+                  backgroundSize: "cover",
+                  backgroundPosition: "center",
+                  backgroundRepeat: "no-repeat",
+                }
               : {}),
-            ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
+            padding:
+              p.padding ??
+              styleProps.padding ??
+              (isMobile ? "1.5rem 0.75rem" : "2rem"),
+            ...(isLast
+              ? { flexGrow: 1, marginBottom: 0, paddingBottom: 0 }
+              : {}),
           };
 
           return (
@@ -1206,28 +1405,24 @@ const MainContent = ({
             >
               <div
                 ref={isLast ? lastSectionRef : undefined}
-                style={{
-                  ...containerStyle,
-                  ...(isLast ? { flexGrow: 1 } : {}),
-                  boxSizing: "border-box", // ✅ Add this
-                  width: "100%",
-                  maxWidth: "100%",
-                  overflow: "visible", // ✅ Change from hidden
-                }}
+                style={containerStyle}
                 className={isLast ? "last-section" : undefined}
               >
+                {/* ✅ 2. Rewrite Inner Wrapper Div */}
                 <div
-                  className="w-full flex flex-wrap"
+                  className="w-full flex"
                   style={{
-                    display: p.display || "flex",
-                    flexDirection: p.flexDirection,
-                    justifyContent: p.justifyContent,
-                    alignItems: p.alignItems,
-                    gap: p.gap,
+                    width: "100%",
+                    maxWidth: isMobile ? "100%" : "1200px", // Optional desktop limit
+                    display: "flex",
+                    flexDirection: isMobile
+                      ? "column"
+                      : p.flexDirection || "row",
+                    flexWrap: isMobile ? "nowrap" : "wrap",
+                    justifyContent: p.justifyContent || "center",
+                    alignItems: isMobile ? "stretch" : p.alignItems || "center",
+                    gap: p.gap || "1rem",
                     boxSizing: "border-box",
-                    maxWidth: "100%",
-                    width: "100%", // ✅ ADD THIS
-                    overflow: "visible", // ✅ ADD THIS
                   }}
                 >
                   {sec.subsections.map((sub) => {
@@ -1854,15 +2049,45 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   const router = useRouter();
 
   useEffect(() => {
-    // Prevent horizontal overflow on mobile
     const style = document.createElement("style");
     style.textContent = `
+    /* 1. Global Page Layout Fixes */
     body, html {
       overflow-x: hidden;
       max-width: 100vw;
+      margin: 0;
+      padding: 0;
     }
     * {
       box-sizing: border-box;
+    }
+
+    /* 2. Force forms and inputs to respect container width */
+    form, .form-container {
+      width: 100% !important;
+      display: flex !important;
+      flex-direction: column !important;
+    }
+    
+    /* This ensures 'eg:' and 'En' inputs don't shrink */
+    input, textarea, select {
+      width: 100% !important;
+      max-width: 100% !important;
+      min-width: 100% !important; /* Added min-width for extra safety */
+      box-sizing: border-box !important;
+      display: block !important;
+    }
+
+    /* 3. Ensure Tailwind utility classes aren't overridden by parent flex */
+    .w-full {
+      width: 100% !important;
+      min-width: 100% !important;
+    }
+
+    /* 4. Fix for the bunched up Navbar text in your screenshot */
+    nav a, nav button {
+      display: inline-block;
+      white-space: nowrap;
     }
   `;
     document.head.appendChild(style);
@@ -2369,38 +2594,40 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     const userStyle = subProps.style || {};
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
-    let base: React.CSSProperties = {};
+    // 1. Layout Engine
+    let base: React.CSSProperties = {
+      display: subProps.display === "grid" ? "grid" : "flex",
+      gap: subProps.gap ?? (isMobile ? "1rem" : "1.5rem"),
+      boxSizing: "border-box",
+    };
 
     if (subProps.display === "grid") {
-      base = {
-        display: "grid",
-        gap: subProps.gap ?? "1.5rem",
-        gridTemplateColumns: isMobile
-          ? "1fr"
-          : (subProps.gridTemplateColumns ??
-            `repeat(${subProps.gridColumns ?? 2}, 1fr)`),
-      };
+      base.gridTemplateColumns = isMobile
+        ? "minmax(0, 1fr)" // Prevents grid blowouts
+        : (subProps.gridTemplateColumns ??
+          `repeat(${subProps.gridColumns ?? 2}, 1fr)`);
     } else {
-      base = {
-        display: "flex",
-        gap: subProps.gap ?? "1.5rem",
-        flexDirection: isMobile
-          ? "column"
-          : (subProps.flexDirection ?? "column"),
-        justifyContent: subProps.justifyContent ?? "flex-start",
-        alignItems: "stretch",
-      };
+      base.flexDirection = isMobile
+        ? "column"
+        : (subProps.flexDirection ?? "column");
+      // "stretch" ensures children like forms fill the horizontal space
+      base.alignItems = isMobile
+        ? "stretch"
+        : (subProps.alignItems ?? "stretch");
+      base.justifyContent = subProps.justifyContent ?? "flex-start";
     }
 
+    // 2. Final Style Assembly
     const finalStyle: React.CSSProperties = {
       ...base,
       ...userStyle,
 
-      // ✅ CRITICAL MOBILE WIDTH FIXES
-      width: isMobile ? "100%" : userStyle.width || "auto",
-      maxWidth: isMobile ? "none" : userStyle.maxWidth || "none", // ✅ Changed to "none"
-      minWidth: isMobile ? "auto" : "auto", // ✅ Changed to "auto"
-      boxSizing: "border-box",
+      // ✅ STYLES TO PREVENT SHRINKING
+      // On mobile, we force the subsection to be the full width of the Section
+      width: isMobile ? "100%" : userStyle.width || "100%",
+      maxWidth: isMobile ? "100%" : userStyle.maxWidth || "none",
+      flexShrink: isMobile ? 0 : (userStyle.flexShrink ?? 1), // Prevent parent flex from squeezing it
+      flexGrow: isMobile ? 1 : (userStyle.flexGrow ?? 0),
 
       // POSITIONING
       position: userStyle.position || "static",
@@ -2409,10 +2636,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       right: withUnit(userStyle.right),
       bottom: withUnit(userStyle.bottom),
 
-      // PADDING
-      padding: isMobile ? "0.5rem" : userStyle.padding || "1rem", // ✅ Reduced mobile padding
-
-      overflow: "visible", // ✅ Changed from conditional to always visible
+      // SPACING & VISIBILITY
+      padding: isMobile ? "1rem" : userStyle.padding || "1rem",
+      margin: isMobile ? "0 auto" : userStyle.margin || "0",
+      boxSizing: "border-box",
+      overflow: "visible", // Ensure shadows/animations aren't clipped
       zIndex: userStyle.position === "relative" ? 50 : "auto",
     };
 
@@ -2813,14 +3041,15 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         <motion.div
           style={{
             width: "100%",
-            maxWidth: "600px", // ✅ ADD A REASONABLE MAX WIDTH
-            margin: "0 auto", // ✅ CENTER IT
+            maxWidth: "600px", // Limits width on desktop for readability
+            margin: "0 auto",
             boxSizing: "border-box",
+            display: "block",
           }}
           initial={initial}
           animate={animate}
           transition={transition}
-          className="w-full px-6 py-4 md:px-0" // ✅ Increased mobile padding to px-6
+          className="w-full px-4 md:px-0"
         >
           <FormRenderer element={element} websiteData={websiteData} />
         </motion.div>
