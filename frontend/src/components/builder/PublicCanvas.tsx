@@ -40,9 +40,7 @@ import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 import { useCart, CartItem } from "@/context/CartContext";
-// At the top of PublicCanvas component, after the imports:
-// ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
-// ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
+
 const PublicVideoElement = ({ props }: { props: any }) => {
   const src = props.src ? resolveImageSrc(props.src) : "";
   const poster = props.poster ? resolveImageSrc(props.poster) : undefined;
@@ -825,165 +823,6 @@ const normalizeBackground = (bg?: string) => {
 };
 // frontend/src/components/builder/PublicCanvas.tsx
 
-// const GatedContent: React.FC<{
-//   elementProps: any;
-//   children: React.ReactNode;
-//   isLoggedIn: boolean;
-//   websiteData: PublicWebsiteData;
-//   isPageGate?: boolean; // Prop to identify page-level checks
-// }> = ({
-//   elementProps,
-//   children,
-//   isLoggedIn,
-//   websiteData,
-//   isPageGate = false,
-// }) => {
-//   const router = useRouter(); // Use the router hook
-//   const [visibility, setVisibility] = useState<
-//     "loading" | "visible" | "hidden" | "gone"
-//   >("loading");
-//   const purchaseCacheRef = useRef<Record<string, boolean>>({});
-
-//   useEffect(() => {
-//     const checkVisibility = async () => {
-//       const v = elementProps?.visibility || {};
-
-//       // Helper for creating the correct redirect path based on domain
-//       const getRedirectPath = (slug: string) => {
-//         if (typeof window === "undefined") return slug;
-//         const isMainHost =
-//           window.location.hostname === "zygoflow.com" ||
-//           window.location.hostname === "www.zygoflow.com";
-//         const base = isMainHost ? `/${websiteData.subdomain}` : "";
-//         return `${base}${slug}`;
-//       };
-
-//       // --- Rule: Admin Emails Required ---
-//       const adminEmails = v.admin_emails || [];
-//       if (adminEmails.length > 0) {
-//         const currentUserEmail = localStorage.getItem(
-//           `siteMemberEmail:${websiteData?.subdomain}`,
-//         );
-//         if (
-//           !isLoggedIn ||
-//           !currentUserEmail ||
-//           !adminEmails.includes(currentUserEmail)
-//         ) {
-//           if (isPageGate) {
-//             router.push(getRedirectPath("/login")); // Redirect if it's a page gate
-//             return;
-//           }
-//           setVisibility("hidden");
-//           return;
-//         }
-//       }
-
-//       // --- Rule: Login Required (for any member) ---
-//       if (v.requiresAuth && !isLoggedIn) {
-//         if (isPageGate) {
-//           router.push(getRedirectPath("/login")); // Redirect if it's a page gate
-//           return;
-//         }
-//         setVisibility("hidden");
-//         return;
-//       }
-
-//       // --- Rule: Anonymous Only ---
-//       if (v.requiresAnonymous && isLoggedIn) {
-//         if (isPageGate) {
-//           router.push(getRedirectPath("/")); // Redirect to home if a logged-in user tries to access
-//           return;
-//         }
-//         setVisibility("hidden");
-//         return;
-//       }
-
-//       // --- Your existing purchase logic remains the same ---
-//       const checkPurchase = async (productId: string): Promise<boolean> => {
-//         const memberId = localStorage.getItem(
-//           `siteMemberId:${websiteData?.subdomain}`,
-//         );
-//         if (!isLoggedIn || !memberId) return false;
-//         const cacheKey = `${memberId}_${productId}`;
-//         if (typeof purchaseCacheRef.current[cacheKey] !== "undefined") {
-//           return purchaseCacheRef.current[cacheKey];
-//         }
-//         try {
-//           const params = new URLSearchParams({
-//             website_id: String(websiteData.website_id),
-//             member_id: memberId,
-//             product_id: productId,
-//           });
-//           const { data: hasPurchase } = await saasApi.get<boolean>(
-//             `/users-stripe-account/${
-//               websiteData.subdomain
-//             }/has-purchase?${params.toString()}`,
-//           );
-//           purchaseCacheRef.current[cacheKey] = !!hasPurchase;
-//           return !!hasPurchase;
-//         } catch {
-//           purchaseCacheRef.current[cacheKey] = false;
-//           return false;
-//         }
-//       };
-
-//       if (v.required_product_id) {
-//         const hasRequiredProduct = await checkPurchase(v.required_product_id);
-//         if (!hasRequiredProduct) {
-//           setVisibility("hidden");
-//           return;
-//         }
-//       }
-
-//       // ✅ 2. HIDE ON PURCHASE (The Button Logic)
-//       // If user HAS bought it, we want it GONE, not locked.
-//       if (v.forbidden_product_id) {
-//         const hasForbiddenProduct = await checkPurchase(v.forbidden_product_id);
-//         if (hasForbiddenProduct) {
-//           setVisibility("gone");
-//           return;
-//         }
-//       }
-//       // ✅ 3. REQUIRE PURCHASE (The Content Logic)
-//       // If user HAS NOT bought it, we want it LOCKED.
-
-//       // If no rules hide the content, show it
-//       setVisibility("visible");
-//     };
-
-//     checkVisibility();
-//   }, [
-//     JSON.stringify(elementProps?.visibility || {}),
-//     isLoggedIn,
-//     websiteData?.subdomain,
-//     websiteData?.website_id,
-//     isPageGate,
-//     router,
-//   ]);
-
-//   if (visibility === "loading") {
-//     return (
-//       <div className="p-4 text-center text-gray-400">Loading Content...</div>
-//     );
-//   }
-//   if (visibility === "hidden") {
-//     const isContainer =
-//       elementProps?.padding || elementProps?.display || elementProps?.style;
-//     if (isContainer && !isPageGate) {
-//       // Don't show "Content Locked" for a full page, as it's redirecting
-//       return (
-//         <div className="border-2 border-dashed rounded-lg p-8 m-4 text-center text-gray-500 bg-gray-50">
-//           <h4 className="font-semibold">Content Locked</h4>
-//           <p className="text-sm mt-1">
-//             This content is not available for your account.
-//           </p>
-//         </div>
-//       );
-//     }
-//     return null;
-//   }
-//   return <>{children}</>;
-// };
 const GatedContent: React.FC<{
   elementProps: any;
   children: React.ReactNode;
@@ -1152,195 +991,6 @@ const GatedContent: React.FC<{
 
   return <>{children}</>;
 };
-
-// const MainContent = ({
-//   currentPage,
-//   activeCategory,
-//   setActiveCategory,
-//   websiteData,
-//   lastSectionRef,
-//   renderElement,
-//   isLoggedIn,
-//   buildSubsectionStyle,
-//   addToCart,
-// }: {
-//   currentPage: Page | undefined;
-//   activeCategory: string | null;
-//   setActiveCategory: (id: string | null) => void;
-//   websiteData: PublicWebsiteData;
-//   lastSectionRef: React.RefObject<HTMLDivElement | null>;
-//   renderElement: (element: ElementType) => React.ReactNode;
-//   isLoggedIn: boolean;
-//   buildSubsectionStyle: (props: any) => React.CSSProperties;
-//   addToCart: (item: CartItem) => void;
-// }) => {
-//   if (activeCategory) {
-//     return (
-//       <>
-//         <div className="p-4">
-//           <button
-//             onClick={() => setActiveCategory(null)}
-//             className="text-blue-600 underline mb-4"
-//           >
-//             ← Back to "{currentPage?.title}"
-//           </button>
-//         </div>
-//         <CategoryMenuInCanvas
-//           locations={websiteData.locations}
-//           categoryId={activeCategory}
-//           onAddToCart={addToCart}
-//         />
-//       </>
-//     );
-//   }
-
-//   return (
-//     <GatedContent
-//       elementProps={currentPage?.properties}
-//       isLoggedIn={isLoggedIn}
-//       websiteData={websiteData}
-//     >
-//       <div className="space-y-0 flex-1 flex flex-col">
-//         {currentPage?.sections.map((sec, idx) => {
-//           const isMobile =
-//             typeof window !== "undefined" && window.innerWidth < 768;
-//           const isLast = idx === currentPage.sections.length - 1;
-//           const p = sec.properties || {};
-//           const styleProps = p.style || {};
-
-//           // 1. Get the background from the correct source
-//           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
-
-//           // 2. Normalize it correctly (handling gradients vs images)
-//           let backgroundImage: string | undefined;
-//           if (typeof rawBg === "string" && rawBg.trim()) {
-//             backgroundImage = rawBg.startsWith("linear-gradient")
-//               ? rawBg
-//               : normalizeBackground(rawBg);
-//           }
-
-//           const containerStyle: React.CSSProperties = {
-//             // 1. Layout & Sizing (Force full width)
-//             width: "100%",
-//             maxWidth: "100vw",
-//             boxSizing: "border-box",
-//             overflowX: "hidden", // Prevent horizontal side-scrolling
-
-//             // 2. Base Flexbox Logic
-//             // Force column on mobile so elements don't squeeze side-by-side
-//             display: "flex",
-//             flexDirection: isMobile
-//               ? "column"
-//               : (p.flexDirection ?? styleProps.flexDirection ?? "column"),
-
-//             // Stretch items to 100% width on mobile, otherwise use saved alignment
-//             alignItems: isMobile
-//               ? "stretch"
-//               : (p.alignItems ?? styleProps.alignItems ?? "center"),
-
-//             justifyContent:
-//               p.justifyContent ?? styleProps.justifyContent ?? "flex-start",
-//             gap: p.gap ?? styleProps.gap,
-
-//             // 3. Visuals & Background
-//             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
-//             ...styleProps,
-//             ...(backgroundImage ? { backgroundImage } : {}),
-
-//             // Background Image Handling
-//             ...(backgroundImage && backgroundImage.startsWith("url(")
-//               ? {
-//                   backgroundSize: "cover",
-//                   backgroundPosition: "center",
-//                   backgroundRepeat: "no-repeat",
-//                 }
-//               : {}),
-
-//             // 4. Spacing
-//             // Reduce padding slightly on mobile to give the form more room
-//             padding:
-//               p.padding ??
-//               styleProps.padding ??
-//               (isMobile ? "1rem 0.5rem" : "2rem"),
-//             ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
-//           };
-
-//           return (
-//             <GatedContent
-//               key={sec.section_id}
-//               elementProps={sec.properties}
-//               isLoggedIn={isLoggedIn}
-//               websiteData={websiteData}
-//             >
-//               <div
-//                 ref={isLast ? lastSectionRef : undefined}
-//                 style={{
-//                   ...containerStyle,
-//                   ...(isLast ? { flexGrow: 1 } : {}),
-//                   boxSizing: "border-box", // ✅ Add this
-//                   width: "100%",
-//                   maxWidth: "100%",
-//                   overflow: "visible", // ✅ Change from hidden
-//                 }}
-//                 className={isLast ? "last-section" : undefined}
-//               >
-//                 <div
-//                   className="w-full flex flex-wrap"
-//                   style={{
-//                     display: p.display || "flex",
-//                     flexDirection: p.flexDirection,
-//                     justifyContent: p.justifyContent,
-//                     alignItems: p.alignItems,
-//                     gap: p.gap,
-//                     boxSizing: "border-box",
-//                     maxWidth: "100%",
-//                     width: "100%", // ✅ ADD THIS
-//                     overflow: "visible", // ✅ ADD THIS
-//                   }}
-//                 >
-//                   {sec.subsections.map((sub) => {
-//                     const subProps = sub.properties || {};
-//                     const { initial, animate, transition } = getMotionConfig(
-//                       subProps.animation,
-//                     );
-//                     const subsectionStyle = buildSubsectionStyle(subProps);
-
-//                     return (
-//                       <GatedContent
-//                         key={sub.subsection_id}
-//                         elementProps={sub.properties}
-//                         isLoggedIn={isLoggedIn}
-//                         websiteData={websiteData}
-//                       >
-//                         <motion.div
-//                           style={subsectionStyle}
-//                           initial={initial}
-//                           animate={animate}
-//                           transition={transition}
-//                         >
-//                           {sub.elements.map((el) => (
-//                             <GatedContent
-//                               key={el.element_id}
-//                               elementProps={el.properties}
-//                               isLoggedIn={isLoggedIn}
-//                               websiteData={websiteData}
-//                             >
-//                               {renderElement(el)}
-//                             </GatedContent>
-//                           ))}
-//                         </motion.div>
-//                       </GatedContent>
-//                     );
-//                   })}
-//                 </div>
-//               </div>
-//             </GatedContent>
-//           );
-//         })}
-//       </div>
-//     </GatedContent>
-//   );
-// };
 
 const MainContent = ({
   currentPage,
@@ -2667,11 +2317,27 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   };
 
   function renderElement(element: ElementType) {
-    // 1. INITIALIZE
-    let props = { ...(element.properties || {}) };
+    // let props = { ...(element.properties || {}) };
+
+    // const itemId = props.item_id || element.aiPayload?.properties?.item_id;
+    // if (itemId && priceRegistry[itemId] !== undefined) {
+    //   props.base_price = priceRegistry[itemId];
+    // }
+
+    // const style = props.style || {};
+    // const { initial, animate, transition } = getMotionConfig(props.animation);
+    // const effectiveType = props.originalType || element.element_type;
+    // 1. INITIALIZE: Merge AI props with Standard props
+    // ✅ CRITICAL FIX: This grabs hidden data (like isBackground) from the AI Generator
+    const aiProps = element.aiPayload?.properties || {};
+    const baseProps = element.properties || {};
+
+    // We merge them so 'isBackground' and 'originalType' are found by the logic below
+    let props = { ...aiProps, ...baseProps };
 
     // 2. LIVE PRICE CHECK
-    const itemId = props.item_id || element.aiPayload?.properties?.item_id;
+    // Use the merged props to find the item_id
+    const itemId = props.item_id;
     if (itemId && priceRegistry[itemId] !== undefined) {
       props.base_price = priceRegistry[itemId];
     }
@@ -2679,6 +2345,8 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     // 3. YOUR ORIGINAL VARIABLES
     const style = props.style || {};
     const { initial, animate, transition } = getMotionConfig(props.animation);
+
+    // Check merged props for originalType first
     const effectiveType = props.originalType || element.element_type;
 
     // --- RENDER LOGIC USING if/else if ---
