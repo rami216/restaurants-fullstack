@@ -1368,15 +1368,15 @@ const MainContent = ({
               : normalizeBackground(rawBg);
           }
 
-          // ✅ 1. Rewrite Section Container Style
+          // ✅ REWRITTEN SECTION STYLE
           const containerStyle: React.CSSProperties = {
             width: "100%",
             maxWidth: "100vw",
             boxSizing: "border-box",
-            overflowX: "hidden",
             display: "flex",
             flexDirection: "column",
-            alignItems: "center", // Center content horizontally
+            // If it's a footer (last section), we don't force 'stretch' if it breaks the look
+            alignItems: isMobile && !isLast ? "stretch" : "center",
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             ...styleProps,
             ...(backgroundImage ? { backgroundImage } : {}),
@@ -1391,8 +1391,14 @@ const MainContent = ({
               p.padding ??
               styleProps.padding ??
               (isMobile ? "1.5rem 0.75rem" : "2rem"),
+            // Last section needs to flex properly but not hide content
             ...(isLast
-              ? { flexGrow: 1, marginBottom: 0, paddingBottom: 0 }
+              ? {
+                  flexGrow: 0,
+                  minHeight: "auto",
+                  marginBottom: 0,
+                  paddingBottom: "2rem",
+                }
               : {}),
           };
 
@@ -1408,19 +1414,26 @@ const MainContent = ({
                 style={containerStyle}
                 className={isLast ? "last-section" : undefined}
               >
-                {/* ✅ 2. Rewrite Inner Wrapper Div */}
+                {/* ✅ REWRITTEN INNER WRAPPER */}
                 <div
-                  className="w-full flex"
+                  className="w-full"
                   style={{
                     width: "100%",
-                    maxWidth: isMobile ? "100%" : "1200px", // Optional desktop limit
+                    maxWidth: isMobile ? "100%" : "1200px",
                     display: "flex",
+                    // For the last section (footer), allow row on mobile if needed,
+                    // but usually footers stack too.
                     flexDirection: isMobile
                       ? "column"
                       : p.flexDirection || "row",
-                    flexWrap: isMobile ? "nowrap" : "wrap",
+                    // 'nowrap' was crushing the footer items; 'wrap' is safer here
+                    flexWrap: "wrap",
                     justifyContent: p.justifyContent || "center",
-                    alignItems: isMobile ? "stretch" : p.alignItems || "center",
+                    // Allow the last section to maintain its child alignment
+                    alignItems:
+                      isMobile && !isLast
+                        ? "stretch"
+                        : p.alignItems || "center",
                     gap: p.gap || "1rem",
                     boxSizing: "border-box",
                   }}
@@ -1440,7 +1453,11 @@ const MainContent = ({
                         websiteData={websiteData}
                       >
                         <motion.div
-                          style={subsectionStyle}
+                          style={{
+                            ...subsectionStyle,
+                            // Ensure subsection doesn't overflow its parent
+                            maxWidth: "100%",
+                          }}
                           initial={initial}
                           animate={animate}
                           transition={transition}
