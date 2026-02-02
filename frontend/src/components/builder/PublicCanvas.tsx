@@ -40,7 +40,25 @@ import { useRouter } from "next/navigation";
 import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 import { useCart, CartItem } from "@/context/CartContext";
+// At the top of PublicCanvas component, after the imports:
+useEffect(() => {
+  // Prevent horizontal overflow on mobile
+  const style = document.createElement("style");
+  style.textContent = `
+    body, html {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+    * {
+      box-sizing: border-box;
+    }
+  `;
+  document.head.appendChild(style);
 
+  return () => {
+    document.head.removeChild(style);
+  };
+}, []);
 // ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
 const PublicVideoElement = ({ props }: { props: any }) => {
   const { initial, animate, transition } = getMotionConfig(props.animation);
@@ -1209,6 +1227,7 @@ const MainContent = ({
                 style={{
                   ...containerStyle,
                   ...(isLast ? { flexGrow: 1 } : {}),
+                  boxSizing: "border-box", // ✅ Add this
                 }}
                 className={isLast ? "last-section" : undefined}
               >
@@ -1220,6 +1239,8 @@ const MainContent = ({
                     justifyContent: p.justifyContent,
                     alignItems: p.alignItems,
                     gap: p.gap,
+                    boxSizing: "border-box", // ✅ Add this
+                    maxWidth: "100%", // ✅ Add this
                   }}
                 >
                   {sec.subsections.map((sub) => {
@@ -2374,10 +2395,10 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       ...base,
       ...userStyle,
 
-      // FORCE FULL WIDTH ON MOBILE
+      // FORCE FULL WIDTH ON MOBILE - with proper constraints
       width: isMobile ? "100%" : userStyle.width || "100%",
-      maxWidth: isMobile ? "100vw" : userStyle.maxWidth || "none",
-      minWidth: isMobile ? "100%" : "auto",
+      maxWidth: isMobile ? "100%" : userStyle.maxWidth || "none", // ✅ Changed from 100vw
+      minWidth: isMobile ? "0" : "auto", // ✅ Changed from 100%
       boxSizing: "border-box",
 
       // POSITIONING
@@ -2385,7 +2406,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       top: withUnit(userStyle.top),
       left: withUnit(userStyle.left),
       right: withUnit(userStyle.right),
-      bottom: withUnit(withUnit(userStyle.bottom)),
+      bottom: withUnit(userStyle.bottom),
 
       // PADDING - Ensure we don't squeeze the content
       padding: isMobile ? "1rem" : userStyle.padding || "1rem",
@@ -2789,11 +2810,16 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     } else if (effectiveType === "FORM") {
       return (
         <motion.div
-          style={{ ...style, width: "100%" }} // Force 100% width
+          style={{
+            ...style,
+            width: "100%",
+            maxWidth: "100%", // ✅ Add this
+            boxSizing: "border-box", // ✅ Add this
+          }}
           initial={initial}
           animate={animate}
           transition={transition}
-          className="w-full px-2 md:px-0" // Add small padding for mobile only
+          className="w-full px-4 md:px-0" // ✅ Changed from px-2 to px-4 for better spacing
         >
           <FormRenderer element={element} websiteData={websiteData} />
         </motion.div>
