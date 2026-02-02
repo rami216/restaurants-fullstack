@@ -2340,18 +2340,16 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   // };
   const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
     const userStyle = subProps.style || {};
-
-    // Dynamic check for mobile screen size
     const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
 
-    // 1. Define the base layout with Mobile responsiveness
+    // 1. Define the base layout with strict mobile overrides
     let base: React.CSSProperties = {};
 
     if (subProps.display === "grid") {
       base = {
         display: "grid",
-        gap: subProps.gap ?? "1rem",
-        // Force 1 column on mobile to prevent shrinking, otherwise use user settings
+        gap: subProps.gap ?? "1.5rem",
+        // Force 1 column on mobile, no exceptions
         gridTemplateColumns: isMobile
           ? "1fr"
           : (subProps.gridTemplateColumns ??
@@ -2360,14 +2358,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     } else {
       base = {
         display: "flex",
-        gap: subProps.gap ?? "1rem",
-        // Force vertical stack on mobile for flex layouts
+        gap: subProps.gap ?? "1.5rem",
+        // Force vertical stack on mobile
         flexDirection: isMobile
           ? "column"
           : (subProps.flexDirection ?? "column"),
         justifyContent: subProps.justifyContent ?? "flex-start",
-        // Ensure children take up full width on mobile
-        alignItems: isMobile ? "stretch" : (subProps.alignItems ?? "stretch"),
+        // Align items to stretch to fill the full width
+        alignItems: "stretch",
       };
     }
 
@@ -2376,22 +2374,22 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       ...base,
       ...userStyle,
 
-      // Ensure the subsection itself takes full width
-      width: "100%",
+      // FORCE FULL WIDTH ON MOBILE
+      width: isMobile ? "100%" : userStyle.width || "100%",
+      maxWidth: isMobile ? "100vw" : userStyle.maxWidth || "none",
+      minWidth: isMobile ? "100%" : "auto",
       boxSizing: "border-box",
 
-      // POSITIONING LOGIC
+      // POSITIONING
       position: userStyle.position || "static",
       top: withUnit(userStyle.top),
       left: withUnit(userStyle.left),
       right: withUnit(userStyle.right),
-      bottom: withUnit(userStyle.bottom),
+      bottom: withUnit(withUnit(userStyle.bottom)),
 
-      // CLIPPING & VISIBILITY
-      // Reduce padding on mobile if it's too bulky
-      padding: userStyle.padding || (isMobile ? "0.75rem" : "1rem"),
+      // PADDING - Ensure we don't squeeze the content
+      padding: isMobile ? "1rem" : userStyle.padding || "1rem",
 
-      // Allow relative items to overflow, otherwise keep it contained
       overflow: userStyle.position === "relative" ? "visible" : "hidden",
       zIndex: userStyle.position === "relative" ? 50 : "auto",
     };
