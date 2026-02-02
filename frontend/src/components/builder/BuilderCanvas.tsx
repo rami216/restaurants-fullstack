@@ -534,7 +534,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           <AiElementRunner
             key={element.aiPayload?.id || element.element_id}
             element={element}
-            isPreview={isPreview} // ✅ Pass down the isPreview prop
+            isPreview={isPreview}
           />,
         );
       } else {
@@ -542,7 +542,16 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         const labelStyle = props.labelStyle || {};
         const inputStyle = props.inputStyle || {};
         return wrap(
-          <div className="border rounded-lg" style={style}>
+          <div
+            className="border rounded-lg p-4 md:p-6" // ✅ Added padding classes
+            style={{
+              ...style,
+              width: "100%", // ✅ Force full width
+              maxWidth: "600px", // ✅ Reasonable max width
+              margin: "0 auto", // ✅ Center it
+              boxSizing: "border-box", // ✅ Include padding in width
+            }}
+          >
             <h3 className="text-2xl font-bold mb-4 text-gray-800">
               {props.title || "Form Title"}
             </h3>
@@ -558,12 +567,23 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                   <input
                     type="text"
                     placeholder={field.placeholder}
-                    style={inputStyle}
-                    className="w-full border border-gray-300 rounded-md shadow-sm p-2"
+                    style={{
+                      ...inputStyle,
+                      width: "100%", // ✅ Ensure inputs take full width
+                      boxSizing: "border-box", // ✅ Critical for proper sizing
+                    }}
+                    className="border border-gray-300 rounded-md shadow-sm p-2"
                   />
                 </div>
               ))}
-              <button type="submit" style={buttonStyle}>
+              <button
+                type="submit"
+                style={{
+                  ...buttonStyle,
+                  width: "100%", // ✅ Full width button on mobile
+                }}
+                className="w-full" // ✅ Tailwind backup
+              >
                 {props.submitButton?.text || "Submit"}
               </button>
             </form>
@@ -571,7 +591,6 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         );
       }
     }
-
     // Fallback for any other AI element that doesn't have a special type
     else if (element.element_type === "AI") {
       return wrap(
