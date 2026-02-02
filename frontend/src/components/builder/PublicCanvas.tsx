@@ -2219,16 +2219,33 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         </div>
 
         {menuOpen && (
-          <div className="md:hidden px-4 pb-4 space-y-2 border-t">
-            {finalItems.map(renderNavItem)}
+          <div className="md:hidden px-4 pb-4 border-t bg-white shadow-lg">
+            {/* Use a flex column with a gap for vertical spacing */}
+            <div className="flex flex-col space-y-4 pt-4">
+              {finalItems.map((ni) => {
+                // We wrap the renderNavItem output in a div to ensure
+                // it behaves as a block element in our flex column
+                return (
+                  <div
+                    key={ni.item_id}
+                    className="w-full pb-2 border-b border-gray-50 last:border-0"
+                  >
+                    {renderNavItem(ni)}
+                  </div>
+                );
+              })}
 
-            {/* ✅ ADDED: Cart Link for Mobile */}
-            <a
-              onClick={handleCartClick}
-              className="text-sm font-medium hover:underline cursor-pointer"
-            >
-              Cart ({cartCount})
-            </a>
+              {/* Cart Link for Mobile - Made more prominent */}
+              <a
+                onClick={handleCartClick}
+                className="flex justify-between items-center py-2 px-4 bg-indigo-50 text-indigo-700 rounded-lg font-semibold cursor-pointer"
+              >
+                <span>View Cart</span>
+                <span className="bg-indigo-600 text-white px-2 py-0.5 rounded-full text-xs">
+                  {cartCount}
+                </span>
+              </a>
+            </div>
           </div>
         )}
       </nav>
@@ -2277,33 +2294,93 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
   const withUnit = (v: any) => (typeof v === "number" ? `${v}px` : v);
 
+  // const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
+  //   const userStyle = subProps.style || {};
+  //   const isMobile = typeof window !== 'undefined' && window.innerWidth < 768;
+  //   // 1. Define the base layout (Grid or Flex)
+  //   const base: React.CSSProperties =
+  //     subProps.display === "grid"
+  //       ? {
+  //           display: "grid",
+  //           gap: subProps.gap ?? "1rem",
+  //           gridTemplateColumns:
+  //             subProps.gridTemplateColumns ??
+  //             `repeat(${subProps.gridColumns ?? 2}, 1fr)`,
+  //         }
+  //       : {
+  //           display: "flex",
+  //           gap: subProps.gap ?? "1rem",
+  //           flexDirection: subProps.flexDirection ?? "column",
+  //           justifyContent: subProps.justifyContent ?? "flex-start",
+  //           alignItems: subProps.alignItems ?? "stretch",
+  //         };
+
+  //   // 2. Build the final style object
+  //   const finalStyle: React.CSSProperties = {
+  //     ...base,
+  //     ...userStyle, // Spread user styles to allow specific overrides (like padding)
+
+  //     // POSITIONING LOGIC (Synchronized with withUnit)
+  //     position: userStyle.position || "static",
+  //     top: withUnit(userStyle.top),
+  //     left: withUnit(userStyle.left),
+  //     right: withUnit(userStyle.right),
+  //     bottom: withUnit(userStyle.bottom),
+
+  //     // CLIPPING & VISIBILITY
+  //     // Match the Builder's p-4 class if no specific padding is set
+  //     padding: userStyle.padding || "1rem",
+  //     // Crucial: Allow relative items to move outside their box without disappearing
+  //     overflow: userStyle.position === "relative" ? "visible" : "hidden",
+  //     // Lift relative items above standard layout flow
+  //     zIndex: userStyle.position === "relative" ? 50 : "auto",
+  //   };
+
+  //   return finalStyle;
+  // };
   const buildSubsectionStyle = (subProps: any): React.CSSProperties => {
     const userStyle = subProps.style || {};
 
-    // 1. Define the base layout (Grid or Flex)
-    const base: React.CSSProperties =
-      subProps.display === "grid"
-        ? {
-            display: "grid",
-            gap: subProps.gap ?? "1rem",
-            gridTemplateColumns:
-              subProps.gridTemplateColumns ??
-              `repeat(${subProps.gridColumns ?? 2}, 1fr)`,
-          }
-        : {
-            display: "flex",
-            gap: subProps.gap ?? "1rem",
-            flexDirection: subProps.flexDirection ?? "column",
-            justifyContent: subProps.justifyContent ?? "flex-start",
-            alignItems: subProps.alignItems ?? "stretch",
-          };
+    // Dynamic check for mobile screen size
+    const isMobile = typeof window !== "undefined" && window.innerWidth < 768;
+
+    // 1. Define the base layout with Mobile responsiveness
+    let base: React.CSSProperties = {};
+
+    if (subProps.display === "grid") {
+      base = {
+        display: "grid",
+        gap: subProps.gap ?? "1rem",
+        // Force 1 column on mobile to prevent shrinking, otherwise use user settings
+        gridTemplateColumns: isMobile
+          ? "1fr"
+          : (subProps.gridTemplateColumns ??
+            `repeat(${subProps.gridColumns ?? 2}, 1fr)`),
+      };
+    } else {
+      base = {
+        display: "flex",
+        gap: subProps.gap ?? "1rem",
+        // Force vertical stack on mobile for flex layouts
+        flexDirection: isMobile
+          ? "column"
+          : (subProps.flexDirection ?? "column"),
+        justifyContent: subProps.justifyContent ?? "flex-start",
+        // Ensure children take up full width on mobile
+        alignItems: isMobile ? "stretch" : (subProps.alignItems ?? "stretch"),
+      };
+    }
 
     // 2. Build the final style object
     const finalStyle: React.CSSProperties = {
       ...base,
-      ...userStyle, // Spread user styles to allow specific overrides (like padding)
+      ...userStyle,
 
-      // POSITIONING LOGIC (Synchronized with withUnit)
+      // Ensure the subsection itself takes full width
+      width: "100%",
+      boxSizing: "border-box",
+
+      // POSITIONING LOGIC
       position: userStyle.position || "static",
       top: withUnit(userStyle.top),
       left: withUnit(userStyle.left),
@@ -2311,11 +2388,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       bottom: withUnit(userStyle.bottom),
 
       // CLIPPING & VISIBILITY
-      // Match the Builder's p-4 class if no specific padding is set
-      padding: userStyle.padding || "1rem",
-      // Crucial: Allow relative items to move outside their box without disappearing
+      // Reduce padding on mobile if it's too bulky
+      padding: userStyle.padding || (isMobile ? "0.75rem" : "1rem"),
+
+      // Allow relative items to overflow, otherwise keep it contained
       overflow: userStyle.position === "relative" ? "visible" : "hidden",
-      // Lift relative items above standard layout flow
       zIndex: userStyle.position === "relative" ? 50 : "auto",
     };
 
@@ -2712,7 +2789,17 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
         </motion.div>
       );
     } else if (effectiveType === "FORM") {
-      return <FormRenderer element={element} websiteData={websiteData} />;
+      return (
+        <motion.div
+          style={{ ...style, width: "100%" }} // Force 100% width
+          initial={initial}
+          animate={animate}
+          transition={transition}
+          className="w-full px-2 md:px-0" // Add small padding for mobile only
+        >
+          <FormRenderer element={element} websiteData={websiteData} />
+        </motion.div>
+      );
     } else {
       // Default fallback for any truly unknown element
       return (
