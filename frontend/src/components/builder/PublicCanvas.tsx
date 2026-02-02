@@ -41,24 +41,6 @@ import type { Element as BuilderElement } from "./Properties";
 import { FormRenderer } from "./FormRenderer"; // <-- 2. Import the new component
 import { useCart, CartItem } from "@/context/CartContext";
 // At the top of PublicCanvas component, after the imports:
-useEffect(() => {
-  // Prevent horizontal overflow on mobile
-  const style = document.createElement("style");
-  style.textContent = `
-    body, html {
-      overflow-x: hidden;
-      max-width: 100vw;
-    }
-    * {
-      box-sizing: border-box;
-    }
-  `;
-  document.head.appendChild(style);
-
-  return () => {
-    document.head.removeChild(style);
-  };
-}, []);
 // ✅ DEFINE THIS SEPARATE COMPONENT (Outside PublicCanvas)
 const PublicVideoElement = ({ props }: { props: any }) => {
   const { initial, animate, transition } = getMotionConfig(props.animation);
@@ -1865,6 +1847,25 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
   const [currentView, setCurrentView] = useState("page"); // 'page' or 'cart'
   const router = useRouter();
+
+  useEffect(() => {
+    // Prevent horizontal overflow on mobile
+    const style = document.createElement("style");
+    style.textContent = `
+    body, html {
+      overflow-x: hidden;
+      max-width: 100vw;
+    }
+    * {
+      box-sizing: border-box;
+    }
+  `;
+    document.head.appendChild(style);
+
+    return () => {
+      document.head.removeChild(style);
+    };
+  }, []);
 
   const [currentPage, setCurrentPage] = useState<Page | undefined>(initialPage);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
