@@ -10109,10 +10109,7 @@ Is this a file upload?
                 const mergedData = { ...targetRow.data, available: false }; 
                 
                 // 5. Update the row
-                await api.put('/custom-data/rows/' + selectedRowId, { 
-                    data: mergedData, 
-                    sitemember_id: targetRow.sitemember_id // <--- MANDATORY
-                }); 
+                await api.put('/custom-data/rows/' + selectedTimeId, { data: mergedData }); 
                 
                 statusEl.textContent = 'Booking successful!'; 
                 form.reset(); 

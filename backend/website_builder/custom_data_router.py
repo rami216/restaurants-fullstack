@@ -296,26 +296,34 @@ async def update_data_row(
     
     # --- START OF NEW LOGIC ---
     
-    # Use the "Nil UUID" (All Zeros) to represent Admin Override
-    # This passes Pydantic validation because it is a valid UUID format
     ADMIN_OVERRIDE_UUID = "00000000-0000-0000-0000-000000000000"
     
-    is_admin_override = str(row_data.sitemember_id) == ADMIN_OVERRIDE_UUID
+    # 1. Check if the REQUESTER is the Admin
+    requesting_as_admin = str(row_data.sitemember_id) == ADMIN_OVERRIDE_UUID
 
-    if not is_admin_override:
-        # Only enforce ownership check if NOT admin
-        if row_to_update.sitemember_id is not None:
+    # 2. Check if the ROW ITSELF belongs to the Admin
+    row_owned_by_admin = str(row_to_update.sitemember_id) == ADMIN_OVERRIDE_UUID
+
+    if not requesting_as_admin:
+        # If the row belongs to the Admin, we allow the update (Public Booking Scenario)
+        if row_owned_by_admin:
+            pass 
+        # Otherwise, enforce strict ownership (User A cannot edit User B's data)
+        elif row_to_update.sitemember_id is not None:
             if str(row_to_update.sitemember_id) != str(row_data.sitemember_id):
                 raise HTTPException(status_code=403, detail="Permission denied: Incorrect owner ID.")
     
     # --- END OF NEW LOGIC ---
 
-    # If it is a normal user update, update the owner field.
-    # If it is Admin, we DO NOT update the owner (we keep the original student as the owner).
-    if not is_admin_override:
-        row_to_update.sitemember_id = row_data.sitemember_id
+    # Logic to update the owner field...
+    if not requesting_as_admin:
+        # If it's a public booking on an Admin row, keep the Admin as owner? 
+        # Or transfer ownership to the user?
+        # Usually, for booking slots, you want the SLOT to stay Admin-owned, 
+        # but the DATA inside (booked_by) to change.
+        if not row_owned_by_admin:
+             row_to_update.sitemember_id = row_data.sitemember_id
     
-    # Update the data
     row_to_update.data = row_data.data
     
     await db.commit()
