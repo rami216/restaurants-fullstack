@@ -9924,17 +9924,37 @@ Is this a file upload?
                 4. Merge with updates: `const mergedData = { ...targetRow.data, available: false };`
                 5. Update: `await api.put('/custom-data/rows/' + selectedRowId, { data: mergedData });`
             - CRITICAL: Do NOT use res.data.rows[0] - always use .find() to locate the correct row
-            - **BOOKING EMAIL RULE (NEW):**
-                - IF the update involves collecting an email address (e.g., for a booking confirmation):
-                - You MUST add this specific code **IMMEDIATELY AFTER** the `api.put` success line:
+            - **AUTO-CONFIRMATION EMAIL RULE (DYNAMIC):**
+                - **TRIGGER:** If the action involves collecting a user's email address (e.g., Booking, Job Application, Registration).
+                - **ACTION:** You MUST add this code **IMMEDIATELY AFTER** the database update/create success line.
+                - **CRITICAL:** Do NOT hardcode "Booking" or "Slot". You MUST construct the email content using the **actual variables** you defined in your script (e.g., if you created a `daySelect`, use it; if you created a `cvUrl`, use it).
+                - **PATTERN:**
                   ```javascript
-                  // Database update successful, now send confirmation
+                  // Database update successful. Now send confirmation.
                   try {
+                      // 1. Construct a summary of the form data
+                      // (Use the specific variables/inputs you defined above)
+                      const summaryHtml = `
+                        <p><b>Name:</b> ${form.querySelector('[name="name"]')?.value || 'N/A'}</p>
+                        <p><b>Details:</b> ${/* REPLACE THIS COMMENT with actual variables, e.g., daySelect.value, jobTitleInput.value */}</p>
+                      `;
+                      
+                      const emailHtml = `
+                        <div style="font-family:sans-serif; padding:20px; color:#333;">
+                          <h2>Submission Received</h2>
+                          <p>Thank you! We have received your details:</p>
+                          <div style="background:#f5f5f5; padding:15px; border-radius:5px; margin:15px 0;">
+                            ${summaryHtml}
+                          </div>
+                        </div>
+                      `;
+
                       await api.post('/builder/send-email', {
                           website_id: properties.website_id, 
-                          to_email: form.querySelector('input[name="email"]').value,
-                          subject: "Booking Confirmation",
-                          content: "<p>Your booking has been confirmed successfully.</p>"
+                          to_email: form.querySelector('[name="email"]').value,
+                          // Make the subject editable via properties, but default to a context-aware string
+                          subject: properties.emailSubject || "Confirmation", 
+                          content: emailHtml
                       });
                   } catch (emailErr) { console.log("Confirmation email failed", emailErr); }
                   ```
