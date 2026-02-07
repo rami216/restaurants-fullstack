@@ -4777,6 +4777,65 @@ Before returning the JSON, verify:
 
 # website_builder/stripe_checkout_router.py (or wherever your router is)
 
+# @router.post("/refine-element", response_model=Dict[str, Any])
+# async def refine_element(
+#     body: RefineStateRequest,
+#     db: AsyncSession = Depends(get_db),
+#     user: User = Depends(get_current_active_user),
+# ):
+#     try:
+#         if not body.website_id:
+#             raise HTTPException(status_code=400, detail="website_id is required")
+
+#         # 1. Build the User Prompt
+#         # We NO LONGER pass the entire list of website schemas.
+#         # We only pass the current state so the AI focuses on refining WHAT IS THERE.
+#         user_content = (
+#             f'USER_PROMPT: "{body.prompt}"\n\n'
+#             f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
+#         )
+
+#         # 2. Call AI with the UI/Logic-Focused Prompt
+#         resp = openai.chat.completions.create(
+#             model=AI_DEFAULT_MODEL,
+#             response_format={"type": "json_object"},
+#             messages=[
+#                 {"role": "system", "content": REFINE_MASTER_PROMPT_2}, # Use the NEW prompt below
+#                 {"role": "user",   "content": user_content},
+#             ],
+#             temperature=0.2, # Low temperature for code precision
+#         )
+
+#         # 3. Parse Response
+#         payload = json.loads(resp.choices[0].message.content)
+
+#         # 4. Clean Script Tags (Security/Stability)
+#         if isinstance(payload.get("script"), str):
+#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if m:
+#                 payload["script"] = m.group(1).strip()
+
+#         # 5. Track Usage
+#         usage = getattr(resp, "usage", None)
+#         await track_ai_usage(
+#             db=db,
+#             website_id=body.website_id,
+#             user_id=user.id,
+#             model=getattr(resp, "model", AI_DEFAULT_MODEL),
+#             feature="refine_element",
+#             prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+#             completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+#             meta={"state_keys": list((body.currentState or {}).keys())[:10]},
+#         )
+
+#         return payload
+
+#     except Exception as e:
+#         import traceback; traceback.print_exc()
+#         raise HTTPException(status_code=500, detail=f"Refine failed: {e}")
+  
+  # website_builder/stripe_checkout_router.py
+
 @router.post("/refine-element", response_model=Dict[str, Any])
 async def refine_element(
     body: RefineStateRequest,
@@ -4800,7 +4859,7 @@ async def refine_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": REFINE_MASTER_PROMPT_2}, # Use the NEW prompt below
+                {"role": "system", "content": REFINE_MASTER_PROMPT_2}, # Using your new prompt
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2, # Low temperature for code precision
@@ -4808,6 +4867,35 @@ async def refine_element(
 
         # 3. Parse Response
         payload = json.loads(resp.choices[0].message.content)
+
+        # --- 🛑 FORCE FIX: SANITIZE MUSTACHE TEMPLATES 🛑 ---
+        # The AI sometimes ignores instructions and adds {{#if}} logic which crashes Mustache.
+        # We detect this here and strip the invalid tags to prevent the frontend from breaking.
+        
+        ai_template = payload.get("aiTemplate", "")
+        
+        # Check for common Handlebars/Mustache logic helpers that are not supported
+        if "{{#if" in ai_template or "{{#eq" in ai_template or "{{#unless" in ai_template:
+            print("⚠️ DETECTED INVALID MUSTACHE LOGIC. AUTO-FIXING...")
+            
+            # Strip the invalid logic tags from HTML.
+            # This leaves the content inside (e.g. the class name) but removes the logic wrapper.
+            # While this disables the conditional visual, it ENSURES the data loads.
+            
+            # Remove {{#if ...}} and {{#eq ...}}
+            ai_template = re.sub(r'\{\{#if.*?\}\}', '', ai_template)
+            ai_template = re.sub(r'\{\{#eq.*?\}\}', '', ai_template)
+            ai_template = re.sub(r'\{\{#unless.*?\}\}', '', ai_template)
+            
+            # Remove closing tags {{/if}}, {{/eq}}, {{/unless}}
+            ai_template = re.sub(r'\{\{/if\}\}', '', ai_template)
+            ai_template = re.sub(r'\{\{/eq\}\}', '', ai_template)
+            ai_template = re.sub(r'\{\{/unless\}\}', '', ai_template)
+            
+            # Update the payload with the safe HTML
+            payload["aiTemplate"] = ai_template
+            
+        # --- END FORCE FIX ---
 
         # 4. Clean Script Tags (Security/Stability)
         if isinstance(payload.get("script"), str):
@@ -10021,7 +10109,10 @@ Is this a file upload?
                 const mergedData = { ...targetRow.data, available: false }; 
                 
                 // 5. Update the row
-                await api.put('/custom-data/rows/' + selectedTimeId, { data: mergedData }); 
+                await api.put('/custom-data/rows/' + selectedRowId, { 
+                    data: mergedData, 
+                    sitemember_id: targetRow.sitemember_id // <--- MANDATORY
+                }); 
                 
                 statusEl.textContent = 'Booking successful!'; 
                 form.reset(); 
