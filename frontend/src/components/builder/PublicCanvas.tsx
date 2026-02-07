@@ -1080,6 +1080,7 @@ const MainContent = ({
           //     : {}),
           //   ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
           // };
+          //the upper containerstyle was good.(just dont forget about it!)
           const containerStyle: React.CSSProperties = {
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             padding: p.padding ?? styleProps.padding,

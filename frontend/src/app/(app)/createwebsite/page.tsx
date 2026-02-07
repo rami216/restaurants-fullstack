@@ -1158,6 +1158,18 @@ function BuilderManager() {
                 >
                   Payments
                 </button>
+                {/* ✅ 2. NEW SETUP EMAIL BUTTON */}
+                <button
+                  onClick={() =>
+                    router.push(
+                      `/builder/websites/${websiteData.website_id}/email-config`,
+                    )
+                  }
+                  className="bg-teal-600 hover:bg-teal-700 text-white font-bold py-2 px-3 rounded"
+                  title="Configure email settings (Gmail/SMTP)"
+                >
+                  Setup Email
+                </button>
                 {websiteData.subdomain && (
                   <>
                     <a
