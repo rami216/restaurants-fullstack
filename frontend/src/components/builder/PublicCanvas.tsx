@@ -1060,27 +1060,50 @@ const MainContent = ({
 
           // 3. YOUR ORIGINAL CONTAINER STYLE LOGIC (Restored)
           // We only force 'relative' so the video doesn't break the page layout.
+          // const containerStyle: React.CSSProperties = {
+          //   backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
+          //   padding: p.padding ?? styleProps.padding,
+          //   display: p.display ?? styleProps.display,
+          //   flexDirection: p.flexDirection ?? styleProps.flexDirection,
+          //   justifyContent: p.justifyContent ?? styleProps.justifyContent,
+          //   alignItems: p.alignItems ?? styleProps.alignItems,
+          //   gap: p.gap ?? styleProps.gap,
+          //   ...styleProps,
+
+          //   // ✅ THIS IS THE ONLY CHANGE: Essential for trapping the video inside
+          //   position: "relative",
+
+          //   ...(backgroundImage ? { backgroundImage } : {}),
+          //   // Ensure image covers the full section (From your old code)
+          //   ...(backgroundImage && backgroundImage.startsWith("url(")
+          //     ? { backgroundSize: "cover", backgroundPosition: "center" }
+          //     : {}),
+          //   ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
+          // };
           const containerStyle: React.CSSProperties = {
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             padding: p.padding ?? styleProps.padding,
-            display: p.display ?? styleProps.display,
-            flexDirection: p.flexDirection ?? styleProps.flexDirection,
+            // Ensure we use block or full-width flex to prevent shrinking
+            display: p.display ?? styleProps.display ?? "flex",
+            flexDirection: (p.flexDirection ??
+              styleProps.flexDirection ??
+              "column") as any,
             justifyContent: p.justifyContent ?? styleProps.justifyContent,
-            alignItems: p.alignItems ?? styleProps.alignItems,
+            alignItems: p.alignItems ?? styleProps.alignItems ?? "center",
             gap: p.gap ?? styleProps.gap,
             ...styleProps,
 
-            // ✅ THIS IS THE ONLY CHANGE: Essential for trapping the video inside
             position: "relative",
+            width: "100%", // ✅ Force full width
+            minWidth: "100%", // ✅ Prevent horizontal shrinking
+            boxSizing: "border-box",
 
             ...(backgroundImage ? { backgroundImage } : {}),
-            // Ensure image covers the full section (From your old code)
             ...(backgroundImage && backgroundImage.startsWith("url(")
               ? { backgroundSize: "cover", backgroundPosition: "center" }
               : {}),
             ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
           };
-
           return (
             <GatedContent
               key={sec.section_id}
