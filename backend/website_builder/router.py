@@ -721,7 +721,6 @@ async def update_email_config(
     return config
 
 # Optional: Test Endpoint
-
 @router.post("/websites/{website_id}/email-config/test")
 async def test_email_config(
     website_id: UUID,
@@ -739,7 +738,8 @@ async def test_email_config(
     smtp_password = payload.smtp_password
     from_email = payload.from_email
     
-    to_email = current_user.email  # We send the test email to the logged-in user
+    # We send the test email TO the logged-in user to prove it arrived
+    to_email = current_user.email  
 
     try:
         # 3. Create the email message
@@ -749,29 +749,45 @@ async def test_email_config(
         message["Subject"] = "Test Email from Your Website Builder"
         
         body = f"""
-        <h1>Connection Successful!</h1>
+        <h3>Connection Successful! ✅</h3>
         <p>This is a test email to verify your SMTP settings.</p>
-        <p><strong>Host:</strong> {smtp_host}</p>
-        <p><strong>Port:</strong> {smtp_port}</p>
-        <br>
-        <p>If you see this, your users will be able to receive emails!</p>
+        <ul>
+            <li><strong>Host:</strong> {smtp_host}</li>
+            <li><strong>Port:</strong> {smtp_port}</li>
+            <li><strong>Authenticated As:</strong> {smtp_user}</li>
+        </ul>
+        <p>If you are reading this, your email configuration is correct.</p>
         """
         message.attach(MIMEText(body, "html"))
 
-        # 4. Connect to the SMTP Server and Send
-        # NOTE: smtplib is synchronous (blocking). For high volume, use aiosmtplib. 
-        # For a simple test button, this is perfectly fine.
+        # 4. Connection Logic (With 10s Timeout & Auto-SSL)
+        server = None
+        timeout_seconds = 10 
         
-        server = smtplib.SMTP(smtp_host, smtp_port)
-        server.starttls() # Secure the connection
-        server.login(smtp_user, smtp_password)
-        server.sendmail(from_email, to_email, message.as_string())
-        server.quit()
+        try:
+            if smtp_port == 465:
+                # Port 465 requires SSL immediately (SMTP_SSL)
+                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout_seconds)
+            else:
+                # Port 587 or 25 uses standard SMTP + STARTTLS
+                server = smtplib.SMTP(smtp_host, smtp_port, timeout=timeout_seconds)
+                server.ehlo() 
+                if server.has_extn("STARTTLS"):
+                    server.starttls()
+                    server.ehlo() 
+
+            # 5. Login and Send
+            server.login(smtp_user, smtp_password)
+            server.sendmail(from_email, to_email, message.as_string())
+            
+        finally:
+            if server:
+                server.quit()
 
         return {"status": "success", "message": f"Test email sent to {to_email}"}
 
     except Exception as e:
         print(f"SMTP Error: {e}")
-        # Return the specific error so the user knows what to fix (e.g., "Username and Password not accepted")
-        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+        # Return the specific error message to the frontend
+        raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
 #endregion emailconfig
