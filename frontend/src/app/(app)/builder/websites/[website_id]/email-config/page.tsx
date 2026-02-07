@@ -32,7 +32,10 @@ export default function EmailConfigPage() {
   const router = useRouter();
   const params = useParams(); // ✅ Correct way to get params in client component
   // Safely extract the ID and ensure it is treated as a string
-  const websiteId = Array.isArray(params?.id) ? params?.id[0] : params?.id;
+  // Match the folder name [website_id] from your screenshot
+  const websiteId = Array.isArray(params?.website_id)
+    ? params?.website_id[0]
+    : params?.website_id;
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
