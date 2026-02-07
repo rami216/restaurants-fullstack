@@ -1,7 +1,7 @@
 "use client";
 
 import React, { useState, useEffect } from "react";
-import { useRouter } from "next/navigation";
+import { useRouter, useParams } from "next/navigation";
 import api from "@/lib/axios";
 import {
   ArrowLeft,
@@ -28,13 +28,11 @@ interface EmailConfig {
   from_name: string;
 }
 
-export default function EmailConfigPage({
-  params,
-}: {
-  params: { id: string };
-}) {
+export default function EmailConfigPage() {
   const router = useRouter();
-  const websiteId = params.id;
+  const params = useParams(); // ✅ Correct way to get params in client component
+  // Safely extract the ID and ensure it is treated as a string
+  const websiteId = Array.isArray(params?.id) ? params?.id[0] : params?.id;
 
   const [isLoading, setIsLoading] = useState(true);
   const [isSaving, setIsSaving] = useState(false);
@@ -57,6 +55,8 @@ export default function EmailConfigPage({
 
   // Fetch existing config on load
   useEffect(() => {
+    if (!websiteId) return; // Don't run if ID is missing
+
     const fetchConfig = async () => {
       try {
         const { data } = await api.get(
@@ -82,6 +82,12 @@ export default function EmailConfigPage({
 
   const handleSave = async (e: React.FormEvent) => {
     e.preventDefault();
+    if (!websiteId) {
+      setMessage("Error: Website ID is missing.");
+      setTestStatus("error");
+      return;
+    }
+
     setIsSaving(true);
     setTestStatus("idle");
     setMessage("");
@@ -105,6 +111,12 @@ export default function EmailConfigPage({
 
   // Optional: You can implement a backend endpoint to send a test email
   const handleTestConnection = async () => {
+    if (!websiteId) {
+      setMessage("Error: Website ID is missing.");
+      setTestStatus("error");
+      return;
+    }
+
     setTestStatus("testing");
     try {
       await api.post(
