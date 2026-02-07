@@ -1049,6 +1049,7 @@ const MainContent = ({
           const p: any = sec.properties || {};
           const styleProps = p.style || {};
 
+          // ✅ 2. ROBUST BACKGROUND IMAGE LOGIC
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
           let backgroundImage: string | undefined;
           if (typeof rawBg === "string" && rawBg.trim()) {
@@ -1057,34 +1058,36 @@ const MainContent = ({
               : normalizeBackground(rawBg);
           }
 
-          // ✅ REWRITTEN SECTION STYLE
           const containerStyle: React.CSSProperties = {
             width: "100%",
             maxWidth: "100vw",
             boxSizing: "border-box",
             display: "flex",
             flexDirection: "column",
-            // If it's a footer (last section), we don't force 'stretch' if it breaks the look
             alignItems: isMobile && !isLast ? "stretch" : "center",
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             ...styleProps,
 
-            // ✅ 2. FORCE RELATIVE POSITIONING (Critical for background video)
+            // ✅ 3. FORCE RELATIVE (Traps background video/image)
             position: "relative",
 
+            // Apply background image if it exists
             ...(backgroundImage ? { backgroundImage } : {}),
-            ...(backgroundImage && backgroundImage.startsWith("url(")
+
+            // ✅ 4. ALWAYS APPLY COVER/CENTER IF BG EXISTS (Fixes the "Strip" bug)
+            ...(backgroundImage
               ? {
                   backgroundSize: "cover",
                   backgroundPosition: "center",
                   backgroundRepeat: "no-repeat",
                 }
               : {}),
+
             padding:
               p.padding ??
               styleProps.padding ??
               (isMobile ? "1.5rem 0.75rem" : "2rem"),
-            // Last section needs to flex properly but not hide content
+
             ...(isLast
               ? {
                   flexGrow: 0,
@@ -1107,13 +1110,13 @@ const MainContent = ({
                 style={containerStyle}
                 className={isLast ? "last-section" : undefined}
               >
-                {/* ✅ 3. INSERT BACKGROUND VIDEO HERE */}
+                {/* ✅ 5. BACKGROUND VIDEO LAYER (Z-Index 0) */}
                 {p.backgroundVideo && (
                   <div
                     className="absolute inset-0 w-full h-full overflow-hidden"
                     style={{
-                      zIndex: 0, // Behind content
-                      pointerEvents: "none", // Allow clicks to pass through
+                      zIndex: 0,
+                      pointerEvents: "none",
                       borderRadius: styleProps.borderRadius || "0px",
                     }}
                   >
@@ -1125,7 +1128,6 @@ const MainContent = ({
                       playsInline
                       className="w-full h-full object-cover"
                     />
-                    {/* Overlay */}
                     {p.backgroundVideoOpacity && (
                       <div
                         className="absolute inset-0 bg-black transition-opacity"
@@ -1135,8 +1137,7 @@ const MainContent = ({
                   </div>
                 )}
 
-                {/* ✅ 4. UPDATE INNER CONTENT WRAPPER */}
-                {/* Added 'relative z-10' to ensure content sits ON TOP of video */}
+                {/* ✅ 6. CONTENT WRAPPER (Z-Index 10 - Sits ON TOP) */}
                 <div
                   className="w-full relative z-10"
                   style={{
