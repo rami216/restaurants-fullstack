@@ -272,4 +272,10 @@ class EmailConfigResponse(EmailConfigBase):
     class Config:
         from_attributes = True
         
+class EmailSendRequest(BaseModel):
+    website_id: UUID
+    to_email: EmailStr
+    subject: str
+    content: str  # Can be HTML or plain text
+        
 #endregion

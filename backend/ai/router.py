@@ -9596,6 +9596,29 @@ Is this a file upload?
             - If no clear match exists, set "schema_id": "" and ignore API logic.
             - Field names in forms MUST match column names in the schema exactly.
 
+        - **EMAIL SENDING PROTOCOL (CUSTOM CONTENT):**
+            - **TRIGGER:** If the prompt implies sending an email (e.g., "Contact Form", "Newsletter", "Send Message") and involves an email input.
+            - **ENDPOINT:** Use `await api.post('/builder/send-email', ...)`
+            - **REQUIREMENT:** You **MUST** add `website_id: "WEBSITE_UUID_FROM_CONTEXT"` to properties.
+            - **EDITABLE CONTENT RULE:** You **MUST** create editable properties for the `emailSubject` and `emailBody` so the user can customize what is sent.
+            - **SCRIPT PATTERN:**
+              ```javascript
+              // 1. Send the Email
+              const emailInput = form.querySelector('input[type="email"]') || form.querySelector('input[name="email"]');
+              if (emailInput && emailInput.value) {
+                  try {
+                      await api.post('/builder/send-email', { 
+                          website_id: properties.website_id, 
+                          to_email: emailInput.value,
+                          subject: properties.emailSubject || "Thank you for contacting us",
+                          content: properties.emailBody || "<p>We received your message.</p>"
+                      });
+                  } catch (err) { console.error("Email failed", err); }
+              }
+              
+              // 2. Save Data (If schema exists)
+              // ... standard api.post('/custom-data/rows/...') logic follows here ...
+              ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`

@@ -791,4 +791,82 @@ async def test_email_config(
         except Exception as e:
             print(f"Email Error: {e}")
             raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
+        
+@router.post("/send-email", status_code=status.HTTP_200_OK)
+async def send_custom_email(
+    payload: schemas.EmailSendRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Sends a one-off email using the website's configured provider (SendGrid or SMTP).
+    """
+    # 1. Fetch the configuration for this website
+    email_config = await db.scalar(
+        select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == payload.website_id)
+    )
+
+    if not email_config:
+        raise HTTPException(status_code=404, detail="Email configuration not found for this website.")
+
+    # 2. Prepare Email Data
+    visitor_email = payload.to_email
+    subject = payload.subject
+    # Wrap content in a basic div to ensure it renders nicely
+    body_content = f"<div style='font-family: sans-serif;'>{payload.content}</div>"
+
+    try:
+        # --- SEND VIA SENDGRID ---
+        if email_config.provider_type == "sendgrid":
+            if not email_config.sendgrid_api_key:
+                raise HTTPException(status_code=400, detail="SendGrid API Key is missing.")
+
+            async with httpx.AsyncClient() as client:
+                response = await client.post(
+                    "https://api.sendgrid.com/v3/mail/send",
+                    headers={
+                        "Authorization": f"Bearer {email_config.sendgrid_api_key}",
+                        "Content-Type": "application/json"
+                    },
+                    json={
+                        "personalizations": [{"to": [{"email": visitor_email}]}],
+                        "from": {"email": email_config.from_email, "name": email_config.from_name},
+                        "subject": subject,
+                        "content": [{"type": "text/html", "value": body_content}]
+                    }
+                )
+                if response.status_code not in [200, 201, 202]:
+                     print(f"SendGrid Error: {response.text}")
+                     raise HTTPException(status_code=400, detail="Failed to send email via SendGrid")
+
+        # --- SEND VIA SMTP ---
+        elif email_config.provider_type == "smtp":
+            message = MIMEMultipart()
+            message["From"] = f"{email_config.from_name} <{email_config.from_email}>"
+            message["To"] = visitor_email
+            message["Subject"] = subject
+            message.attach(MIMEText(body_content, "html"))
+
+            timeout_seconds = 10
+            
+            # Logic to handle SSL (465) vs TLS (587)
+            if email_config.smtp_port == 465:
+                server = smtplib.SMTP_SSL(email_config.smtp_host, email_config.smtp_port, timeout=timeout_seconds)
+            else:
+                server = smtplib.SMTP(email_config.smtp_host, email_config.smtp_port, timeout=timeout_seconds)
+                server.ehlo()
+                if server.has_extn("STARTTLS"):
+                    server.starttls()
+                    server.ehlo()
+
+            server.login(email_config.smtp_user, email_config.smtp_password)
+            server.sendmail(email_config.from_email, visitor_email, message.as_string())
+            server.quit()
+
+        return {"status": "success", "message": "Email sent successfully"}
+
+    except HTTPException as he:
+        raise he
+    except Exception as e:
+        print(f"Email send error: {e}")
+        raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 #endregion emailconfig
