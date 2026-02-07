@@ -883,7 +883,8 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
 
       <div className="space-y-4">
         {page.sections.map((section) => {
-          const properties = section.properties || {};
+          // ✅ FIX TS ERROR: Cast to 'any' to access new backgroundVideo properties
+          const properties: any = section.properties || {};
           const styleProps = properties.style || {};
 
           // get bg from either place
@@ -912,11 +913,12 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             // ADD THESE LINES TO FIX POSITIONING
             top: withUnit(styleProps.top),
             left: withUnit(styleProps.left),
-            position: styleProps.position || "static",
+            // ✅ CRITICAL: Default to relative so the absolute video stays inside
+            position: styleProps.position || "relative",
             overflow:
               styleProps.position === "relative"
-                ? "visible"
-                : styleProps.overflow,
+                ? "visible" // Allows popups to escape if needed
+                : styleProps.overflow || "hidden", // Default hidden to crop video edges
             // ... rest of your bg logic
             ...(backgroundImage ? { backgroundImage } : {}),
             ...(backgroundImage && backgroundImage.startsWith("url(")
@@ -944,8 +946,37 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               }`}
               style={sectionStyle}
             >
+              {/* ✅ 1. INSERT THIS: Background Video Layer */}
+              {properties.backgroundVideo && (
+                <div
+                  className="absolute inset-0 w-full h-full overflow-hidden"
+                  style={{
+                    zIndex: 0, // Behind content
+                    pointerEvents: "none", // Don't block selection clicks in builder
+                    borderRadius: styleProps.borderRadius || "0px",
+                  }}
+                >
+                  <video
+                    src={properties.backgroundVideo}
+                    autoPlay
+                    muted
+                    loop
+                    playsInline
+                    className="w-full h-full object-cover"
+                  />
+                  {/* Optional Overlay */}
+                  {properties.backgroundVideoOpacity && (
+                    <div
+                      className="absolute inset-0 bg-black transition-opacity"
+                      style={{ opacity: properties.backgroundVideoOpacity }}
+                    />
+                  )}
+                </div>
+              )}
+
+              {/* ✅ 2. CONTENT WRAPPER: Added 'relative z-10' to sit ON TOP of video */}
               <div
-                className="flex flex-wrap"
+                className="flex flex-wrap relative z-10"
                 style={{
                   display: "flex",
                   flexDirection: properties.flexDirection,

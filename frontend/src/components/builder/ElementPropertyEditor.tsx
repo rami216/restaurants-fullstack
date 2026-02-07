@@ -380,9 +380,58 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   };
   // Add this helper function inside the component, near handleAiPropLocalChange
 
+  // const handleVideoUpload = async (
+  //   event: React.ChangeEvent<HTMLInputElement>,
+  //   propertyName: "src",
+  // ) => {
+  //   const file = event.target.files?.[0];
+  //   if (!file) return;
+
+  //   try {
+  //     setIsUploading(true);
+  //     setUploadProgress(0);
+
+  //     // 1) Ask backend for a signed URL
+  //     const formData = new FormData();
+  //     formData.append("file_name", file.name);
+  //     formData.append("content_type", file.type || "application/octet-stream");
+
+  //     const { data: signed } = await api.post(
+  //       "/uploads/video/signed-url",
+  //       formData,
+  //     );
+  //     const { upload_url, public_url, content_type } = signed;
+
+  //     // 2) Upload directly to Supabase via PUT (with progress)
+  //     await axios.put(upload_url, file, {
+  //       headers: {
+  //         "Content-Type":
+  //           content_type || file.type || "application/octet-stream",
+  //         "x-upsert": "true",
+  //       },
+  //       onUploadProgress: (evt) => {
+  //         const percent = Math.round((evt.loaded * 100) / (evt.total ?? 1));
+  //         setUploadProgress(percent);
+  //       },
+  //       maxBodyLength: Infinity, // allow large files
+  //       maxContentLength: Infinity,
+  //     });
+
+  //     // 3) Save the public URL to your element's properties
+  //     handlePropertyChange(propertyName, public_url);
+  //   } catch (err) {
+  //     console.error("Video upload failed:", err);
+  //     alert("Video upload failed. Please try again.");
+  //   } finally {
+  //     setIsUploading(false);
+  //     setUploadProgress(0);
+  //     // Also consider clearing the input so selecting the same file triggers again:
+  //     event.target.value = "";
+  //   }
+  // };
   const handleVideoUpload = async (
     event: React.ChangeEvent<HTMLInputElement>,
-    propertyName: "src",
+    propertyName: string,
   ) => {
     const file = event.target.files?.[0];
     if (!file) return;
@@ -402,7 +451,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       );
       const { upload_url, public_url, content_type } = signed;
 
-      // 2) Upload directly to Supabase via PUT (with progress)
+      // 2) Upload directly to Supabase via PUT
       await axios.put(upload_url, file, {
         headers: {
           "Content-Type":
@@ -413,11 +462,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
           const percent = Math.round((evt.loaded * 100) / (evt.total ?? 1));
           setUploadProgress(percent);
         },
-        maxBodyLength: Infinity, // allow large files
+        maxBodyLength: Infinity,
         maxContentLength: Infinity,
       });
 
-      // 3) Save the public URL to your element's properties
+      // 3) Save the public URL to the property
       handlePropertyChange(propertyName, public_url);
     } catch (err) {
       console.error("Video upload failed:", err);
@@ -425,11 +474,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     } finally {
       setIsUploading(false);
       setUploadProgress(0);
-      // Also consider clearing the input so selecting the same file triggers again:
       event.target.value = "";
     }
   };
-
   const handleCreatePage = () => {
     if (newPageTitle.trim()) {
       onCreatePage(newPageTitle.trim());
@@ -937,7 +984,80 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             )}
           </div>
         </div>
-
+        {/* ✅ NEW: Background Video Section */}
+        <div>
+          <label className="block text-sm font-medium text-gray-700">
+            Background Video
+          </label>
+          <div className="mt-1 p-2 border-2 border-dashed border-gray-300 rounded-md">
+            {properties.backgroundVideo ? (
+              <div className="text-center">
+                <div className="relative rounded-md overflow-hidden bg-black mb-2">
+                  <video
+                    src={properties.backgroundVideo}
+                    className="max-h-32 w-full object-cover mx-auto"
+                    controls
+                  />
+                </div>
+                <button
+                  onClick={() => handlePropertyChange("backgroundVideo", "")}
+                  className="text-xs text-red-600 hover:text-red-800 font-medium"
+                >
+                  <Trash2 size={12} className="inline mr-1" /> Remove Video
+                </button>
+              </div>
+            ) : (
+              <div className="text-center py-4">
+                <input
+                  type="file"
+                  id="bg-video-upload"
+                  className="hidden"
+                  accept="video/mp4, video/webm"
+                  onChange={(e) => handleVideoUpload(e, "backgroundVideo")}
+                  disabled={isUploading}
+                />
+                <label
+                  htmlFor="bg-video-upload"
+                  className={`cursor-pointer font-medium text-indigo-600 hover:text-indigo-500 ${
+                    isUploading ? "opacity-50 cursor-not-allowed" : ""
+                  }`}
+                >
+                  <div className="flex flex-col items-center">
+                    <Upload size={24} className="mb-2 text-gray-400" />
+                    <span>{isUploading ? "Uploading..." : "Upload Video"}</span>
+                  </div>
+                </label>
+                <p className="text-xs text-gray-500 mt-1">MP4, WEBM</p>
+                {isUploading && (
+                  <div className="w-full bg-gray-200 rounded-full h-1 mt-2">
+                    <div
+                      className="bg-blue-600 h-1 rounded-full transition-all"
+                      style={{ width: `${uploadProgress}%` }}
+                    />
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+          {properties.backgroundVideo && (
+            <div className="mt-2 flex items-center gap-2">
+              <input
+                type="checkbox"
+                id="bg-vid-opacity"
+                checked={properties.backgroundVideoOpacity !== undefined}
+                onChange={(e) =>
+                  handlePropertyChange(
+                    "backgroundVideoOpacity",
+                    e.target.checked ? 0.5 : undefined,
+                  )
+                }
+              />
+              <label htmlFor="bg-vid-opacity" className="text-sm text-gray-600">
+                Add Dark Overlay
+              </label>
+            </div>
+          )}
+        </div>
         {/* --- Layout Controls (No changes needed) --- */}
         {/* These correctly edit the top-level layout properties */}
         <div>

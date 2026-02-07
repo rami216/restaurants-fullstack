@@ -1044,7 +1044,9 @@ const MainContent = ({
       <div className="space-y-0 flex-1 flex flex-col w-full">
         {currentPage?.sections.map((sec, idx) => {
           const isLast = idx === currentPage.sections.length - 1;
-          const p = sec.properties || {};
+
+          // ✅ 1. CAST TO 'any' TO FIX TS ERRORS
+          const p: any = sec.properties || {};
           const styleProps = p.style || {};
 
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
@@ -1066,6 +1068,10 @@ const MainContent = ({
             alignItems: isMobile && !isLast ? "stretch" : "center",
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
             ...styleProps,
+
+            // ✅ 2. FORCE RELATIVE POSITIONING (Critical for background video)
+            position: "relative",
+
             ...(backgroundImage ? { backgroundImage } : {}),
             ...(backgroundImage && backgroundImage.startsWith("url(")
               ? {
@@ -1101,22 +1107,47 @@ const MainContent = ({
                 style={containerStyle}
                 className={isLast ? "last-section" : undefined}
               >
-                {/* ✅ REWRITTEN INNER WRAPPER */}
+                {/* ✅ 3. INSERT BACKGROUND VIDEO HERE */}
+                {p.backgroundVideo && (
+                  <div
+                    className="absolute inset-0 w-full h-full overflow-hidden"
+                    style={{
+                      zIndex: 0, // Behind content
+                      pointerEvents: "none", // Allow clicks to pass through
+                      borderRadius: styleProps.borderRadius || "0px",
+                    }}
+                  >
+                    <video
+                      src={p.backgroundVideo}
+                      autoPlay
+                      muted
+                      loop
+                      playsInline
+                      className="w-full h-full object-cover"
+                    />
+                    {/* Overlay */}
+                    {p.backgroundVideoOpacity && (
+                      <div
+                        className="absolute inset-0 bg-black transition-opacity"
+                        style={{ opacity: p.backgroundVideoOpacity }}
+                      />
+                    )}
+                  </div>
+                )}
+
+                {/* ✅ 4. UPDATE INNER CONTENT WRAPPER */}
+                {/* Added 'relative z-10' to ensure content sits ON TOP of video */}
                 <div
-                  className="w-full"
+                  className="w-full relative z-10"
                   style={{
                     width: "100%",
                     maxWidth: isMobile ? "100%" : "1200px",
                     display: "flex",
-                    // For the last section (footer), allow row on mobile if needed,
-                    // but usually footers stack too.
                     flexDirection: isMobile
                       ? "column"
                       : p.flexDirection || "row",
-                    // 'nowrap' was crushing the footer items; 'wrap' is safer here
                     flexWrap: "wrap",
                     justifyContent: p.justifyContent || "center",
-                    // Allow the last section to maintain its child alignment
                     alignItems:
                       isMobile && !isLast
                         ? "stretch"
@@ -1142,7 +1173,6 @@ const MainContent = ({
                         <motion.div
                           style={{
                             ...subsectionStyle,
-                            // Ensure subsection doesn't overflow its parent
                             maxWidth: "100%",
                           }}
                           initial={initial}
