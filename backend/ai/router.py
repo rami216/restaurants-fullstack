@@ -3631,6 +3631,9 @@ async def generate_ai_element(
         if "properties" not in payload:
             payload["properties"] = {}
         
+        # ✅ ADD THIS LINE RIGHT HERE:
+        payload["properties"]["website_id"] = str(body.website_id)  # <--- INJECT REAL ID
+        
         # Add all_schemas to properties (the script needs this!)
         payload["properties"]["all_schemas"] = all_schemas_for_script
         
@@ -9921,7 +9924,20 @@ Is this a file upload?
                 4. Merge with updates: `const mergedData = { ...targetRow.data, available: false };`
                 5. Update: `await api.put('/custom-data/rows/' + selectedRowId, { data: mergedData });`
             - CRITICAL: Do NOT use res.data.rows[0] - always use .find() to locate the correct row
-    
+            - **BOOKING EMAIL RULE (NEW):**
+                - IF the update involves collecting an email address (e.g., for a booking confirmation):
+                - You MUST add this specific code **IMMEDIATELY AFTER** the `api.put` success line:
+                  ```javascript
+                  // Database update successful, now send confirmation
+                  try {
+                      await api.post('/builder/send-email', {
+                          website_id: properties.website_id, 
+                          to_email: form.querySelector('input[name="email"]').value,
+                          subject: "Booking Confirmation",
+                          content: "<p>Your booking has been confirmed successfully.</p>"
+                      });
+                  } catch (emailErr) { console.log("Confirmation email failed", emailErr); }
+                  ```
                     **Complete Example:**
                 ```javascript
                     form.onsubmit = async (e) => { 
