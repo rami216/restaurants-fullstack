@@ -1,6 +1,6 @@
 # website_builder/schemas.py
 
-from pydantic import BaseModel, ConfigDict, Field,StringConstraints
+from pydantic import BaseModel, ConfigDict, Field,StringConstraints,EmailStr
 from typing import Optional, List, Dict, Any,Annotated
 from uuid import UUID
 # import datetime
@@ -247,3 +247,29 @@ class WebsiteOrderResponse(BaseModel):
     currency: str
     status: str
     created_at: datetime
+    
+#region emailconfig
+class EmailConfigBase(BaseModel):
+    provider_type: str
+    from_email: EmailStr
+    from_name: str
+    
+    smtp_host: Optional[str] = None
+    smtp_port: Optional[int] = None
+    smtp_user: Optional[str] = None
+    smtp_password: Optional[str] = None
+    smtp_secure: Optional[bool] = False
+    
+    sendgrid_api_key: Optional[str] = None
+
+class EmailConfigCreate(EmailConfigBase):
+    pass
+
+class EmailConfigResponse(EmailConfigBase):
+    config_id: UUID
+    website_id: UUID
+
+    class Config:
+        from_attributes = True
+        
+#endregion

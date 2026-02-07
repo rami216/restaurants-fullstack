@@ -11,11 +11,13 @@ from typing import List
 from database import get_db
 from auth.auth_handler import get_current_active_user
 from models import User, RestaurantOwner,Location,CustomDataSchema
-from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain
+from .models import Website, Page, Section, Subsection, Element, Navbar, NavbarItem,FormSubmission,CustomDomain,WebsiteEmailConfig
 
 from . import schemas
 from config import AI_SPEND_LIMIT_USD  # import the default from .env
-
+import smtplib
+from email.mime.text import MIMEText
+from email.mime.multipart import MIMEMultipart
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
 def _normalize_slug(s: str | None) -> str:
@@ -250,23 +252,6 @@ async def create_element(element_data: schemas.ElementCreate, db: AsyncSession =
     # await db.refresh(new_element)
     return new_element
 
-# --- UPDATE update_element ---
-# @router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
-# async def update_element(element_id: UUID, element_data: schemas.ElementUpdate, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
-#     db_element = await db.get(Element, element_id)
-#     if not db_element: raise HTTPException(status_code=404, detail="Element not found")
-
-#     update_data = element_data.model_dump(exclude_unset=True)
-#     for key, value in update_data.items():
-#         setattr(db_element, key, value)
-#         # --- THIS IS THE FIX ---
-#         # We need to tell SQLAlchemy that the JSON fields have been modified.
-#         if key in ["properties", "ai_payload"]:
-#             flag_modified(db_element, key)
-
-#     await db.commit()
-#     # await db.refresh(db_element)
-#     return db_element
 @router.put("/elements/{element_id}", response_model=schemas.ElementResponse)
 async def update_element(
     element_id: UUID, 
@@ -694,3 +679,99 @@ async def update_page(
 
 
 #endregion updatepage
+#region emailconfig
+@router.get("/websites/{website_id}/email-config", response_model=schemas.EmailConfigResponse)
+async def get_email_config(
+    website_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Check ownership
+    await get_website_and_check_ownership(website_id, current_user, db)
+    
+    config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == website_id))
+    if not config:
+        raise HTTPException(status_code=404, detail="Email configuration not found")
+    return config
+
+@router.put("/websites/{website_id}/email-config", response_model=schemas.EmailConfigResponse)
+async def update_email_config(
+    website_id: UUID,
+    payload: schemas.EmailConfigCreate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # Check ownership
+    await get_website_and_check_ownership(website_id, current_user, db)
+    
+    config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == website_id))
+    
+    if not config:
+        # Create new
+        config = WebsiteEmailConfig(website_id=website_id, **payload.model_dump())
+        db.add(config)
+    else:
+        # Update existing
+        update_data = payload.model_dump(exclude_unset=True)
+        for key, value in update_data.items():
+            setattr(config, key, value)
+            
+    await db.commit()
+    await db.refresh(config)
+    return config
+
+# Optional: Test Endpoint
+
+@router.post("/websites/{website_id}/email-config/test")
+async def test_email_config(
+    website_id: UUID,
+    payload: schemas.EmailConfigCreate, 
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    # 1. Check ownership
+    await get_website_and_check_ownership(website_id, current_user, db)
+
+    # 2. Extract settings
+    smtp_host = payload.smtp_host
+    smtp_port = payload.smtp_port
+    smtp_user = payload.smtp_user
+    smtp_password = payload.smtp_password
+    from_email = payload.from_email
+    
+    to_email = current_user.email  # We send the test email to the logged-in user
+
+    try:
+        # 3. Create the email message
+        message = MIMEMultipart()
+        message["From"] = f"{payload.from_name} <{from_email}>"
+        message["To"] = to_email
+        message["Subject"] = "Test Email from Your Website Builder"
+        
+        body = f"""
+        <h1>Connection Successful!</h1>
+        <p>This is a test email to verify your SMTP settings.</p>
+        <p><strong>Host:</strong> {smtp_host}</p>
+        <p><strong>Port:</strong> {smtp_port}</p>
+        <br>
+        <p>If you see this, your users will be able to receive emails!</p>
+        """
+        message.attach(MIMEText(body, "html"))
+
+        # 4. Connect to the SMTP Server and Send
+        # NOTE: smtplib is synchronous (blocking). For high volume, use aiosmtplib. 
+        # For a simple test button, this is perfectly fine.
+        
+        server = smtplib.SMTP(smtp_host, smtp_port)
+        server.starttls() # Secure the connection
+        server.login(smtp_user, smtp_password)
+        server.sendmail(from_email, to_email, message.as_string())
+        server.quit()
+
+        return {"status": "success", "message": f"Test email sent to {to_email}"}
+
+    except Exception as e:
+        print(f"SMTP Error: {e}")
+        # Return the specific error so the user knows what to fix (e.g., "Username and Password not accepted")
+        raise HTTPException(status_code=400, detail=f"Failed to send email: {str(e)}")
+#endregion emailconfig

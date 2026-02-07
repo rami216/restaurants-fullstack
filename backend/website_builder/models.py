@@ -1,9 +1,10 @@
 # website_builder/models.py
 
+import uuid
 from sqlalchemy import Boolean, Column, String, Integer, DateTime, ForeignKey, JSON,BigInteger, Numeric,Computed, UniqueConstraint
 import os
 
-from sqlalchemy.dialects.postgresql import UUID,JSONB
+from sqlalchemy.dialects.postgresql import UUID,JSONB,PG_UUID
 from sqlalchemy.sql import func, text
 from sqlalchemy.orm import relationship
 from database import Base
@@ -39,7 +40,7 @@ class Website(Base):
     navbar     = relationship("Navbar", back_populates="website", uselist=False, cascade="all, delete-orphan")
     restaurant = relationship("RestaurantOwner", back_populates="website")
     ai_usage_logs = relationship("AIUsageLog", back_populates="website", cascade="all, delete-orphan")
-
+    email_config = relationship("WebsiteEmailConfig", uselist=False, back_populates="website", cascade="all, delete-orphan")
     
 class AIUsageLog(Base):
     __tablename__ = "ai_usage_logs"
@@ -189,3 +190,29 @@ class CustomDomain(Base):
     website     = relationship("Website", backref="custom_domains")
 
 #endregion customdomains
+#region websiteemail
+class WebsiteEmailConfig(Base):
+    __tablename__ = "website_email_configs"
+
+    config_id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    website_id = Column(PG_UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), unique=True, nullable=False)
+    
+    provider_type = Column(String(50), nullable=False)  # 'smtp' or 'sendgrid'
+    
+    # Common Fields
+    from_email = Column(String(255), nullable=False)
+    from_name = Column(String(255), nullable=False)
+    
+    # SMTP Fields
+    smtp_host = Column(String(255), nullable=True)
+    smtp_port = Column(Integer, nullable=True)
+    smtp_user = Column(String(255), nullable=True)
+    smtp_password = Column(String(255), nullable=True)  # Store encrypted in production!
+    smtp_secure = Column(Boolean, default=True)
+
+    # SendGrid Fields
+    sendgrid_api_key = Column(String(255), nullable=True) # Store encrypted in production!
+
+    # Relationship back to Website
+    website = relationship("Website", back_populates="email_config")
+#endregion 
