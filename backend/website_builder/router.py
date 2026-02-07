@@ -7,7 +7,7 @@ from sqlalchemy.future import select
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from typing import List
-
+import httpx # <--- ADD THIS
 from database import get_db
 from auth.auth_handler import get_current_active_user
 from models import User, RestaurantOwner,Location,CustomDataSchema
@@ -731,63 +731,64 @@ async def test_email_config(
     # 1. Check ownership
     await get_website_and_check_ownership(website_id, current_user, db)
 
-    # 2. Extract settings
-    smtp_host = payload.smtp_host
-    smtp_port = payload.smtp_port
-    smtp_user = payload.smtp_user
-    smtp_password = payload.smtp_password
-    from_email = payload.from_email
-    
-    # We send the test email TO the logged-in user to prove it arrived
-    to_email = current_user.email  
+    to_email = current_user.email
+    subject = "Test Email from Your Website Builder"
+    body_content = "<h1>It Works!</h1><p>This is a test email.</p>"
 
-    try:
-        # 3. Create the email message
-        message = MIMEMultipart()
-        message["From"] = f"{payload.from_name} <{from_email}>"
-        message["To"] = to_email
-        message["Subject"] = "Test Email from Your Website Builder"
+    # --- LOGIC FOR SENDGRID (HTTP API) ---
+    if payload.provider_type == "sendgrid":
+        if not payload.sendgrid_api_key:
+            raise HTTPException(status_code=400, detail="SendGrid API Key is missing.")
         
-        body = f"""
-        <h3>Connection Successful! ✅</h3>
-        <p>This is a test email to verify your SMTP settings.</p>
-        <ul>
-            <li><strong>Host:</strong> {smtp_host}</li>
-            <li><strong>Port:</strong> {smtp_port}</li>
-            <li><strong>Authenticated As:</strong> {smtp_user}</li>
-        </ul>
-        <p>If you are reading this, your email configuration is correct.</p>
-        """
-        message.attach(MIMEText(body, "html"))
+        async with httpx.AsyncClient() as client:
+            response = await client.post(
+                "https://api.sendgrid.com/v3/mail/send",
+                headers={
+                    "Authorization": f"Bearer {payload.sendgrid_api_key}",
+                    "Content-Type": "application/json"
+                },
+                json={
+                    "personalizations": [{"to": [{"email": to_email}]}],
+                    "from": {"email": payload.from_email, "name": payload.from_name},
+                    "subject": subject,
+                    "content": [{"type": "text/html", "value": body_content}]
+                }
+            )
+            
+            if response.status_code not in [200, 201, 202]:
+                raise HTTPException(status_code=400, detail=f"SendGrid Error: {response.text}")
+                
+        return {"status": "success", "message": f"Test email sent via SendGrid to {to_email}"}
 
-        # 4. Connection Logic (With 10s Timeout & Auto-SSL)
-        server = None
-        timeout_seconds = 10 
-        
+    # --- LOGIC FOR SMTP (Gmail/Outlook) ---
+    else:
         try:
-            if smtp_port == 465:
-                # Port 465 requires SSL immediately (SMTP_SSL)
-                server = smtplib.SMTP_SSL(smtp_host, smtp_port, timeout=timeout_seconds)
+            message = MIMEMultipart()
+            message["From"] = f"{payload.from_name} <{payload.from_email}>"
+            message["To"] = to_email
+            message["Subject"] = subject
+            message.attach(MIMEText(body_content, "html"))
+
+            # Auto-detect SSL vs TLS based on port
+            timeout_seconds = 10
+            if payload.smtp_port == 465:
+                # SSL Connection (Preferred for Gmail on some clouds)
+                server = smtplib.SMTP_SSL(payload.smtp_host, payload.smtp_port, timeout=timeout_seconds)
             else:
-                # Port 587 or 25 uses standard SMTP + STARTTLS
-                server = smtplib.SMTP(smtp_host, smtp_port, timeout=timeout_seconds)
-                server.ehlo() 
+                # TLS Connection (Standard)
+                server = smtplib.SMTP(payload.smtp_host, payload.smtp_port, timeout=timeout_seconds)
+                server.ehlo()
                 if server.has_extn("STARTTLS"):
                     server.starttls()
-                    server.ehlo() 
+                    server.ehlo()
 
-            # 5. Login and Send
-            server.login(smtp_user, smtp_password)
-            server.sendmail(from_email, to_email, message.as_string())
-            
-        finally:
-            if server:
-                server.quit()
+            server.login(payload.smtp_user, payload.smtp_password)
+            server.sendmail(payload.from_email, to_email, message.as_string())
+            server.quit()
 
-        return {"status": "success", "message": f"Test email sent to {to_email}"}
+            return {"status": "success", "message": f"Test email sent via SMTP to {to_email}"}
 
-    except Exception as e:
-        print(f"SMTP Error: {e}")
-        # Return the specific error message to the frontend
-        raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
+        except Exception as e:
+            print(f"Email Error: {e}")
+            raise HTTPException(status_code=400, detail=f"Connection failed: {str(e)}")
 #endregion emailconfig
