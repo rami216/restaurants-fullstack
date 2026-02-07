@@ -1071,10 +1071,16 @@ const MainContent = ({
             // ✅ 3. FORCE RELATIVE (Traps background video/image)
             position: "relative",
 
+            // ✅ 3.5 ENSURE HEIGHTS HAVE UNITS
+            // This fixes the "empty section is small" bug.
+            // If you set height/minHeight in builder without 'px', this fixes it.
+            minHeight: withUnit(p.minHeight ?? styleProps.minHeight),
+            height: withUnit(p.height ?? styleProps.height),
+
             // Apply background image if it exists
             ...(backgroundImage ? { backgroundImage } : {}),
 
-            // ✅ 4. ALWAYS APPLY COVER/CENTER IF BG EXISTS (Fixes the "Strip" bug)
+            // ✅ 4. ALWAYS APPLY COVER/CENTER IF BG EXISTS
             ...(backgroundImage
               ? {
                   backgroundSize: "cover",
@@ -1083,9 +1089,11 @@ const MainContent = ({
                 }
               : {}),
 
+            // ✅ 5. FIX PADDING UNITS
+            // We wrap the value in 'withUnit'. If you saved "8" in DB, this makes it "8px".
+            // If the section is empty, padding is the only thing giving it height.
             padding:
-              p.padding ??
-              styleProps.padding ??
+              withUnit(p.padding ?? styleProps.padding) ??
               (isMobile ? "1.5rem 0.75rem" : "2rem"),
 
             ...(isLast
