@@ -1045,11 +1045,11 @@ const MainContent = ({
         {currentPage?.sections.map((sec, idx) => {
           const isLast = idx === currentPage.sections.length - 1;
 
-          // ✅ 1. CAST TO 'any' TO FIX TS ERRORS
+          // 1. Cast to any to fix TS errors with new properties
           const p: any = sec.properties || {};
           const styleProps = p.style || {};
 
-          // ✅ 2. ROBUST BACKGROUND IMAGE LOGIC
+          // 2. Original Background Image Logic
           const rawBg = p.backgroundImage ?? styleProps.backgroundImage;
           let backgroundImage: string | undefined;
           if (typeof rawBg === "string" && rawBg.trim()) {
@@ -1058,52 +1058,27 @@ const MainContent = ({
               : normalizeBackground(rawBg);
           }
 
+          // 3. YOUR ORIGINAL CONTAINER STYLE LOGIC (Restored)
+          // We only force 'relative' so the video doesn't break the page layout.
           const containerStyle: React.CSSProperties = {
-            width: "100%",
-            maxWidth: "100vw",
-            boxSizing: "border-box",
-            display: "flex",
-            flexDirection: "column",
-            alignItems: isMobile && !isLast ? "stretch" : "center",
             backgroundColor: p.backgroundColor ?? styleProps.backgroundColor,
+            padding: p.padding ?? styleProps.padding,
+            display: p.display ?? styleProps.display,
+            flexDirection: p.flexDirection ?? styleProps.flexDirection,
+            justifyContent: p.justifyContent ?? styleProps.justifyContent,
+            alignItems: p.alignItems ?? styleProps.alignItems,
+            gap: p.gap ?? styleProps.gap,
             ...styleProps,
 
-            // ✅ 3. FORCE RELATIVE (Traps background video/image)
+            // ✅ THIS IS THE ONLY CHANGE: Essential for trapping the video inside
             position: "relative",
 
-            // ✅ 3.5 ENSURE HEIGHTS HAVE UNITS
-            // This fixes the "empty section is small" bug.
-            // If you set height/minHeight in builder without 'px', this fixes it.
-            minHeight: withUnit(p.minHeight ?? styleProps.minHeight),
-            height: withUnit(p.height ?? styleProps.height),
-
-            // Apply background image if it exists
             ...(backgroundImage ? { backgroundImage } : {}),
-
-            // ✅ 4. ALWAYS APPLY COVER/CENTER IF BG EXISTS
-            ...(backgroundImage
-              ? {
-                  backgroundSize: "cover",
-                  backgroundPosition: "center",
-                  backgroundRepeat: "no-repeat",
-                }
+            // Ensure image covers the full section (From your old code)
+            ...(backgroundImage && backgroundImage.startsWith("url(")
+              ? { backgroundSize: "cover", backgroundPosition: "center" }
               : {}),
-
-            // ✅ 5. FIX PADDING UNITS
-            // We wrap the value in 'withUnit'. If you saved "8" in DB, this makes it "8px".
-            // If the section is empty, padding is the only thing giving it height.
-            padding:
-              withUnit(p.padding ?? styleProps.padding) ??
-              (isMobile ? "1.5rem 0.75rem" : "2rem"),
-
-            ...(isLast
-              ? {
-                  flexGrow: 0,
-                  minHeight: "auto",
-                  marginBottom: 0,
-                  paddingBottom: "2rem",
-                }
-              : {}),
+            ...(isLast ? { marginBottom: 0, paddingBottom: 0 } : {}),
           };
 
           return (
@@ -1115,10 +1090,13 @@ const MainContent = ({
             >
               <div
                 ref={isLast ? lastSectionRef : undefined}
-                style={containerStyle}
+                style={{
+                  ...containerStyle,
+                  ...(isLast ? { flexGrow: 1 } : {}),
+                }}
                 className={isLast ? "last-section" : undefined}
               >
-                {/* ✅ 5. BACKGROUND VIDEO LAYER (Z-Index 0) */}
+                {/* ✅ VIDEO LAYER: Added securely behind content */}
                 {p.backgroundVideo && (
                   <div
                     className="absolute inset-0 w-full h-full overflow-hidden"
@@ -1145,24 +1123,15 @@ const MainContent = ({
                   </div>
                 )}
 
-                {/* ✅ 6. CONTENT WRAPPER (Z-Index 10 - Sits ON TOP) */}
+                {/* ✅ CONTENT LAYER: Restored original wrapper + added z-index */}
                 <div
-                  className="w-full relative z-10"
+                  className="w-full flex flex-wrap relative z-10"
                   style={{
-                    width: "100%",
-                    maxWidth: isMobile ? "100%" : "1200px",
-                    display: "flex",
-                    flexDirection: isMobile
-                      ? "column"
-                      : p.flexDirection || "row",
-                    flexWrap: "wrap",
-                    justifyContent: p.justifyContent || "center",
-                    alignItems:
-                      isMobile && !isLast
-                        ? "stretch"
-                        : p.alignItems || "center",
-                    gap: p.gap || "1rem",
-                    boxSizing: "border-box",
+                    display: p.display || "flex",
+                    flexDirection: p.flexDirection,
+                    justifyContent: p.justifyContent,
+                    alignItems: p.alignItems,
+                    gap: p.gap,
                   }}
                 >
                   {sec.subsections.map((sub) => {
