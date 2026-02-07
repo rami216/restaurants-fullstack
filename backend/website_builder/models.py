@@ -4,7 +4,7 @@ import uuid
 from sqlalchemy import Boolean, Column, String, Integer, DateTime, ForeignKey, JSON,BigInteger, Numeric,Computed, UniqueConstraint
 import os
 
-from sqlalchemy.dialects.postgresql import UUID,JSONB,PG_UUID
+from sqlalchemy.dialects.postgresql import UUID,JSONB
 from sqlalchemy.sql import func, text
 from sqlalchemy.orm import relationship
 from database import Base
@@ -191,11 +191,13 @@ class CustomDomain(Base):
 
 #endregion customdomains
 #region websiteemail
+#region websiteemail
 class WebsiteEmailConfig(Base):
     __tablename__ = "website_email_configs"
 
-    config_id = Column(PG_UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    website_id = Column(PG_UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), unique=True, nullable=False)
+    # Use UUID and server_default to match your other tables
+    config_id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), unique=True, nullable=False)
     
     provider_type = Column(String(50), nullable=False)  # 'smtp' or 'sendgrid'
     
@@ -207,12 +209,12 @@ class WebsiteEmailConfig(Base):
     smtp_host = Column(String(255), nullable=True)
     smtp_port = Column(Integer, nullable=True)
     smtp_user = Column(String(255), nullable=True)
-    smtp_password = Column(String(255), nullable=True)  # Store encrypted in production!
+    smtp_password = Column(String(255), nullable=True) 
     smtp_secure = Column(Boolean, default=True)
 
     # SendGrid Fields
-    sendgrid_api_key = Column(String(255), nullable=True) # Store encrypted in production!
+    sendgrid_api_key = Column(String(255), nullable=True)
 
     # Relationship back to Website
     website = relationship("Website", back_populates="email_config")
-#endregion 
+#endregion
