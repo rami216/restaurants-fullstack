@@ -10721,25 +10721,6 @@ Is this a file upload?
             → Keywords detected: "my bookings"
             → Action: Add currentUserId logic, filter by sitemember_id
         
-        - **IF CASCADING/DEPENDENT DROPDOWNS IMPLIED:**
-            - **Trigger:** When the prompt implies a hierarchy (e.g., "Select X, then show Y based on X", "City depends on State", "Service -> Date -> Time").
-            - **Strategy:** Fetch ALL rows from the schema once. Perform all filtering in client-side JavaScript to ensure speed and data integrity.
-            - **GENERATION RULES:**
-                1. **Identify Hierarchy:** Analyze the prompt to find the Parent Field (Level 1), Child Field (Level 2), and Grandchild Field (Level 3, if any).
-                2. **Global Storage:** Create `let allData = [];` to store the API response.
-                3. **Fetch Logic:** Generate `const fetchAll = async () => { ... }` that calls `api.get` with `limit=1000` (or sufficient limit).
-                4. **Level 1 Logic (The Parent):**
-                   - Use `const unique = [...new Set(allData.map(item => item.data.LEVEL_1_FIELD))];`
-                   - Populate the first `<select>`.
-                5. **Chained Listeners (The Logic):**
-                   - Add `change` event to Level 1 Select:
-                     - Filter `allData` where `row.data.LEVEL_1_FIELD === this.value`.
-                     - Extract unique values for Level 2 from this filtered set.
-                     - Populate Level 2 `<select>` and enable it.
-                     - (If Level 3 exists) Clear/Disable Level 3.
-                6. **Submission Mapping:**
-                   - The **Final Dropdown** in the chain MUST store the `row.row_id` as its value (not the text).
-                   - On submit, use that `row_id` to perform the update.
                    
        - **IF CROSS-TABLE MUTATION IS IMPLIED:**
             - Logic: If updating an existing record (e.g., "mark slot as booked"), use api.put with the row_id
@@ -10822,13 +10803,82 @@ Is this a file upload?
                     }
                     };
                 ```
-        - IF RELATIONAL FIELDS EXIST:
-            - Logic: You MUST api.get the related schema rows to populate dropdowns.
-            - UI: Use <select> elements where the value is the **row.row_id**.
-            - Hierarchy (Parent/Child): If a dependency is implied (e.g., "Time for a specific Day"), the script MUST:
-                1. Use new Set() to populate the Parent dropdown with unique values from the dataset.
-                2. Add a change listener to the Parent to .filter() the data and re-populate the Child dropdown.
-                3. Immediately after populating the Parent dropdown, the script MUST automatically call the Child fetch function for the first available Parent value to ensure the Child dropdown is never empty on load.
+        - **IF RELATIONAL OR DEPENDENT DROPDOWNS EXIST:**
+            - **Logic:** You must handle both Foreign Keys (fetching other tables) and In-Table Dependencies (filtering rows based on selection).
+            - **CRITICAL DATA STRATEGY:** 1. **Foreign Keys:** If a dropdown depends on a separate table (e.g., "Category", "Service"), generate a specific fetch function for that schema.
+                2. **Main Data:** Generate a `fetchMainData()` function that gets the main table (limit=1000). Store this in a global variable `let allRows = [];`.
+            
+            - **INTERACTIVITY RULES (The Chain Pattern):**
+                - **Step 1 (Parent):** Add an `onchange` listener to the Parent dropdown.
+                - **Step 2 (Filter):** Inside that listener, filter `allRows` where `row.data.PARENT_FIELD === this.value`.
+                - **Step 3 (Child):** Use `new Set()` to extract unique values for the Child dropdown from the filtered list.
+                - **Step 4 (Grandchild - Optional):** If a third level exists, filter again based on Parent AND Child to get the final options.
+            
+            - **SUBMISSION MAPPING (Crucial):**
+                - The **Final Dropdown** in the chain MUST set its value to the `row.row_id` (so we know exactly which record to update/book).
+            
+            - **GENERIC CODE PATTERN (Adapt variable names to the user's prompt):**
+              ```javascript
+              let mainRows = []; 
+              
+              // 1. Fetch Foreign Key Data (if applicable)
+              const fetchParentData = async () => {
+                  const res = await api.get('/custom-data/rows/RELATED_SCHEMA_ID?limit=100');
+                  const options = res.data.rows.map(r => `<option value="${r.row_id}">${r.data.name}</option>`).join('');
+                  parentSelect.innerHTML += options;
+              };
+
+              // 2. Fetch Main Data (The Dependent Table)
+              const fetchMain = async () => {
+                  const res = await api.get('/custom-data/rows/' + schemaId + '?limit=1000');
+                  mainRows = res.data.rows;
+              };
+
+              // 3. Logic: Parent -> Child (e.g. Service -> Day, or Make -> Model)
+              parentSelect.onchange = () => {
+                  // Reset Child
+                  childSelect.innerHTML = '<option value="">Select Option</option>'; 
+                  childSelect.disabled = true;
+                  
+                  if (!parentSelect.value) return;
+
+                  // Filter main rows by Parent ID
+                  const parentId = parentSelect.value;
+                  // Note: Ensure you check against both boolean types if filtering by availability
+                  const filtered = mainRows.filter(r => r.data.PARENT_FIELD_NAME === parentId);
+                  
+                  // Get Unique Child Values
+                  const uniqueValues = [...new Set(filtered.map(r => r.data.CHILD_FIELD_NAME))];
+                  
+                  childSelect.innerHTML += uniqueValues.map(v => `<option value="${v}">${v}</option>`).join('');
+                  childSelect.disabled = false;
+              };
+
+              // 4. Final Selection (e.g. Time Slot)
+              childSelect.onchange = () => {
+                  finalSelect.innerHTML = '<option value="">Select Option</option>';
+                  finalSelect.disabled = true;
+                  
+                  if (!childSelect.value) return;
+
+                  // Filter by Parent AND Child
+                  const parentId = parentSelect.value;
+                  const childVal = childSelect.value;
+                  
+                  const finalRows = mainRows.filter(r => 
+                      r.data.PARENT_FIELD_NAME === parentId && 
+                      r.data.CHILD_FIELD_NAME === childVal
+                  );
+                  
+                  // Map to ROW_ID (Critical for updates/booking)
+                  finalSelect.innerHTML += finalRows.map(r => `<option value="${r.row_id}">${r.data.FINAL_DISPLAY_FIELD}</option>`).join('');
+                  finalSelect.disabled = false;
+              };
+
+              // Init
+              fetchParentData();
+              fetchMain();
+              ```
 
 
         - IF FILE/IMAGE UPLOADS ARE IMPLIED:
