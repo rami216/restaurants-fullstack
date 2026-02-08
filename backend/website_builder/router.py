@@ -544,18 +544,93 @@ async def create_form_submission(
     payload: schemas.FormSubmissionCreate,
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Receives and saves a new form submission from a public website.
-    """
-    # Verify the website exists
+    # 1. Save to DB (Standard)
     website = await db.get(Website, payload.website_id)
-    if not website:
-        raise HTTPException(status_code=404, detail="Website not found")
-
+    if not website: raise HTTPException(404, "Website not found")
+    
     new_submission = FormSubmission(**payload.model_dump())
     db.add(new_submission)
     await db.commit()
     await db.refresh(new_submission)
+
+    # 2. Send Smart Email
+    try:
+        email_config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == payload.website_id))
+        
+        if email_config:
+            # --- SMART DATA DETECTION ---
+            visitor_email = None
+            visitor_name = "there" # Default greeting if no name found
+            
+            # Loop through the submitted data to find Name and Email
+            for key, value in payload.submission_data.items():
+                key_lower = key.lower()
+                val_str = str(value)
+
+                # 1. Find Email (look for "email" in key or "@" in value)
+                if "email" in key_lower and "@" in val_str:
+                    visitor_email = val_str
+                
+                # 2. Find Name (look for keys like "Name", "Full Name", "First Name")
+                if "name" in key_lower:
+                    visitor_name = val_str
+
+            # Only send if we found an email address
+            if visitor_email:
+                subject = f"We have received your information - {email_config.from_name}"
+                
+                # Personalized HTML Body
+                body = f"""
+                <div style="font-family: sans-serif; padding: 20px; color: #333;">
+                    <h2>Dear {visitor_name},</h2>
+                    <p>We have received your information.</p>
+                    <p>Thank you for contacting <b>{email_config.from_name}</b>.</p>
+                    <br>
+                    <div style="background-color: #f9f9f9; padding: 15px; border-radius: 5px;">
+                        <small>Ref ID: {new_submission.submission_id}</small>
+                    </div>
+                </div>
+                """
+                
+                # --- SEND VIA SENDGRID ---
+                if email_config.provider_type == "sendgrid" and email_config.sendgrid_api_key:
+                    async with httpx.AsyncClient() as client:
+                        await client.post(
+                            "https://api.sendgrid.com/v3/mail/send",
+                            headers={"Authorization": f"Bearer {email_config.sendgrid_api_key}", "Content-Type": "application/json"},
+                            json={
+                                "personalizations": [{"to": [{"email": visitor_email}]}],
+                                "from": {"email": email_config.from_email, "name": email_config.from_name},
+                                "subject": subject,
+                                "content": [{"type": "text/html", "value": body}]
+                            }
+                        )
+                
+                # --- SEND VIA SMTP ---
+                elif email_config.provider_type == "smtp":
+                    message = MIMEMultipart()
+                    message["From"] = f"{email_config.from_name} <{email_config.from_email}>"
+                    message["To"] = visitor_email
+                    message["Subject"] = subject
+                    message.attach(MIMEText(body, "html"))
+
+                    # Standard SMTP Logic...
+                    timeout = 10
+                    if email_config.smtp_port == 465:
+                        server = smtplib.SMTP_SSL(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+                    else:
+                        server = smtplib.SMTP(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+                        server.ehlo()
+                        if server.has_extn("STARTTLS"):
+                            server.starttls()
+                            server.ehlo()
+                    server.login(email_config.smtp_user, email_config.smtp_password)
+                    server.sendmail(email_config.from_email, visitor_email, message.as_string())
+                    server.quit()
+
+    except Exception as e:
+        print(f"Email failed but submission saved: {e}")
+
     return new_submission
 
 @router.get("/my-submissions", response_model=List[schemas.FormSubmissionResponse])
