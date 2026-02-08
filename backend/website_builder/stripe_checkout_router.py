@@ -10,13 +10,14 @@ from sqlalchemy.orm import selectinload
 from uuid import UUID
 from decimal import Decimal # ✅ 1. Import the Decimal type
 from database import get_db
-from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner,WebsiteEmailConfig # Make sure all models are imported
+from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner # Make sure all models are imported
 from auth.auth_handler import get_current_active_user
 from website_builder.site_commerce_models import WebsiteStripeAccount
 import httpx # <--- Added for SendGrid
 import smtplib # <--- Added for SMTP
 from email.mime.text import MIMEText # <--- Added
 from email.mime.multipart import MIMEMultipart # <--- Added
+from .models import WebsiteEmailConfig
 router = APIRouter(prefix="/checkout", tags=["Stripe Cart Checkout"])
 
 # --- Helper to get Stripe API Key ---
