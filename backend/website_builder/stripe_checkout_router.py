@@ -10,10 +10,13 @@ from sqlalchemy.orm import selectinload
 from uuid import UUID
 from decimal import Decimal # ✅ 1. Import the Decimal type
 from database import get_db
-from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner # Make sure all models are imported
+from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner,WebsiteEmailConfig # Make sure all models are imported
 from auth.auth_handler import get_current_active_user
 from website_builder.site_commerce_models import WebsiteStripeAccount
-
+import httpx # <--- Added for SendGrid
+import smtplib # <--- Added for SMTP
+from email.mime.text import MIMEText # <--- Added
+from email.mime.multipart import MIMEMultipart # <--- Added
 router = APIRouter(prefix="/checkout", tags=["Stripe Cart Checkout"])
 
 # --- Helper to get Stripe API Key ---
@@ -237,4 +240,92 @@ async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get
     db.add(new_order)
     await db.commit()
     
+    # 2. Send Order Confirmation Email
+    try:
+        email_config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == payload.website_id))
+        
+        if email_config:
+            # Build the Item List HTML
+            items_html = ""
+            for item in payload.cart:
+                # Format options text
+                options_text = ""
+                if item.selectedOptions:
+                    options_text = "<br><small>" + ", ".join([f"{k}: {v}" for k,v in item.selectedOptions.items()]) + "</small>"
+                
+                items_html += f"""
+                <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 10px;">{item.name} x {item.quantity}{options_text}</td>
+                    <td style="padding: 10px; text-align: right;">${(item.unitPrice * item.quantity):.2f}</td>
+                </tr>
+                """
+
+            total_price = sum(item.unitPrice * item.quantity for item in payload.cart)
+            
+            subject = f"Order Confirmation #{str(new_order.order_id)[:8]}"
+            
+            body = f"""
+            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+                <h2 style="color: #333;">Thank you for your order, {payload.customer_name}!</h2>
+                <p>We have received your Cash on Delivery order.</p>
+                
+                <h3>Order Summary</h3>
+                <table style="width: 100%; border-collapse: collapse;">
+                    {items_html}
+                    <tr>
+                        <td style="padding: 15px 10px; font-weight: bold;">Total</td>
+                        <td style="padding: 15px 10px; text-align: right; font-weight: bold;">${total_price:.2f}</td>
+                    </tr>
+                </table>
+
+                <div style="background-color: #f9f9f9; padding: 15px; margin-top: 20px; border-radius: 5px;">
+                    <strong>Shipping to:</strong><br>
+                    {payload.shipping_address}<br>
+                    {payload.customer_phone or ""}
+                </div>
+                
+                <p style="margin-top: 20px; font-size: 12px; color: #888;">
+                    This email was sent from {email_config.from_name}.
+                </p>
+            </div>
+            """
+
+            # --- SEND VIA SENDGRID ---
+            if email_config.provider_type == "sendgrid" and email_config.sendgrid_api_key:
+                async with httpx.AsyncClient() as client:
+                    await client.post(
+                        "https://api.sendgrid.com/v3/mail/send",
+                        headers={"Authorization": f"Bearer {email_config.sendgrid_api_key}", "Content-Type": "application/json"},
+                        json={
+                            "personalizations": [{"to": [{"email": payload.customer_email}]}],
+                            "from": {"email": email_config.from_email, "name": email_config.from_name},
+                            "subject": subject,
+                            "content": [{"type": "text/html", "value": body}]
+                        }
+                    )
+            
+            # --- SEND VIA SMTP ---
+            elif email_config.provider_type == "smtp":
+                message = MIMEMultipart()
+                message["From"] = f"{email_config.from_name} <{email_config.from_email}>"
+                message["To"] = payload.customer_email
+                message["Subject"] = subject
+                message.attach(MIMEText(body, "html"))
+
+                timeout = 10
+                if email_config.smtp_port == 465:
+                    server = smtplib.SMTP_SSL(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+                else:
+                    server = smtplib.SMTP(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+                    server.ehlo()
+                    if server.has_extn("STARTTLS"):
+                        server.starttls()
+                        server.ehlo()
+                server.login(email_config.smtp_user, email_config.smtp_password)
+                server.sendmail(email_config.from_email, payload.customer_email, message.as_string())
+                server.quit()
+
+    except Exception as e:
+        print(f"Order email failed but order saved: {e}")
+
     return {"status": "success", "order_id": new_order.order_id}
