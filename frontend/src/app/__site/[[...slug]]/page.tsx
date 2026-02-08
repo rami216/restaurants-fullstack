@@ -11,10 +11,19 @@ const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE?.replace(/\/$/, "") ||
   "http://localhost:8000";
 
+// async function fetchByHost(host: string): Promise<PublicWebsiteData> {
+//   const res = await fetch(
+//     `${API_BASE}/builder/public/by-host?host=${encodeURIComponent(host)}`,
+//     { cache: "no-store" }
+//   );
+//   if (!res.ok) throw new Error("not found");
+//   return res.json();
+// }
 async function fetchByHost(host: string): Promise<PublicWebsiteData> {
+  // ✅ NUCLEAR FIX: Append &_t=${Date.now()}
   const res = await fetch(
-    `${API_BASE}/builder/public/by-host?host=${encodeURIComponent(host)}`,
-    { cache: "no-store" }
+    `${API_BASE}/builder/public/by-host?host=${encodeURIComponent(host)}&_t=${Date.now()}`,
+    { cache: "no-store" },
   );
   if (!res.ok) throw new Error("not found");
   return res.json();

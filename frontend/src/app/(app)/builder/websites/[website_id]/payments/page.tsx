@@ -58,8 +58,10 @@ export default function BuilderPaymentsPage() {
     "";
   const webhookUrl = `${API_BASE.replace(
     /\/+$/,
-    ""
+    "",
   )}/users-stripe-account/webhook`;
+
+  // BuilderPaymentsPage.tsx
 
   React.useEffect(() => {
     if (!websiteId) return;
@@ -68,42 +70,30 @@ export default function BuilderPaymentsPage() {
       setLoading(true);
       setError(null);
       try {
-        // 1. Separate fetch for Payment Method so it doesn't break the page if 404s
+        // 1. Fetch Payment Method (NUCLEAR FIX: Add timestamp)
         api
-          .get(`/builder/websites/${websiteId}`)
+          .get(`/builder/websites/${websiteId}?t=${Date.now()}`) // <--- ADD THIS
           .then((res) => {
-            if (res.data?.payment_method) {
+            if (res.data && res.data.payment_method) {
               setPaymentMethod(res.data.payment_method);
             }
           })
           .catch((err) => {
-            console.warn(
-              "Website settings not found, using default display mode.",
-              err
-            );
+            console.warn("Website settings not found", err);
           });
 
-        // 2. Main fetch for Stripe Config
+        // 2. Fetch Stripe Config (NUCLEAR FIX: Add timestamp)
         const { data } = await api.get(
-          `/users-stripe-account/builder/websites/${websiteId}/stripe-config`
+          `/users-stripe-account/builder/websites/${websiteId}/stripe-config?t=${Date.now()}`, // <--- ADD THIS
         );
 
         setView(data as StripeConfigView);
 
-        // 3. Load Products if Stripe is configured
         if (data?.exists) {
           await loadProducts();
         }
       } catch (err: any) {
-        if (err?.response?.status === 401) {
-          router.replace("/login");
-          return;
-        }
-        setError(
-          err?.response?.data?.detail ||
-            err?.message ||
-            "Failed to load Stripe config"
-        );
+        // ... error handling ...
       } finally {
         setLoading(false);
       }
@@ -111,16 +101,17 @@ export default function BuilderPaymentsPage() {
 
     run();
   }, [websiteId, router]);
-
   const loadProducts = async () => {
     try {
       const { data } = await api.get(
-        `/users-stripe-account/builder/websites/${websiteId}/products`
+        `/users-stripe-account/builder/websites/${websiteId}/products`,
       );
       setProducts(data as ProductRow[]);
     } catch (err: any) {
       setProdError(
-        err?.response?.data?.detail || err?.message || "Failed to load products"
+        err?.response?.data?.detail ||
+          err?.message ||
+          "Failed to load products",
       );
     }
   };
@@ -131,26 +122,26 @@ export default function BuilderPaymentsPage() {
     const priceId = pPriceId.trim();
     if (!priceId.startsWith("price_")) {
       setProdError(
-        "Please paste a valid Stripe Price ID (starts with price_)."
+        "Please paste a valid Stripe Price ID (starts with price_).",
       );
       return;
     }
     try {
       const { data } = await api.get(
-        `/users-stripe-account/builder/websites/${websiteId}/stripe/price/${priceId}`
+        `/users-stripe-account/builder/websites/${websiteId}/stripe/price/${priceId}`,
       );
       setPName((prev) => (prev?.trim() ? prev : data.product_name || ""));
       setPCurrency((data.currency || "usd").toLowerCase());
       setPAmount(
         typeof data.unit_amount === "number"
           ? (data.unit_amount / 100).toFixed(2)
-          : ""
+          : "",
       );
     } catch (err: any) {
       setProdError(
         err?.response?.data?.detail ||
           err?.message ||
-          "Couldn’t look up that Price ID in Stripe"
+          "Couldn’t look up that Price ID in Stripe",
       );
     }
   };
@@ -176,10 +167,10 @@ export default function BuilderPaymentsPage() {
           stripe_secret_key: secretKey,
           stripe_webhook_secret: webhookSecret,
           stripe_publishable_key: publishableKey, // ✅ 3. Send the new key to the backend
-        }
+        },
       );
       const { data } = await api.get(
-        `/users-stripe-account/builder/websites/${websiteId}/stripe-config`
+        `/users-stripe-account/builder/websites/${websiteId}/stripe-config`,
       );
       setView(data as StripeConfigView);
       setEditing(false); // <<< close edit mode after saving
@@ -188,7 +179,7 @@ export default function BuilderPaymentsPage() {
       setError(
         err?.response?.data?.detail ||
           err?.message ||
-          "Failed to save Stripe config"
+          "Failed to save Stripe config",
       );
     } finally {
       setSaving(false);
@@ -219,7 +210,7 @@ export default function BuilderPaymentsPage() {
           currency: pCurrency.trim().toLowerCase(),
           amount_cents,
           active: pActive,
-        }
+        },
       );
       await loadProducts();
 
@@ -234,7 +225,7 @@ export default function BuilderPaymentsPage() {
       setProdError(
         err?.response?.data?.detail ||
           err?.message ||
-          "Failed to create product"
+          "Failed to create product",
       );
     } finally {
       setCreatingProduct(false);
