@@ -1403,191 +1403,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
 
   return <div ref={ref} />;
 };
-// const MenuItemDetails = ({
-//   item,
-//   itemExtras,
-//   itemOptions,
-//   onAddToCart,
-// }: {
-//   item: MenuItem;
-//   itemExtras: Extra[];
-//   itemOptions: PublicOptionGroup[];
-//   onAddToCart: (item: CartItem) => void;
-// }) => {
-//   const [selectedExtras, setSelectedExtras] = useState(new Set<string>());
-//   const [selectedOptions, setSelectedOptions] = useState<
-//     Record<string, string>
-//   >({});
-//   const [quantity, setQuantity] = useState(1);
-//   const [totalPrice, setTotalPrice] = useState(Number(item.base_price));
-
-//   useEffect(() => {
-//     let currentTotal = Number(item.base_price);
-//     selectedExtras.forEach((extraId) => {
-//       const extra = itemExtras.find((e) => e.extra_id === extraId);
-//       if (extra) currentTotal += Number(extra.price);
-//     });
-//     Object.values(selectedOptions).forEach((choiceId) => {
-//       for (const group of itemOptions) {
-//         const choice = group.choices.find((c) => c.choice_id === choiceId);
-//         if (choice) {
-//           currentTotal += Number(choice.price_adjustment);
-//           break;
-//         }
-//       }
-//     });
-//     setTotalPrice(currentTotal);
-//   }, [
-//     selectedExtras,
-//     selectedOptions,
-//     item.base_price,
-//     itemExtras,
-//     itemOptions,
-//   ]);
-
-//   const handleExtraToggle = (extraId: string) => {
-//     setSelectedExtras((prev) => {
-//       const newSet = new Set(prev);
-//       newSet.has(extraId) ? newSet.delete(extraId) : newSet.add(extraId);
-//       return newSet;
-//     });
-//   };
-
-//   const handleOptionChange = (groupId: string, choiceId: string) => {
-//     setSelectedOptions((prev) => ({ ...prev, [groupId]: choiceId }));
-//   };
-
-//   const handleAddToCartClick = () => {
-//     const extrasList = itemExtras.filter((extra) =>
-//       selectedExtras.has(extra.extra_id),
-//     );
-//     const optionsDict: Record<string, string> = {};
-//     for (const group of itemOptions) {
-//       const selectedChoiceId = selectedOptions[group.group_id];
-//       if (selectedChoiceId) {
-//         const choice = group.choices.find(
-//           (c) => c.choice_id === selectedChoiceId,
-//         );
-//         if (choice) optionsDict[group.group_name] = choice.name;
-//       }
-//     }
-//     const cartItem: CartItem = {
-//       cartItemId: `${item.item_id}-${Date.now()}`,
-//       itemId: item.item_id,
-//       name: item.item_name,
-//       imageUrl: item.image_url,
-//       quantity: quantity,
-//       unitPrice: totalPrice,
-//       selectedExtras: extrasList,
-//       selectedOptions: optionsDict,
-//     };
-//     onAddToCart(cartItem);
-//   };
-
-//   return (
-//     <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 space-y-4">
-//       {itemExtras.length > 0 && (
-//         <div>
-//           <h5 className="font-semibold mb-2 text-slate-800">Add Extras:</h5>
-//           <div className="space-y-2">
-//             {itemExtras.map((extra) => (
-//               <label
-//                 key={extra.extra_id}
-//                 className="flex justify-between items-center cursor-pointer text-sm"
-//               >
-//                 <span>{extra.name}</span>
-//                 <div className="flex items-center space-x-3">
-//                   <span>+ ${Number(extra.price).toFixed(2)}</span>
-//                   <input
-//                     type="checkbox"
-//                     className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-//                     onChange={() => handleExtraToggle(extra.extra_id)}
-//                     checked={selectedExtras.has(extra.extra_id)}
-//                   />
-//                 </div>
-//               </label>
-//             ))}
-//           </div>
-//         </div>
-//       )}
-
-//       {itemOptions.length > 0 && (
-//         <div className="space-y-4 pt-4 border-t">
-//           {itemOptions.map((group) => (
-//             <div key={group.group_id}>
-//               <h5 className="font-semibold text-slate-800">
-//                 {group.group_name}
-//               </h5>
-//               <div className="mt-2 space-y-2">
-//                 {group.choices.map((choice) => (
-//                   <label
-//                     key={choice.choice_id}
-//                     className="flex justify-between items-center cursor-pointer text-sm"
-//                   >
-//                     <span>{choice.name}</span>
-//                     <div className="flex items-center space-x-3">
-//                       {Number(choice.price_adjustment) > 0 && (
-//                         <span>
-//                           + ${Number(choice.price_adjustment).toFixed(2)}
-//                         </span>
-//                       )}
-//                       <input
-//                         type="radio"
-//                         name={`${item.item_id}-${group.group_id}`}
-//                         className="h-5 w-5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
-//                         onChange={() =>
-//                           handleOptionChange(group.group_id, choice.choice_id)
-//                         }
-//                         checked={
-//                           selectedOptions[group.group_id] === choice.choice_id
-//                         }
-//                       />
-//                     </div>
-//                   </label>
-//                 ))}
-//               </div>
-//             </div>
-//           ))}
-//         </div>
-//       )}
-
-//       <div className="border-t pt-4 space-y-2">
-//         <div className="flex items-center justify-between">
-//           <span className="font-semibold">Quantity:</span>
-//           <div className="flex items-center gap-2">
-//             <button
-//               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-//               className="w-8 h-8 rounded-full bg-gray-200 font-bold"
-//             >
-//               -
-//             </button>
-//             <span className="font-bold w-8 text-center">{quantity}</span>
-//             <button
-//               onClick={() => setQuantity((q) => q + 1)}
-//               className="w-8 h-8 rounded-full bg-gray-200 font-bold"
-//             >
-//               +
-//             </button>
-//           </div>
-//         </div>
-//         <div className="flex justify-between items-center">
-//           <span className="text-lg font-bold">Total:</span>
-//           <span className="text-xl font-bold text-indigo-600">
-//             ${(totalPrice * quantity).toFixed(2)}
-//           </span>
-//         </div>
-//       </div>
-
-//       <button
-//         onClick={handleAddToCartClick}
-//         className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700"
-//       >
-//         Add to Cart
-//       </button>
-//     </div>
-//   );
-// };
-
 const MenuItemDetails = ({
   item,
   itemExtras,
@@ -1670,135 +1485,320 @@ const MenuItemDetails = ({
   };
 
   return (
-    <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 space-y-6">
-      {/* 1. EXTRAS SECTION */}
+    <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 space-y-4">
       {itemExtras.length > 0 && (
-        <div className="space-y-3">
-          <h5 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">
-            Extras
-          </h5>
+        <div>
+          <h5 className="font-semibold mb-2 text-slate-800">Add Extras:</h5>
           <div className="space-y-2">
-            {itemExtras.map((extra) => {
-              const isSelected = selectedExtras.has(extra.extra_id);
-              return (
-                <label
-                  key={extra.extra_id}
-                  className={`flex justify-between items-center cursor-pointer p-3 rounded-lg border transition-all ${
-                    isSelected
-                      ? "bg-indigo-50 border-indigo-200"
-                      : "bg-white border-gray-200 hover:bg-gray-50"
-                  }`}
-                >
-                  <span className="text-sm font-medium text-gray-700">
-                    {extra.name}
-                  </span>
-                  <div className="flex items-center space-x-3">
-                    <span className="text-sm text-gray-500">
-                      +${Number(extra.price).toFixed(2)}
-                    </span>
-                    <input
-                      type="checkbox"
-                      className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                      onChange={() => handleExtraToggle(extra.extra_id)}
-                      checked={isSelected}
-                    />
-                  </div>
-                </label>
-              );
-            })}
+            {itemExtras.map((extra) => (
+              <label
+                key={extra.extra_id}
+                className="flex justify-between items-center cursor-pointer text-sm"
+              >
+                <span>{extra.name}</span>
+                <div className="flex items-center space-x-3">
+                  <span>+ ${Number(extra.price).toFixed(2)}</span>
+                  <input
+                    type="checkbox"
+                    className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                    onChange={() => handleExtraToggle(extra.extra_id)}
+                    checked={selectedExtras.has(extra.extra_id)}
+                  />
+                </div>
+              </label>
+            ))}
           </div>
         </div>
       )}
 
-      {/* 2. OPTIONS SECTION */}
       {itemOptions.length > 0 && (
-        <div className="space-y-4 pt-2">
+        <div className="space-y-4 pt-4 border-t">
           {itemOptions.map((group) => (
-            <div key={group.group_id} className="space-y-3">
-              <h5 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">
+            <div key={group.group_id}>
+              <h5 className="font-semibold text-slate-800">
                 {group.group_name}
               </h5>
-              <div className="space-y-2">
-                {group.choices.map((choice) => {
-                  const isSelected =
-                    selectedOptions[group.group_id] === choice.choice_id;
-                  return (
-                    <label
-                      key={choice.choice_id}
-                      className={`flex justify-between items-center cursor-pointer p-3 rounded-lg border transition-all ${
-                        isSelected
-                          ? "bg-indigo-50 border-indigo-200"
-                          : "bg-white border-gray-200 hover:bg-gray-50"
-                      }`}
-                    >
-                      <span className="text-sm font-medium text-gray-700">
-                        {choice.name}
-                      </span>
-                      <div className="flex items-center space-x-3">
-                        {Number(choice.price_adjustment) > 0 && (
-                          <span className="text-sm text-gray-500">
-                            +${Number(choice.price_adjustment).toFixed(2)}
-                          </span>
-                        )}
-                        <input
-                          type="radio"
-                          name={`${item.item_id}-${group.group_id}`}
-                          className="h-5 w-5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
-                          onChange={() =>
-                            handleOptionChange(group.group_id, choice.choice_id)
-                          }
-                          checked={isSelected}
-                        />
-                      </div>
-                    </label>
-                  );
-                })}
+              <div className="mt-2 space-y-2">
+                {group.choices.map((choice) => (
+                  <label
+                    key={choice.choice_id}
+                    className="flex justify-between items-center cursor-pointer text-sm"
+                  >
+                    <span>{choice.name}</span>
+                    <div className="flex items-center space-x-3">
+                      {Number(choice.price_adjustment) > 0 && (
+                        <span>
+                          + ${Number(choice.price_adjustment).toFixed(2)}
+                        </span>
+                      )}
+                      <input
+                        type="radio"
+                        name={`${item.item_id}-${group.group_id}`}
+                        className="h-5 w-5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+                        onChange={() =>
+                          handleOptionChange(group.group_id, choice.choice_id)
+                        }
+                        checked={
+                          selectedOptions[group.group_id] === choice.choice_id
+                        }
+                      />
+                    </div>
+                  </label>
+                ))}
               </div>
             </div>
           ))}
         </div>
       )}
 
-      {/* 3. FOOTER: QUANTITY & ADD BUTTON */}
-      <div className="pt-4 border-t border-gray-200 space-y-4">
-        {/* Quantity Row */}
-        <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
-          <span className="font-semibold text-sm text-gray-600 pl-2">
-            Quantity
-          </span>
-          <div className="flex items-center gap-4">
+      <div className="border-t pt-4 space-y-2">
+        <div className="flex items-center justify-between">
+          <span className="font-semibold">Quantity:</span>
+          <div className="flex items-center gap-2">
             <button
               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 font-bold transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full bg-gray-200 font-bold"
             >
               -
             </button>
-            <span className="font-bold w-4 text-center text-lg">
-              {quantity}
-            </span>
+            <span className="font-bold w-8 text-center">{quantity}</span>
             <button
               onClick={() => setQuantity((q) => q + 1)}
-              className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-bold transition-colors active:scale-95"
+              className="w-8 h-8 rounded-full bg-gray-200 font-bold"
             >
               +
             </button>
           </div>
         </div>
-
-        {/* Combined Add Button & Price */}
-        <button
-          onClick={handleAddToCartClick}
-          className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-between shadow-md"
-        >
-          <span>Add to Cart</span>
-          <span className="bg-indigo-700 bg-opacity-40 px-2 py-1 rounded text-sm">
+        <div className="flex justify-between items-center">
+          <span className="text-lg font-bold">Total:</span>
+          <span className="text-xl font-bold text-indigo-600">
             ${(totalPrice * quantity).toFixed(2)}
           </span>
-        </button>
+        </div>
       </div>
+
+      <button
+        onClick={handleAddToCartClick}
+        className="w-full bg-indigo-600 text-white font-semibold py-3 rounded-lg hover:bg-indigo-700"
+      >
+        Add to Cart
+      </button>
     </div>
   );
 };
+
+// const MenuItemDetails = ({
+//   item,
+//   itemExtras,
+//   itemOptions,
+//   onAddToCart,
+// }: {
+//   item: MenuItem;
+//   itemExtras: Extra[];
+//   itemOptions: PublicOptionGroup[];
+//   onAddToCart: (item: CartItem) => void;
+// }) => {
+//   const [selectedExtras, setSelectedExtras] = useState(new Set<string>());
+//   const [selectedOptions, setSelectedOptions] = useState<
+//     Record<string, string>
+//   >({});
+//   const [quantity, setQuantity] = useState(1);
+//   const [totalPrice, setTotalPrice] = useState(Number(item.base_price));
+
+//   useEffect(() => {
+//     let currentTotal = Number(item.base_price);
+//     selectedExtras.forEach((extraId) => {
+//       const extra = itemExtras.find((e) => e.extra_id === extraId);
+//       if (extra) currentTotal += Number(extra.price);
+//     });
+//     Object.values(selectedOptions).forEach((choiceId) => {
+//       for (const group of itemOptions) {
+//         const choice = group.choices.find((c) => c.choice_id === choiceId);
+//         if (choice) {
+//           currentTotal += Number(choice.price_adjustment);
+//           break;
+//         }
+//       }
+//     });
+//     setTotalPrice(currentTotal);
+//   }, [
+//     selectedExtras,
+//     selectedOptions,
+//     item.base_price,
+//     itemExtras,
+//     itemOptions,
+//   ]);
+
+//   const handleExtraToggle = (extraId: string) => {
+//     setSelectedExtras((prev) => {
+//       const newSet = new Set(prev);
+//       newSet.has(extraId) ? newSet.delete(extraId) : newSet.add(extraId);
+//       return newSet;
+//     });
+//   };
+
+//   const handleOptionChange = (groupId: string, choiceId: string) => {
+//     setSelectedOptions((prev) => ({ ...prev, [groupId]: choiceId }));
+//   };
+
+//   const handleAddToCartClick = () => {
+//     const extrasList = itemExtras.filter((extra) =>
+//       selectedExtras.has(extra.extra_id),
+//     );
+//     const optionsDict: Record<string, string> = {};
+//     for (const group of itemOptions) {
+//       const selectedChoiceId = selectedOptions[group.group_id];
+//       if (selectedChoiceId) {
+//         const choice = group.choices.find(
+//           (c) => c.choice_id === selectedChoiceId,
+//         );
+//         if (choice) optionsDict[group.group_name] = choice.name;
+//       }
+//     }
+//     const cartItem: CartItem = {
+//       cartItemId: `${item.item_id}-${Date.now()}`,
+//       itemId: item.item_id,
+//       name: item.item_name,
+//       imageUrl: item.image_url,
+//       quantity: quantity,
+//       unitPrice: totalPrice,
+//       selectedExtras: extrasList,
+//       selectedOptions: optionsDict,
+//     };
+//     onAddToCart(cartItem);
+//   };
+
+//   return (
+//     <div className="border border-t-0 rounded-b-lg p-4 bg-slate-50 space-y-6">
+//       {/* 1. EXTRAS SECTION */}
+//       {itemExtras.length > 0 && (
+//         <div className="space-y-3">
+//           <h5 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">
+//             Extras
+//           </h5>
+//           <div className="space-y-2">
+//             {itemExtras.map((extra) => {
+//               const isSelected = selectedExtras.has(extra.extra_id);
+//               return (
+//                 <label
+//                   key={extra.extra_id}
+//                   className={`flex justify-between items-center cursor-pointer p-3 rounded-lg border transition-all ${
+//                     isSelected
+//                       ? "bg-indigo-50 border-indigo-200"
+//                       : "bg-white border-gray-200 hover:bg-gray-50"
+//                   }`}
+//                 >
+//                   <span className="text-sm font-medium text-gray-700">
+//                     {extra.name}
+//                   </span>
+//                   <div className="flex items-center space-x-3">
+//                     <span className="text-sm text-gray-500">
+//                       +${Number(extra.price).toFixed(2)}
+//                     </span>
+//                     <input
+//                       type="checkbox"
+//                       className="h-5 w-5 rounded border-gray-300 text-indigo-600 focus:ring-indigo-500"
+//                       onChange={() => handleExtraToggle(extra.extra_id)}
+//                       checked={isSelected}
+//                     />
+//                   </div>
+//                 </label>
+//               );
+//             })}
+//           </div>
+//         </div>
+//       )}
+
+//       {/* 2. OPTIONS SECTION */}
+//       {itemOptions.length > 0 && (
+//         <div className="space-y-4 pt-2">
+//           {itemOptions.map((group) => (
+//             <div key={group.group_id} className="space-y-3">
+//               <h5 className="font-semibold text-slate-800 text-sm uppercase tracking-wide">
+//                 {group.group_name}
+//               </h5>
+//               <div className="space-y-2">
+//                 {group.choices.map((choice) => {
+//                   const isSelected =
+//                     selectedOptions[group.group_id] === choice.choice_id;
+//                   return (
+//                     <label
+//                       key={choice.choice_id}
+//                       className={`flex justify-between items-center cursor-pointer p-3 rounded-lg border transition-all ${
+//                         isSelected
+//                           ? "bg-indigo-50 border-indigo-200"
+//                           : "bg-white border-gray-200 hover:bg-gray-50"
+//                       }`}
+//                     >
+//                       <span className="text-sm font-medium text-gray-700">
+//                         {choice.name}
+//                       </span>
+//                       <div className="flex items-center space-x-3">
+//                         {Number(choice.price_adjustment) > 0 && (
+//                           <span className="text-sm text-gray-500">
+//                             +${Number(choice.price_adjustment).toFixed(2)}
+//                           </span>
+//                         )}
+//                         <input
+//                           type="radio"
+//                           name={`${item.item_id}-${group.group_id}`}
+//                           className="h-5 w-5 border-gray-300 text-indigo-600 focus:ring-indigo-500"
+//                           onChange={() =>
+//                             handleOptionChange(group.group_id, choice.choice_id)
+//                           }
+//                           checked={isSelected}
+//                         />
+//                       </div>
+//                     </label>
+//                   );
+//                 })}
+//               </div>
+//             </div>
+//           ))}
+//         </div>
+//       )}
+
+//       {/* 3. FOOTER: QUANTITY & ADD BUTTON */}
+//       <div className="pt-4 border-t border-gray-200 space-y-4">
+//         {/* Quantity Row */}
+//         <div className="flex items-center justify-between bg-white p-2 rounded-lg border border-gray-200">
+//           <span className="font-semibold text-sm text-gray-600 pl-2">
+//             Quantity
+//           </span>
+//           <div className="flex items-center gap-4">
+//             <button
+//               onClick={() => setQuantity((q) => Math.max(1, q - 1))}
+//               className="w-8 h-8 flex items-center justify-center rounded-full bg-gray-100 text-gray-600 hover:bg-gray-200 font-bold transition-colors active:scale-95"
+//             >
+//               -
+//             </button>
+//             <span className="font-bold w-4 text-center text-lg">
+//               {quantity}
+//             </span>
+//             <button
+//               onClick={() => setQuantity((q) => q + 1)}
+//               className="w-8 h-8 flex items-center justify-center rounded-full bg-indigo-100 text-indigo-700 hover:bg-indigo-200 font-bold transition-colors active:scale-95"
+//             >
+//               +
+//             </button>
+//           </div>
+//         </div>
+
+//         {/* Combined Add Button & Price */}
+//         <button
+//           onClick={handleAddToCartClick}
+//           className="w-full bg-indigo-600 text-white font-semibold py-3 px-4 rounded-xl hover:bg-indigo-700 active:scale-[0.98] transition-all flex items-center justify-between shadow-md"
+//         >
+//           <span>Add to Cart</span>
+//           <span className="bg-indigo-700 bg-opacity-40 px-2 py-1 rounded text-sm">
+//             ${(totalPrice * quantity).toFixed(2)}
+//           </span>
+//         </button>
+//       </div>
+//     </div>
+//   );
+// };
 const Accordion = ({
   items,
   style,
