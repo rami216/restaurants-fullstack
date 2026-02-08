@@ -279,3 +279,14 @@ class EmailSendRequest(BaseModel):
     content: str  # Can be HTML or plain text
         
 #endregion
+
+
+# website_builder/schemas.py
+
+class WebsiteSettingsResponse(BaseModel):
+    website_id: UUID
+    subdomain: str | None
+    payment_method: str  # <--- This is the only thing we really care about right now
+    
+    class Config:
+        from_attributes = True

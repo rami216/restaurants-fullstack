@@ -123,16 +123,17 @@ async def update_website_payment_method(
     await db.commit()
     return {"status": "success", "payment_method": website.payment_method}
 
-
-@router.get("/websites/{website_id}", response_model=schemas.WebsiteResponse)
+@router.get("/websites/{website_id}", response_model=schemas.WebsiteSettingsResponse)
 async def get_website_details(
     website_id: UUID, 
     db: AsyncSession = Depends(get_db), 
     current_user: User = Depends(get_current_active_user)
 ):
     """
-    Fetch a specific website by ID. Used by the builder to load settings like payment_method.
+    Fetch ONLY website settings (lighter and faster).
     """
+    # Now this simple query works perfectly because the schema 
+    # isn't asking for 'pages' or 'navbar' anymore!
     website = await get_website_and_check_ownership(website_id, current_user, db)
     return website
 #endregion paymentmethod
