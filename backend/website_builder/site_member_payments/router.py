@@ -14,7 +14,11 @@ from website_builder.site_commerce_models import WebsiteStripeAccount,SitePurcha
 from website_builder.models import Website
 from auth.auth_handler import get_current_active_user as get_current_user
 from models import RestaurantOwner, WebsiteOrder # ✅ 1. IMPORT WebsiteOrder
-
+import httpx # <--- Add this
+import smtplib # <--- Add this
+from email.mime.text import MIMEText # <--- Add this
+from email.mime.multipart import MIMEMultipart # <--- Add this
+from website_builder.models import WebsiteEmailConfig
 router = APIRouter(prefix="/users-stripe-account", tags=["SiteMemberPayments"])
 
 # =========================
@@ -147,6 +151,7 @@ async def create_checkout_session(
 # =========================
 # Webhook (Single endpoint for all site members)
 # =========================
+
 # @router.post("/webhook")
 # async def webhook(
 #     request: Request,
@@ -155,22 +160,25 @@ async def create_checkout_session(
 # ):
 #     payload = await request.body()
 
+#     # 1. Parse Website ID safely
 #     try:
 #         raw = json.loads(payload)
 #         md = raw.get("data", {}).get("object", {}).get("metadata", {}) or {}
-#         website_id = md.get("website_id")
+#         website_id_str = md.get("website_id")
 #     except Exception:
-#         website_id = None
+#         return {"status": "ignored (payload parsing failed)"}
 
-#     if not website_id:
+#     if not website_id_str:
 #         return {"status": "ignored (no website_id in metadata)"}
 
+#     # 2. Get Secret
 #     account = await db.scalar(
-#         select(WebsiteStripeAccount).where(WebsiteStripeAccount.website_id == website_id)
+#         select(WebsiteStripeAccount).where(WebsiteStripeAccount.website_id == website_id_str)
 #     )
 #     if not account or not account.stripe_webhook_secret:
 #         return {"status": "ignored (no website webhook secret configured)"}
 
+#     # 3. Verify Signature
 #     try:
 #         event = stripe.Webhook.construct_event(
 #             payload=payload,
@@ -178,83 +186,107 @@ async def create_checkout_session(
 #             secret=account.stripe_webhook_secret,
 #         )
 #     except Exception as e:
+#         print(f"❌ Webhook Signature Error: {e}")
 #         raise HTTPException(400, f"Webhook verification failed: {e}")
 
-#     # --- Handle Different Event Types ---
+#     # --- Handle Events ---
 
+#     # ✅ CASE 1: MEMBER UNLOCK (Digital Course/Content)
 #     if event["type"] == "checkout.session.completed":
 #         session = event["data"]["object"]
+        
 #         if session.get("payment_status") != "paid":
 #             return {"status": "ignored (not paid)"}
 
 #         md = session.get("metadata") or {}
+        
 #         if md.get("type") == "site_member_unlock":
-#             website_id = md.get("website_id")
-#             member_id = md.get("member_id")
-#             product_id = md.get("product_id")
-            
-#             # ✅ FIX: The payment_intent is just a string ID on the session object
-#             payment_intent_id = session.get("payment_intent")
+#             try:
+#                 website_id = md.get("website_id")
+#                 member_id = md.get("member_id")
+#                 product_id = md.get("product_id")
+#                 payment_intent_id = session.get("payment_intent")
+                
+#                 # Get financials (Added this to fix the DB constraint issue)
+#                 amount_total = session.get("amount_total", 0) # e.g. 2000 (cents)
+#                 currency = session.get("currency", "usd")
 
-#             if not (website_id and member_id and product_id and payment_intent_id):
-#                 return {"status": "ignored (missing metadata for unlock)"}
-            
-#             exists = await db.scalar(
-#                 select(SitePurchase).where(SitePurchase.payment_intent_id == payment_intent_id)
-#             )
-#             if not exists:
-#                 db.add(SitePurchase(
-#                     website_id=website_id,
-#                     member_id=member_id,
-#                     product_id=product_id,
-#                     status="paid",
-#                     payment_intent_id=payment_intent_id
-#                 ))
-#                 await db.commit()
+#                 if not (website_id and member_id and product_id and payment_intent_id):
+#                     print("❌ Missing metadata for unlock")
+#                     return {"status": "ignored (missing metadata for unlock)"}
+                
+#                 exists = await db.scalar(
+#                     select(SitePurchase).where(SitePurchase.payment_intent_id == payment_intent_id)
+#                 )
+                
+#                 if not exists:
+#                     # ✅ FIXED: Cast strings to UUIDs and include amount/currency
+#                     db.add(SitePurchase(
+#                         website_id=UUID(website_id),
+#                         member_id=UUID(member_id),   # Fixes 'String is not UUID' error
+#                         product_id=UUID(product_id), # Fixes 'String is not UUID' error
+#                         status="paid",
+#                         payment_intent_id=payment_intent_id,
+#                         amount_paid=amount_total / 100.0, # Fixes missing column error
+#                         currency=currency
+#                     ))
+#                     await db.commit()
+#                     print(f"✅ Purchase saved for member {member_id}")
+#             except Exception as e:
+#                 print(f"❌ Database Insert Error (Unlock): {e}")
+#                 traceback.print_exc()
+#                 return {"status": "error", "message": str(e)}
 
+#     # ✅ CASE 2: CART CHECKOUT (Physical/Menu Items)
 #     elif event["type"] == "payment_intent.succeeded":
 #         payment_intent = event["data"]["object"]
 #         md = payment_intent.get("metadata", {})
 
 #         if md.get("type") == "cart_checkout":
-#             website_id = md.get("website_id")
-#             cart_items_json = md.get("cart_items")
-            
-#             # ✅ FIX: The shipping details are under the "shipping" key, not "address"
-#             shipping_details = payment_intent.get("shipping")
-            
-#             # Use safe access with .get() in case shipping_details is None
-#             customer_name = shipping_details.get("name") if shipping_details else "N/A"
-#             customer_email = payment_intent.get("receipt_email")
-#             customer_phone = shipping_details.get("phone") if shipping_details else None
-            
-#             address_details = shipping_details.get("address", {}) if shipping_details else {}
-#             address_parts = [
-#                 address_details.get("line1"),
-#                 address_details.get("city"),
-#                 address_details.get("state"),
-#                 address_details.get("postal_code"),
-#                 address_details.get("country"),
-#             ]
-#             shipping_address = ", ".join(filter(None, address_parts))
+#             try:
+#                 website_id = md.get("website_id")
+#                 cart_items_json = md.get("cart_items")
+                
+#                 # Extract shipping details
+#                 shipping_details = payment_intent.get("shipping")
+                
+#                 customer_name = shipping_details.get("name") if shipping_details else "N/A"
+#                 customer_email = payment_intent.get("receipt_email")
+#                 customer_phone = shipping_details.get("phone") if shipping_details else None
+                
+#                 address_details = shipping_details.get("address", {}) if shipping_details else {}
+#                 address_parts = [
+#                     address_details.get("line1"),
+#                     address_details.get("city"),
+#                     address_details.get("state"),
+#                     address_details.get("postal_code"),
+#                     address_details.get("country"),
+#                 ]
+#                 shipping_address = ", ".join(filter(None, address_parts))
 
-#             # Check if order already exists to prevent duplicates
-#             exists = await db.scalar(select(WebsiteOrder).where(WebsiteOrder.payment_intent_id == payment_intent.get("id")))
-#             if not exists:
-#                 new_order = WebsiteOrder(
-#                     website_id=website_id,
-#                     customer_name=customer_name,
-#                     customer_email=customer_email,
-#                     customer_phone=customer_phone,
-#                     shipping_address=shipping_address,
-#                     cart_items=json.loads(cart_items_json) if cart_items_json else [],
-#                     total_amount_cents=payment_intent.get("amount"),
-#                     currency=payment_intent.get("currency"),
-#                     payment_intent_id=payment_intent.get("id"),
-#                     status="paid",
-#                 )
-#                 db.add(new_order)
-#                 await db.commit()
+#                 # Check duplicates
+#                 exists = await db.scalar(select(WebsiteOrder).where(WebsiteOrder.payment_intent_id == payment_intent.get("id")))
+                
+#                 if not exists:
+#                     new_order = WebsiteOrder(
+#                         website_id=UUID(website_id), # UUID cast for safety
+#                         customer_name=customer_name,
+#                         customer_email=customer_email,
+#                         customer_phone=customer_phone,
+#                         shipping_address=shipping_address,
+#                         cart_items=json.loads(cart_items_json) if cart_items_json else [],
+#                         total_amount_cents=payment_intent.get("amount"),
+#                         currency=payment_intent.get("currency"),
+#                         payment_intent_id=payment_intent.get("id"),
+#                         status="paid",
+#                     )
+#                     db.add(new_order)
+#                     await db.commit()
+#                     print(f"✅ Cart Order saved: {payment_intent.get('id')}")
+#             except Exception as e:
+#                 print(f"❌ Database Insert Error (Cart): {e}")
+#                 traceback.print_exc()
+#                 return {"status": "error", "message": str(e)}
 
 #     return {"status": "ok"}
 
@@ -313,12 +345,10 @@ async def webhook(
                 product_id = md.get("product_id")
                 payment_intent_id = session.get("payment_intent")
                 
-                # Get financials (Added this to fix the DB constraint issue)
-                amount_total = session.get("amount_total", 0) # e.g. 2000 (cents)
+                amount_total = session.get("amount_total", 0)
                 currency = session.get("currency", "usd")
 
                 if not (website_id and member_id and product_id and payment_intent_id):
-                    print("❌ Missing metadata for unlock")
                     return {"status": "ignored (missing metadata for unlock)"}
                 
                 exists = await db.scalar(
@@ -326,24 +356,22 @@ async def webhook(
                 )
                 
                 if not exists:
-                    # ✅ FIXED: Cast strings to UUIDs and include amount/currency
                     db.add(SitePurchase(
                         website_id=UUID(website_id),
-                        member_id=UUID(member_id),   # Fixes 'String is not UUID' error
-                        product_id=UUID(product_id), # Fixes 'String is not UUID' error
+                        member_id=UUID(member_id),
+                        product_id=UUID(product_id),
                         status="paid",
                         payment_intent_id=payment_intent_id,
-                        amount_paid=amount_total / 100.0, # Fixes missing column error
+                        amount_paid=amount_total / 100.0,
                         currency=currency
                     ))
                     await db.commit()
-                    print(f"✅ Purchase saved for member {member_id}")
             except Exception as e:
                 print(f"❌ Database Insert Error (Unlock): {e}")
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
 
-    # ✅ CASE 2: CART CHECKOUT (Physical/Menu Items)
+    # ✅ CASE 2: CART CHECKOUT (Physical/Menu Items) WITH EMAIL
     elif event["type"] == "payment_intent.succeeded":
         payment_intent = event["data"]["object"]
         md = payment_intent.get("metadata", {})
@@ -353,9 +381,7 @@ async def webhook(
                 website_id = md.get("website_id")
                 cart_items_json = md.get("cart_items")
                 
-                # Extract shipping details
                 shipping_details = payment_intent.get("shipping")
-                
                 customer_name = shipping_details.get("name") if shipping_details else "N/A"
                 customer_email = payment_intent.get("receipt_email")
                 customer_phone = shipping_details.get("phone") if shipping_details else None
@@ -370,12 +396,11 @@ async def webhook(
                 ]
                 shipping_address = ", ".join(filter(None, address_parts))
 
-                # Check duplicates
                 exists = await db.scalar(select(WebsiteOrder).where(WebsiteOrder.payment_intent_id == payment_intent.get("id")))
                 
                 if not exists:
                     new_order = WebsiteOrder(
-                        website_id=UUID(website_id), # UUID cast for safety
+                        website_id=UUID(website_id),
                         customer_name=customer_name,
                         customer_email=customer_email,
                         customer_phone=customer_phone,
@@ -388,14 +413,75 @@ async def webhook(
                     )
                     db.add(new_order)
                     await db.commit()
-                    print(f"✅ Cart Order saved: {payment_intent.get('id')}")
+                    
+                    # 📧 SEND CONFIRMATION EMAIL (NEW LOGIC)
+                    try:
+                        email_config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == UUID(website_id)))
+                        if email_config and customer_email:
+                            subject = f"Order Paid #{str(new_order.order_id)[:8]}"
+                            total_paid = (payment_intent.get("amount") / 100)
+                            
+                            body = f"""
+                            <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+                                <h2 style="color: #28a745;">Payment Successful!</h2>
+                                <p>Hi {customer_name},</p>
+                                <p>We have received your payment of <b>${total_paid:.2f}</b>.</p>
+                                
+                                <div style="background-color: #f9f9f9; padding: 15px; margin-top: 20px; border-radius: 5px;">
+                                    <strong>Shipping to:</strong><br>
+                                    {shipping_address}<br>
+                                    {customer_phone or ""}
+                                </div>
+                                
+                                <p style="margin-top: 20px; font-size: 12px; color: #888;">
+                                    Sent by {email_config.from_name}
+                                </p>
+                            </div>
+                            """
+
+                            # --- SEND VIA SENDGRID ---
+                            if email_config.provider_type == "sendgrid" and email_config.sendgrid_api_key:
+                                async with httpx.AsyncClient() as client:
+                                    await client.post(
+                                        "https://api.sendgrid.com/v3/mail/send",
+                                        headers={"Authorization": f"Bearer {email_config.sendgrid_api_key}", "Content-Type": "application/json"},
+                                        json={
+                                            "personalizations": [{"to": [{"email": customer_email}]}],
+                                            "from": {"email": email_config.from_email, "name": email_config.from_name},
+                                            "subject": subject,
+                                            "content": [{"type": "text/html", "value": body}]
+                                        }
+                                    )
+                            # --- SEND VIA SMTP ---
+                            elif email_config.provider_type == "smtp":
+                                message = MIMEMultipart()
+                                message["From"] = f"{email_config.from_name} <{email_config.from_email}>"
+                                message["To"] = customer_email
+                                message["Subject"] = subject
+                                message.attach(MIMEText(body, "html"))
+
+                                timeout = 10
+                                if email_config.smtp_port == 465:
+                                    server = smtplib.SMTP_SSL(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+                                else:
+                                    server = smtplib.SMTP(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+                                    server.ehlo()
+                                    if server.has_extn("STARTTLS"):
+                                        server.starttls()
+                                        server.ehlo()
+                                server.login(email_config.smtp_user, email_config.smtp_password)
+                                server.sendmail(email_config.from_email, customer_email, message.as_string())
+                                server.quit()
+
+                    except Exception as email_err:
+                        print(f"⚠️ Email failed for Stripe order: {email_err}")
+
             except Exception as e:
                 print(f"❌ Database Insert Error (Cart): {e}")
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
 
     return {"status": "ok"}
-
 def _assert_site_owner(ctx, website: Website):
     # If you later add roles/ownership checks, enforce here.
     # For now ctx["member"] belongs to website already (via subdomain),
