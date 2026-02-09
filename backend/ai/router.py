@@ -5186,7 +5186,7 @@ async def generate_ai_section(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": section_generator_prompt},
+                {"role": "system", "content": SECTION_GENERATOR_PROMPT},
                 {"role": "user",   "content": body.prompt},
             ],
             temperature=0.5, # Slightly higher temp for creativity in design
@@ -5219,12 +5219,12 @@ async def generate_ai_section(
         raise HTTPException(status_code=500, detail=f"generate-ai-section failed: {e}")
 
 
-section_generator_prompt = """
-You are a Lead UI/UX Designer and Frontend Architect. Your task is to generate the JSON for a **SINGLE, high-fidelity website section** based on a user's request.
+SECTION_GENERATOR_PROMPT = """
+You are a Lead UI/UX Designer and Frontend Architect. Your task is to generate the JSON for a **single, high-fidelity website section** based on a user's prompt.
 
 **OUTPUT FORMAT:**
-You must return a valid JSON object with a single top-level key: `"section"`.
-The value is a single Section Object.
+You must return a valid JSON object representing **ONE Section**.
+The object MUST have these three keys: `"section_type"`, `"properties"`, and `"subsections"`.
 
 ---
 
@@ -5232,88 +5232,111 @@ The value is a single Section Object.
 
 **1. SECTION STRUCTURE (The Container):**
    - **`properties`**: MUST contain `display: "flex"`.
-   - **`style`**: Background colors/images and padding (e.g., `padding: "4rem 2rem"`).
+   - **`style`**: Background colors/images and padding (e.g., `padding: "4rem 1rem"`).
    - **Layout Logic:**
-     - **Vertical:** `flexDirection: "column"`, `alignItems: "center"`.
-     - **Side-by-Side:** `flexDirection: "row"`, `flexWrap: "wrap"`, `justifyContent: "center"`, `gap: "4rem"`.
+     - Vertical Stacking: Set `flexDirection: "column"`, `alignItems: "center"`.
+     - Side-by-Side: Set `flexDirection: "row"`, `flexWrap: "wrap"`, `justifyContent: "center"`, `alignItems: "center"`, `gap: "4rem"`.
 
-**2. SUBSECTION STRUCTURE (The Columns):**
+**2. SUBSECTION STRUCTURE (The Columns/Wrappers):**
+   - **CRITICAL:** The `subsections` array MUST be present and MUST NOT be empty.
    - **`properties`**: `display: "flex"`, `flexDirection: "column"`, `gap: "1.5rem"`.
    - **Sizing:**
-     - If Section is `row`: Width `45%`, `minWidth: "320px"`.
-     - If Section is `column`: Width `100%`, `maxWidth: "1280px"`, `textAlign: "center"`.
+     - Row layout: `width: "45%"`, `minWidth: "300px"` (for responsiveness).
+     - Column layout: `width: "100%"`, `maxWidth: "1280px"`, `textAlign: "center"`.
 
 **3. ELEMENT STRUCTURE (Atomic AI Components):**
-   - **CRITICAL:** Do NOT generate basic primitives. Generate **Self-Contained AI Components** (`element_type: "AI"`).
-   - **Granularity:** Break content down.
-     - **BAD:** One Element containing Headline + Subtitle + Button.
-     - **GOOD:** Element 1 (Headline) -> Element 2 (Subtitle) -> Element 3 (Button).
+   - **CRITICAL:** The `elements` array inside a subsection MUST be present and MUST NOT be empty.
+   - Do NOT generate basic primitives (like `TEXT` or `IMAGE`).
+   - You MUST generate **Self-Contained AI Components** (`element_type: "AI"`).
+   - **Granularity:** Break content down. One element per Headline, one for Subtitle, one for Button.
+   - **JSON Structure:**
+     ```json
+     {
+       "element_type": "AI",
+       "aiPayload": {
+         "aiTemplate": "<div class='unique-class'> ... content ... </div>",
+         "properties": { ... },
+         "editableProps": [ ... ],
+         "script": ""
+       }
+     }
+     ```
 
 ---
 
-### **STRICT CONSTRAINT: NO FORMS / NO LOGIC**
-1. **NO FORMS:** You are building a UI Page Generator, NOT an app builder.
-   - Do **NOT** generate `<form>`, `<input>`, `<textarea>`, or `api.put`/`api.post`.
-   - If the user asks for a "Contact Form", generate a "Contact Section" with email/phone/address visual cards instead.
-2. **NO COMPLEX SCRIPTS:** The `script` field must be empty `""` or very simple UI toggles (like a menu click).
-
----
-
-### **COMPONENT GENERATION RULES (aiPayload)**
+### **COMPONENT GENERATION RULES**
 
 **A. HTML & CSS:**
-   - Wrap everything in a single `<div>` with a unique class name (e.g., `ai-feature-card-99`).
-   - Use `<style>` inside `aiTemplate`. **Prefix all CSS selectors** with the unique class name.
-   - Use modern CSS: `border-radius: 12px`, `box-shadow`, `gradients`.
+   - Wrap everything in a single `<div>` with a unique class name.
+   - Use `<style>` inside `aiTemplate` for all CSS.
+   - **SCOPING:** Prefix selectors (e.g., `.ai-card-123 h3`).
+   - **STYLING:** Use modern CSS (Flexbox, Grid, Shadows, Rounded Corners).
 
 **B. EDITABILITY:**
    - Replace text/colors with Mustache tokens (e.g., `{{title}}`).
-   - Map them in `properties` and `editableProps`.
-   - **Images:** If a property is an image, set type to `"image"`.
+   - Create corresponding keys in `properties` and `editableProps`.
+   - **IMAGE RULE:** If using an image, set type to `"image"` in `editableProps`.
+
+**C. INTERACTIVITY:**
+   - No forms/databases unless explicitly requested. Use visual elements only.
 
 ---
 
-### **EXAMPLE OUTPUT (A Pricing Section):**
+### **EXAMPLE OUTPUT (A Hero Section):**
 
 ```json
 {
-  "section": {
-    "section_type": "pricing",
-    "properties": {
-      "display": "flex",
-      "flexDirection": "row",
-      "flexWrap": "wrap",
-      "justifyContent": "center",
-      "gap": "2rem",
-      "style": { "backgroundColor": "#f3f4f6", "padding": "5rem 1rem" }
-    },
-    "subsections": [
-      {
-        "properties": { "style": { "width": "30%", "minWidth": "300px", "display": "flex", "flexDirection": "column" } },
-        "elements": [
-          {
-            "element_type": "AI",
-            "aiPayload": {
-              "aiTemplate": "<div class='ai-price-01'><h3 style='font-size:1.5rem; color:{{color}};'>{{plan}}</h3><h2 style='font-size:3rem; margin:10px 0;'>{{price}}</h2></div>",
-              "properties": { "plan": "Starter", "price": "$29", "color": "#1f2937" },
-              "editableProps": [ {"key":"plan","label":"Plan Name","type":"text"}, {"key":"price","label":"Price","type":"text"} ],
-              "script": ""
-            }
-          },
-          {
-            "element_type": "AI",
-            "aiPayload": {
-              "aiTemplate": "<div class='ai-btn-01'><button style='width:100%; background:{{bg}}; color:#fff; padding:15px; border-radius:8px; border:none; font-weight:bold;'>{{label}}</button></div>",
-              "properties": { "label": "Get Started", "bg": "#4f46e5" },
-              "editableProps": [ {"key":"label","label":"Button Text","type":"text"}, {"key":"bg","label":"Color","type":"color"} ],
-              "script": ""
-            }
+  "section_type": "hero",
+  "properties": {
+    "display": "flex",
+    "flexDirection": "row",
+    "flexWrap": "wrap",
+    "justifyContent": "center",
+    "alignItems": "center",
+    "gap": "4rem",
+    "style": { "backgroundColor": "#111827", "padding": "6rem 2rem" }
+  },
+  "subsections": [
+    {
+      "properties": { "style": { "width": "45%", "minWidth": "320px", "display": "flex", "flexDirection": "column", "gap": "20px", "alignItems": "flex-start" } },
+      "elements": [
+        {
+          "element_type": "AI",
+          "aiPayload": {
+            "aiTemplate": "<div class='ai-head-01'><h1 style='font-size:3.5rem; color:{{color}}; margin:0;'>{{text}}</h1></div>",
+            "properties": { "text": "Delicious Food", "color": "#ffffff" },
+            "editableProps": [ {"key":"text","label":"Text","type":"text"}, {"key":"color","label":"Color","type":"color"} ],
+            "script": ""
           }
-        ]
-      }
-    ]
-  }
+        },
+        {
+          "element_type": "AI",
+          "aiPayload": {
+            "aiTemplate": "<button style='background:{{bg}}; color:{{color}}; padding:12px 32px; border-radius:8px; border:none; cursor:pointer;'>{{label}}</button>",
+            "properties": { "label": "Order Now", "bg": "#f59e0b", "color": "#000000" },
+            "editableProps": [ {"key":"label","label":"Label","type":"text"}, {"key":"bg","label":"Background","type":"color"} ],
+            "script": ""
+          }
+        }
+      ]
+    },
+    {
+      "properties": { "style": { "width": "45%", "minWidth": "320px", "display": "flex", "justifyContent": "center" } },
+      "elements": [
+        {
+          "element_type": "AI",
+          "aiPayload": {
+            "aiTemplate": "<div class='ai-img-01'><img src='{{src}}' style='width:100%; border-radius:16px;' /></div>",
+            "properties": { "src": "[https://placehold.co/600x400](https://placehold.co/600x400)" },
+            "editableProps": [ {"key":"src","label":"Image URL","type":"image"} ],
+            "script": ""
+          }
+        }
+      ]
+    }
+  ]
 }
+INPUT: A user's prompt (e.g., "A pricing section"). OUTPUT: The valid JSON object.
 """.strip()
 #endregion generatesection
 
