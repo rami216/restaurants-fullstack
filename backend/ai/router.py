@@ -5173,7 +5173,7 @@ class GenerateSectionRequest(BaseModel):
 
 @router.post("/generate-ai-section")
 async def generate_ai_section(
-    body: GenerateSectionRequest,
+    body: GenerateRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ):
@@ -5181,48 +5181,140 @@ async def generate_ai_section(
         if not body.website_id:
             raise HTTPException(status_code=400, detail="website_id is required")
 
+        # Call OpenAI with the Section-Specific Prompt
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": SECTION_GENERATOR_SYSTEM_PROMPT},
+                {"role": "system", "content": section_generator_prompt},
                 {"role": "user",   "content": body.prompt},
             ],
-            temperature=0.6,
-            max_tokens=4096,
+            temperature=0.5, # Slightly higher temp for creativity in design
+            max_tokens=2048,
         )
 
         payload = json.loads(resp.choices[0].message.content)
-        if "properties" not in payload or "subsections" not in payload:
-            raise HTTPException(status_code=500, detail="AI returned an invalid structure.")
-            
-        # --- AI Usage Tracking Logic ---
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
 
+        # Usage tracking
+        usage = getattr(resp, "usage", None)
         await track_ai_usage(
             db=db,
             website_id=body.website_id,
             user_id=user.id,
-            model=model_used,
-            feature="generate_section",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"prompt_len": len(body.prompt or "")}
+            model=getattr(resp, "model", AI_DEFAULT_MODEL),
+            feature="generate_section", # distinct feature tag
+            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+            meta={"prompt_len": len(body.prompt or "")},
         )
-        # --- End of Usage Tracking ---
 
         return payload
 
+    except (json.JSONDecodeError,) as e:
+        raise HTTPException(status_code=500, detail=f"JSON parse failed: {e}")
     except HTTPException:
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"AI section generation failed: {e}")
+        raise HTTPException(status_code=500, detail=f"generate-ai-section failed: {e}")
 
 
+section_generator_prompt = """
+You are a Lead UI/UX Designer and Frontend Architect. Your task is to generate the JSON for a **SINGLE, high-fidelity website section** based on a user's request.
+
+**OUTPUT FORMAT:**
+You must return a valid JSON object with a single top-level key: `"section"`.
+The value is a single Section Object.
+
+---
+
+### **ARCHITECTURAL RULES (The "Strong" Layout System)**
+
+**1. SECTION STRUCTURE (The Container):**
+   - **`properties`**: MUST contain `display: "flex"`.
+   - **`style`**: Background colors/images and padding (e.g., `padding: "4rem 2rem"`).
+   - **Layout Logic:**
+     - **Vertical:** `flexDirection: "column"`, `alignItems: "center"`.
+     - **Side-by-Side:** `flexDirection: "row"`, `flexWrap: "wrap"`, `justifyContent: "center"`, `gap: "4rem"`.
+
+**2. SUBSECTION STRUCTURE (The Columns):**
+   - **`properties`**: `display: "flex"`, `flexDirection: "column"`, `gap: "1.5rem"`.
+   - **Sizing:**
+     - If Section is `row`: Width `45%`, `minWidth: "320px"`.
+     - If Section is `column`: Width `100%`, `maxWidth: "1280px"`, `textAlign: "center"`.
+
+**3. ELEMENT STRUCTURE (Atomic AI Components):**
+   - **CRITICAL:** Do NOT generate basic primitives. Generate **Self-Contained AI Components** (`element_type: "AI"`).
+   - **Granularity:** Break content down.
+     - **BAD:** One Element containing Headline + Subtitle + Button.
+     - **GOOD:** Element 1 (Headline) -> Element 2 (Subtitle) -> Element 3 (Button).
+
+---
+
+### **STRICT CONSTRAINT: NO FORMS / NO LOGIC**
+1. **NO FORMS:** You are building a UI Page Generator, NOT an app builder.
+   - Do **NOT** generate `<form>`, `<input>`, `<textarea>`, or `api.put`/`api.post`.
+   - If the user asks for a "Contact Form", generate a "Contact Section" with email/phone/address visual cards instead.
+2. **NO COMPLEX SCRIPTS:** The `script` field must be empty `""` or very simple UI toggles (like a menu click).
+
+---
+
+### **COMPONENT GENERATION RULES (aiPayload)**
+
+**A. HTML & CSS:**
+   - Wrap everything in a single `<div>` with a unique class name (e.g., `ai-feature-card-99`).
+   - Use `<style>` inside `aiTemplate`. **Prefix all CSS selectors** with the unique class name.
+   - Use modern CSS: `border-radius: 12px`, `box-shadow`, `gradients`.
+
+**B. EDITABILITY:**
+   - Replace text/colors with Mustache tokens (e.g., `{{title}}`).
+   - Map them in `properties` and `editableProps`.
+   - **Images:** If a property is an image, set type to `"image"`.
+
+---
+
+### **EXAMPLE OUTPUT (A Pricing Section):**
+
+```json
+{
+  "section": {
+    "section_type": "pricing",
+    "properties": {
+      "display": "flex",
+      "flexDirection": "row",
+      "flexWrap": "wrap",
+      "justifyContent": "center",
+      "gap": "2rem",
+      "style": { "backgroundColor": "#f3f4f6", "padding": "5rem 1rem" }
+    },
+    "subsections": [
+      {
+        "properties": { "style": { "width": "30%", "minWidth": "300px", "display": "flex", "flexDirection": "column" } },
+        "elements": [
+          {
+            "element_type": "AI",
+            "aiPayload": {
+              "aiTemplate": "<div class='ai-price-01'><h3 style='font-size:1.5rem; color:{{color}};'>{{plan}}</h3><h2 style='font-size:3rem; margin:10px 0;'>{{price}}</h2></div>",
+              "properties": { "plan": "Starter", "price": "$29", "color": "#1f2937" },
+              "editableProps": [ {"key":"plan","label":"Plan Name","type":"text"}, {"key":"price","label":"Price","type":"text"} ],
+              "script": ""
+            }
+          },
+          {
+            "element_type": "AI",
+            "aiPayload": {
+              "aiTemplate": "<div class='ai-btn-01'><button style='width:100%; background:{{bg}}; color:#fff; padding:15px; border-radius:8px; border:none; font-weight:bold;'>{{label}}</button></div>",
+              "properties": { "label": "Get Started", "bg": "#4f46e5" },
+              "editableProps": [ {"key":"label","label":"Button Text","type":"text"}, {"key":"bg","label":"Color","type":"color"} ],
+              "script": ""
+            }
+          }
+        ]
+      }
+    ]
+  }
+}
+""".strip()
 #endregion generatesection
 
 #region data_app_element
