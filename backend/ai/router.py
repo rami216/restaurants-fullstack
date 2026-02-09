@@ -10802,88 +10802,97 @@ Is this a file upload?
                     }
                     };
                 ```
-        - **IF RELATIONAL OR CASCADING DROPDOWNS EXIST:**
-            - **Trigger:** When form fields depend on each other (e.g., "Select Category -> Subcategory", "Service -> Date -> Time") or link to another table.
-            - **Strategy:** You must distinguish between the **Foreign Key Source** (The list of Categories/Services) and the **Main Data Source** (The Rows/Slots).
+        - **IF CASCADING DROPDOWNS WITH RELATIONS (Table A -> Table B):**
+            - **Trigger:** When the prompt implies filtering data based on a category from another table (e.g., "Select Service -> Day -> Time").
+            - **Strategy:** You must fetch the **Category Table** (Level 1) separately from the **Data Table** (Level 2/3).
             - **MANDATORY SCRIPT STRUCTURE:**
-                1. **Global Variables:** Create `let allMainRows = [];` (to store the main data for filtering).
-                2. **Fetch Step 1 (The Parent/Category):** - If the first dropdown is a Relation, `api.get` that related schema ID.
-                   - Populate Dropdown 1 with `value=row_id` and `text=name`.
-                3. **Fetch Step 2 (The Data):**
-                   - `api.get` the Main Schema (the one we are submitting to) with `limit=1000`.
-                   - Store results in `allMainRows`.
-                4. **Chain Logic (The Filter):**
-                   - **Parent Dropdown Change:**
-                     - Reset Child Dropdowns.
-                     - Filter `allMainRows`: `const filtered = allMainRows.filter(row => row.data.FOREIGN_KEY_FIELD === this.value);`
-                     - **CRITICAL:** Use `new Set()` to get unique values for the 2nd Dropdown (e.g. Dates/Models) from this filtered list.
-                   - **Child Dropdown Change:**
-                     - Filter `allMainRows` again: `const final = allMainRows.filter(row => row.data.FOREIGN_KEY_FIELD === parent.value && row.data.CHILD_FIELD === this.value);`
-                     - Populate the **Final Dropdown** with `value=row.row_id` (CRITICAL: This ID is needed for the update/booking).
-                
-                - **GENERIC CODE PATTERN (Adapt variable names):**
-                  ```javascript
-                  let globalRows = [];
+                1. **Global Vars:** `let allDataRows = [];`
+                2. **Fetch Level 1 (Categories/Services):** - `api.get` the Related Schema (e.g., Services).
+                   - Populate Select 1 with `value=row_id` and `text=name`.
+                3. **Fetch Level 2 (Data/Slots):**
+                   - `api.get` the Main Schema (e.g., Slots) with `limit=1000`.
+                   - Store results in `allDataRows`.
+                4. **The "Universal Matcher" Logic (CRITICAL):**
+                   - When filtering, you MUST check if the row's relation field matches the selected ID.
+                   - **Code Pattern:**
+                     ```javascript
+                     const selectedId = select1.value;
+                     const filtered = allDataRows.filter(row => {
+                        const val = row.data.RELATION_FIELD_NAME;
+                        // Check if val is just the ID string OR an object with row_id
+                        const rowValue = (typeof val === 'object' && val !== null) ? val.row_id : val; 
+                        return rowValue === selectedId;
+                     });
+                     ```
+                5. **Populate Child Dropdowns:**
+                   - Use `new Set()` on the `filtered` list to get unique values for Select 2 (e.g., Days).
+                   - On Select 2 change, filter again to get specific rows for Select 3.
+                   - **Final Value:** Select 3 MUST use `row_id` as the value to allow updating.
+
+            - **CODE TEMPLATE (Adapt variable names):**
+              ```javascript
+              let allRows = [];
+              
+              // 1. Fetch Categories (Services)
+              const fetchCats = async () => {
+                  try {
+                      const res = await api.get('/custom-data/rows/RELATED_SCHEMA_ID?limit=100');
+                      select1.innerHTML = '<option value="">Select Option</option>' + 
+                          res.data.rows.map(r => `<option value="${r.row_id}">${r.data.name}</option>`).join('');
+                  } catch (e) { console.error(e); }
+              };
+
+              // 2. Fetch Data (Slots)
+              const fetchData = async () => {
+                  try {
+                      const res = await api.get('/custom-data/rows/' + schemaId + '?limit=1000');
+                      allRows = res.data.rows;
+                  } catch (e) { console.error(e); }
+              };
+
+              // 3. Filter Logic
+              select1.onchange = () => {
+                  select2.innerHTML = '<option value="">Select...</option>';
+                  select3.innerHTML = '<option value="">Select...</option>';
+                  select2.disabled = true; select3.disabled = true;
                   
-                  // 1. Fetch Foreign Key Options (e.g. Services)
-                  const fetchRelations = async () => {
-                      try {
-                          const res = await api.get('/custom-data/rows/RELATED_SCHEMA_ID?limit=100');
-                          // Populate Parent Select
-                          select1.innerHTML = '<option value="">Select Option</option>' + 
-                              res.data.rows.map(r => `<option value="${r.row_id}">${r.data.name}</option>`).join('');
-                      } catch (e) { console.error(e); }
-                  };
+                  if (!select1.value) return;
 
-                  // 2. Fetch Main Table Data (e.g. Slots)
-                  const fetchMainData = async () => {
-                      try {
-                          const res = await api.get('/custom-data/rows/' + schemaId + '?limit=1000');
-                          globalRows = res.data.rows;
-                      } catch (e) { console.error(e); }
-                  };
+                  // Universal Matcher (Handles String IDs and Objects)
+                  const matches = allRows.filter(r => {
+                      const val = r.data.RELATION_FIELD_NAME; // e.g. service_type
+                      const storedId = (typeof val === 'object' && val !== null) ? val.row_id : val;
+                      // Also check available flag if it exists
+                      const isAvail = r.data.available === true || r.data.available === 'true' || r.data.available === undefined;
+                      return storedId === select1.value && isAvail;
+                  });
+                  
+                  // Get Unique Level 2 Items (e.g. Days)
+                  const uniqueL2 = [...new Set(matches.map(r => r.data.LEVEL_2_FIELD))];
+                  select2.innerHTML += uniqueL2.map(v => `<option value="${v}">${v}</option>`).join('');
+                  select2.disabled = false;
+              };
 
-                  // 3. Parent Changed -> Filter Main Data -> Show Child Options
-                  select1.onchange = () => {
-                      select2.innerHTML = '<option value="">Select...</option>';
-                      select2.disabled = true;
-                      
-                      if (!select1.value) return;
+              // 4. Final Selection
+              select2.onchange = () => {
+                  select3.innerHTML = '<option value="">Select...</option>';
+                  select3.disabled = true;
+                  if (!select2.value) return;
 
-                      // Filter logic: Find rows in Main Table that belong to this Foreign Key ID
-                      // Note: Check availability if implied by prompt
-                      const relevantRows = globalRows.filter(r => 
-                          r.data.FOREIGN_KEY_FIELD === select1.value && 
-                          (r.data.available === true || r.data.available === 'true' || r.data.available === undefined)
-                      );
-                      
-                      // Extract Unique Values for the intermediate dropdown
-                      const uniqueValues = [...new Set(relevantRows.map(r => r.data.INTERMEDIATE_FIELD))];
-                      
-                      select2.innerHTML += uniqueValues.map(v => `<option value="${v}">${v}</option>`).join('');
-                      select2.disabled = false;
-                  };
+                  const finalRows = allRows.filter(r => {
+                      const val = r.data.RELATION_FIELD_NAME;
+                      const storedId = (typeof val === 'object' && val !== null) ? val.row_id : val;
+                      return storedId === select1.value && r.data.LEVEL_2_FIELD === select2.value;
+                  });
 
-                  // 4. Child Changed -> Find Specific Row ID
-                  select2.onchange = () => {
-                      select3.innerHTML = '<option value="">Select...</option>';
-                      select3.disabled = true;
+                  // Map to ROW_ID for booking
+                  select3.innerHTML += finalRows.map(r => `<option value="${r.row_id}">${r.data.LEVEL_3_FIELD}</option>`).join('');
+                  select3.disabled = false;
+              };
 
-                      if (!select2.value) return;
-
-                      const finalRows = globalRows.filter(r => 
-                          r.data.FOREIGN_KEY_FIELD === select1.value && 
-                          r.data.INTERMEDIATE_FIELD === select2.value
-                      );
-
-                      // Map to ROW_ID so we can book/update this specific record
-                      select3.innerHTML += finalRows.map(r => `<option value="${r.row_id}">${r.data.FINAL_DISPLAY_FIELD}</option>`).join('');
-                      select3.disabled = false;
-                  };
-
-                  fetchRelations();
-                  fetchMainData();
-                  ```
+              fetchCats();
+              fetchData();
+              ```
 
         - IF FILE/IMAGE UPLOADS ARE IMPLIED:
             - HTML: Render `<input type="file" name="EXACT_SCHEMA_FIELD_NAME">`.
