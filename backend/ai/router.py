@@ -10812,22 +10812,10 @@ Is this a file upload?
                 3. **Fetch Level 2 (Data/Slots):**
                    - `api.get` the Main Schema (e.g., Slots) with `limit=1000`.
                    - Store results in `allDataRows`.
-                4. **The "Universal Matcher" Logic (CRITICAL):**
-                   - When filtering, you MUST check if the row's relation field matches the selected ID.
-                   - **Code Pattern:**
-                     ```javascript
-                     const selectedId = select1.value;
-                     const filtered = allDataRows.filter(row => {
-                        const val = row.data.RELATION_FIELD_NAME;
-                        // Check if val is just the ID string OR an object with row_id
-                        const rowValue = (typeof val === 'object' && val !== null) ? val.row_id : val; 
-                        return rowValue === selectedId;
-                     });
-                     ```
-                5. **Populate Child Dropdowns:**
-                   - Use `new Set()` on the `filtered` list to get unique values for Select 2 (e.g., Days).
-                   - On Select 2 change, filter again to get specific rows for Select 3.
-                   - **Final Value:** Select 3 MUST use `row_id` as the value to allow updating.
+                4. **The "Universal Matcher" Logic:**
+                   - When filtering, check if the row's relation field matches the selected ID (handle both String IDs and Expanded Objects).
+                5. **The "Sanitization" Logic (CRITICAL):**
+                   - Before `api.put`, loop through the data. If any field is an object with a `row_id`, convert it back to a string ID. This prevents database corruption.
 
             - **CODE TEMPLATE (Adapt variable names):**
               ```javascript
@@ -10850,7 +10838,7 @@ Is this a file upload?
                   } catch (e) { console.error(e); }
               };
 
-              // 3. Filter Logic
+              // 3. Filter Logic (Service -> Day)
               select1.onchange = () => {
                   select2.innerHTML = '<option value="">Select...</option>';
                   select3.innerHTML = '<option value="">Select...</option>';
@@ -10858,22 +10846,20 @@ Is this a file upload?
                   
                   if (!select1.value) return;
 
-                  // Universal Matcher (Handles String IDs and Objects)
+                  // Universal Matcher: Handle String IDs vs Objects
                   const matches = allRows.filter(r => {
-                      const val = r.data.RELATION_FIELD_NAME; // e.g. service_type
+                      const val = r.data.RELATION_FIELD_NAME; 
                       const storedId = (typeof val === 'object' && val !== null) ? val.row_id : val;
-                      // Also check available flag if it exists
                       const isAvail = r.data.available === true || r.data.available === 'true' || r.data.available === undefined;
                       return storedId === select1.value && isAvail;
                   });
                   
-                  // Get Unique Level 2 Items (e.g. Days)
                   const uniqueL2 = [...new Set(matches.map(r => r.data.LEVEL_2_FIELD))];
                   select2.innerHTML += uniqueL2.map(v => `<option value="${v}">${v}</option>`).join('');
                   select2.disabled = false;
               };
 
-              // 4. Final Selection
+              // 4. Filter Logic (Day -> Time)
               select2.onchange = () => {
                   select3.innerHTML = '<option value="">Select...</option>';
                   select3.disabled = true;
@@ -10888,6 +10874,34 @@ Is this a file upload?
                   // Map to ROW_ID for booking
                   select3.innerHTML += finalRows.map(r => `<option value="${r.row_id}">${r.data.LEVEL_3_FIELD}</option>`).join('');
                   select3.disabled = false;
+              };
+
+              // 5. Submission with SANITIZATION
+              form.onsubmit = async (e) => {
+                  e.preventDefault();
+                  const selectedRowId = select3.value;
+                  // ... disable buttons ...
+                  
+                  try {
+                      const res = await api.get('/custom-data/rows/' + schemaId + '?row_id=' + selectedRowId);
+                      const targetRow = res.data.rows.find(r => r.row_id === selectedRowId);
+                      
+                      const formData = {};
+                      new FormData(form).forEach((v, k) => formData[k] = v);
+                      
+                      let mergedData = { ...targetRow.data, ...formData, available: false };
+
+                      // SANITIZE DATA: Convert Objects back to IDs
+                      Object.keys(mergedData).forEach(key => {
+                          const val = mergedData[key];
+                          if (val && typeof val === 'object' && val.row_id) {
+                              mergedData[key] = val.row_id;
+                          }
+                      });
+
+                      await api.put('/custom-data/rows/' + selectedRowId, { data: mergedData });
+                      // ... success message & refresh ...
+                  } catch (err) { console.error(err); }
               };
 
               fetchCats();
