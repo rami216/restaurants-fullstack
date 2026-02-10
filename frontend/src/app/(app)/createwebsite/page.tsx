@@ -538,22 +538,24 @@ function BuilderManager() {
   };
   //endregion copy
   const handleGenerateSection = async (prompt: string, sectionId: string) => {
-    if (!activePage || !websiteData) return; // Also check for websiteData
+    if (!activePage || !websiteData) return;
 
     try {
-      // The AI response now contains { properties: {...}, subsections: [...] }
       const { data } = await api.post("/ai/generate-ai-section", {
         prompt,
         website_id: websiteData.website_id,
       });
 
-      // The AI returns subsections. We need to assign new unique IDs to them and their elements.
       const newSubsections: Subsection[] = data.subsections.map((sub: any) => ({
         ...sub,
         subsection_id: `subsection_${Date.now()}_${Math.random()}`,
-        elements: sub.elements.map((el: any) => ({
+        // ✅ FIX: Apply the same safety defaults as Page Generator
+        elements: (sub.elements || []).map((el: any) => ({
           ...el,
           element_id: `element_${Date.now()}_${Math.random()}`,
+          element_type: el.element_type || "AI", // Default to AI
+          properties: el.properties || {}, // Never allow undefined
+          aiPayload: el.aiPayload || null, // Pass payload safely
         })),
       }));
 
@@ -561,11 +563,9 @@ function BuilderManager() {
         ...activePage,
         sections: activePage.sections.map((section) => {
           if (section.section_id === sectionId) {
-            // THE FIX:
-            // Replace the section's properties AND its subsections with the AI's response.
             return {
               ...section,
-              properties: data.properties, // <-- THIS IS THE NEW LINE
+              properties: data.properties || section.properties, // Safety fallback
               subsections: newSubsections,
             };
           }
@@ -577,7 +577,6 @@ function BuilderManager() {
     } catch (err) {
       console.error("AI section generation failed:", err);
       alert("AI section generation failed. Please check the console.");
-      // Re-throw to let the child component know the request failed
       throw err;
     }
   };
