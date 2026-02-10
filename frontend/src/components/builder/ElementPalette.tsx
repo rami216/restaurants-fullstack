@@ -594,7 +594,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             )}
           </div>
           {/* ✅ **3. ADD NEW UI for the View-Only generator** */}
-          <div className="mb-4">
+          {/* <div className="mb-4">
             <label className="text-sm font-semibold text-gray-700">
               Generate a Read-Only View
             </label>
@@ -623,7 +623,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
                 Please subscribe to use AI features.
               </p>
             )}
-          </div>
+          </div> */}
 
           <hr className="my-4 border-gray-300" />
           <p
