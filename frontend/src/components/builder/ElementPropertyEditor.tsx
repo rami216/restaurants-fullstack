@@ -3113,7 +3113,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               )}
             </div>
 
-            {selectedItem.properties.linkEnabled && (
+            {selectedItem.properties?.linkEnabled && (
               <div>
                 <label className="block text-sm font-medium text-gray-700">
                   Link to Page
