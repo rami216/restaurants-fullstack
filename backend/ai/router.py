@@ -5217,7 +5217,6 @@ async def generate_ai_section(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"generate-ai-section failed: {e}")
-
 SECTION_GENERATOR_PROMPT = """
 You are a Lead UI/UX Designer and Frontend Architect. Your task is to generate the JSON for a **single, high-fidelity website section** based on a user's prompt.
 
@@ -5231,6 +5230,7 @@ Do NOT wrap this in a "sections" array. Return the single section object directl
 ### **ARCHITECTURAL RULES (The "Strong" Layout System)**
 
 **1. SECTION STRUCTURE (The Container):**
+   - Each object represents a full-width stripe.
    - **`properties`**: MUST contain `display: "flex"`.
    - **`style`**: Background colors/images and padding (e.g., `padding: "4rem 1rem"`).
    - **Layout Logic:**
@@ -5245,22 +5245,23 @@ Do NOT wrap this in a "sections" array. Return the single section object directl
      - Column layout: `width: "100%"`, `maxWidth: "1280px"`, `textAlign: "center"`.
 
 **3. ELEMENT STRUCTURE (Atomic AI Components):**
+   - **STRICT TYPE RULE:** You must **ONLY** generate elements with `element_type: "AI"`.
+   - **FORBIDDEN TYPES:** Do NOT generate `element_type: "BUTTON"`, `element_type: "TEXT"`, `element_type: "IMAGE"`, or `element_type: "MENU_ITEM"`. Use the AI wrapper for everything.
    - **CRITICAL:** The `elements` array inside a subsection MUST be present and MUST NOT be empty.
-   - Do NOT generate basic primitives (like `TEXT` or `IMAGE`).
-   - You MUST generate **Self-Contained AI Components** (`element_type: "AI"`).
    - **Granularity:** Break content down. One element per Headline, one for Subtitle, one for Button.
-   - **JSON Structure:**
+   - **JSON Structure (MANDATORY):**
      ```json
      {
        "element_type": "AI",
        "aiPayload": {
          "aiTemplate": "<div class='unique-class'> ... content ... </div>",
-         "properties": { ... },
+         "properties": { "text": "Example", ... },
          "editableProps": [ ... ],
          "script": ""
        }
      }
      ```
+   - **DATA SAFETY RULE:** The `properties` key inside `aiPayload` is **MANDATORY**. It cannot be null. It must be an object, even if empty (e.g., `"properties": {}`).
 
 ---
 
