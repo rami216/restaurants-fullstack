@@ -1431,26 +1431,6 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
       handlePropertyChange("fields", next);
     };
 
-    const addField = () => {
-      handlePropertyChange("fields", [
-        ...fields,
-        {
-          id: `${kind.toLowerCase()}_${Date.now()}`,
-          label: "New field",
-          name: "custom",
-          placeholder: "",
-          type: "text",
-        },
-      ]);
-    };
-
-    const removeField = (idx: number) => {
-      handlePropertyChange(
-        "fields",
-        fields.filter((_: any, i: number) => i !== idx),
-      );
-    };
-
     const updateBtn = (k: string, v: any) =>
       handlePropertyChange("submitButton", {
         ...(props.submitButton || {}),
@@ -1465,6 +1445,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
     return (
       <div className="space-y-6">
+        {/* Title Section */}
         <div>
           <label className="block text-sm font-medium text-gray-700">
             Title
@@ -1479,100 +1460,143 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
         <hr />
 
+        {/* Fields Section (Restricted: No Add/Remove, Locked Name/Type) */}
         <div>
           <h4 className="text-md font-medium text-gray-800 mb-2">Fields</h4>
+          <p className="text-xs text-gray-500 mb-3">
+            System fields cannot be removed or renamed to ensure authentication
+            works.
+          </p>
           <div className="space-y-3">
             {fields.map((f: any, i: number) => (
               <div
-                key={f.id}
+                key={f.id || i}
                 className="p-3 border rounded bg-gray-50 space-y-2"
               >
                 <div className="grid grid-cols-2 gap-2">
-                  <input
-                    className="border rounded p-2"
-                    placeholder="Label"
-                    value={f.label}
-                    onChange={(e) => updateField(i, "label", e.target.value)}
-                  />
-                  <input
-                    className="border rounded p-2"
-                    placeholder="name (payload key)"
-                    value={f.name}
-                    onChange={(e) => updateField(i, "name", e.target.value)}
-                  />
-                  <input
-                    className="border rounded p-2 col-span-2"
-                    placeholder="Placeholder"
-                    value={f.placeholder}
-                    onChange={(e) =>
-                      updateField(i, "placeholder", e.target.value)
-                    }
-                  />
-                  <select
-                    className="border rounded p-2"
-                    value={f.type || "text"}
-                    onChange={(e) => updateField(i, "type", e.target.value)}
-                  >
-                    <option value="text">text</option>
-                    <option value="email">email</option>
-                    <option value="password">password</option>
-                  </select>
-                  <button
-                    onClick={() => removeField(i)}
-                    className="border rounded p-2 text-red-600"
-                  >
-                    Remove
-                  </button>
+                  {/* Label - Editable */}
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-500">Label</label>
+                    <input
+                      className="border rounded p-2 w-full"
+                      placeholder="Label"
+                      value={f.label}
+                      onChange={(e) => updateField(i, "label", e.target.value)}
+                    />
+                  </div>
+
+                  {/* Placeholder - Editable */}
+                  <div className="col-span-2">
+                    <label className="text-xs text-gray-500">Placeholder</label>
+                    <input
+                      className="border rounded p-2 w-full"
+                      placeholder="Placeholder"
+                      value={f.placeholder}
+                      onChange={(e) =>
+                        updateField(i, "placeholder", e.target.value)
+                      }
+                    />
+                  </div>
+
+                  {/* Name - Disabled (Read-only) */}
+                  <div>
+                    <label className="text-xs text-gray-500">System Name</label>
+                    <input
+                      className="border rounded p-2 w-full bg-gray-200 text-gray-500 cursor-not-allowed"
+                      value={f.name}
+                      disabled
+                      title="Cannot change system field name"
+                    />
+                  </div>
+
+                  {/* Type - Disabled (Read-only) */}
+                  <div>
+                    <label className="text-xs text-gray-500">Type</label>
+                    <input
+                      className="border rounded p-2 w-full bg-gray-200 text-gray-500 cursor-not-allowed"
+                      value={f.type}
+                      disabled
+                    />
+                  </div>
                 </div>
               </div>
             ))}
           </div>
-          <button
-            onClick={addField}
-            className="mt-2 w-full border-dashed border-2 rounded p-2"
-          >
-            + Add Field
-          </button>
         </div>
 
         <hr />
 
+        {/* Form Styling Section */}
         <div>
           <h4 className="text-md font-medium text-gray-800 mb-2">
             Form Styles
           </h4>
           <div className="grid grid-cols-2 gap-3">
-            <input
-              className="border rounded p-2 col-span-2"
-              placeholder="Width (e.g., 100%, 420px)"
-              value={props.style?.width || "100%"}
-              onChange={(e) => handleStyleChange("width", e.target.value)}
-            />
-            <input
-              className="border rounded p-2 col-span-2"
-              placeholder="Padding (e.g., 2rem)"
-              value={props.style?.padding || "2rem"}
-              onChange={(e) => handleStyleChange("padding", e.target.value)}
-            />
-            <input
-              type="color"
-              className="h-10 border rounded"
-              value={props.style?.backgroundColor || "#f9fafb"}
-              onChange={(e) =>
-                handleStyleChange("backgroundColor", e.target.value)
-              }
-            />
-            <input
-              type="color"
-              className="h-10 border rounded"
-              value={props.labelStyle?.color || "#374151"}
-              onChange={(e) => handleLabelStyleChange("color", e.target.value)}
-            />
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">Width</label>
+              <input
+                className="border rounded p-2 w-full"
+                placeholder="Width (e.g., 100%, 420px)"
+                value={props.style?.width || "100%"}
+                onChange={(e) => handleStyleChange("width", e.target.value)}
+              />
+            </div>
+            <div className="col-span-2">
+              <label className="block text-xs text-gray-500 mb-1">
+                Padding
+              </label>
+              <input
+                className="border rounded p-2 w-full"
+                placeholder="Padding (e.g., 2rem)"
+                value={props.style?.padding || "2rem"}
+                onChange={(e) => handleStyleChange("padding", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Background
+              </label>
+              <input
+                type="color"
+                className="h-10 border rounded w-full"
+                value={props.style?.backgroundColor || "#f9fafb"}
+                onChange={(e) =>
+                  handleStyleChange("backgroundColor", e.target.value)
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Label Color
+              </label>
+              <input
+                type="color"
+                className="h-10 border rounded w-full"
+                value={props.labelStyle?.color || "#374151"}
+                onChange={(e) =>
+                  handleLabelStyleChange("color", e.target.value)
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Input Text Color
+              </label>
+              <input
+                type="color"
+                className="h-10 border rounded w-full"
+                value={selectedItem.properties.inputStyle?.color || "#000000"}
+                onChange={(e) =>
+                  handleInputStyleChange("color", e.target.value)
+                }
+              />
+            </div>
           </div>
         </div>
 
         <hr />
 
+        {/* Submit Button Section */}
         <div>
           <h4 className="text-md font-medium text-gray-800 mb-2">
             Submit Button
@@ -1589,36 +1613,57 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             onChange={(e) => updateBtn("text", e.target.value)}
           />
           <div className="grid grid-cols-3 gap-3">
-            <input
-              type="color"
-              className="h-10 border rounded"
-              value={
-                props.submitButton?.style?.backgroundColor ||
-                (kind === "LOGIN_FORM" ? "#111827" : "#2563eb")
-              }
-              onChange={(e) =>
-                updateBtnStyle("backgroundColor", e.target.value)
-              }
-            />
-            <input
-              type="color"
-              className="h-10 border rounded"
-              value={props.submitButton?.style?.color || "#ffffff"}
-              onChange={(e) => updateBtnStyle("color", e.target.value)}
-            />
-            <input
-              className="border rounded p-2"
-              placeholder="Width"
-              value={props.submitButton?.style?.width || "100%"}
-              onChange={(e) => updateBtnStyle("width", e.target.value)}
-            />
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Background
+              </label>
+              <input
+                type="color"
+                className="h-10 border rounded w-full"
+                value={
+                  props.submitButton?.style?.backgroundColor ||
+                  (kind === "LOGIN_FORM" ? "#111827" : "#2563eb")
+                }
+                onChange={(e) =>
+                  updateBtnStyle("backgroundColor", e.target.value)
+                }
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">
+                Text Color
+              </label>
+              <input
+                type="color"
+                className="h-10 border rounded w-full"
+                value={props.submitButton?.style?.color || "#ffffff"}
+                onChange={(e) => updateBtnStyle("color", e.target.value)}
+              />
+            </div>
+            <div>
+              <label className="block text-xs text-gray-500 mb-1">Width</label>
+              <input
+                className="border rounded p-2 w-full h-10"
+                placeholder="Width"
+                value={props.submitButton?.style?.width || "100%"}
+                onChange={(e) => updateBtnStyle("width", e.target.value)}
+              />
+            </div>
           </div>
         </div>
 
-        {/* Visibility panel reuse */}
+        {/* Visibility Editor Section */}
+        <hr className="my-4" />
         <VisibilityEditor
           value={selectedItem.properties}
           onChange={(next) => updateItem({ ...selectedItem, properties: next })}
+          onBecameProtected={async () => {
+            await api.post(
+              `/builder/ensure-auth-pages/${websiteData!.website_id}`,
+            );
+          }}
+          products={products}
+          isSubscribed={isSubscribed}
         />
       </div>
     );
