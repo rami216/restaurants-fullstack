@@ -10,7 +10,7 @@ import { useSubscription } from "@/context/SubscriptionContext";
 import Link from "next/link"; // <-- 2. Import Link for the billing page
 
 const stripePromise = loadStripe(
-  "pk_test_51PoT3lJ436yrzjfSZK3QP1DDzAG5HJvGKdAfj455nsKlalB76uKEjakezDDBVM2Ki9zaPxGm8UsvJKTpjdPejdEX00F4Pv3jkK"
+  "pk_test_51PoT3lJ436yrzjfSZK3QP1DDzAG5HJvGKdAfj455nsKlalB76uKEjakezDDBVM2Ki9zaPxGm8UsvJKTpjdPejdEX00F4Pv3jkK",
 );
 const tableNames = [
   "locations",
@@ -29,7 +29,7 @@ const MainPage = () => {
   const { subscriptionStatus, creditBalance } = useSubscription();
   // --- STATE MANAGEMENT ---
   const [pendingFiles, setPendingFiles] = useState<Record<number, File | null>>(
-    {}
+    {},
   );
   // helper to resolve image URL for display
   const resolveImageSrc = (val: string | null | undefined) => {
@@ -61,7 +61,7 @@ const MainPage = () => {
     // 5. Fallback for old data: If it's just a filename, log a warning
     //    and assume it's in the menu_item_images bucket.
     console.warn(
-      `Resolving a legacy image path. Please update "${val}" in the database to a full path.`
+      `Resolving a legacy image path. Please update "${val}" in the database to a full path.`,
     );
     return `${base}/storage/v1/object/public/menu_item_images/${val}`;
   };
@@ -101,7 +101,7 @@ const MainPage = () => {
   const [selectedData, setSelectedData] = useState<any[]>([]);
 
   const [selectedLocationId, setSelectedLocationId] = useState<string | null>(
-    null
+    null,
   );
 
   // --- NEW PAYMENT & BILLING STATE ---
@@ -123,7 +123,7 @@ const MainPage = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   // NEW: State to track which row's image is being uploaded
   const [uploadingImageIndex, setUploadingImageIndex] = useState<number | null>(
-    null
+    null,
   );
 
   const [dropdownOptions, setDropdownOptions] = useState<{
@@ -297,7 +297,7 @@ const MainPage = () => {
 
   const handleTableClick = async (
     tableName: string,
-    locationIdOverride?: string | null
+    locationIdOverride?: string | null,
   ) => {
     setSelectedTable(tableName);
     setSelectedData([]);
@@ -544,7 +544,7 @@ const MainPage = () => {
           if (!config.updateApi) continue;
           const apiUrl = config.updateApi.replace(
             /\${(.*?)}/g,
-            (_: any, key: string) => row[key] ?? ""
+            (_: any, key: string) => row[key] ?? "",
           );
           await api.put(apiUrl, processedRow);
         } else {
@@ -711,7 +711,7 @@ const MainPage = () => {
         </h1>
         {hasRestaurant ? (
           <>
-            <h2 className="text-xl mb-4">✅ You have a restaurant!</h2>
+            <h2 className="text-xl mb-4">✅ Setup completed</h2>
             {hasBrand === null ? (
               <p>Checking brand...</p>
             ) : hasBrand ? (
@@ -723,7 +723,7 @@ const MainPage = () => {
                 <div className="p-4 bg-black bg-opacity-20 rounded-lg text-center space-y-4">
                   <div>
                     <h4 className="text-lg font-semibold">
-                      Remaining Credit: ${creditBalance.toFixed(5)}
+                      {/* Remaining Credit: ${creditBalance.toFixed(5)} */}
                     </h4>
                     <p className="text-sm text-gray-300 mt-1">
                       Subscription Status:{" "}
@@ -775,7 +775,7 @@ const MainPage = () => {
                       <div className="mt-4">
                         <a
                           href={`https://restaurants-automation.onrender.com/?restaurant_id=${restaurantId}&restaurant_name=${encodeURIComponent(
-                            brandName
+                            brandName,
                           )}`}
                           target="_blank"
                           rel="noopener noreferrer"
@@ -795,6 +795,12 @@ const MainPage = () => {
                     >
                       Add Location
                     </button>
+                    <Link
+                      href="/createwebsite"
+                      className="bg-white text-pink-600 font-semibold px-4 py-2 rounded hover:bg-pink-100"
+                    >
+                      or start creating website
+                    </Link>
                   </>
                 )}
                 {showLocationForm && (
@@ -844,12 +850,12 @@ const MainPage = () => {
           </>
         ) : (
           <>
-            <h2 className="text-xl mb-4">❌ No restaurant yet.</h2>
+            <h2 className="text-xl mb-4">❌ complete setup.</h2>
             <button
               className="bg-white text-pink-600 font-semibold px-4 py-2 rounded hover:bg-pink-100"
               onClick={createRestaurant}
             >
-              Create Restaurant
+              pleaee complete setup
             </button>
           </>
         )}
@@ -895,7 +901,7 @@ const MainPage = () => {
                     onClick={() => {
                       const emptyRow: any = {};
                       tableConfigs[selectedTable].fields.forEach(
-                        (field) => (emptyRow[field.key] = "")
+                        (field) => (emptyRow[field.key] = ""),
                       );
                       setSelectedData((prev) => [...prev, emptyRow]);
                     }}

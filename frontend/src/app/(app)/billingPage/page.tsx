@@ -155,7 +155,7 @@ export default function BillingPage() {
         </div>
 
         {/* 2. Chatbot Credits Card */}
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
+        {/* <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
           <h2 className="text-xl font-semibold mb-4">Chatbot Credits</h2>
           <div className="flex-grow">
             <p className="text-gray-600 mb-2">Pre-paid balance for Chatbot:</p>
@@ -181,7 +181,7 @@ export default function BillingPage() {
               Add Funds
             </button>
           </div>
-        </div>
+        </div> */}
 
         {/* 3. ✅ NEW: AI Builder Monthly Budget Card */}
         <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
