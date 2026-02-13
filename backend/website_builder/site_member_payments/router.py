@@ -379,7 +379,6 @@ async def webhook(
         if md.get("type") == "cart_checkout":
             try:
                 website_id = md.get("website_id")
-                cart_items_json = md.get("cart_items")
                 
                 shipping_details = payment_intent.get("shipping")
                 customer_name = shipping_details.get("name") if shipping_details else "N/A"
@@ -396,30 +395,40 @@ async def webhook(
                 ]
                 shipping_address = ", ".join(filter(None, address_parts))
 
-                exists = await db.scalar(select(WebsiteOrder).where(WebsiteOrder.payment_intent_id == payment_intent.get("id")))
+                # ✅ FIX 3: Find the pending order we created earlier and UPDATE it!
+                existing_order = await db.scalar(select(WebsiteOrder).where(WebsiteOrder.payment_intent_id == payment_intent.get("id")))
                 
-                if not exists:
-                    new_order = WebsiteOrder(
-                        website_id=UUID(website_id),
-                        customer_name=customer_name,
-                        customer_email=customer_email,
-                        customer_phone=customer_phone,
-                        shipping_address=shipping_address,
-                        cart_items=json.loads(cart_items_json) if cart_items_json else [],
-                        total_amount_cents=payment_intent.get("amount"),
-                        currency=payment_intent.get("currency"),
-                        payment_intent_id=payment_intent.get("id"),
-                        status="paid",
-                    )
-                    db.add(new_order)
+                if existing_order:
+                    existing_order.customer_name = customer_name
+                    existing_order.customer_email = customer_email
+                    existing_order.customer_phone = customer_phone
+                    existing_order.shipping_address = shipping_address
+                    existing_order.status = "paid"
                     await db.commit()
                     
-                    # 📧 SEND CONFIRMATION EMAIL (NEW LOGIC)
+                    # 📧 SEND CONFIRMATION EMAIL
                     try:
                         email_config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == UUID(website_id)))
                         if email_config and customer_email:
-                            subject = f"Order Paid #{str(new_order.order_id)[:8]}"
+                            subject = f"Order Paid #{str(existing_order.order_id)[:8]}"
                             total_paid = (payment_intent.get("amount") / 100)
+
+                            # Build the Item List HTML for the email
+                            items_html = ""
+                            for item_dict in existing_order.cart_items:
+                                item_name = item_dict.get("item_name", "Item")
+                                qty = item_dict.get("quantity", 1)
+                                price = item_dict.get("price", 0)
+                                options_text = ""
+                                if item_dict.get("selectedOptions"):
+                                    options_text = "<br><small>" + ", ".join([f"{k}: {v}" for k,v in item_dict["selectedOptions"].items()]) + "</small>"
+                                
+                                items_html += f"""
+                                <tr style="border-bottom: 1px solid #eee;">
+                                    <td style="padding: 10px;">{item_name} x {qty}{options_text}</td>
+                                    <td style="padding: 10px; text-align: right;">${(price * qty):.2f}</td>
+                                </tr>
+                                """
                             
                             body = f"""
                             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
@@ -427,6 +436,15 @@ async def webhook(
                                 <p>Hi {customer_name},</p>
                                 <p>We have received your payment of <b>${total_paid:.2f}</b>.</p>
                                 
+                                <h3>Order Summary</h3>
+                                <table style="width: 100%; border-collapse: collapse;">
+                                    {items_html}
+                                    <tr>
+                                        <td style="padding: 15px 10px; font-weight: bold;">Total Paid</td>
+                                        <td style="padding: 15px 10px; text-align: right; font-weight: bold;">${total_paid:.2f}</td>
+                                    </tr>
+                                </table>
+
                                 <div style="background-color: #f9f9f9; padding: 15px; margin-top: 20px; border-radius: 5px;">
                                     <strong>Shipping to:</strong><br>
                                     {shipping_address}<br>
@@ -480,7 +498,6 @@ async def webhook(
                 print(f"❌ Database Insert Error (Cart): {e}")
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
-
     return {"status": "ok"}
 def _assert_site_owner(ctx, website: Website):
     # If you later add roles/ownership checks, enforce here.

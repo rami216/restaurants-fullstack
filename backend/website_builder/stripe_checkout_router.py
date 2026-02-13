@@ -164,13 +164,66 @@ async def unsync_menu_item_from_stripe(
     return {"status": "un-synced successfully"}
 
 # --- Endpoint to create a Payment Intent for the cart ---
+# @router.post("/create-payment-intent")
+# async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Depends(get_db)):
+#     stripe.api_key = await get_stripe_key(payload.website_id, db)
+    
+#     total = 0
+#     # ✅ 1. Create a simplified list for the metadata
+#     simplified_cart_for_metadata = []
+
+#     for item in payload.cart:
+#         try:
+#             item_uuid = UUID(item.itemId)
+#         except ValueError:
+#             raise HTTPException(status_code=400, detail=f"Invalid itemId format for {item.name}.")
+
+#         # ✅ THE FIX: Check MenuItem first, and if not found, check CustomDataRow!
+#         db_item = await db.get(MenuItem, item_uuid)
+#         if not db_item:
+#             custom_item = await db.get(CustomDataRow, item_uuid)
+#             if not custom_item:
+#                 raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
+        
+#         # We'll trust the client's calculated price for now
+#         total += item.unitPrice * item.quantity
+
+#         # ✅ 2. Build the simplified object for metadata
+#         simplified_item = {
+#             "itemId": item.itemId,
+#             "quantity": item.quantity,
+#             # Added a safe fallback just in case selectedExtras is ever null
+#             "selectedExtras": [extra.get("extra_id") for extra in item.selectedExtras] if item.selectedExtras else [],
+#             "selectedOptions": item.selectedOptions
+#         }
+#         simplified_cart_for_metadata.append(simplified_item)
+
+#     # ✅ Minor fix: This used to say "must be zero"
+#     if total <= 0:
+#         raise HTTPException(status_code=400, detail="Cart total must be greater than zero.")
+
+#     try:
+#         payment_intent = stripe.PaymentIntent.create(
+#             amount=int(total * 100),
+#             currency="usd",
+#             automatic_payment_methods={"enabled": True},
+#             metadata={
+#                 "type": "cart_checkout",
+#                 "website_id": str(payload.website_id),
+#                 # ✅ 3. Save the simplified, shorter version to metadata
+#                 "cart_items": json.dumps(simplified_cart_for_metadata)
+#             }
+#         )
+#         return {"clientSecret": payment_intent.client_secret}
+#     except Exception as e:
+#         print(f"Stripe Error: {e}")
+#         raise HTTPException(status_code=500, detail=str(e))
 @router.post("/create-payment-intent")
 async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Depends(get_db)):
     stripe.api_key = await get_stripe_key(payload.website_id, db)
     
     total = 0
-    # ✅ 1. Create a simplified list for the metadata
-    simplified_cart_for_metadata = []
+    enriched_cart = []
 
     for item in payload.cart:
         try:
@@ -178,27 +231,20 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid itemId format for {item.name}.")
 
-        # ✅ THE FIX: Check MenuItem first, and if not found, check CustomDataRow!
         db_item = await db.get(MenuItem, item_uuid)
         if not db_item:
             custom_item = await db.get(CustomDataRow, item_uuid)
             if not custom_item:
                 raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
-        # We'll trust the client's calculated price for now
         total += item.unitPrice * item.quantity
 
-        # ✅ 2. Build the simplified object for metadata
-        simplified_item = {
-            "itemId": item.itemId,
-            "quantity": item.quantity,
-            # Added a safe fallback just in case selectedExtras is ever null
-            "selectedExtras": [extra.get("extra_id") for extra in item.selectedExtras] if item.selectedExtras else [],
-            "selectedOptions": item.selectedOptions
-        }
-        simplified_cart_for_metadata.append(simplified_item)
+        # ✅ FIX 1: Add alias keys so the dashboard doesn't show $NaN!
+        item_dict = item.model_dump()
+        item_dict["item_name"] = item.name
+        item_dict["price"] = item.unitPrice
+        enriched_cart.append(item_dict)
 
-    # ✅ Minor fix: This used to say "must be zero"
     if total <= 0:
         raise HTTPException(status_code=400, detail="Cart total must be greater than zero.")
 
@@ -209,16 +255,30 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
             automatic_payment_methods={"enabled": True},
             metadata={
                 "type": "cart_checkout",
-                "website_id": str(payload.website_id),
-                # ✅ 3. Save the simplified, shorter version to metadata
-                "cart_items": json.dumps(simplified_cart_for_metadata)
+                "website_id": str(payload.website_id)
             }
         )
+        
+        # ✅ FIX 2: Create the order NOW as 'pending', bypassing Stripe's metadata limits!
+        new_order = WebsiteOrder(
+            website_id=payload.website_id,
+            customer_name="Pending Stripe Customer",
+            customer_email="",
+            customer_phone=None,
+            shipping_address="Awaiting checkout completion...",
+            cart_items=enriched_cart,
+            total_amount_cents=int(total * 100),
+            currency="usd",
+            payment_intent_id=payment_intent.id,
+            status="pending",
+        )
+        db.add(new_order)
+        await db.commit()
+
         return {"clientSecret": payment_intent.client_secret}
     except Exception as e:
         print(f"Stripe Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
-
 
 class OrderPayload(BaseModel):
     cart: list[CartItem]
@@ -228,15 +288,129 @@ class OrderPayload(BaseModel):
     customer_phone: str | None = None
     shipping_address: str
 
+# @router.post("/submit-cod-order")
+# async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get_db)):
+#     new_order = WebsiteOrder(
+#         website_id=payload.website_id,
+#         customer_name=payload.customer_name,
+#         customer_email=payload.customer_email,
+#         customer_phone=payload.customer_phone,
+#         shipping_address=payload.shipping_address,
+#         cart_items=[item.model_dump() for item in payload.cart],
+#         total_amount_cents=int(sum(item.unitPrice * item.quantity for item in payload.cart) * 100),
+#         currency="usd",
+#         payment_intent_id=None,
+#         status="pending",
+#     )
+#     db.add(new_order)
+#     await db.commit()
+    
+#     # 2. Send Order Confirmation Email
+#     try:
+#         email_config = await db.scalar(select(WebsiteEmailConfig).where(WebsiteEmailConfig.website_id == payload.website_id))
+        
+#         if email_config:
+#             # Build the Item List HTML
+#             items_html = ""
+#             for item in payload.cart:
+#                 # Format options text
+#                 options_text = ""
+#                 if item.selectedOptions:
+#                     options_text = "<br><small>" + ", ".join([f"{k}: {v}" for k,v in item.selectedOptions.items()]) + "</small>"
+                
+#                 items_html += f"""
+#                 <tr style="border-bottom: 1px solid #eee;">
+#                     <td style="padding: 10px;">{item.name} x {item.quantity}{options_text}</td>
+#                     <td style="padding: 10px; text-align: right;">${(item.unitPrice * item.quantity):.2f}</td>
+#                 </tr>
+#                 """
+
+#             total_price = sum(item.unitPrice * item.quantity for item in payload.cart)
+            
+#             subject = f"Order Confirmation #{str(new_order.order_id)[:8]}"
+            
+#             body = f"""
+#             <div style="font-family: sans-serif; max-width: 600px; margin: 0 auto; padding: 20px; border: 1px solid #ddd; border-radius: 8px;">
+#                 <h2 style="color: #333;">Thank you for your order, {payload.customer_name}!</h2>
+#                 <p>We have received your Cash on Delivery order.</p>
+                
+#                 <h3>Order Summary</h3>
+#                 <table style="width: 100%; border-collapse: collapse;">
+#                     {items_html}
+#                     <tr>
+#                         <td style="padding: 15px 10px; font-weight: bold;">Total</td>
+#                         <td style="padding: 15px 10px; text-align: right; font-weight: bold;">${total_price:.2f}</td>
+#                     </tr>
+#                 </table>
+
+#                 <div style="background-color: #f9f9f9; padding: 15px; margin-top: 20px; border-radius: 5px;">
+#                     <strong>Shipping to:</strong><br>
+#                     {payload.shipping_address}<br>
+#                     {payload.customer_phone or ""}
+#                 </div>
+                
+#                 <p style="margin-top: 20px; font-size: 12px; color: #888;">
+#                     This email was sent from {email_config.from_name}.
+#                 </p>
+#             </div>
+#             """
+
+#             # --- SEND VIA SENDGRID ---
+#             if email_config.provider_type == "sendgrid" and email_config.sendgrid_api_key:
+#                 async with httpx.AsyncClient() as client:
+#                     await client.post(
+#                         "https://api.sendgrid.com/v3/mail/send",
+#                         headers={"Authorization": f"Bearer {email_config.sendgrid_api_key}", "Content-Type": "application/json"},
+#                         json={
+#                             "personalizations": [{"to": [{"email": payload.customer_email}]}],
+#                             "from": {"email": email_config.from_email, "name": email_config.from_name},
+#                             "subject": subject,
+#                             "content": [{"type": "text/html", "value": body}]
+#                         }
+#                     )
+            
+#             # --- SEND VIA SMTP ---
+#             elif email_config.provider_type == "smtp":
+#                 message = MIMEMultipart()
+#                 message["From"] = f"{email_config.from_name} <{email_config.from_email}>"
+#                 message["To"] = payload.customer_email
+#                 message["Subject"] = subject
+#                 message.attach(MIMEText(body, "html"))
+
+#                 timeout = 10
+#                 if email_config.smtp_port == 465:
+#                     server = smtplib.SMTP_SSL(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+#                 else:
+#                     server = smtplib.SMTP(email_config.smtp_host, email_config.smtp_port, timeout=timeout)
+#                     server.ehlo()
+#                     if server.has_extn("STARTTLS"):
+#                         server.starttls()
+#                         server.ehlo()
+#                 server.login(email_config.smtp_user, email_config.smtp_password)
+#                 server.sendmail(email_config.from_email, payload.customer_email, message.as_string())
+#                 server.quit()
+
+#     except Exception as e:
+#         print(f"Order email failed but order saved: {e}")
+
+#     return {"status": "success", "order_id": new_order.order_id}
 @router.post("/submit-cod-order")
 async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get_db)):
+    # ✅ FIX 1 (Cont): Fix the COD order cart formatting too!
+    enriched_cart = []
+    for item in payload.cart:
+        item_dict = item.model_dump()
+        item_dict["item_name"] = item.name
+        item_dict["price"] = item.unitPrice
+        enriched_cart.append(item_dict)
+        
     new_order = WebsiteOrder(
         website_id=payload.website_id,
         customer_name=payload.customer_name,
         customer_email=payload.customer_email,
         customer_phone=payload.customer_phone,
         shipping_address=payload.shipping_address,
-        cart_items=[item.model_dump() for item in payload.cart],
+        cart_items=enriched_cart,
         total_amount_cents=int(sum(item.unitPrice * item.quantity for item in payload.cart) * 100),
         currency="usd",
         payment_intent_id=None,
@@ -253,7 +427,6 @@ async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get
             # Build the Item List HTML
             items_html = ""
             for item in payload.cart:
-                # Format options text
                 options_text = ""
                 if item.selectedOptions:
                     options_text = "<br><small>" + ", ".join([f"{k}: {v}" for k,v in item.selectedOptions.items()]) + "</small>"
@@ -266,7 +439,6 @@ async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get
                 """
 
             total_price = sum(item.unitPrice * item.quantity for item in payload.cart)
-            
             subject = f"Order Confirmation #{str(new_order.order_id)[:8]}"
             
             body = f"""
@@ -308,7 +480,6 @@ async def submit_cod_order(payload: OrderPayload, db: AsyncSession = Depends(get
                             "content": [{"type": "text/html", "value": body}]
                         }
                     )
-            
             # --- SEND VIA SMTP ---
             elif email_config.provider_type == "smtp":
                 message = MIMEMultipart()
