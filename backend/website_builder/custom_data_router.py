@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends, HTTPException,Query
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select,func
+from sqlalchemy import select,func,Float
 from uuid import UUID
 from typing import List, Dict, Any, Optional
 
@@ -303,9 +303,9 @@ async def delete_data_row(
 
 #region complex
 class SearchQuery(BaseModel):
-    filters: Dict[str, Any] = {} # e.g., {"price": {">": 100}, "category": "electronics"}
+    filters: Dict[str, Any] = {} 
     sort_by: Optional[str] = "created_at"
-    sort_order: Optional[str] = "desc" # "asc" or "desc"
+    sort_order: Optional[str] = "desc" 
 
 @router.post("/rows/{schema_id}/search", response_model=PaginatedRowResponse)
 async def search_data_rows(
@@ -328,21 +328,23 @@ async def search_data_rows(
     # 1. Apply JSON Filters dynamically
     for field, condition in query.filters.items():
         if isinstance(condition, dict):
-            # Numeric comparisons
             if ">" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) > float(condition[">"]))
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) > float(condition[">"]))
             if "<" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) < float(condition["<"]))
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) < float(condition["<"]))
             if ">=" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) >= float(condition[">="]))
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) >= float(condition[">="]))
             if "<=" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) <= float(condition["<="]))
-            # Text search (case-insensitive)
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) <= float(condition["<="]))
             if "ilike" in condition: 
                 base_query = base_query.where(CustomDataRow.data[field].astext.ilike(f"%{condition['ilike']}%"))
         else:
-            # Exact match
             base_query = base_query.where(CustomDataRow.data[field].astext == str(condition))
+
+    # ✅ THE FIX: Calculate the total count HERE, before sorting is applied!
+    count_query = select(func.count(CustomDataRow.row_id)).select_from(base_query.subquery())
+    total_result = await db.execute(count_query)
+    total_rows = total_result.scalar_one()
 
     # 2. Apply Sorting
     if query.sort_by == "created_at":
@@ -357,17 +359,12 @@ async def search_data_rows(
         else:
             base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.asc())
 
-    # 3. Get the real total count AFTER filtering, but BEFORE pagination limit is applied
-    count_query = select(func.count(CustomDataRow.row_id)).select_from(base_query.subquery())
-    total_result = await db.execute(count_query)
-    total_rows = total_result.scalar_one()
-
-    # 4. Apply pagination and fetch rows
+    # 3. Apply pagination and fetch rows
     paginated_query = base_query.offset(skip).limit(limit)
     result = await db.execute(paginated_query)
     rows = result.scalars().all()
 
-    # 5. Resolve relations (Re-using your existing logic from the GET endpoint)
+    # 4. Resolve relations (Re-using your existing logic from the GET endpoint)
     relation_fields = {
         field['id']: UUID(field['related_schema_id'])
         for field in schema.fields
@@ -415,5 +412,4 @@ async def search_data_rows(
         final_response_rows.append(RowResponse(row_id=row.row_id, data=resolved_data))
 
     return PaginatedRowResponse(rows=final_response_rows, total=total_rows)
-
 #endregion complex
