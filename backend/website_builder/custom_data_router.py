@@ -327,26 +327,29 @@ async def search_data_rows(
 
     # 1. Apply JSON Filters dynamically
     for field, condition in query.filters.items():
+        # ✅ THE FIX: Use Postgres ->> operator instead of .astext to extract JSON!
+        json_text_value = CustomDataRow.data.op("->>")(field)
+        
         if isinstance(condition, dict):
             if ">" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) > float(condition[">"]))
+                base_query = base_query.where(json_text_value.cast(Float) > float(condition[">"]))
             if "<" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) < float(condition["<"]))
+                base_query = base_query.where(json_text_value.cast(Float) < float(condition["<"]))
             if ">=" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) >= float(condition[">="]))
+                base_query = base_query.where(json_text_value.cast(Float) >= float(condition[">="]))
             if "<=" in condition:
-                base_query = base_query.where(CustomDataRow.data[field].astext.cast(Float) <= float(condition["<="]))
+                base_query = base_query.where(json_text_value.cast(Float) <= float(condition["<="]))
             if "ilike" in condition: 
-                base_query = base_query.where(CustomDataRow.data[field].astext.ilike(f"%{condition['ilike']}%"))
+                base_query = base_query.where(json_text_value.ilike(f"%{condition['ilike']}%"))
         else:
-            base_query = base_query.where(CustomDataRow.data[field].astext == str(condition))
+            # Exact match
+            base_query = base_query.where(json_text_value == str(condition))
 
-    # ✅ THE FIX: Calculate the total count HERE, before sorting is applied!
+    # Calculate the total count HERE, before sorting is applied!
     count_query = select(func.count(CustomDataRow.row_id)).select_from(base_query.subquery())
     total_result = await db.execute(count_query)
     total_rows = total_result.scalar_one()
 
-    # 2. Apply Sorting
     # 2. Apply Sorting
     if query.sort_by == "created_at":
         if query.sort_order == "desc":
@@ -359,6 +362,7 @@ async def search_data_rows(
             base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).desc())
         else:
             base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).asc())
+            
     # 3. Apply pagination and fetch rows
     paginated_query = base_query.offset(skip).limit(limit)
     result = await db.execute(paginated_query)
