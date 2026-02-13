@@ -98,61 +98,6 @@ async def get_schemas_for_website(
     return result.scalars().all()
 
 
-# --- THE NEW, MORE POWERFUL get_rows_for_schema ---
-# @router.get("/rows/{schema_id}", response_model=List[RowResponse])
-# async def get_rows_for_schema(
-#     schema_id: UUID,
-#     db: AsyncSession = Depends(get_db)
-# ):
-#     schema = await db.get(CustomDataSchema, schema_id)
-#     if not schema:
-#         raise HTTPException(status_code=404, detail="Schema not found.")
-    
-#     relation_fields = {
-#         field['id']: UUID(field['related_schema_id'])
-#         for field in schema.fields
-#         if field.get('type') == 'relation' and field.get('related_schema_id')
-#     }
-
-#     result = await db.execute(
-#         select(CustomDataRow)
-#         .where(CustomDataRow.schema_id == schema_id)
-#         .order_by(CustomDataRow.created_at.desc())
-#     )
-#     rows = result.scalars().all()
-
-#     if not relation_fields:
-#         return [RowResponse.from_orm(row) for row in rows]
-
-#     ids_to_fetch = set()
-#     for row in rows:
-#         for field_id in relation_fields:
-#             related_row_id = row.data.get(field_id)
-#             if related_row_id:
-#                 try:
-#                     ids_to_fetch.add(UUID(related_row_id))
-#                 except (ValueError, TypeError):
-#                     pass
-
-#     if not ids_to_fetch:
-#          return [RowResponse.from_orm(row) for row in rows]
-
-#     related_rows_result = await db.execute(
-#         select(CustomDataRow).where(CustomDataRow.row_id.in_(ids_to_fetch))
-#     )
-#     related_rows_map = { str(row.row_id): RowResponse.from_orm(row).model_dump() for row in related_rows_result.scalars() }
-
-#     final_response = []
-#     for row in rows:
-#         resolved_data = row.data.copy()
-#         for field_id in relation_fields:
-#             related_row_id = resolved_data.get(field_id)
-#             if related_row_id and str(related_row_id) in related_rows_map:
-#                 resolved_data[field_id] = related_rows_map[str(related_row_id)]
-        
-#         final_response.append(RowResponse(row_id=row.row_id, data=resolved_data))
-
-#     return final_response
 
 @router.get("/rows/{schema_id}", response_model=PaginatedRowResponse)
 async def get_rows_for_schema(
@@ -355,3 +300,120 @@ async def delete_data_row(
     await db.delete(row_to_delete)
     await db.commit()
     return None
+
+#region complex
+class SearchQuery(BaseModel):
+    filters: Dict[str, Any] = {} # e.g., {"price": {">": 100}, "category": "electronics"}
+    sort_by: Optional[str] = "created_at"
+    sort_order: Optional[str] = "desc" # "asc" or "desc"
+
+@router.post("/rows/{schema_id}/search", response_model=PaginatedRowResponse)
+async def search_data_rows(
+    schema_id: UUID,
+    query: SearchQuery,
+    skip: int = Query(0, ge=0),
+    limit: int = Query(20, ge=1, le=1000),
+    sitemember_id: Optional[UUID] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    schema = await db.get(CustomDataSchema, schema_id)
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema not found.")
+
+    base_query = select(CustomDataRow).where(CustomDataRow.schema_id == schema_id)
+    
+    if sitemember_id is not None:
+        base_query = base_query.where(CustomDataRow.sitemember_id == sitemember_id)
+
+    # 1. Apply JSON Filters dynamically
+    for field, condition in query.filters.items():
+        if isinstance(condition, dict):
+            # Numeric comparisons
+            if ">" in condition:
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) > float(condition[">"]))
+            if "<" in condition:
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) < float(condition["<"]))
+            if ">=" in condition:
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) >= float(condition[">="]))
+            if "<=" in condition:
+                base_query = base_query.where(CustomDataRow.data[field].astext.cast(db.Float) <= float(condition["<="]))
+            # Text search (case-insensitive)
+            if "ilike" in condition: 
+                base_query = base_query.where(CustomDataRow.data[field].astext.ilike(f"%{condition['ilike']}%"))
+        else:
+            # Exact match
+            base_query = base_query.where(CustomDataRow.data[field].astext == str(condition))
+
+    # 2. Apply Sorting
+    if query.sort_by == "created_at":
+        if query.sort_order == "desc":
+            base_query = base_query.order_by(CustomDataRow.created_at.desc())
+        else:
+            base_query = base_query.order_by(CustomDataRow.created_at.asc())
+    else:
+        # Sort by a custom JSON field
+        if query.sort_order == "desc":
+            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.desc())
+        else:
+            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.asc())
+
+    # 3. Get the real total count AFTER filtering, but BEFORE pagination limit is applied
+    count_query = select(func.count(CustomDataRow.row_id)).select_from(base_query.subquery())
+    total_result = await db.execute(count_query)
+    total_rows = total_result.scalar_one()
+
+    # 4. Apply pagination and fetch rows
+    paginated_query = base_query.offset(skip).limit(limit)
+    result = await db.execute(paginated_query)
+    rows = result.scalars().all()
+
+    # 5. Resolve relations (Re-using your existing logic from the GET endpoint)
+    relation_fields = {
+        field['id']: UUID(field['related_schema_id'])
+        for field in schema.fields
+        if field.get('type') == 'relation' and field.get('related_schema_id')
+    }
+
+    if not relation_fields:
+        return PaginatedRowResponse(
+            rows=[RowResponse.from_orm(row) for row in rows],
+            total=total_rows
+        )
+
+    ids_to_fetch = set()
+    for row in rows:
+        for field_id in relation_fields:
+            related_row_id = row.data.get(field_id)
+            if related_row_id:
+                try:
+                    ids_to_fetch.add(UUID(related_row_id))
+                except (ValueError, TypeError):
+                    pass 
+
+    if not ids_to_fetch:
+        return PaginatedRowResponse(
+            rows=[RowResponse.from_orm(row) for row in rows],
+            total=total_rows
+        )
+
+    related_rows_result = await db.execute(
+        select(CustomDataRow).where(CustomDataRow.row_id.in_(ids_to_fetch))
+    )
+    related_rows_map = { 
+        str(row.row_id): RowResponse.from_orm(row).model_dump() 
+        for row in related_rows_result.scalars() 
+    }
+
+    final_response_rows = []
+    for row in rows:
+        resolved_data = row.data.copy()
+        for field_id in relation_fields:
+            related_row_id = resolved_data.get(field_id)
+            if related_row_id and str(related_row_id) in related_rows_map:
+                resolved_data[field_id] = related_rows_map[str(related_row_id)]
+        
+        final_response_rows.append(RowResponse(row_id=row.row_id, data=resolved_data))
+
+    return PaginatedRowResponse(rows=final_response_rows, total=total_rows)
+
+#endregion complex
