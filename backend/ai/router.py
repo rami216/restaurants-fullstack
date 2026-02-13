@@ -11483,7 +11483,22 @@ Is this a file upload?
                 - **Example:** `const mergedData = { ...targetRow.data, available: false };`
             
             - **Delete Row:** `await api.delete('/custom-data/rows/' + rowId);`
-            
+        - **E-COMMERCE / ADD TO CART RULE:**
+            - If the prompt implies adding an item to a cart or basket, you have access to a global `addToCart(item)` function.
+            - You MUST construct the item object exactly like this before calling the function:
+              ```javascript
+              addToCart({
+                cartItemId: `${row.row_id}-${Date.now()}`,
+                itemId: row.row_id,
+                name: row.data.name || "Unknown Item",
+                imageUrl: row.data.image_url || row.data.image || "",
+                quantity: 1,
+                unitPrice: Number(row.data.price) || 0,
+                selectedExtras: [],
+                selectedOptions: {}
+              });
+              alert('Added to cart!');
+              ```
         - **USER-SCOPED DATA (OPTIONAL - Only if User Specifies):**
             - **TRIGGER KEYWORDS:** Only apply user filtering if the prompt contains phrases like:
                 - "logged in user", "current user", "user's own"
