@@ -347,17 +347,18 @@ async def search_data_rows(
     total_rows = total_result.scalar_one()
 
     # 2. Apply Sorting
+    # 2. Apply Sorting
     if query.sort_by == "created_at":
         if query.sort_order == "desc":
             base_query = base_query.order_by(CustomDataRow.created_at.desc())
         else:
             base_query = base_query.order_by(CustomDataRow.created_at.asc())
     else:
-        # Sort by a custom JSON field
+        # Sort by a custom JSON field (Removed .astext)
         if query.sort_order == "desc":
-            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.desc())
+            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].desc())
         else:
-            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.asc())
+            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].asc())
 
     # 3. Apply pagination and fetch rows
     paginated_query = base_query.offset(skip).limit(limit)
