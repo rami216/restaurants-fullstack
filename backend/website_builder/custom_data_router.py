@@ -354,12 +354,11 @@ async def search_data_rows(
         else:
             base_query = base_query.order_by(CustomDataRow.created_at.asc())
     else:
-        # Sort by a custom JSON field (Removed .astext)
+        # ✅ THE FIX: Use Postgres ->> operator to extract JSON as text before sorting
         if query.sort_order == "desc":
-            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].desc())
+            base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).desc())
         else:
-            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].asc())
-
+            base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).asc())
     # 3. Apply pagination and fetch rows
     paginated_query = base_query.offset(skip).limit(limit)
     result = await db.execute(paginated_query)

@@ -56,7 +56,7 @@ PUBLIC_RULES = [
     ("/menu-item-extras/", {"GET", "OPTIONS"}),
     ("/menu-item-options/", {"GET", "OPTIONS"}),
     ("/uploads/", {"GET", "POST", "OPTIONS"}),
-    ("/custom-data/rows/", {"POST", "GET", "PUT", "DELETE", "OPTIONS"}),
+    ("/custom-data/", {"POST", "GET", "PUT", "DELETE", "OPTIONS"}),
     ("/builder/form-submissions", {"POST", "OPTIONS"}),
     ("/builder/send-email", {"POST", "OPTIONS"}),  # <--- Add this line
 
