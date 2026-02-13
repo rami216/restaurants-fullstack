@@ -1208,6 +1208,7 @@ interface AiElementRunnerProps {
   element: ElementType;
   isPreview: boolean;
   websiteData: PublicWebsiteData; // ✅ ADD THIS
+  addToCart: (item: any) => void; // ✅ ADD THIS
 }
 
 // const AiElementRunner: React.FC<AiElementRunnerProps> = ({
@@ -1303,6 +1304,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   element,
   isPreview,
   websiteData, // ✅ ADD THIS
+  addToCart,
 }) => {
   const { aiPayload } = element;
   const ref = useRef<HTMLDivElement>(null);
@@ -1387,6 +1389,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           "schemaId",
           "properties",
           "Mustache",
+          "addToCart", // <-- ADD THIS
           jsBody,
         );
         // ✅ ADD subdomain to properties so AI scripts can access it
@@ -1394,7 +1397,14 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
           ...processedProps,
           subdomain: websiteData.subdomain,
         };
-        fn(ref.current, apiClient, schemaId, propsWithSubdomain, Mustache); // ✅ USE propsWithSubdomain, not processedProps
+        fn(
+          ref.current,
+          apiClient,
+          schemaId,
+          propsWithSubdomain,
+          Mustache,
+          addToCart,
+        ); // ✅ USE propsWithSubdomain, not processedProps
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
@@ -2613,6 +2623,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
               element={element}
               isPreview={true} // <-- This is the crucial part
               websiteData={websiteData} // ✅ ADD THIS
+              addToCart={addToCart} // ✅ ADD THIS HERE
             />
           ) : (
             <div className="rounded-lg overflow-hidden shadow">
@@ -2679,6 +2690,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
                   element={{ ...element, properties: props }}
                   isPreview={false}
                   websiteData={websiteData} // ✅ ADD THIS
+                  addToCart={addToCart} // ✅ ADD THIS HERE
                 />
 
                 {props.chatEnabled && props.whatsappNumber && (
@@ -2762,6 +2774,7 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
             element={element}
             isPreview={true} // <-- This is the crucial part
             websiteData={websiteData} // ✅ ADD THIS
+            addToCart={addToCart} // ✅ ADD THIS HERE
           />
 
           {showWA && (
