@@ -12,11 +12,10 @@ from models import User, RestaurantOwner
 from auth.auth_handler import get_current_active_user
 from schemas import CheckoutSessionResponse, BillingPortalResponse, TopUpRequest
 
-# --- CONFIGURATION ---
-STRIPE_SECRET_KEY = "sk_test_51PoT3lJ436yrzjfSmv9FaegFSGFr0NKmbalj7Dmkz4yCEYjnlv3cEzNpYuxeCDjnFs8Av5V1WeLiBvOUA12nyYpw004M8Vpx1D"
-STRIPE_WEBHOOK_SECRET = "whsec_DVjOkdltatRzKK9VFirNG40mt1TpvLR7"
 
-RECURRING_PRICE_ID = "price_1RjNRrJ436yrzjfSAATBGkqe"
+STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
+STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
+RECURRING_PRICE_ID = os.getenv("RECURRING_PRICE_ID")
 
 stripe.api_key = STRIPE_SECRET_KEY
 router = APIRouter(prefix="/payments", tags=["Payments"])
