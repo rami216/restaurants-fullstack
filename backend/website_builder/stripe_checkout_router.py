@@ -10,7 +10,7 @@ from sqlalchemy.orm import selectinload
 from uuid import UUID
 from decimal import Decimal # ✅ 1. Import the Decimal type
 from database import get_db
-from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner # Make sure all models are imported
+from models import User, MenuItem, WebsiteOrder, Location, RestaurantOwner,CustomDataRow # Make sure all models are imported
 from auth.auth_handler import get_current_active_user
 from website_builder.site_commerce_models import WebsiteStripeAccount
 import httpx # <--- Added for SendGrid
@@ -178,9 +178,12 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
         except ValueError:
             raise HTTPException(status_code=400, detail=f"Invalid itemId format for {item.name}.")
 
+        # ✅ THE FIX: Check MenuItem first, and if not found, check CustomDataRow!
         db_item = await db.get(MenuItem, item_uuid)
         if not db_item:
-            raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
+            custom_item = await db.get(CustomDataRow, item_uuid)
+            if not custom_item:
+                raise HTTPException(status_code=404, detail=f"Item {item.name} not found.")
         
         # We'll trust the client's calculated price for now
         total += item.unitPrice * item.quantity
@@ -189,14 +192,15 @@ async def create_payment_intent(payload: CheckoutPayload, db: AsyncSession = Dep
         simplified_item = {
             "itemId": item.itemId,
             "quantity": item.quantity,
-            "selectedExtras": [extra.get("extra_id") for extra in item.selectedExtras],
+            # Added a safe fallback just in case selectedExtras is ever null
+            "selectedExtras": [extra.get("extra_id") for extra in item.selectedExtras] if item.selectedExtras else [],
             "selectedOptions": item.selectedOptions
         }
         simplified_cart_for_metadata.append(simplified_item)
 
-
+    # ✅ Minor fix: This used to say "must be zero"
     if total <= 0:
-        raise HTTPException(status_code=400, detail="Cart total must be zero.")
+        raise HTTPException(status_code=400, detail="Cart total must be greater than zero.")
 
     try:
         payment_intent = stripe.PaymentIntent.create(
