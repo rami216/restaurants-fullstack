@@ -7,7 +7,6 @@ import type { PublicWebsiteData } from "@/components/builder/Properties";
 export const dynamic = "force-dynamic";
 export const revalidate = 0;
 
-// 🚨 FIX 1: Added _URL to match your environment variables! 🚨
 const API_BASE =
   process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") ||
   "http://localhost:8000";
@@ -28,7 +27,16 @@ export default async function PublicCustomDomain({
 }) {
   const hdrs = await headers();
 
-  // 🚨 FIX 2: Matched the header extraction perfectly with your subdomain file 🚨
+  // --- NEW DEBUGGING LINES: SHOW ME EVERYTHING ---
+  console.log("--- DEBUGGING ALL HEADERS (__site) ---");
+  const allHeaders: Record<string, string> = {};
+  hdrs.forEach((value, key) => {
+    allHeaders[key] = value;
+  });
+  console.log(JSON.stringify(allHeaders, null, 2));
+  console.log("----------------------------------------");
+  // --- END DEBUGGING ---
+
   const hostRaw =
     hdrs.get("x-original-host") ||
     hdrs.get("x-forwarded-host") ||
@@ -41,7 +49,7 @@ export default async function PublicCustomDomain({
     websiteData = await fetchByHost(host);
   } catch (err) {
     console.error("Failed to fetch custom domain data for host:", host, err);
-    return notFound(); // <--- This was triggering because it was hitting localhost!
+    return notFound();
   }
 
   const path = "/" + (params.slug?.join("/") || "");
