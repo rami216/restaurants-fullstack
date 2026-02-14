@@ -12089,7 +12089,14 @@ Is this a file upload?
             - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
             - If no clear match exists, set "schema_id": "" and ignore API logic.
             - Field names in forms MUST match column names in the schema exactly.
-
+        - NO HARDCODING RULE (CRITICAL):
+            - NEVER hardcode a specific database UUID (like "cdca9385...") into the JavaScript or HTML.
+            - You MUST always declare it dynamically at the top of your script: const schemaId = properties.schema_id; and use the ${schemaId} variable in your API calls.
+        - SAFE ARRAY/GALLERY PARSING (CRITICAL):
+            - Database array fields (like a gallery of images) are often returned as JSON strings.
+            - If you need to use .map() on an array field, you MUST safely parse it first to prevent fatal crashes.
+            - Pattern: const galleryArr = typeof row.data.gallery === 'string' ? JSON.parse(row.data.gallery) : (row.data.gallery || []);
+            
         - **EMAIL SENDING PROTOCOL (CUSTOM CONTENT):**
             - **TRIGGER:** If the prompt implies sending an email (e.g., "Contact Form", "Newsletter", "Send Message") and involves an email input.
             - **ENDPOINT:** Use `await api.post('/builder/send-email', ...)`
@@ -12179,6 +12186,7 @@ Is this a file upload?
               ```javascript
               const urlParams = new URLSearchParams(window.location.search);
               const rowId = urlParams.get('id');
+              const schemaId = properties.schema_id; // MUST BE DYNAMIC
               
               if (!rowId) {
                   container.innerHTML = '<p class="text-center p-4">Item not found. Please select an item from the list.</p>';
@@ -12187,17 +12195,27 @@ Is this a file upload?
               
               const fetchDetail = async () => {
                   try {
+                      // Safe fetching using dynamic schemaId
                       const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
-                      const row = res.data.rows.find(r => r.row_id === rowId);
+                      const rows = res.data?.rows || res.rows || [];
+                      const row = rows.find(r => r.row_id === rowId);
                       
                       if (!row) {
                           container.innerHTML = '<p class="text-center p-4">Item no longer exists.</p>';
                           return;
                       }
+
+                      // SAFELY PARSE ARRAYS/GALLERIES BEFORE USAGE
+                      let parsedGallery = [];
+                      if (row.data.gallery) {
+                          try { parsedGallery = typeof row.data.gallery === 'string' ? JSON.parse(row.data.gallery) : row.data.gallery; } 
+                          catch(e) { parsedGallery = []; }
+                      }
                       
                       // Render the detail HTML here...
                       // Attach listeners (addToCart, etc.) here...
                   } catch (err) {
+                      console.error("Detail Error:", err);
                       container.innerHTML = '<p class="text-center p-4">Error loading details.</p>';
                   }
               };
