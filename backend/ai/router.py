@@ -11491,8 +11491,25 @@ Is this a file upload?
             - Example: `row.data.item` will be an object. To get the actual text or price, you MUST dig into it: `row.data.item.data.item_name` or `row.data.item.data.price` (look at the schema columns).
             - When rendering HTML or assigning variables (like `unitPrice` or `name` for a cart), ALWAYS write safe fallback logic to extract nested data. Example: `const itemName = row.data.name || row.data.item?.data?.item || "Unknown";`
         - **DYNAMIC PAGES & MASTER-DETAIL PATTERNS (CRITICAL AUTOMATION):**
-            - **Creating Links (Master Page):** If the user asks to link an item to a "details page" or another URL (e.g., "goes to /apartment-details"), you MUST automatically append the row's ID to the URL as a query parameter. 
-              Example: `<a href="/apartment-details?id=${row.row_id}">View Details</a>` (Never expect the user to tell you to add the ID).
+            - **Creating Links (Master Page):** If the user asks to link an item to a "details page" or another URL (e.g., "goes to /apartment-details"), you MUST automatically append the row's ID as a query parameter and handle SaaS subdomain routing via JavaScript.
+              - **CRITICAL ROUTING RULE:** NEVER use a hardcoded `<a href="/...">` tag. It will break the platform's subdomain routing.
+              - Use a button or clickable element in the HTML: `<button class="view-details-btn" data-index="${index}">View Details</button>`
+              - Attach a listener in your JS that calculates the correct path:
+              ```javascript
+              container.querySelectorAll('.view-details-btn').forEach(btn => {
+                  btn.onclick = () => {
+                      const index = btn.getAttribute('data-index');
+                      const rowId = rows[index].row_id;
+                      
+                      // Handle SaaS Subdomain vs Custom Domain Routing
+                      const isMainHost = window.location.hostname.includes("zygoflow.com");
+                      const basePath = isMainHost && properties.subdomain ? `/${properties.subdomain}` : "";
+                      
+                      // Replace '/apartment-details' with whatever path the user requested
+                      window.location.href = `${basePath}/apartment-details?id=${rowId}`;
+                  };
+              });
+              ```
             - **Reading Links (Detail Page):** If the user asks to build a "detail page", "single view", or "profile page" for a database table, you MUST automatically assume the item's ID is being passed in the URL.
             - You MUST extract the ID using `URLSearchParams` and fetch only that specific row.
             - **MANDATORY DETAIL PAGE SCRIPT PATTERN:**
@@ -11501,7 +11518,7 @@ Is this a file upload?
               const rowId = urlParams.get('id');
               
               if (!rowId) {
-                  container.innerHTML = '<p>Item not found. Please select an item from the list.</p>';
+                  container.innerHTML = '<p class="text-center p-4">Item not found. Please select an item from the list.</p>';
                   return;
               }
               
@@ -11511,14 +11528,14 @@ Is this a file upload?
                       const row = res.data.rows.find(r => r.row_id === rowId);
                       
                       if (!row) {
-                          container.innerHTML = '<p>Item no longer exists.</p>';
+                          container.innerHTML = '<p class="text-center p-4">Item no longer exists.</p>';
                           return;
                       }
                       
                       // Render the detail HTML here...
                       // Attach listeners (addToCart, etc.) here...
                   } catch (err) {
-                      container.innerHTML = '<p>Error loading details.</p>';
+                      container.innerHTML = '<p class="text-center p-4">Error loading details.</p>';
                   }
               };
               fetchDetail();
