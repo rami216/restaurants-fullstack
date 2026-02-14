@@ -143,7 +143,7 @@ const PublicVideoElement = ({ props }: { props: any }) => {
     </motion.div>
   );
 };
-const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
+const CheckoutForm = ({ websiteData }: { websiteData: PublicWebsiteData }) => {
   const stripe = useStripe();
   const elements = useElements();
   const { cartTotal } = useCart();
@@ -163,12 +163,17 @@ const CheckoutForm = ({ websiteId }: { websiteId: string }) => {
     }
 
     setIsLoading(true);
-
+    // ✅ 2. Dynamically build the correct return URL!
+    const isMainHost =
+      window.location.hostname === "zygoflow.com" ||
+      window.location.hostname === "www.zygoflow.com";
+    const basePath = isMainHost ? `/${websiteData.subdomain}` : "";
+    const returnUrl = `${window.location.origin}${basePath}/thank-you`;
     // ✅ 2. Pass the shipping details to Stripe when confirming the payment
     const { error } = await stripe.confirmPayment({
       elements,
       confirmParams: {
-        return_url: `${window.location.origin}/thank-you`,
+        return_url: returnUrl, // ✅ 3. Use the dynamic URL here
         receipt_email: email,
         shipping: {
           name: name,
@@ -606,7 +611,13 @@ const CartView = ({
         customer_phone: codDetails.phone,
       });
       clearCart();
-      window.location.href = `/thank-you`;
+
+      // ✅ THE FIX: Dynamic URL for COD as well
+      const isMainHost =
+        window.location.hostname === "zygoflow.com" ||
+        window.location.hostname === "www.zygoflow.com";
+      const basePath = isMainHost ? `/${websiteData.subdomain}` : "";
+      window.location.href = `${basePath}/thank-you`;
     } catch {
       alert("Error placing your order. Please try again.");
     } finally {
@@ -721,7 +732,7 @@ const CartView = ({
                   stripe={stripePromise}
                   key={clientSecret}
                 >
-                  <CheckoutForm websiteId={websiteData.website_id} />
+                  <CheckoutForm websiteData={websiteData} />
                 </Elements>
               ) : (
                 !piError && (
