@@ -11490,6 +11490,39 @@ Is this a file upload?
             - If the schema contains relational fields (e.g., a "Products" table linking to an "Items" table), the API returns that field as a nested object, NOT a flat string.
             - Example: `row.data.item` will be an object. To get the actual text or price, you MUST dig into it: `row.data.item.data.item_name` or `row.data.item.data.price` (look at the schema columns).
             - When rendering HTML or assigning variables (like `unitPrice` or `name` for a cart), ALWAYS write safe fallback logic to extract nested data. Example: `const itemName = row.data.name || row.data.item?.data?.item || "Unknown";`
+        - **DYNAMIC PAGES & MASTER-DETAIL PATTERNS (CRITICAL AUTOMATION):**
+            - **Creating Links (Master Page):** If the user asks to link an item to a "details page" or another URL (e.g., "goes to /apartment-details"), you MUST automatically append the row's ID to the URL as a query parameter. 
+              Example: `<a href="/apartment-details?id=${row.row_id}">View Details</a>` (Never expect the user to tell you to add the ID).
+            - **Reading Links (Detail Page):** If the user asks to build a "detail page", "single view", or "profile page" for a database table, you MUST automatically assume the item's ID is being passed in the URL.
+            - You MUST extract the ID using `URLSearchParams` and fetch only that specific row.
+            - **MANDATORY DETAIL PAGE SCRIPT PATTERN:**
+              ```javascript
+              const urlParams = new URLSearchParams(window.location.search);
+              const rowId = urlParams.get('id');
+              
+              if (!rowId) {
+                  container.innerHTML = '<p>Item not found. Please select an item from the list.</p>';
+                  return;
+              }
+              
+              const fetchDetail = async () => {
+                  try {
+                      const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
+                      const row = res.data.rows.find(r => r.row_id === rowId);
+                      
+                      if (!row) {
+                          container.innerHTML = '<p>Item no longer exists.</p>';
+                          return;
+                      }
+                      
+                      // Render the detail HTML here...
+                      // Attach listeners (addToCart, etc.) here...
+                  } catch (err) {
+                      container.innerHTML = '<p>Error loading details.</p>';
+                  }
+              };
+              fetchDetail();
+              ```
         - **E-COMMERCE / ADD TO CART RULE:**
             - If the prompt implies adding an item to a cart, you have access to a locally-scoped `addToCart(item)` function.
             - **CRITICAL:** NEVER use inline HTML attributes like `onclick="addToCart(...)"`. It will cause a ReferenceError.
