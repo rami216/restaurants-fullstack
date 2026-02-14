@@ -11375,7 +11375,10 @@ Is this a file upload?
         - **Mandatory CSS Pattern:** `display: grid; grid-template-columns: repeat(auto-fit, minmax({{cardMinWidth}}, 1fr)); gap: {{gap}}; width: 100%;`
         - Create a `{{cardMinWidth}}` property (default usually '280px' or '300px').
         - **Why?** This ensures items automatically stack vertically on mobile phones and spread out on desktops without writing media queries.
-        - **Image Safety:** Ensure all images inside cards have `width: 100%; height: auto; object-fit: cover;` to prevent overflow.
+       - **UI & LAYOUT SAFETY (CRITICAL FOR CARDS):** - Images inside grids/cards MUST have a fixed height to keep the grid uniform. Use: `width: 100%; height: 200px; object-fit: cover; border-radius: 8px 8px 0 0;`. Do NOT use `height: auto`.
+            - Cards MUST use `display: flex; flex-direction: column; gap: 12px; height: 100%;` so internal elements have breathing room.
+            - Push buttons to the bottom of the card uniformly by adding `margin-top: auto;` to the button.
+            - All `<input>`, `<select>`, and `<button>` elements inside cards MUST be `width: 100%; box-sizing: border-box; padding: 10px; border-radius: 6px;`.
     - **You MUST expose editables for the following visual controls (when relevant):**
         - **Colors:** element background color, text color, link color, hover/active accents, border color.
         - **Borders:** border width, border style, border radius.
