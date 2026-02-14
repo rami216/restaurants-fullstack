@@ -12212,7 +12212,16 @@ Is this a file upload?
                           catch(e) { parsedGallery = []; }
                       }
                       
-                      // Render the detail HTML here...
+                      // CRITICAL DOM UPDATE REQUIREMENT:
+                        // You MUST manually map the fetched data to the HTML elements so the user can see it!
+                        // Do not use raw {{tokens}} in the HTML for fetched data. Use querySelector instead:
+                        const imgEl = container.querySelector('.main-image');
+                        if (imgEl && row.data.main_image) imgEl.src = row.data.main_image;
+
+                        const titleEl = container.querySelector('.apartment-name');
+                        if (titleEl && row.data.name) titleEl.textContent = row.data.name;
+
+                        // ... map the rest of the fields (price, area, location) the exact same way ...
                       // Attach listeners (addToCart, etc.) here...
                   } catch (err) {
                       console.error("Detail Error:", err);
