@@ -11484,26 +11484,51 @@ Is this a file upload?
             
             - **Delete Row:** `await api.delete('/custom-data/rows/' + rowId);`
         - **E-COMMERCE / ADD TO CART RULE:**
-            - If the prompt implies adding an item to a cart or basket, you have access to a locally-scoped `addToCart(item)` function.
-            - **CRITICAL:** NEVER use inline HTML attributes like `onclick="addToCart(...)"`. It will cause a ReferenceError because the function is locally scoped.
+            - If the prompt implies adding an item to a cart, you have access to a locally-scoped `addToCart(item)` function.
+            - **CRITICAL:** NEVER use inline HTML attributes like `onclick="addToCart(...)"`. It will cause a ReferenceError.
+            - **PRODUCT OPTIONS, ADD-ONS & QUANTITY:** If the user asks for options (Size, Color), priced add-ons (+Warranty), or Quantity:
+              1. Generate the HTML inputs (`<select>`, `<input type="checkbox" data-price="50">`, `<input type="number">`) inside each product's card.
+              2. Read those values inside the button's `onclick` handler.
+              3. **MATH RULE:** Start with the base price. If a selected option or checked add-on costs extra, mathematically add it to the `finalPrice`.
+              4. **RECEIPT RULE:** Push all chosen options and add-ons into the `options` object so they show up on the user's receipt.
             - **MANDATORY IMPLEMENTATION PATTERN:**
-              1. Store your fetched rows at the top level: `let rows = [];`
-              2. Render buttons with a data-index: `<button class="add-to-cart-btn" data-index="${index}">Add to Cart</button>`
+              1. Store fetched rows: `let rows = [];`
+              2. Render buttons: `<button class="add-to-cart-btn" data-index="${index}">Add to Cart</button>`
               3. Attach listeners using JavaScript **after** rendering:
               ```javascript
               container.querySelectorAll('.add-to-cart-btn').forEach(btn => {
                   btn.onclick = () => {
                       const index = btn.getAttribute('data-index');
                       const row = rows[index];
+                      const card = btn.closest('.card');
+                      
+                      const qtyInput = card.querySelector('.qty-input');
+                      const quantity = qtyInput ? parseInt(qtyInput.value) || 1 : 1;
+                      
+                      let finalPrice = Number(row.data.price) || 0;
+                      const options = {};
+
+                      // Example 1: Standard Dropdown
+                      const colorSelect = card.querySelector('.color-select');
+                      if (colorSelect && colorSelect.value) options["Color"] = colorSelect.value;
+
+                      // Example 2: Priced Add-on Checkbox
+                      const addonCheckboxes = card.querySelectorAll('.addon-checkbox:checked');
+                      addonCheckboxes.forEach(cb => {
+                          const addonPrice = Number(cb.getAttribute('data-price')) || 0;
+                          finalPrice += addonPrice;
+                          options["Add-on"] = `${cb.value} (+$${addonPrice})`;
+                      });
+
                       addToCart({
                           cartItemId: `${row.row_id}-${Date.now()}`,
                           itemId: row.row_id,
                           name: row.data.name || "Unknown Item",
                           imageUrl: row.data.image_url || row.data.image || "",
-                          quantity: 1,
-                          unitPrice: Number(row.data.price) || 0,
+                          quantity: quantity,
+                          unitPrice: finalPrice,
                           selectedExtras: [],
-                          selectedOptions: {}
+                          selectedOptions: options // Pass all choices here!
                       });
                       alert('Added to cart!');
                   };
