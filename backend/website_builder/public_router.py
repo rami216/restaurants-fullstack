@@ -39,22 +39,22 @@ async def get_public_website_by_subdomain(subdomain: str, db: AsyncSession):
         locations=location_list
     )
 
-@router.get("/by-host", response_model=schemas.PublicWebsiteResponse)
-async def resolve_by_host(
-    host: str,
-    db: AsyncSession = Depends(get_db),
-):
-    """Finds a website by its custom domain host."""
-    cd = (await db.execute(
-        select(CustomDomain).where(CustomDomain.domain == host, CustomDomain.status == "active")
-    )).scalars().first()
+# @router.get("/by-host", response_model=schemas.PublicWebsiteResponse)
+# async def resolve_by_host(
+#     host: str,
+#     db: AsyncSession = Depends(get_db),
+# ):
+#     """Finds a website by its custom domain host."""
+#     cd = (await db.execute(
+#         select(CustomDomain).where(CustomDomain.domain == host, CustomDomain.status == "active")
+#     )).scalars().first()
     
-    if not cd:
-        raise HTTPException(404, "Custom domain not found or not active")
+#     if not cd:
+#         raise HTTPException(404, "Custom domain not found or not active")
 
-    website = await db.get(Website, cd.website_id)
-    if not website:
-        raise HTTPException(404, "Website not found for this domain")
+#     website = await db.get(Website, cd.website_id)
+#     if not website:
+#         raise HTTPException(404, "Website not found for this domain")
         
-    # Now, call the other function to get the full public data
-    return await get_public_website_by_subdomain(website.subdomain, db)
+#     # Now, call the other function to get the full public data
+#     return await get_public_website_by_subdomain(website.subdomain, db)

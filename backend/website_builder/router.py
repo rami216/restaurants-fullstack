@@ -481,13 +481,34 @@ async def delete_navbar_item(item_id: UUID, db: AsyncSession = Depends(get_db), 
     return
 
 
+# --- ADD THIS FIRST: The by-host route ---
+@router.get("/public/by-host", response_model=schemas.PublicWebsiteResponse)
+async def resolve_by_host(
+    host: str,
+    db: AsyncSession = Depends(get_db),
+):
+    """Finds a website by its custom domain host."""
+    # We query CustomDomain exactly like you had in public_router.py
+    cd = (await db.execute(
+        select(CustomDomain).where(CustomDomain.domain == host, CustomDomain.status == "active")
+    )).scalars().first()
+    
+    if not cd:
+        raise HTTPException(status_code=404, detail="Custom domain not found or not active")
+
+    website = await db.get(Website, cd.website_id)
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found for this domain")
+        
+    # Call the subdomain function below to fetch all the page data
+    return await get_public_website_by_subdomain(website.subdomain, db)
+
+# --- MUST BE BELOW `by-host`: The catch-all subdomain route ---
 @router.get("/public/{subdomain}", response_model=schemas.PublicWebsiteResponse)
 async def get_public_website_by_subdomain(
     subdomain: str,
     db: AsyncSession = Depends(get_db),
-    
 ):
-    # 1) fetch the site + all its pages, sections, subsections, etc.
     result = await db.execute(
         select(Website)
         .options(
@@ -497,7 +518,6 @@ async def get_public_website_by_subdomain(
                 .selectinload(Subsection.elements),
             selectinload(Website.navbar)
                 .selectinload(Navbar.items),
-            # we’ll fetch locations separately
         )
         .where(Website.subdomain == subdomain)
     )
@@ -505,19 +525,15 @@ async def get_public_website_by_subdomain(
     if not website:
         raise HTTPException(status_code=404, detail="Website not found.")
 
-    # 2) now fetch all locations for that restaurant
     loc_q = await db.execute(
-        select(Location)
-        .where(Location.restaurant_id == website.restaurant_id)
+        select(Location).where(Location.restaurant_id == website.restaurant_id)
     )
     location_list = loc_q.scalars().all()
 
-    # 3) return a PublicWebsiteResponse, pydantic will pick up all fields + our new locations
     return schemas.PublicWebsiteResponse(
-        **website.__dict__,      # all the fields from WebsiteResponse
-        locations=location_list  # our new list of LocationResponse
+        **website.__dict__,      
+        locations=location_list  
     )
-
 
 #region standalon_page
 @router.post("/pages/standalone", response_model=schemas.PageResponse, status_code=status.HTTP_201_CREATED)
