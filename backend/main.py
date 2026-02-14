@@ -44,8 +44,7 @@ app = FastAPI()
 
 PUBLIC_RULES = [
     # Specific public routes first
-    ("/users-stripe-account/public/stripe-key", {"GET", "OPTIONS"}),
-    ("/users-stripe-account/public/checkout", {"POST", "OPTIONS"}),
+    ("/users-stripe-account/", {"GET", "POST", "OPTIONS"}),
 
     # General public routes
     ("/site-auth", {"GET", "POST", "OPTIONS"}),
@@ -117,14 +116,21 @@ class DynamicSaaSCORSMiddleware(BaseHTTPMiddleware):
 
         return await call_next(request)
 
+# app.add_middleware(
+#     CORSMiddleware,
+#     allow_origins=ALLOWED_ORIGINS or ["http://localhost:3000"],
+#     allow_credentials=True,
+#     allow_methods=["*"],
+#     allow_headers=["*"],
+# )
 app.add_middleware(
     CORSMiddleware,
     allow_origins=ALLOWED_ORIGINS or ["http://localhost:3000"],
+    allow_origin_regex=r"https://.*", # ✅ FIX 2: THE MAGIC WILDCARD!
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 app.add_middleware(DynamicSaaSCORSMiddleware)
 
 # ---- Static files (keep only if the folder exists in the container)
