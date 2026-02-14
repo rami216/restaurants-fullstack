@@ -11483,6 +11483,10 @@ Is this a file upload?
                 - **Example:** `const mergedData = { ...targetRow.data, available: false };`
             
             - **Delete Row:** `await api.delete('/custom-data/rows/' + rowId);`
+        - **NESTED / RELATIONAL DATA RULE (CRITICAL):**
+            - If the schema contains relational fields (e.g., a "Products" table linking to an "Items" table), the API returns that field as a nested object, NOT a flat string.
+            - Example: `row.data.item` will be an object. To get the actual text or price, you MUST dig into it: `row.data.item.data.item_name` or `row.data.item.data.price` (look at the schema columns).
+            - When rendering HTML or assigning variables (like `unitPrice` or `name` for a cart), ALWAYS write safe fallback logic to extract nested data. Example: `const itemName = row.data.name || row.data.item?.data?.item || "Unknown";`
         - **E-COMMERCE / ADD TO CART RULE:**
             - If the prompt implies adding an item to a cart, you have access to a locally-scoped `addToCart(item)` function.
             - **CRITICAL:** NEVER use inline HTML attributes like `onclick="addToCart(...)"`. It will cause a ReferenceError.
@@ -11505,30 +11509,35 @@ Is this a file upload?
                       const qtyInput = card.querySelector('.qty-input');
                       const quantity = qtyInput ? parseInt(qtyInput.value) || 1 : 1;
                       
-                      let finalPrice = Number(row.data.price) || 0;
+                      // ✅ SMART NESTED EXTRACTION (Handles flat AND relational data)
+                      const itemName = row.data.name || row.data.item?.data?.name || row.data.item?.data?.item || "Unknown Item";
+                      let finalPrice = Number(row.data.price) || Number(row.data.item?.data?.price) || 0;
+                      
                       const options = {};
 
-                      // Example 1: Standard Dropdown
-                      const colorSelect = card.querySelector('.color-select');
-                      if (colorSelect && colorSelect.value) options["Color"] = colorSelect.value;
+                      // Find Dropdowns
+                      const selects = card.querySelectorAll('select');
+                      selects.forEach(sel => {
+                          if (sel.value) options[sel.name || "Option"] = sel.value;
+                      });
 
-                      // Example 2: Priced Add-on Checkbox
+                      // Find Priced Add-on Checkboxes (handles nested relation prices too)
                       const addonCheckboxes = card.querySelectorAll('.addon-checkbox:checked');
                       addonCheckboxes.forEach(cb => {
                           const addonPrice = Number(cb.getAttribute('data-price')) || 0;
                           finalPrice += addonPrice;
-                          options["Add-on"] = `${cb.value} (+$${addonPrice})`;
+                          options["Add-on"] = `${cb.value} (+$${addonPrice.toFixed(2)})`;
                       });
 
                       addToCart({
                           cartItemId: `${row.row_id}-${Date.now()}`,
                           itemId: row.row_id,
-                          name: row.data.name || "Unknown Item",
-                          imageUrl: row.data.image_url || row.data.image || "",
+                          name: itemName,
+                          imageUrl: row.data.image_url || row.data.image || row.data.item?.data?.image || "",
                           quantity: quantity,
                           unitPrice: finalPrice,
                           selectedExtras: [],
-                          selectedOptions: options // Pass all choices here!
+                          selectedOptions: options
                       });
                       alert('Added to cart!');
                   };
