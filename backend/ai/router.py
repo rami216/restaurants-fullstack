@@ -12091,7 +12091,7 @@ Is this a file upload?
             - Field names in forms MUST match column names in the schema exactly.
         - NO HARDCODING RULE (CRITICAL):
             - NEVER hardcode a specific database UUID (like "cdca9385...") into the JavaScript or HTML.
-            - You MUST always declare it dynamically at the top of your script: const schemaId = properties.schema_id; and use the ${schemaId} variable in your API calls.
+            - NEVER declare const schemaId = ... in your script. The schemaId is already injected as a parameter into your environment. Just use the existing schemaId variable directly in your API calls (e.g., `/custom-data/rows/${schemaId}?limit=50`).
         - SAFE ARRAY/GALLERY PARSING (CRITICAL):
             - Database array fields (like a gallery of images) are often returned as JSON strings.
             - If you need to use .map() on an array field, you MUST safely parse it first to prevent fatal crashes.
@@ -12184,14 +12184,15 @@ Is this a file upload?
             - You MUST extract the ID using `URLSearchParams` and fetch only that specific row.
             - **MANDATORY DETAIL PAGE SCRIPT PATTERN:**
               ```javascript
+             
               const urlParams = new URLSearchParams(window.location.search);
-              const rowId = urlParams.get('id');
-              const schemaId = properties.schema_id; // MUST BE DYNAMIC
+                const rowId = urlParams.get('id');
+
+                if (!rowId) {
+                    container.innerHTML = '<p class="text-center p-4">Item not found. Please select an item from the list.</p>';
+                    return;
+                }
               
-              if (!rowId) {
-                  container.innerHTML = '<p class="text-center p-4">Item not found. Please select an item from the list.</p>';
-                  return;
-              }
               
               const fetchDetail = async () => {
                   try {
