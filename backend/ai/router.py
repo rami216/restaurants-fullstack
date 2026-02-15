@@ -12089,6 +12089,7 @@ Is this a file upload?
             - You MUST find the correct schema_id from EXISTING_SCHEMAS_ON_WEBSITE.
             - If no clear match exists, set "schema_id": "" and ignore API logic.
             - Field names in forms MUST match column names in the schema exactly.
+            - CRITICAL PROPERTY REQUIREMENT: You MUST explicitly include "schema_id": "THE_MATCHING_UUID" inside the "properties" JSON object for EVERY data-connected element. If you forget to add "schema_id" to the properties block, the entire API URL will evaluate to 'undefined' and crash the application.
         - NO HARDCODING RULE (CRITICAL):
             - NEVER hardcode a specific database UUID (like "cdca9385...") into the JavaScript or HTML.
             - NEVER declare const schemaId = ... in your script. The schemaId is already injected as a parameter into your environment. Just use the existing schemaId variable directly in your API calls (e.g., `/custom-data/rows/${schemaId}?limit=50`).
