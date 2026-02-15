@@ -18,7 +18,7 @@ export default function OpenAISettingsPage() {
     const fetchSettings = async () => {
       try {
         // Fetch the current settings using your existing endpoint
-        const res = await api.get(`/builder/websites/${websiteId}/settings`);
+        const res = await api.get(`/builder/websites/${websiteId}`);
         if (res.data.openai_api_key) {
           // We don't display the full key for security, just show a placeholder if it exists
           setApiKey("sk-.......................................");
@@ -54,7 +54,7 @@ export default function OpenAISettingsPage() {
 
     setSaving(true);
     try {
-      await api.put(`/builder/websites/${websiteId}/settings`, {
+      await api.put(`/builder/websites/${websiteId}/openai-key`, {
         openai_api_key: apiKey,
       });
       alert("OpenAI API Key saved successfully!");
@@ -80,7 +80,7 @@ export default function OpenAISettingsPage() {
 
     setSaving(true);
     try {
-      await api.put(`/builder/websites/${websiteId}/settings`, {
+      await api.put(`/builder/websites/${websiteId}/openai-key`, {
         openai_api_key: null,
       });
       alert("OpenAI API Key removed.");
