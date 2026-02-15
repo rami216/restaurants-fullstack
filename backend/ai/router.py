@@ -12121,6 +12121,45 @@ Is this a file upload?
               // 2. Save Data (If schema exists)
               // ... standard api.post('/custom-data/rows/...') logic follows here ...
               ```
+        - **AI / OPENAI GENERATION PROTOCOL:**
+            - **TRIGGER:** If the prompt implies using AI to "generate text", "write a description", "summarize", "translate", or "auto-fill".
+            - **ENDPOINT:** Use `await api.post('/builder/openai', payload)`
+            - **REQUIREMENT:** You **MUST** add `website_id: "WEBSITE_UUID_FROM_CONTEXT"` to the `properties` block.
+            - **EDITABLE CONTENT RULE:** You MUST create an editable property for the `systemPrompt` (e.g., "You are an expert copywriter") so the user can tweak the AI's behavior.
+            - **SCRIPT PATTERN (Inside a form or generator):**
+              ```javascript
+              const generateBtn = container.querySelector('.generate-ai-btn');
+              const targetInput = container.querySelector('.target-input'); // Where the AI text goes
+              const topicInput = container.querySelector('.topic-input'); // What the user typed
+
+              if (generateBtn && targetInput) {
+                  generateBtn.onclick = async (e) => {
+                      e.preventDefault(); // Prevent form submission
+                      
+                      const topic = topicInput ? topicInput.value : "General topic";
+                      
+                      generateBtn.disabled = true;
+                      generateBtn.textContent = 'AI is thinking...';
+                      
+                      try {
+                          const res = await api.post('/builder/openai', {
+                              website_id: properties.website_id,
+                              prompt: `Write content about: ${topic}`,
+                              system_prompt: properties.systemPrompt || "You are a helpful assistant."
+                          });
+                          
+                          // Inject the result into the target input or display div
+                          targetInput.value = res.data.text; 
+                      } catch (err) {
+                          console.error(err);
+                          alert(`AI Error: ${err.response?.data?.detail || "Failed to generate text."}`);
+                      } finally {
+                          generateBtn.disabled = false;
+                          generateBtn.textContent = 'Generate with AI';
+                      }
+                  };
+              }
+              ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
