@@ -307,6 +307,7 @@ class SearchQuery(BaseModel):
     sort_by: Optional[str] = "created_at"
     sort_order: Optional[str] = "desc" 
 
+
 @router.post("/rows/{schema_id}/search", response_model=PaginatedRowResponse)
 async def search_data_rows(
     schema_id: UUID,
@@ -327,10 +328,15 @@ async def search_data_rows(
 
     # 1. Apply JSON Filters dynamically
     for field, condition in query.filters.items():
-        # ✅ THE FIX: Use Postgres ->> operator instead of .astext to extract JSON!
-        json_text_value = CustomDataRow.data.op("->>")(field)
+        # ✅ THE FIX: Use SQLAlchemy's native .astext! It unlocks .ilike() without crashing.
+        json_text_value = CustomDataRow.data[field].astext
         
         if isinstance(condition, dict):
+            # 🚨 ANTI-CRASH MEASURE: Ignore empty strings before doing math to prevent Postgres 500 errors
+            if any(op in condition for op in [">", "<", ">=", "<="]):
+                base_query = base_query.where(json_text_value != "")
+                base_query = base_query.where(json_text_value.is_not(None))
+
             if ">" in condition:
                 base_query = base_query.where(json_text_value.cast(Float) > float(condition[">"]))
             if "<" in condition:
@@ -342,8 +348,11 @@ async def search_data_rows(
             if "ilike" in condition: 
                 base_query = base_query.where(json_text_value.ilike(f"%{condition['ilike']}%"))
         else:
-            # Exact match
-            base_query = base_query.where(json_text_value == str(condition))
+            # ✅ BOOLEAN SAFETY: Convert Python True/False to JSON "true"/"false"
+            if isinstance(condition, bool):
+                base_query = base_query.where(json_text_value == str(condition).lower())
+            else:
+                base_query = base_query.where(json_text_value == str(condition))
 
     # Calculate the total count HERE, before sorting is applied!
     count_query = select(func.count(CustomDataRow.row_id)).select_from(base_query.subquery())
@@ -357,18 +366,18 @@ async def search_data_rows(
         else:
             base_query = base_query.order_by(CustomDataRow.created_at.asc())
     else:
-        # ✅ THE FIX: Use Postgres ->> operator to extract JSON as text before sorting
+        # ✅ THE FIX: Use native .astext for sorting too!
         if query.sort_order == "desc":
-            base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).desc())
+            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.desc())
         else:
-            base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).asc())
+            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.asc())
             
     # 3. Apply pagination and fetch rows
     paginated_query = base_query.offset(skip).limit(limit)
     result = await db.execute(paginated_query)
     rows = result.scalars().all()
 
-    # 4. Resolve relations (Re-using your existing logic from the GET endpoint)
+    # 4. Resolve relations
     relation_fields = {
         field['id']: UUID(field['related_schema_id'])
         for field in schema.fields

@@ -12140,9 +12140,12 @@ Is this a file upload?
                 - **Endpoint:** `api.post(\`/custom-data/rows/\${schemaId}/search?skip=\${skip}&limit=\${limit}\`, payload)`
                 - **Payload Structure:** `const payload = { filters: {}, sort_by: "created_at", sort_order: "desc" };`
                 - **Filter Syntax Examples:**
-                  - Exact match: `payload.filters.status = "active";`
-                  - Numeric logic: `payload.filters.price = { "<=": 50, ">": 10 };`
-                  - Text search: `payload.filters.title = { "ilike": searchInput.value };`
+                    - Exact match (Text, Number, Boolean): `payload.filters.status = "active";` or `payload.filters.bedrooms = Number(input.value);` (CRITICAL: NEVER use `{'=': value}` for exact matches. Just assign the value directly).
+                    - Text search: `payload.filters.title = { "ilike": searchInput.value };`
+                    - Range Match (CRITICAL: Do NOT overwrite the dictionary! You MUST construct it safely):
+                        `payload.filters.price = {};`
+                        `if (min) payload.filters.price['>='] = Number(min);`
+                        `if (max) payload.filters.price['<='] = Number(max);`
                 - **Access data:** `const rows = res.data.rows;` (Same as GET)
             - **Fetch Single Row (for Cross-Table Updates):**
                 - Call: `const res = await api.get(\`/custom-data/rows/\${schemaId}?row_id=\${rowId}\`);`
