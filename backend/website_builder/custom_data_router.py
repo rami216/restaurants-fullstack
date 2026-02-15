@@ -328,11 +328,11 @@ async def search_data_rows(
 
     # 1. Apply JSON Filters dynamically
     for field, condition in query.filters.items():
-        # ✅ THE FIX: Use SQLAlchemy's native .astext! It unlocks .ilike() without crashing.
-        json_text_value = CustomDataRow.data[field].astext
+        # ✅ THE FIX: Revert to ->> operator to prevent .astext crashes
+        json_text_value = CustomDataRow.data.op("->>")(field)
         
         if isinstance(condition, dict):
-            # 🚨 ANTI-CRASH MEASURE: Ignore empty strings before doing math to prevent Postgres 500 errors
+            # 🚨 ANTI-CRASH MEASURE: Ignore empty strings before doing math
             if any(op in condition for op in [">", "<", ">=", "<="]):
                 base_query = base_query.where(json_text_value != "")
                 base_query = base_query.where(json_text_value.is_not(None))
@@ -346,7 +346,8 @@ async def search_data_rows(
             if "<=" in condition:
                 base_query = base_query.where(json_text_value.cast(Float) <= float(condition["<="]))
             if "ilike" in condition: 
-                base_query = base_query.where(json_text_value.ilike(f"%{condition['ilike']}%"))
+                # ✅ THE ILIKE FIX: Use .op("ilike") to force the search without SQLAlchemy type crashes
+                base_query = base_query.where(json_text_value.op("ilike")(f"%{condition['ilike']}%"))
         else:
             # ✅ BOOLEAN SAFETY: Convert Python True/False to JSON "true"/"false"
             if isinstance(condition, bool):
@@ -366,11 +367,11 @@ async def search_data_rows(
         else:
             base_query = base_query.order_by(CustomDataRow.created_at.asc())
     else:
-        # ✅ THE FIX: Use native .astext for sorting too!
+        # ✅ THE SORTING FIX: Revert to ->> for sorting too!
         if query.sort_order == "desc":
-            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.desc())
+            base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).desc())
         else:
-            base_query = base_query.order_by(CustomDataRow.data[query.sort_by].astext.asc())
+            base_query = base_query.order_by(CustomDataRow.data.op("->>")(query.sort_by).asc())
             
     # 3. Apply pagination and fetch rows
     paginated_query = base_query.offset(skip).limit(limit)
