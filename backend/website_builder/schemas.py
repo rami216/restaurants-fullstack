@@ -177,11 +177,13 @@ class WebsiteResponse(WebsiteBase):
     primary_custom_domain_id: Optional[UUID] = None   # <-- add this
     
     payment_method: str
+    openai_api_key: Optional[str] = None # <-- ADD THIS HERE
     class Config:
         from_attributes = True
 
 class WebsiteUpdatePayload(BaseModel):
-    payment_method: str
+    payment_method: Optional[str] = None
+    openai_api_key: Optional[str] = None # <-- ADD THIS HERE
     
 class LocationResponse(BaseModel):
     location_id: UUID
@@ -287,6 +289,7 @@ class WebsiteSettingsResponse(BaseModel):
     website_id: UUID
     subdomain: str | None
     payment_method: str  # <--- This is the only thing we really care about right now
+    openai_api_key: Optional[str] = None # <-- ADD THIS HERE
     
     class Config:
         from_attributes = True
