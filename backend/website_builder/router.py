@@ -18,6 +18,9 @@ from config import AI_SPEND_LIMIT_USD  # import the default from .env
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
+import openai
+from pydantic import BaseModel
+from typing import Optional
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
 def _normalize_slug(s: str | None) -> str:
@@ -975,3 +978,50 @@ async def send_custom_email(
         print(f"Email send error: {e}")
         raise HTTPException(status_code=500, detail=f"Failed to send email: {str(e)}")
 #endregion emailconfig
+
+
+class OpenAIKeyUpdate(BaseModel):
+    openai_api_key: Optional[str] = None
+
+@router.put("/websites/{website_id}/openai-key")
+async def update_openai_key(
+    website_id: UUID,
+    payload: OpenAIKeyUpdate,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user)
+):
+    """Safely updates ONLY the OpenAI key without touching payment methods."""
+    website = await get_website_and_check_ownership(website_id, current_user, db)
+    website.openai_api_key = payload.openai_api_key if payload.openai_api_key else None
+    await db.commit()
+    return {"status": "success"}
+
+
+class OpenAIPayload(BaseModel):
+    website_id: UUID
+    prompt: str
+    system_prompt: Optional[str] = "You are a helpful AI assistant."
+    max_tokens: Optional[int] = 500
+
+@router.post("/openai")
+async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(get_db)):
+    """The proxy that securely calls OpenAI using the website's saved key."""
+    website = await db.get(Website, payload.website_id)
+    
+    if not website or not website.openai_api_key:
+        raise HTTPException(status_code=400, detail="OpenAI API key not configured for this website.")
+
+    try:
+        client = openai.AsyncOpenAI(api_key=website.openai_api_key)
+        response = await client.chat.completions.create(
+            model="gpt-4o-mini",
+            messages=[
+                {"role": "system", "content": payload.system_prompt},
+                {"role": "user", "content": payload.prompt}
+            ],
+            max_tokens=payload.max_tokens
+        )
+        return {"text": response.choices[0].message.content}
+        
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=f"OpenAI Error: {str(e)}")
