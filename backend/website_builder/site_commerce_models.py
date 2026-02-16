@@ -1,6 +1,6 @@
 #website_builder/site_commerce_models.py
 
-from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Boolean, UniqueConstraint
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Boolean, UniqueConstraint,Integer,Float
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.sql import func
 from database import Base
@@ -68,3 +68,15 @@ class SitePurchase(Base):
     payment_intent_id = Column(String, nullable=True) # To track the Stripe ID
     amount_paid = Column(Numeric(10, 2), nullable=True) # To store $20.00
     currency = Column(String, nullable=True) # To store 'usd'
+    
+
+class SiteMemberUsage(Base):
+    __tablename__ = "site_member_usage"
+    
+    id = Column(Integer, primary_key=True, index=True)
+    website_id = Column(UUID(as_uuid=True), index=True)
+    member_id = Column(UUID(as_uuid=True), index=True) # The person visiting the live site
+    
+    # Track their specific usage
+    ai_spend_usd = Column(Float, default=0.0)
+    ai_calls_count = Column(Integer, default=0)

@@ -12142,8 +12142,12 @@ Is this a file upload?
                       generateBtn.textContent = 'AI is thinking...';
                       
                       try {
+                          const memberId = typeof window !== 'undefined' 
+                              ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
+                              : null;
                           const res = await api.post('/builder/openai', {
                               website_id: properties.website_id,
+                              member_id: memberId, // ✅ NOW WE ARE TRACKING THE SPECIFIC USER
                               prompt: `Write content about: ${topic}`,
                               system_prompt: properties.systemPrompt || "You are a helpful assistant."
                           });
@@ -12165,7 +12169,7 @@ Is this a file upload?
                 - **CRITICAL ANTI-NESTING RULE:** When writing the `system_prompt` for OpenAI, DO NOT use literal JSON formatting examples with curly brackets and quotes (like `{"score": 85}`). This breaks the master JSON payload. 
                 - **CORRECT INSTRUCTION FORMAT:** Describe the keys in plain English. Example: `system_prompt: "Reply ONLY with a raw JSON object containing exactly two keys: ai_score (a number) and ai_analysis (a string). No markdown."`
                 - **PARSING RULE:** You MUST parse the response using `const parsedData = JSON.parse(res.data.text);` inside a try/catch block. NEVER use `.split()` or string manipulation to extract AI data.
-        - **PDF UPLOAD & AI PARSING PROTOCOL:**
+         - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV". (CRITICAL: Do NOT use this protocol for standard file uploads. ONLY use this if the prompt explicitly asks the AI to process or read the contents of the uploaded file).
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
             - **SCRIPT PATTERN (Inside form.onsubmit):**
@@ -12177,6 +12181,11 @@ Is this a file upload?
                   submitBtn.disabled = true;
                   
                   try {
+                      // Grab the logged-in user's ID to track their AI usage
+                      const memberId = typeof window !== 'undefined' 
+                          ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
+                          : null;
+
                       // 1. Upload the PDF
                       submitBtn.textContent = 'Uploading...';
                       const formData = new FormData();
@@ -12193,6 +12202,7 @@ Is this a file upload?
                       submitBtn.textContent = 'AI Analyzing...';
                       const aiRes = await api.post('/builder/openai', {
                           website_id: properties.website_id,
+                          member_id: memberId, // ✅ DOUBLE-LEDGER TRACKING ACTIVE
                           prompt: `Analyze this document: ${rawText}`,
                           system_prompt: properties.systemPrompt || "You are a strict HR recruiter. Analyze this document."
                       });
@@ -12204,13 +12214,19 @@ Is this a file upload?
                       rowData.cv_url = pdfUrl; // Save the file link
                       rowData.ai_analysis = aiRes.data.text; // Save the AI result
                       
-                      await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
+                      // Save the record linked to the specific site member
+                      await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: memberId });
                       
                       alert("Analysis Complete!");
                       form.reset();
                   } catch (err) {
                       console.error("PDF Workflow Error:", err);
-                      alert("Failed to process document.");
+                      // Provide feedback if the user hit their AI spending limit
+                      if (err?.response?.status === 403) {
+                          alert("AI Limit Reached: " + (err.response.data.detail || "Please upgrade your account."));
+                      } else {
+                          alert("Failed to process document.");
+                      }
                   } finally {
                       submitBtn.disabled = false;
                       submitBtn.textContent = 'Submit';
