@@ -411,18 +411,18 @@ async def webhook(
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
     # ✅ CASE 3: SUBSCRIPTION CREATED / RENEWED (Invoice Paid)
+   
     elif event["type"] == "invoice.payment_succeeded":
         invoice = event["data"]["object"]
         
-        # Only process if this invoice is for a subscription
         if invoice.get("subscription"):
             subscription_id = invoice.get("subscription")
             
-            # We need to get the metadata we attached to the subscription
             stripe.api_key = account.stripe_secret_key
             sub = stripe.Subscription.retrieve(subscription_id)
             md = sub.get("metadata", {})
             
+            # Use the type we set in the checkout session
             if md.get("type") == "site_member_subscription":
                 try:
                     website_id = md.get("website_id")
@@ -430,33 +430,35 @@ async def webhook(
                     product_id = md.get("product_id")
                     
                     amount_paid = invoice.get("amount_paid", 0) / 100.0
-                    currency = invoice.get("currency", "usd")
+                    currency = invoice.get("currency", "eur")
 
-                    # Look for existing purchase/subscription record
+                    # Logic Fix: Check if this user already has an entry for THIS product
                     existing = await db.scalar(
                         select(SitePurchase).where(
-                            SitePurchase.payment_intent_id == subscription_id # Re-using this column for Sub ID
+                            SitePurchase.website_id == UUID(website_id),
+                            SitePurchase.member_id == UUID(member_id),
+                            SitePurchase.product_id == UUID(product_id)
                         )
                     )
                     
                     if not existing:
+                        # CREATE the purchase record so the visibility logic works!
                         db.add(SitePurchase(
                             website_id=UUID(website_id),
                             member_id=UUID(member_id),
                             product_id=UUID(product_id),
-                            status="active", # Mark as active!
-                            payment_intent_id=subscription_id, 
+                            status="active",
+                            payment_intent_id=subscription_id, # Link to Sub ID
                             amount_paid=amount_paid,
                             currency=currency
                         ))
                     else:
                         existing.status = "active"
+                        existing.payment_intent_id = subscription_id
                     
                     await db.commit()
                 except Exception as e:
                     print(f"❌ Database Insert Error (Subscription): {e}")
-                    return {"status": "error", "message": str(e)}
-
     # ✅ CASE 4: SUBSCRIPTION CANCELLED OR FAILED
     elif event["type"] in ["customer.subscription.deleted", "customer.subscription.canceled"]:
         sub = event["data"]["object"]
