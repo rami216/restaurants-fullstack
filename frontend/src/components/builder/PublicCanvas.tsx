@@ -2166,13 +2166,69 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     // router.refresh();
   };
   // ✅ UPDATE: Pass an `isSubscription` flag to know which endpoint to hit
+  // const startCheckout = async (
+  //   productId: string,
+  //   isSubscription: boolean = false,
+  // ) => {
+  //   if (!productId) return;
+
+  //   // member must be logged in
+  //   const subdomain = websiteData.subdomain;
+  //   const memberId =
+  //     typeof window !== "undefined"
+  //       ? localStorage.getItem(`siteMemberId:${subdomain}`)
+  //       : null;
+
+  //   if (!memberId) {
+  //     alert("Please log in to complete your purchase.");
+  //     return;
+  //   }
+
+  //   try {
+  //     // Figure out what the user's browser origin should come back to
+  //     const win = typeof window !== "undefined" ? window : null;
+  //     const isMainHost =
+  //       !!win &&
+  //       (win.location.hostname === "zygoflow.com" ||
+  //         win.location.hostname === "www.zygoflow.com");
+
+  //     // On custom domains → /thank-you (same origin).
+  //     // On zygoflow.com preview → /{subdomain}/thank-you
+  //     const basePath = isMainHost ? `/${subdomain}` : "";
+  //     const siteOrigin = win ? win.location.origin : "";
+
+  //     const success_url = `${siteOrigin}${basePath}/thank-you`;
+  //     const cancel_url = `${siteOrigin}${basePath}${currentPage?.slug || ""}`;
+
+  //     // ✅ DYNAMIC ENDPOINT: Choose standard checkout OR subscription checkout
+  //     const endpoint = isSubscription
+  //       ? `/users-stripe-account/public/websites/${websiteData.website_id}/subscription-checkout`
+  //       : `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`;
+
+  //     // Call your API (no cookies needed)
+  //     const { data } = await saasApi.post(endpoint, {
+  //       product_id: productId,
+  //       member_id: memberId,
+  //       success_url,
+  //       cancel_url,
+  //     });
+
+  //     const redirect = data?.checkout_url || data?.url;
+  //     if (redirect) {
+  //       window.location.href = redirect;
+  //       return;
+  //     }
+  //     alert("Checkout session created, but no checkout URL was returned.");
+  //   } catch (err) {
+  //     console.error("Failed to start checkout:", err);
+  //     alert("Sorry — couldn’t start checkout. Please try again.");
+  //   }
+  // };
   const startCheckout = async (
     productId: string,
     isSubscription: boolean = false,
   ) => {
     if (!productId) return;
-
-    // member must be logged in
     const subdomain = websiteData.subdomain;
     const memberId =
       typeof window !== "undefined"
@@ -2185,46 +2241,40 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     }
 
     try {
-      // Figure out what the user's browser origin should come back to
       const win = typeof window !== "undefined" ? window : null;
       const isMainHost =
         !!win &&
         (win.location.hostname === "zygoflow.com" ||
           win.location.hostname === "www.zygoflow.com");
 
-      // On custom domains → /thank-you (same origin).
-      // On zygoflow.com preview → /{subdomain}/thank-you
+      // Keep your original path logic so the redirect works on your main domain
       const basePath = isMainHost ? `/${subdomain}` : "";
       const siteOrigin = win ? win.location.origin : "";
 
       const success_url = `${siteOrigin}${basePath}/thank-you`;
-      const cancel_url = `${siteOrigin}${basePath}${currentPage?.slug || ""}`;
+      const cancel_url = window.location.href;
 
-      // ✅ DYNAMIC ENDPOINT: Choose standard checkout OR subscription checkout
-      const endpoint = isSubscription
-        ? `/users-stripe-account/public/websites/${websiteData.website_id}/subscription-checkout`
-        : `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`;
-
-      // Call your API (no cookies needed)
-      const { data } = await saasApi.post(endpoint, {
-        product_id: productId,
-        member_id: memberId,
-        success_url,
-        cancel_url,
-      });
+      // Send the POST request to the single /checkout endpoint
+      const { data } = await saasApi.post(
+        `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`,
+        {
+          product_id: productId,
+          member_id: memberId,
+          action: isSubscription ? "subscribe" : "purchase", // 👈 This is the magic line
+          success_url,
+          cancel_url,
+        },
+      );
 
       const redirect = data?.checkout_url || data?.url;
       if (redirect) {
         window.location.href = redirect;
-        return;
       }
-      alert("Checkout session created, but no checkout URL was returned.");
     } catch (err) {
-      console.error("Failed to start checkout:", err);
+      console.error("Checkout failed", err);
       alert("Sorry — couldn’t start checkout. Please try again.");
     }
   };
-
   const performInteractivity = async (props: any) => {
     const { interactivity: inter = { action: "none" } } = props || {};
 
