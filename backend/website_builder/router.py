@@ -1030,11 +1030,12 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
     
     
 #region pdfparser
+#region pdfparser
 class PDFParseRequest(BaseModel):
     pdf_url: str
 
 @router.post("/parse-pdf")
-async def parse_pdf_from_url(payload: PDFParseRequest, db: AsyncSession = Depends(get_current_active_user)):
+async def parse_pdf_from_url(payload: PDFParseRequest):
     """Downloads a PDF from a URL, extracts the text, and returns it."""
     try:
         # 1. Download the PDF file from the URL into memory
@@ -1059,4 +1060,5 @@ async def parse_pdf_from_url(payload: PDFParseRequest, db: AsyncSession = Depend
         
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}") 
+#endregion pdfparser
 #endregion pdfparser
