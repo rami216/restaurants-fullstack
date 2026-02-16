@@ -12160,6 +12160,11 @@ Is this a file upload?
                   };
               }
               ```
+            - **MULTI-VARIABLE AI EXTRACTION (JSON RULE):**
+                - If the prompt requires extracting MULTIPLE specific pieces of data from the AI (e.g., a Name, a Price, and a Score), you MUST instruct the AI to return a JSON object.
+                - **CRITICAL ANTI-NESTING RULE:** When writing the `system_prompt` for OpenAI, DO NOT use literal JSON formatting examples with curly brackets and quotes (like `{"score": 85}`). This breaks the master JSON payload. 
+                - **CORRECT INSTRUCTION FORMAT:** Describe the keys in plain English. Example: `system_prompt: "Reply ONLY with a raw JSON object containing exactly two keys: ai_score (a number) and ai_analysis (a string). No markdown."`
+                - **PARSING RULE:** You MUST parse the response using `const parsedData = JSON.parse(res.data.text);` inside a try/catch block. NEVER use `.split()` or string manipulation to extract AI data.
         - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV". (CRITICAL: Do NOT use this protocol for standard file uploads. ONLY use this if the prompt explicitly asks the AI to process or read the contents of the uploaded file).
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
