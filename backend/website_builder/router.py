@@ -21,6 +21,8 @@ from email.mime.multipart import MIMEMultipart
 import openai
 from pydantic import BaseModel
 from typing import Optional
+import io
+from pypdf import PdfReader
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
 def _normalize_slug(s: str | None) -> str:
@@ -1025,3 +1027,36 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
         
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"OpenAI Error: {str(e)}")
+    
+    
+#region pdfparser
+class PDFParseRequest(BaseModel):
+    pdf_url: str
+
+@router.post("/parse-pdf")
+async def parse_pdf_from_url(payload: PDFParseRequest, db: AsyncSession = Depends(get_current_active_user)):
+    """Downloads a PDF from a URL, extracts the text, and returns it."""
+    try:
+        # 1. Download the PDF file from the URL into memory
+        async with httpx.AsyncClient() as client:
+            response = await client.get(payload.pdf_url)
+            response.raise_for_status()
+            
+        # 2. Load the bytes into a memory buffer
+        pdf_file = io.BytesIO(response.content)
+        
+        # 3. Read the PDF and extract text page by page
+        reader = PdfReader(pdf_file)
+        extracted_text = ""
+        
+        for page in reader.pages:
+            text = page.extract_text()
+            if text:
+                extracted_text += text + "\n"
+                
+        # 4. Return the raw text
+        return {"text": extracted_text.strip()}
+        
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}") 
+#endregion pdfparser

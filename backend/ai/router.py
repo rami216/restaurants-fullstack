@@ -12160,6 +12160,58 @@ Is this a file upload?
                   };
               }
               ```
+        - **PDF UPLOAD & AI PARSING PROTOCOL:**
+            - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV". (CRITICAL: Do NOT use this protocol for standard file uploads. ONLY use this if the prompt explicitly asks the AI to process or read the contents of the uploaded file).
+            - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
+            - **SCRIPT PATTERN (Inside form.onsubmit):**
+              ```javascript
+              const fileInput = container.querySelector('input[type="file"]');
+              const submitBtn = form.querySelector('button[type="submit"]');
+              
+              if (fileInput && fileInput.files.length > 0) {
+                  submitBtn.disabled = true;
+                  
+                  try {
+                      // 1. Upload the PDF
+                      submitBtn.textContent = 'Uploading...';
+                      const formData = new FormData();
+                      formData.append('file', fileInput.files[0]);
+                      const uploadRes = await api.post('/uploads/', formData);
+                      const pdfUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
+                      
+                      // 2. Parse the PDF Text
+                      submitBtn.textContent = 'Reading PDF...';
+                      const parseRes = await api.post('/builder/parse-pdf', { pdf_url: pdfUrl });
+                      const rawText = parseRes.data.text;
+                      
+                      // 3. Send Text to AI
+                      submitBtn.textContent = 'AI Analyzing...';
+                      const aiRes = await api.post('/builder/openai', {
+                          website_id: properties.website_id,
+                          prompt: `Analyze this document: ${rawText}`,
+                          system_prompt: properties.systemPrompt || "You are a strict HR recruiter. Analyze this document."
+                      });
+                      
+                      // 4. Save to Database (Merge AI result with form data)
+                      submitBtn.textContent = 'Saving...';
+                      const rowData = {};
+                      new FormData(form).forEach((v, k) => { if(k !== 'file') rowData[k] = v; });
+                      rowData.cv_url = pdfUrl; // Save the file link
+                      rowData.ai_analysis = aiRes.data.text; // Save the AI result
+                      
+                      await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });
+                      
+                      alert("Analysis Complete!");
+                      form.reset();
+                  } catch (err) {
+                      console.error("PDF Workflow Error:", err);
+                      alert("Failed to process document.");
+                  } finally {
+                      submitBtn.disabled = false;
+                      submitBtn.textContent = 'Submit';
+                  }
+              }
+              ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
