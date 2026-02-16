@@ -106,7 +106,6 @@ async def create_checkout_session(
 ):
     product_id = body.get("product_id")
     member_id  = body.get("member_id")
-    # ✅ Capture the action (purchase or subscribe) from the frontend
     action = body.get("action", "purchase") 
     
     success_url = body.get("success_url") or "https://example.com/success"
@@ -133,10 +132,17 @@ async def create_checkout_session(
 
     stripe.api_key = secret_key
 
-    # ✅ LOGIC SWITCH: Determine Stripe Mode and Metadata based on 'action'
     is_subscription = action == "subscribe"
     mode = "subscription" if is_subscription else "payment"
     metadata_type = "site_member_subscription" if is_subscription else "site_member_unlock"
+
+    # ✅ CRITICAL: Build metadata once
+    shared_metadata = {
+        "type": metadata_type,
+        "website_id": website_id,
+        "member_id": member_id or "",
+        "product_id": product_id,
+    }
 
     checkout_params = {
         "mode": mode,
@@ -146,76 +152,20 @@ async def create_checkout_session(
         "cancel_url": cancel_url,
     }
 
-    # ✅ IMPORTANT: Metadata location differs slightly between modes
-    shared_metadata = {
-        "type": metadata_type,
-        "website_id": website_id,
-        "member_id": member_id or "",
-        "product_id": product_id,
-    }
-
+    # ✅ FIX: For subscriptions, put metadata in BOTH places
     if is_subscription:
         checkout_params["subscription_data"] = {"metadata": shared_metadata}
+        checkout_params["metadata"] = shared_metadata  # ← ADD THIS LINE
     else:
         checkout_params["metadata"] = shared_metadata
 
     session = stripe.checkout.Session.create(**checkout_params)
 
     return {"checkout_url": session.url}
-
 # =========================
 # Create Subscription Checkout
 # =========================
-@router.post("/public/websites/{website_id}/subscription-checkout")
-async def create_subscription_checkout(
-    website_id: str,
-    body: dict,
-    db: AsyncSession = Depends(get_db),
-):
-    product_id = body.get("product_id")
-    member_id  = body.get("member_id")
-    success_url = body.get("success_url") or "https://example.com/success"
-    cancel_url  = body.get("cancel_url")  or "https://example.com/cancel"
 
-    if not product_id:
-        raise HTTPException(400, "product_id required")
-
-    product = await db.scalar(
-        select(SiteProduct).where(
-            SiteProduct.product_id == product_id,
-            SiteProduct.website_id == website_id
-        )
-    )
-    if not product:
-        raise HTTPException(404, "Product not found")
-
-    secret_key = await db.scalar(
-        select(WebsiteStripeAccount.stripe_secret_key)
-        .where(WebsiteStripeAccount.website_id == website_id)
-    )
-    if not secret_key:
-        raise HTTPException(400, "Stripe not configured")
-
-    stripe.api_key = secret_key
-
-    # CRITICAL DIFFERENCE: mode="subscription"
-    session = stripe.checkout.Session.create(
-        mode="subscription",
-        payment_method_types=["card"],
-        line_items=[{"price": product.stripe_price_id, "quantity": 1}],
-        success_url=success_url,
-        cancel_url=cancel_url,
-        subscription_data={
-            "metadata": {
-                "type": "site_member_subscription",
-                "website_id": website_id,
-                "member_id": member_id or "",
-                "product_id": product_id,
-            }
-        },
-    )
-
-    return {"checkout_url": session.url}
 @router.post("/webhook")
 async def webhook(
     request: Request,
