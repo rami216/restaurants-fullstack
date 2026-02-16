@@ -58,6 +58,8 @@ PUBLIC_RULES = [
     ("/custom-data/", {"POST", "GET", "PUT", "DELETE", "OPTIONS"}),
     ("/builder/form-submissions", {"POST", "OPTIONS"}),
     ("/builder/send-email", {"POST", "OPTIONS"}),  # <--- Add this line
+    ("/builder/openai", {"POST", "OPTIONS"}),
+    ("/builder/parse-pdf", {"POST", "OPTIONS"}),
 
     
 ]

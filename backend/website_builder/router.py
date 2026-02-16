@@ -1004,19 +1004,19 @@ PRICE_PER_1M_COMPLETION = 0.600
 
 class OpenAIPayload(BaseModel):
     website_id: UUID
-    member_id: Optional[UUID] = None  # ✅ NEW: We now accept the specific visitor's ID
+    member_id: Optional[UUID] = None  # ✅ NOW ACCEPTS THE MEMBER ID
     prompt: str
     system_prompt: Optional[str] = "You are a helpful AI assistant."
     max_tokens: Optional[int] = 500
 
 @router.post("/openai")
 async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(get_db)):
-    # 1. Fetch the Website (Macro Level)
+    # 1. Fetch the Website
     website = await db.get(Website, payload.website_id)
     if not website:
         raise HTTPException(status_code=404, detail="Website not found.")
 
-    # 2. Fetch or Create the Member's Wallet (Micro Level)
+    # 2. Track the Specific User (Site Member)
     member_usage = None
     if payload.member_id:
         member_usage = await db.scalar(
@@ -1034,18 +1034,17 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
             )
             db.add(member_usage)
 
-        # ✅ ENFORCE MEMBER LIMITS HERE (e.g., Free users get $0.10 of AI processing)
-        # You can later connect this to your SitePurchase table to see if they bought a "Pro Plan"
+        # Cut off free users if they spam the AI
         if member_usage.ai_spend_usd > 0.10: 
-            raise HTTPException(status_code=403, detail="Member AI Limit Reached! Please upgrade your plan on this site.")
+            raise HTTPException(status_code=403, detail="Member AI Limit Reached! Please upgrade your plan.")
 
-    # 3. Choose the API Key (Platform vs Owner)
-    api_key = website.openai_api_key 
+    # 3. Use the Website's Key, or fallback to your Master Key
+    api_key = website.openai_api_key or os.getenv("OPENAI_API_KEY")
     if not api_key:
         raise HTTPException(status_code=500, detail="No AI key configured.")
 
     try:
-        # 4. Make the call
+        # 4. Call OpenAI
         client = openai.AsyncOpenAI(api_key=api_key)
         response = await client.chat.completions.create(
             model="gpt-4o-mini",
@@ -1056,17 +1055,16 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
             max_tokens=payload.max_tokens
         )
         
-        # 5. Calculate Cost
+        # 5. Calculate Cost and Update Both Ledgers
         if response.usage:
             prompt_cost = (response.usage.prompt_tokens / 1_000_000) * PRICE_PER_1M_PROMPT
             comp_cost = (response.usage.completion_tokens / 1_000_000) * PRICE_PER_1M_COMPLETION
             total_call_cost = prompt_cost + comp_cost
             
-            # ✅ DOUBLE LEDGER UPDATE
-            # A. Charge the Website Owner
+            # Charge the Website Owner
             website.current_ai_spend_usd = getattr(website, 'current_ai_spend_usd', 0.0) + total_call_cost
             
-            # B. Charge the Site Member
+            # Charge the Site Member
             if member_usage:
                 member_usage.ai_spend_usd += total_call_cost
                 member_usage.ai_calls_count += 1
@@ -1078,8 +1076,7 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
     except HTTPException as he:
         raise he
     except Exception as e:
-        raise HTTPException(status_code=500, detail=f"OpenAI Error: {str(e)}")    
-    
+        raise HTTPException(status_code=500, detail=f"OpenAI Error: {str(e)}")
 #region pdfparser
 class PDFParseRequest(BaseModel):
     pdf_url: str

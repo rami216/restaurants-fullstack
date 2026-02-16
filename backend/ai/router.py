@@ -12170,7 +12170,7 @@ Is this a file upload?
                 - **CORRECT INSTRUCTION FORMAT:** Describe the keys in plain English. Example: `system_prompt: "Reply ONLY with a raw JSON object containing exactly two keys: ai_score (a number) and ai_analysis (a string). No markdown."`
                 - **PARSING RULE:** You MUST parse the response using `const parsedData = JSON.parse(res.data.text);` inside a try/catch block. NEVER use `.split()` or string manipulation to extract AI data.
          - **PDF UPLOAD & AI PARSING PROTOCOL:**
-            - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV". (CRITICAL: Do NOT use this protocol for standard file uploads. ONLY use this if the prompt explicitly asks the AI to process or read the contents of the uploaded file).
+            - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
             - **SCRIPT PATTERN (Inside form.onsubmit):**
               ```javascript
@@ -12202,7 +12202,7 @@ Is this a file upload?
                       submitBtn.textContent = 'AI Analyzing...';
                       const aiRes = await api.post('/builder/openai', {
                           website_id: properties.website_id,
-                          member_id: memberId, // ✅ DOUBLE-LEDGER TRACKING ACTIVE
+                          member_id: memberId, // ✅ TRACKING THE USER
                           prompt: `Analyze this document: ${rawText}`,
                           system_prompt: properties.systemPrompt || "You are a strict HR recruiter. Analyze this document."
                       });
@@ -12211,17 +12211,15 @@ Is this a file upload?
                       submitBtn.textContent = 'Saving...';
                       const rowData = {};
                       new FormData(form).forEach((v, k) => { if(k !== 'file') rowData[k] = v; });
-                      rowData.cv_url = pdfUrl; // Save the file link
-                      rowData.ai_analysis = aiRes.data.text; // Save the AI result
+                      rowData.cv_url = pdfUrl; 
+                      rowData.ai_analysis = aiRes.data.text; 
                       
-                      // Save the record linked to the specific site member
                       await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: memberId });
                       
                       alert("Analysis Complete!");
                       form.reset();
                   } catch (err) {
                       console.error("PDF Workflow Error:", err);
-                      // Provide feedback if the user hit their AI spending limit
                       if (err?.response?.status === 403) {
                           alert("AI Limit Reached: " + (err.response.data.detail || "Please upgrade your account."));
                       } else {
