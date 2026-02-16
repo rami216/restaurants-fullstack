@@ -255,24 +255,23 @@ async def webhook(
 
     # --- Handle Events ---
 
-    # ✅ FIX: Unified handler for both One-time and Subscriptions
-    # ✅ FIX: Unified handler that "digs" for metadata if missing
+    
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         
         if session.get("payment_status") != "paid":
             return {"status": "ignored (not paid)"}
 
-        # 1. Start with session metadata
+        # 1. Try session metadata (works for One-time purchases)
         md = session.get("metadata") or {}
         
-        # 2. SUB FIX: If session metadata is empty but there's a subscription, fetch it!
-        # This is where your code was failing before.
+        # 2. If empty and it's a subscription, fetch the metadata from the Sub object
+        # This is the missing piece for your subscription logic!
         if not md.get("type") and session.get("subscription"):
             stripe.api_key = account.stripe_secret_key
             subscription_obj = stripe.Subscription.retrieve(session.get("subscription"))
             md = subscription_obj.get("metadata") or {}
-            print(f"📡 Retrieved metadata from subscription object: {md}")
+            print(f"📡 Sub Metadata Found: {md}")
 
         # 3. Check for our specific unlock types
         if md.get("type") in ["site_member_unlock", "site_member_subscription"]:
@@ -281,17 +280,17 @@ async def webhook(
                 member_id = md.get("member_id")
                 product_id = md.get("product_id")
                 
-                # Subscription ID (sub_...) or PaymentIntent ID (pi_...)
+                # Identifier is Sub ID (sub_...) for recurring, or PaymentIntent (pi_...) for one-time
                 identifier = session.get("subscription") or session.get("payment_intent")
                 
                 amount_total = session.get("amount_total", 0)
                 currency = session.get("currency", "eur")
 
                 if not (website_id and member_id and product_id and identifier):
-                    print("⚠️ Webhook found the event but metadata values are still missing.")
-                    return {"status": "ignored (metadata missing)"}
+                    print("⚠️ Metadata keys still missing after retrieval attempt.")
+                    return {"status": "ignored (missing metadata)"}
                 
-                # Check for existing to avoid duplicates
+                # Check for existing record
                 existing = await db.scalar(
                     select(SitePurchase).where(SitePurchase.payment_intent_id == identifier)
                 )
@@ -301,6 +300,7 @@ async def webhook(
                         website_id=UUID(website_id),
                         member_id=UUID(member_id),
                         product_id=UUID(product_id),
+                        # Mark as 'active' for subs, 'paid' for one-time
                         status="active" if md.get("type") == "site_member_subscription" else "paid",
                         payment_intent_id=identifier,
                         amount_paid=amount_total / 100.0,
@@ -309,14 +309,14 @@ async def webhook(
                     await db.commit()
                     print(f"✅ SUCCESS: Unlocked {product_id} for member {member_id}")
                 else:
+                    # Update status if it exists but wasn't active
                     existing.status = "active" if md.get("type") == "site_member_subscription" else "paid"
                     await db.commit()
-                    print(f"✅ SUCCESS: Updated existing record for member {member_id}")
 
             except Exception as e:
                 print(f"❌ Database Error in Webhook: {e}")
                 traceback.print_exc()
-                await db.rollback() # Ensure cleanup on error
+                await db.rollback()
                 return {"status": "error", "message": str(e)}
     # ✅ CASE 2: CART CHECKOUT (Physical/Menu Items) WITH EMAIL
     elif event["type"] == "payment_intent.succeeded":
