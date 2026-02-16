@@ -255,7 +255,7 @@ async def webhook(
 
     # --- Handle Events ---
 
-    # ✅ CASE 1: MEMBER UNLOCK (Digital Course/Content)
+    
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         
@@ -263,40 +263,58 @@ async def webhook(
             return {"status": "ignored (not paid)"}
 
         md = session.get("metadata") or {}
-        
-        if md.get("type") == "site_member_unlock":
+        # Subscriptions put metadata inside subscription_data, which ends up on the subscription object
+        # We check both the session metadata and the nested subscription metadata
+        if not md.get("type") and session.get("subscription"):
+            stripe.api_key = account.stripe_secret_key
+            sub = stripe.Subscription.retrieve(session.get("subscription"))
+            md = sub.get("metadata", {})
+
+        # Now we check if it's either of our types
+        if md.get("type") in ["site_member_unlock", "site_member_subscription"]:
             try:
                 website_id = md.get("website_id")
                 member_id = md.get("member_id")
                 product_id = md.get("product_id")
-                payment_intent_id = session.get("payment_intent")
+                
+                # For subscriptions, use sub ID; for one-time, use payment intent ID
+                identifier = session.get("subscription") or session.get("payment_intent")
                 
                 amount_total = session.get("amount_total", 0)
-                currency = session.get("currency", "usd")
+                currency = session.get("currency", "eur")
 
-                if not (website_id and member_id and product_id and payment_intent_id):
-                    return {"status": "ignored (missing metadata for unlock)"}
+                if not (website_id and member_id and product_id and identifier):
+                    return {"status": "ignored (missing metadata for database sync)"}
                 
-                exists = await db.scalar(
-                    select(SitePurchase).where(SitePurchase.payment_intent_id == payment_intent_id)
+                # Use a combined check to avoid duplicates
+                existing = await db.scalar(
+                    select(SitePurchase).where(
+                        SitePurchase.website_id == UUID(website_id),
+                        SitePurchase.member_id == UUID(member_id),
+                        SitePurchase.product_id == UUID(product_id)
+                    )
                 )
                 
-                if not exists:
+                if not existing:
                     db.add(SitePurchase(
                         website_id=UUID(website_id),
                         member_id=UUID(member_id),
                         product_id=UUID(product_id),
-                        status="paid",
-                        payment_intent_id=payment_intent_id,
+                        status="active" if md.get("type") == "site_member_subscription" else "paid",
+                        payment_intent_id=identifier,
                         amount_paid=amount_total / 100.0,
                         currency=currency
                     ))
-                    await db.commit()
+                else:
+                    existing.status = "active" if md.get("type") == "site_member_subscription" else "paid"
+                    existing.payment_intent_id = identifier
+                
+                await db.commit()
+                print(f"✅ Successfully unlocked content for member {member_id}")
             except Exception as e:
-                print(f"❌ Database Insert Error (Unlock): {e}")
+                print(f"❌ Database Insert Error (Unified Checkout): {e}")
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
-
     # ✅ CASE 2: CART CHECKOUT (Physical/Menu Items) WITH EMAIL
     elif event["type"] == "payment_intent.succeeded":
         payment_intent = event["data"]["object"]
