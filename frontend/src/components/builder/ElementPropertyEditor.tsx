@@ -1697,7 +1697,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
   const renderElementEditor = () => {
     const inter = selectedItem.properties?.interactivity || {};
-    const action: "none" | "link" | "purchase" = inter.action || "none";
+    const action: "none" | "link" | "purchase" | "subscribe" =
+      inter.action || "none";
     const productId = inter.product_id || "";
     const linkHref = inter.href || "";
 
@@ -1900,7 +1901,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
 
       case "BUTTON": {
         const inter = selectedItem.properties?.interactivity || {};
-        const action: "none" | "link" | "purchase" = inter.action || "none";
+        // ✅ FIXED LINE:
+        const action: "none" | "link" | "purchase" | "subscribe" =
+          inter.action || "none";
         const productId = inter.product_id || "";
         const linkHref = inter.href || "";
         editorBody = (
@@ -1929,18 +1932,35 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                   className="border rounded p-2 w-full mt-1"
                   value={action}
                   onChange={(e) => {
-                    const newAction = e.target.value as
+                    // ✅ Add subscribe to the cast
+                    const a = e.target.value as
                       | "none"
                       | "link"
-                      | "purchase";
-                    handlePropertyChange("interactivity", {
-                      action: newAction,
-                    });
+                      | "purchase"
+                      | "subscribe";
+                    let newInteractivity;
+                    if (a === "link") {
+                      newInteractivity = {
+                        action: "link",
+                        href: linkHref || "",
+                      };
+                    } else if (a === "purchase" || a === "subscribe") {
+                      // ✅ Handle BOTH purchase and subscribe
+                      newInteractivity = {
+                        action: a,
+                        product_id: productId || "",
+                      };
+                    } else {
+                      newInteractivity = { action: "none" };
+                    }
+                    handlePropertyChange("interactivity", newInteractivity);
                   }}
                 >
                   <option value="none">No action</option>
                   <option value="link">Go to page</option>
-                  <option value="purchase">Purchase product</option>
+                  <option value="purchase">Purchase (One-time)</option>
+                  {/* ✅ ADD SUBSCRIBE OPTION */}
+                  <option value="subscribe">Subscribe (Recurring)</option>
                 </select>
               </div>
 
@@ -1969,7 +1989,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 </div>
               )}
 
-              {action === "purchase" && (
+              {/* ✅ SHOW FOR BOTH PURCHASE AND SUBSCRIBE */}
+              {(action === "purchase" || action === "subscribe") && (
                 <div className="mt-2">
                   <label className="block text-sm font-medium mb-1">
                     Product
@@ -1979,7 +2000,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     value={productId}
                     onChange={(e) =>
                       handlePropertyChange("interactivity", {
-                        action: "purchase",
+                        action: action, // Keeps it as purchase OR subscribe
                         product_id: e.target.value,
                       })
                     }
@@ -1991,6 +2012,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       </option>
                     ))}
                   </select>
+                  <p className="text-xs text-gray-500 mt-1">
+                    This element will start a Stripe checkout for the selected
+                    product.
+                  </p>
                 </div>
               )}
             </div>
@@ -3073,16 +3098,21 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                   className="border rounded p-2 w-full"
                   value={action}
                   onChange={(e) => {
-                    const a = e.target.value as "none" | "link" | "purchase";
+                    const a = e.target.value as
+                      | "none"
+                      | "link"
+                      | "purchase"
+                      | "subscribe";
                     let newInteractivity;
                     if (a === "link") {
                       newInteractivity = {
                         action: "link",
                         href: linkHref || "",
                       };
-                    } else if (a === "purchase") {
+                    } else if (a === "purchase" || a === "subscribe") {
+                      // ✅ ADDED SUBSCRIBE
                       newInteractivity = {
-                        action: "purchase",
+                        action: a, // ✅ SAVES AS EITHER PURCHASE OR SUBSCRIBE
                         product_id: productId || "",
                       };
                     } else {
@@ -3094,7 +3124,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 >
                   <option value="none">No action</option>
                   <option value="link">Go to page</option>
-                  <option value="purchase">Purchase product</option>
+                  <option value="purchase">Purchase (One-time)</option>
+                  <option value="subscribe">Subscribe (Recurring)</option>{" "}
+                  {/* ✅ ADDED DROPDOWN OPTION */}
                 </select>
               </div>
 
@@ -3102,7 +3134,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 <div>
                   <label className="block text-sm font-medium">Page</label>
                   <select
-                    className="border rounded p-2 w-full"
+                    className="border rounded p-2 w-full mt-1"
                     value={linkHref}
                     onChange={(e) =>
                       // ✅ Use the main property change handler
@@ -3127,7 +3159,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                 </div>
               )}
 
-              {action === "purchase" && (
+              {/* ✅ SHOW FOR BOTH PURCHASE AND SUBSCRIBE */}
+              {(action === "purchase" || action === "subscribe") && (
                 <div className="mt-2">
                   <label className="block text-sm font-medium mb-1">
                     Product
@@ -3138,7 +3171,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                     onChange={(e) =>
                       // ✅ Use the main property change handler
                       handlePropertyChange("interactivity", {
-                        action: "purchase",
+                        action: action, // Keeps it as purchase or subscribe
                         product_id: e.target.value,
                       })
                     }

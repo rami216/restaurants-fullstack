@@ -2165,7 +2165,11 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
     // You can also add a refresh or redirect here if you want
     // router.refresh();
   };
-  const startCheckout = async (productId: string) => {
+  // ✅ UPDATE: Pass an `isSubscription` flag to know which endpoint to hit
+  const startCheckout = async (
+    productId: string,
+    isSubscription: boolean = false,
+  ) => {
     if (!productId) return;
 
     // member must be logged in
@@ -2191,21 +2195,23 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       // On custom domains → /thank-you (same origin).
       // On zygoflow.com preview → /{subdomain}/thank-you
       const basePath = isMainHost ? `/${subdomain}` : "";
-      const siteOrigin = win ? win.location.origin : ""; // https://www.whitemessagecenter.com OR https://zygoflow.com
+      const siteOrigin = win ? win.location.origin : "";
 
       const success_url = `${siteOrigin}${basePath}/thank-you`;
       const cancel_url = `${siteOrigin}${basePath}${currentPage?.slug || ""}`;
 
+      // ✅ DYNAMIC ENDPOINT: Choose standard checkout OR subscription checkout
+      const endpoint = isSubscription
+        ? `/users-stripe-account/public/websites/${websiteData.website_id}/subscription-checkout`
+        : `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`;
+
       // Call your API (no cookies needed)
-      const { data } = await saasApi.post(
-        `/users-stripe-account/public/websites/${websiteData.website_id}/checkout`,
-        {
-          product_id: productId,
-          member_id: memberId,
-          success_url,
-          cancel_url,
-        },
-      );
+      const { data } = await saasApi.post(endpoint, {
+        product_id: productId,
+        member_id: memberId,
+        success_url,
+        cancel_url,
+      });
 
       const redirect = data?.checkout_url || data?.url;
       if (redirect) {
@@ -2266,7 +2272,14 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
 
       case "purchase": {
         if (!inter.product_id) return;
-        await startCheckout(inter.product_id);
+        await startCheckout(inter.product_id, false); // isSubscription = false
+        break;
+      }
+
+      // ✅ NEW: Handle subscribe action
+      case "subscribe": {
+        if (!inter.product_id) return;
+        await startCheckout(inter.product_id, true); // isSubscription = true
         break;
       }
 
