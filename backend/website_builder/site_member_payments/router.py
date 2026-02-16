@@ -255,44 +255,42 @@ async def webhook(
 
     # --- Handle Events ---
 
-    
+    # ✅ FIX: Unified handler for both One-time and Subscriptions
     if event["type"] == "checkout.session.completed":
         session = event["data"]["object"]
         
         if session.get("payment_status") != "paid":
             return {"status": "ignored (not paid)"}
 
+        # 1. Try to get metadata from the session (One-time)
         md = session.get("metadata") or {}
-        # Subscriptions put metadata inside subscription_data, which ends up on the subscription object
-        # We check both the session metadata and the nested subscription metadata
+        
+        # 2. If it's a subscription, metadata moved to the Subscription object
         if not md.get("type") and session.get("subscription"):
             stripe.api_key = account.stripe_secret_key
-            sub = stripe.Subscription.retrieve(session.get("subscription"))
-            md = sub.get("metadata", {})
+            subscription_obj = stripe.Subscription.retrieve(session.get("subscription"))
+            md = subscription_obj.get("metadata") or {}
 
-        # Now we check if it's either of our types
+        # 3. Process if it matches our unlock types
         if md.get("type") in ["site_member_unlock", "site_member_subscription"]:
             try:
                 website_id = md.get("website_id")
                 member_id = md.get("member_id")
                 product_id = md.get("product_id")
                 
-                # For subscriptions, use sub ID; for one-time, use payment intent ID
-                identifier = session.get("subscription") or session.get("payment_intent")
+                # Use Sub ID for recurring, PaymentIntent ID for one-time
+                payment_intent_id = session.get("subscription") or session.get("payment_intent")
                 
                 amount_total = session.get("amount_total", 0)
-                currency = session.get("currency", "eur")
+                currency = session.get("currency", "usd")
 
-                if not (website_id and member_id and product_id and identifier):
-                    return {"status": "ignored (missing metadata for database sync)"}
+                if not (website_id and member_id and product_id and payment_intent_id):
+                    print("⚠️ Webhook missing critical metadata values")
+                    return {"status": "ignored (missing metadata)"}
                 
-                # Use a combined check to avoid duplicates
+                # Check for existing to prevent duplicate rows
                 existing = await db.scalar(
-                    select(SitePurchase).where(
-                        SitePurchase.website_id == UUID(website_id),
-                        SitePurchase.member_id == UUID(member_id),
-                        SitePurchase.product_id == UUID(product_id)
-                    )
+                    select(SitePurchase).where(SitePurchase.payment_intent_id == payment_intent_id)
                 )
                 
                 if not existing:
@@ -301,18 +299,14 @@ async def webhook(
                         member_id=UUID(member_id),
                         product_id=UUID(product_id),
                         status="active" if md.get("type") == "site_member_subscription" else "paid",
-                        payment_intent_id=identifier,
+                        payment_intent_id=payment_intent_id,
                         amount_paid=amount_total / 100.0,
                         currency=currency
                     ))
-                else:
-                    existing.status = "active" if md.get("type") == "site_member_subscription" else "paid"
-                    existing.payment_intent_id = identifier
-                
-                await db.commit()
-                print(f"✅ Successfully unlocked content for member {member_id}")
+                    await db.commit()
+                    print(f"✅ SUCCESS: Unlocked {product_id} for member {member_id}")
             except Exception as e:
-                print(f"❌ Database Insert Error (Unified Checkout): {e}")
+                print(f"❌ Database Error in Webhook: {e}")
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
     # ✅ CASE 2: CART CHECKOUT (Physical/Menu Items) WITH EMAIL
