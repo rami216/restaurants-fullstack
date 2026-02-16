@@ -105,7 +105,10 @@ async def create_checkout_session(
     db: AsyncSession = Depends(get_db),
 ):
     product_id = body.get("product_id")
-    member_id  = body.get("member_id")  # <- pass this from frontend if you have it
+    member_id  = body.get("member_id")
+    # ✅ Capture the action (purchase or subscribe) from the frontend
+    action = body.get("action", "purchase") 
+    
     success_url = body.get("success_url") or "https://example.com/success"
     cancel_url  = body.get("cancel_url")  or "https://example.com/cancel"
 
@@ -130,24 +133,35 @@ async def create_checkout_session(
 
     stripe.api_key = secret_key
 
-    session = stripe.checkout.Session.create(
-        mode="payment",
-        payment_method_types=["card"],
-        line_items=[{"price": product.stripe_price_id, "quantity": 1}],
-        success_url=success_url,
-        cancel_url=cancel_url,
+    # ✅ LOGIC SWITCH: Determine Stripe Mode and Metadata based on 'action'
+    is_subscription = action == "subscribe"
+    mode = "subscription" if is_subscription else "payment"
+    metadata_type = "site_member_subscription" if is_subscription else "site_member_unlock"
 
-        # IMPORTANT: this is what your webhook reads
-        metadata={
-            "type": "site_member_unlock",
-            "website_id": website_id,
-            "member_id": member_id or "",     # pass real value if you have it
-            "product_id": product_id,
-        },
-    )
+    checkout_params = {
+        "mode": mode,
+        "payment_method_types": ["card"],
+        "line_items": [{"price": product.stripe_price_id, "quantity": 1}],
+        "success_url": success_url,
+        "cancel_url": cancel_url,
+    }
+
+    # ✅ IMPORTANT: Metadata location differs slightly between modes
+    shared_metadata = {
+        "type": metadata_type,
+        "website_id": website_id,
+        "member_id": member_id or "",
+        "product_id": product_id,
+    }
+
+    if is_subscription:
+        checkout_params["subscription_data"] = {"metadata": shared_metadata}
+    else:
+        checkout_params["metadata"] = shared_metadata
+
+    session = stripe.checkout.Session.create(**checkout_params)
 
     return {"checkout_url": session.url}
-
 
 # =========================
 # Create Subscription Checkout
