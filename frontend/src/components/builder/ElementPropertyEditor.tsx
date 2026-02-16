@@ -1928,39 +1928,25 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium">Action</label>
+                
                 <select
                   className="border rounded p-2 w-full mt-1"
                   value={action}
                   onChange={(e) => {
-                    // ✅ Add subscribe to the cast
-                    const a = e.target.value as
-                      | "none"
-                      | "link"
-                      | "purchase"
-                      | "subscribe";
-                    let newInteractivity;
-                    if (a === "link") {
-                      newInteractivity = {
-                        action: "link",
-                        href: linkHref || "",
-                      };
-                    } else if (a === "purchase" || a === "subscribe") {
-                      // ✅ Handle BOTH purchase and subscribe
-                      newInteractivity = {
-                        action: a,
-                        product_id: productId || "",
-                      };
-                    } else {
-                      newInteractivity = { action: "none" };
-                    }
-                    handlePropertyChange("interactivity", newInteractivity);
+                    const a = e.target.value;
+                    // When switching actions, clear the productId to force a fresh selection
+                    handlePropertyChange("interactivity", {
+                      action: a,
+                      product_id: "",
+                    });
                   }}
                 >
                   <option value="none">No action</option>
                   <option value="link">Go to page</option>
-                  <option value="purchase">Purchase (One-time)</option>
-                  {/* ✅ ADD SUBSCRIBE OPTION */}
-                  <option value="subscribe">Subscribe (Recurring)</option>
+                  <option value="purchase">Purchase (One-time Checkout)</option>
+                  <option value="subscribe">
+                    Subscribe (Monthly/Recurring)
+                  </option>
                 </select>
               </div>
 
