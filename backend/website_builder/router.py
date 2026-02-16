@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from typing import Optional
 import io
 from pypdf import PdfReader
-from site_commerce_models import SiteMemberUsage
+from .site_commerce_models import SiteMemberUsage
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
 def _normalize_slug(s: str | None) -> str:
