@@ -12080,7 +12080,20 @@ Is this a file upload?
     
 5. DATA LOGIC PROTOCOL (Implementation Rules):
         Analyze the user's prompt and EXISTING_SCHEMAS_ON_WEBSITE. Apply these modules ONLY if applicable:
-
+        - **CRITICAL GLOBAL TRACKING RULE (MANDATORY FOR ALL AI):**
+            - EVERY SINGLE TIME you write an `api.post('/builder/openai', ...)` call in your javascript—whether it is a standard generation, a PDF parser, or a custom loop—you MUST include the `member_id` in the payload. 
+            - If you forget this, the billing system will crash.
+            - **MANDATORY PAYLOAD PATTERN:**
+              ```javascript
+              const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
+              
+              const aiRes = await api.post('/builder/openai', {
+                  website_id: properties.website_id,
+                  member_id: memberId, // <-- YOU MUST NEVER FORGET THIS
+                  prompt: "...",
+                  system_prompt: "..."
+              });
+              ```
         - **IDENTIFIER RULE (CRITICAL):**
             - The unique identifier for ANY row in ANY schema is ALWAYS **"row_id"** (e.g., row.row_id). 
             - **NEVER use "row.id"**. Any API update or delete call using "row.id" will fail.
