@@ -23,7 +23,8 @@ from pydantic import BaseModel
 from typing import Optional
 import io
 from pypdf import PdfReader
-from .site_commerce_models import SiteMemberUsage,SiteMember
+from .site_commerce_models import SiteMemberUsage
+from .site_auth_models import SiteMember
 import os
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
