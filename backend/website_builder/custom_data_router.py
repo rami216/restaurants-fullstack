@@ -432,7 +432,7 @@ async def search_data_rows(
 #region ai_sitemember_use
 class MemberUsageResponse(BaseModel):
     website_id: UUID
-    member_id: UUID
+    member_id: str
     limit_usd: float
     used_usd: float
     remaining_usd: float
@@ -441,34 +441,39 @@ class MemberUsageResponse(BaseModel):
 @router.get("/usage/{website_id}/{member_id}", response_model=MemberUsageResponse)
 async def get_site_member_usage(
     website_id: UUID,
-    member_id: UUID,
+    member_id: str, # ✅ Changed to string to prevent 422 CORS crashes
     db: AsyncSession = Depends(get_db)
 ):
     """Fetches the AI usage for a specific user on a specific website."""
     
-    # 1. Get the Website to find the global limit
+    # 1. Safely parse the UUID
+    try:
+        mem_uuid = UUID(member_id)
+    except ValueError:
+        # If the frontend sends "null", return 0 safely instead of crashing
+        return MemberUsageResponse(
+            website_id=website_id, member_id=member_id, limit_usd=0.0, used_usd=0.0, remaining_usd=0.0, total_calls=0
+        )
+
+    # 2. Get the Website to find the global limit
     website = await db.get(Website, website_id)
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
     
-    # ✅ FIX: Safely get the limit and FORCE it to be a float
     raw_limit = getattr(website, 'member_ai_spend_limit_usd', 0.10)
     limit_usd = float(raw_limit) if raw_limit is not None else 0.10
         
-    # 2. Get the Member's specific usage
+    # 3. Get the Member's specific usage
     result = await db.execute(
         select(SiteMemberUsage).where(
             SiteMemberUsage.website_id == website_id,
-            SiteMemberUsage.member_id == member_id
+            SiteMemberUsage.member_id == mem_uuid
         )
     )
     usage = result.scalars().first()
     
-    # ✅ FIX: Safely get the used amount and FORCE it to be a float
     used_usd = float(usage.ai_spend_usd) if usage and usage.ai_spend_usd is not None else 0.0
     total_calls = usage.ai_calls_count if usage else 0
-    
-    # Now that they are both guaranteed to be floats, the math will work perfectly!
     remaining_usd = max(0.0, limit_usd - used_usd)
     
     return MemberUsageResponse(

@@ -12139,7 +12139,19 @@ Is this a file upload?
             - **ENDPOINT:** Use `await api.post('/builder/openai', payload)`
             - **REQUIREMENT:** You **MUST** add `website_id: "WEBSITE_UUID_FROM_CONTEXT"` to the `properties` block.
             - **EDITABLE CONTENT RULE:** You MUST create an editable property for the `systemPrompt` (e.g., "You are an expert copywriter") so the user can tweak the AI's behavior.
-            - **SCRIPT PATTERN (Inside a form or generator):**
+            - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE):**
+                - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* (e.g., generating 3 separate meals, or a Title + Description), you MUST format the AI response as JSON.
+                - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`, arrays, or string manipulation to chop up AI text. It will fail due to markdown formatting. You MUST force JSON.
+                - **SYSTEM PROMPT FORMAT:** You must proactively invent the JSON keys based on the schema and add a strict instruction to the `system_prompt`. Example: `system_prompt: "Reply ONLY with a raw JSON object containing exactly three keys: meal_1, meal_2, meal_3. Do not use markdown or backticks."`
+                - **SAFE PARSING (MANDATORY):** OpenAI often wraps JSON in markdown backticks or adds conversational text. You MUST strip them before parsing:
+                  ```javascript
+                  let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                  // 🛡️ INDESTRUCTIBLE REGEX: Extracts only the JSON object if OpenAI added conversational text
+                  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+                  if (jsonMatch) cleanText = jsonMatch[0];
+                  const parsedData = JSON.parse(cleanText);
+                  ```
+            - **SCRIPT PATTERN (Standard Text Generation):**
               ```javascript
               const generateBtn = container.querySelector('.generate-ai-btn');
               const targetInput = container.querySelector('.target-input'); // Where the AI text goes
@@ -12177,11 +12189,6 @@ Is this a file upload?
                   };
               }
               ```
-            - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE):**
-                - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* (e.g., generating 3 separate meals, or a Title + Description), you MUST format the AI response as JSON.
-                - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`, arrays, or string manipulation to chop up AI text. It will fail due to markdown formatting. You MUST force JSON.
-                - **SYSTEM PROMPT FORMAT:** You must proactively invent the JSON keys based on the schema and add a strict instruction to the `system_prompt`. Example: `system_prompt: "Reply ONLY with a raw JSON object containing exactly three keys: meal_1, meal_2, meal_3. Do not use markdown or backticks."`
-                - **PARSING:** Parse the response safely using `const parsedData = JSON.parse(res.data.text);` inside a try/catch block, and map the properties (e.g., `parsedData.meal_1`) to the database payload.
          - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
