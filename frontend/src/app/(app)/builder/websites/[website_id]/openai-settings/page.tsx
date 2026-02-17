@@ -15,7 +15,7 @@ export default function OpenAISettingsPage() {
   const [isConfigured, setIsConfigured] = useState(false);
   const [spendLimit, setSpendLimit] = useState<string>("0.10");
 
-  // ✅ NEW: State to hold our analytics data
+  // State to hold our analytics data
   const [analytics, setAnalytics] = useState<any>(null);
 
   useEffect(() => {
@@ -34,7 +34,7 @@ export default function OpenAISettingsPage() {
           setSpendLimit(Number(res.data.member_ai_spend_limit_usd).toFixed(2));
         }
 
-        // 2. ✅ NEW: Fetch Analytics
+        // 2. Fetch Analytics
         const analyticsRes = await api.get(
           `/builder/websites/${websiteId}/ai-analytics`,
         );
@@ -117,7 +117,7 @@ export default function OpenAISettingsPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 p-8">
-      <div className="max-w-4xl mx-auto">
+      <div className="max-w-5xl mx-auto">
         {/* Navigation Bar */}
         <div className="flex items-center justify-between mb-8">
           <button
@@ -131,6 +131,7 @@ export default function OpenAISettingsPage() {
           </h1>
         </div>
 
+        {/* --- GRID SPLIT --- */}
         <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
           {/* LEFT COLUMN: Settings Form */}
           <div className="lg:col-span-1">
@@ -249,7 +250,7 @@ export default function OpenAISettingsPage() {
                     <thead className="bg-gray-50 text-gray-600">
                       <tr>
                         <th className="p-3 font-semibold rounded-tl-lg">
-                          Member ID
+                          Member
                         </th>
                         <th className="p-3 font-semibold">AI Calls</th>
                         <th className="p-3 font-semibold text-right rounded-tr-lg">
@@ -264,11 +265,17 @@ export default function OpenAISettingsPage() {
                             key={u.member_id}
                             className="hover:bg-gray-50 transition-colors"
                           >
-                            <td
-                              className="p-3 font-mono text-xs text-gray-500 truncate max-w-[150px]"
-                              title={u.member_id}
-                            >
-                              {u.member_id}
+                            <td className="p-3">
+                              {/* Show Name/Email prominently */}
+                              <div
+                                className="font-semibold text-gray-900 truncate max-w-[200px]"
+                                title={u.email}
+                              >
+                                {u.name || u.email || "Unknown User"}
+                              </div>
+                              <div className="font-mono text-[10px] text-gray-400 mt-0.5">
+                                {u.member_id.split("-")[0]}...
+                              </div>
                             </td>
                             <td className="p-3 text-gray-700 font-medium">
                               {u.ai_calls_count}
