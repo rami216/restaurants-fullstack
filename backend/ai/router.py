@@ -8406,6 +8406,10 @@ Is this a file upload?
                                 - Do NOT add sitemember_id to API calls
                                 - Use: `await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: null });`
                                 - This shows ALL data regardless of who created it
+                    - **JAVASCRIPT ANTI-PATTERNS (DO NOT USE THESE):**
+                        - ❌ Do NOT attempt to build custom pagination logic (e.g., `renderPagination`, `currentRows`, or `paginatedRows`) UNLESS the user explicitly asks for "pagination". Always map and render directly from the globally scoped `rows` array.
+                        - ❌ Never use `.split('\n')` to extract multi-variable AI data. Always use the STRICT JSON RULE above.
+                        - ❌ Never use `currentRows` or `paginatedRows` without explicitly declaring them. Just use `let rows = [];`.
                     **5. Update/Delete - verify ownership:**
                 ```javascript
                                 // ✅ CORRECT: Always pass sitemember_id in PUT/DELETE requests
@@ -12142,8 +12146,8 @@ Is this a file upload?
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE):**
                 - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* (e.g., generating 3 separate meals, or a Title + Description), you MUST format the AI response as JSON.
                 - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`, arrays, or string manipulation to chop up AI text. It will fail due to markdown formatting. You MUST force JSON.
-                - **SYSTEM PROMPT OVERRIDE (CRITICAL):** You MUST explicitly command the AI to return JSON inside the `system_prompt` payload. If you fail to do this, the application will crash.
-                  - **MANDATORY PATTERN:** `system_prompt: "You are an expert. You MUST reply ONLY with a raw JSON object containing exactly these keys: key_1, key_2. Do NOT use markdown."`
+                - **SYSTEM PROMPT OVERRIDE (CRITICAL):** You MUST explicitly command the AI to return JSON inside the `system_prompt` payload. 
+                  - **MANDATORY PATTERN:** `system_prompt: "You are an expert. You MUST reply ONLY with a raw JSON object containing exactly these keys: key_1, key_2. The values for these keys MUST be simple text strings, NOT nested objects or arrays. Do NOT use markdown."`
                 - **SAFE PARSING (MANDATORY):** OpenAI often wraps JSON in markdown backticks or adds conversational text. You MUST strip them before parsing:
                   ```javascript
                   let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
