@@ -12144,13 +12144,18 @@ Is this a file upload?
             - **EDITABLE CONTENT RULE:** You MUST create an editable property for the `systemPrompt` (e.g., "You are an expert copywriter") so the user can tweak the AI's behavior.
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE):**
                 - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* (e.g., generating 3 separate meals, or a Title + Description), you MUST format the AI response as JSON.
-                - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`, arrays, or string manipulation to chop up AI text. It will fail due to markdown formatting. You MUST force JSON.
-                - **SYSTEM PROMPT OVERRIDE (CRITICAL):** You MUST explicitly command the AI to return JSON inside the `system_prompt` payload. You MUST forbid nested objects.
-                  - **MANDATORY PATTERN:** `system_prompt: "You are an expert. You MUST reply ONLY with a raw JSON object. The keys must match the requested data. The values for EVERY key MUST be simple, flat text strings. DO NOT use nested objects, arrays, or dictionaries. DO NOT use markdown. Example of valid format: {\"meal_1\": \"Chicken and Rice, 500 calories\", \"meal_2\": \"Eggs and Toast, 300 calories\"}"`
-                - **SAFE PARSING (MANDATORY):** OpenAI often wraps JSON in markdown backticks or adds conversational text. You MUST strip them before parsing:
+                - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`. You MUST force JSON.
+                - **MANDATORY SCRIPT PATTERN:** You MUST append the JSON instructions DIRECTLY into the API call in the script so it cannot be overridden or forgotten:
                   ```javascript
+                  const aiRes = await api.post('/builder/openai', {
+                      website_id: properties.website_id,
+                      member_id: memberId,
+                      prompt: `Your prompt here...`,
+                      // 🛡️ CRITICAL: Hardcode the JSON format rule by appending it!
+                      system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with a raw JSON object containing exactly the requested keys. The values MUST be simple text strings. NO nested objects, NO arrays, NO markdown. Example: {\"meal_1\": \"Chicken and Rice\", \"meal_2\": \"Eggs\"}"
+                  });
+                  
                   let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-                  // 🛡️ INDESTRUCTIBLE REGEX: Extracts only the JSON object if OpenAI added conversational text
                   const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
                   if (jsonMatch) cleanText = jsonMatch[0];
                   const parsedData = JSON.parse(cleanText);
