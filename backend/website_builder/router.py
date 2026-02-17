@@ -23,7 +23,7 @@ from pydantic import BaseModel
 from typing import Optional
 import io
 from pypdf import PdfReader
-from .site_commerce_models import SiteMemberUsage
+from .site_commerce_models import SiteMemberUsage,SiteMember
 import os
 router = APIRouter(prefix="/builder", tags=["Website Builder v2"])
 
@@ -1148,25 +1148,28 @@ async def get_website_ai_analytics(
     # 1. Verify the user actually owns this website
     website = await get_website_and_check_ownership(website_id, current_user, db)
 
-    # 2. Fetch all member usages for this specific website, sorted by highest spend
+    # 2. Fetch usages AND the actual member details using a JOIN
     result = await db.execute(
-        select(SiteMemberUsage)
+        select(SiteMemberUsage, SiteMember)
+        .join(SiteMember, SiteMemberUsage.member_id == SiteMember.id)
         .where(SiteMemberUsage.website_id == website_id)
         .order_by(SiteMemberUsage.ai_spend_usd.desc())
     )
-    usages = result.scalars().all()
+    
+    # .all() returns tuples of (usage_record, member_record)
+    rows = result.all()
 
-    # 3. Format the data to send to the frontend
+    # 3. Format the data to include the Email and Name!
     user_data = []
-    for u in usages:
+    for usage, member in rows:
         user_data.append({
-            "member_id": str(u.member_id),
-            "ai_spend_usd": float(u.ai_spend_usd) if u.ai_spend_usd else 0.0,
-            "ai_calls_count": u.ai_calls_count or 0
+            "member_id": str(usage.member_id),
+            "email": member.email,
+            "name": member.name,
+            "ai_spend_usd": float(usage.ai_spend_usd) if usage.ai_spend_usd else 0.0,
+            "ai_calls_count": usage.ai_calls_count or 0
         })
 
-    # Optional: If you have a total tracker on the website, you can return it. 
-    # Otherwise, we just calculate it on the fly!
     total_spend = sum(u["ai_spend_usd"] for u in user_data)
     total_calls = sum(u["ai_calls_count"] for u in user_data)
 
