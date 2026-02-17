@@ -9,7 +9,8 @@ from database import get_db
 from models import User, CustomDataSchema, CustomDataRow
 from auth.auth_handler import get_current_active_user
 from website_builder.router import get_website_and_check_ownership
-
+from .site_commerce_models import SiteMemberUsage
+from .models import Website
 router = APIRouter(prefix="/custom-data", tags=["Custom Data"])
 
 # --- Schemas ---
@@ -427,3 +428,55 @@ async def search_data_rows(
 
     return PaginatedRowResponse(rows=final_response_rows, total=total_rows)
 #endregion complex
+
+#region ai_sitemember_use
+class MemberUsageResponse(BaseModel):
+    website_id: UUID
+    member_id: UUID
+    limit_usd: float
+    used_usd: float
+    remaining_usd: float
+    total_calls: int
+
+@router.get("/usage/{website_id}/{member_id}", response_model=MemberUsageResponse)
+async def get_site_member_usage(
+    website_id: UUID,
+    member_id: UUID,
+    db: AsyncSession = Depends(get_db)
+):
+    """Fetches the AI usage for a specific user on a specific website."""
+    
+    # 1. Get the Website to find the global limit
+    website = await db.get(Website, website_id)
+    if not website:
+        raise HTTPException(status_code=404, detail="Website not found")
+    
+    # Safely get the limit, default to $0.10 if not set
+    limit_usd = getattr(website, 'member_ai_spend_limit_usd', 0.10)
+    if limit_usd is None: 
+        limit_usd = 0.10
+        
+    # 2. Get the Member's specific usage
+    result = await db.execute(
+        select(SiteMemberUsage).where(
+            SiteMemberUsage.website_id == website_id,
+            SiteMemberUsage.member_id == member_id
+        )
+    )
+    usage = result.scalars().first()
+    
+    # 3. Calculate remaining amounts safely
+    used_usd = usage.ai_spend_usd if usage else 0.0
+    total_calls = usage.ai_calls_count if usage else 0
+    remaining_usd = max(0.0, limit_usd - used_usd)
+    
+    return MemberUsageResponse(
+        website_id=website_id,
+        member_id=member_id,
+        limit_usd=limit_usd,
+        used_usd=used_usd,
+        remaining_usd=remaining_usd,
+        total_calls=total_calls
+    )
+
+#endregion ai_sitemember_use

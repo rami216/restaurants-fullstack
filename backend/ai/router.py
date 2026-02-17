@@ -12414,6 +12414,51 @@ Is this a file upload?
                   };
               });
               ```
+        - **AI USAGE & CREDITS TRACKER (USER DASHBOARD):**
+            - **TRIGGER:** If the prompt asks to "show the user usage", "my AI credits", "usage dashboard", or "remaining AI limit".
+            - **ENDPOINT:** `await api.get(\`/custom-data/usage/\${properties.website_id}/\${currentUserId}\`)`
+            - **SCRIPT PATTERN:**
+              ```javascript
+              const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
+              
+              if (!currentUserId) {
+                  container.innerHTML = '<p class="text-center p-4 text-gray-500">Please log in to view your AI usage.</p>';
+                  return;
+              }
+
+              const fetchUsage = async () => {
+                  try {
+                      // CRITICAL: Call the usage endpoint, NOT the rows endpoint!
+                      const res = await api.get(`/custom-data/usage/${properties.website_id}/${currentUserId}`);
+                      const usage = res.data;
+                      
+                      // Safely map the numbers to the DOM elements
+                      const usedEl = container.querySelector('.used-amount');
+                      const limitEl = container.querySelector('.limit-amount');
+                      const remainingEl = container.querySelector('.remaining-amount');
+                      const callsEl = container.querySelector('.total-calls');
+                      
+                      if (usedEl) usedEl.textContent = `$${usage.used_usd.toFixed(3)}`;
+                      if (limitEl) limitEl.textContent = `$${usage.limit_usd.toFixed(2)}`;
+                      if (remainingEl) remainingEl.textContent = `$${usage.remaining_usd.toFixed(3)}`;
+                      if (callsEl) callsEl.textContent = usage.total_calls;
+                      
+                      // Progress Bar Logic (Optional but recommended for UI)
+                      const progressEl = container.querySelector('.progress-bar-fill');
+                      if (progressEl) {
+                          const pct = Math.min(100, (usage.used_usd / usage.limit_usd) * 100);
+                          progressEl.style.width = `${pct}%`;
+                          progressEl.style.backgroundColor = pct > 90 ? '#ef4444' : pct > 75 ? '#f59e0b' : '#10b981';
+                      }
+                      
+                  } catch (err) {
+                      console.error("Failed to load usage", err);
+                      container.innerHTML = '<p class="text-red-500 p-4">Error loading usage data.</p>';
+                  }
+              };
+              
+              fetchUsage();
+              ```
         - **USER-SCOPED DATA (OPTIONAL - Only if User Specifies):**
             - **TRIGGER KEYWORDS:** Only apply user filtering if the prompt contains phrases like:
                 - "logged in user", "current user", "user's own"
