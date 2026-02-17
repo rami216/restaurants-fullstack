@@ -1137,4 +1137,41 @@ async def parse_pdf_from_url(payload: PDFParseRequest):
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"Failed to parse PDF: {str(e)}") 
 #endregion pdfparser
-#endregion pdfparser
+#region ai_usage_analytics
+@router.get("/websites/{website_id}/ai-analytics")
+async def get_website_ai_analytics(
+    website_id: UUID, 
+    db: AsyncSession = Depends(get_db), 
+    current_user: User = Depends(get_current_active_user)
+):
+    """Fetches the master AI usage analytics for the Website Owner."""
+    # 1. Verify the user actually owns this website
+    website = await get_website_and_check_ownership(website_id, current_user, db)
+
+    # 2. Fetch all member usages for this specific website, sorted by highest spend
+    result = await db.execute(
+        select(SiteMemberUsage)
+        .where(SiteMemberUsage.website_id == website_id)
+        .order_by(SiteMemberUsage.ai_spend_usd.desc())
+    )
+    usages = result.scalars().all()
+
+    # 3. Format the data to send to the frontend
+    user_data = []
+    for u in usages:
+        user_data.append({
+            "member_id": str(u.member_id),
+            "ai_spend_usd": float(u.ai_spend_usd) if u.ai_spend_usd else 0.0,
+            "ai_calls_count": u.ai_calls_count or 0
+        })
+
+    # Optional: If you have a total tracker on the website, you can return it. 
+    # Otherwise, we just calculate it on the fly!
+    total_spend = sum(u["ai_spend_usd"] for u in user_data)
+    total_calls = sum(u["ai_calls_count"] for u in user_data)
+
+    return {
+        "total_spend_usd": total_spend,
+        "total_calls": total_calls,
+        "users": user_data
+    }
