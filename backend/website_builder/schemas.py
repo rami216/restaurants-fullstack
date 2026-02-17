@@ -178,13 +178,14 @@ class WebsiteResponse(WebsiteBase):
     
     payment_method: str
     openai_api_key: Optional[str] = None # <-- ADD THIS HERE
+    member_ai_spend_limit_usd: Optional[float] = 0.10
     class Config:
         from_attributes = True
 
 class WebsiteUpdatePayload(BaseModel):
     payment_method: Optional[str] = None
     openai_api_key: Optional[str] = None # <-- ADD THIS HERE
-    
+    member_ai_spend_limit_usd: Optional[float] = None # <-- YES, ADD THIS HERE TOO!
 class LocationResponse(BaseModel):
     location_id: UUID
     location_name: str
@@ -290,6 +291,7 @@ class WebsiteSettingsResponse(BaseModel):
     subdomain: str | None
     payment_method: str  # <--- This is the only thing we really care about right now
     openai_api_key: Optional[str] = None # <-- ADD THIS HERE
+    member_ai_spend_limit_usd: Optional[float] = 0.10
     
     class Config:
         from_attributes = True

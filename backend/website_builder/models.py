@@ -41,7 +41,9 @@ class Website(Base):
     restaurant = relationship("RestaurantOwner", back_populates="website")
     ai_usage_logs = relationship("AIUsageLog", back_populates="website", cascade="all, delete-orphan")
     email_config = relationship("WebsiteEmailConfig", uselist=False, back_populates="website", cascade="all, delete-orphan")
-    openai_api_key = Column(String, nullable=True)
+    openai_api_key = Column(String, nullable=True),
+    member_ai_spend_limit_usd = Column(Numeric, nullable=True, default=0.10)
+    
 class AIUsageLog(Base):
     __tablename__ = "ai_usage_logs"
 
