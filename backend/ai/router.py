@@ -12142,7 +12142,8 @@ Is this a file upload?
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE):**
                 - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* (e.g., generating 3 separate meals, or a Title + Description), you MUST format the AI response as JSON.
                 - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`, arrays, or string manipulation to chop up AI text. It will fail due to markdown formatting. You MUST force JSON.
-                - **SYSTEM PROMPT FORMAT:** You must proactively invent the JSON keys based on the schema and add a strict instruction to the `system_prompt`. Example: `system_prompt: "Reply ONLY with a raw JSON object containing exactly three keys: meal_1, meal_2, meal_3. Do not use markdown or backticks."`
+                - **SYSTEM PROMPT OVERRIDE (CRITICAL):** You MUST explicitly command the AI to return JSON inside the `system_prompt` payload. If you fail to do this, the application will crash.
+                  - **MANDATORY PATTERN:** `system_prompt: "You are an expert. You MUST reply ONLY with a raw JSON object containing exactly these keys: key_1, key_2. Do NOT use markdown."`
                 - **SAFE PARSING (MANDATORY):** OpenAI often wraps JSON in markdown backticks or adds conversational text. You MUST strip them before parsing:
                   ```javascript
                   let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
