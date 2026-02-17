@@ -451,10 +451,9 @@ async def get_site_member_usage(
     if not website:
         raise HTTPException(status_code=404, detail="Website not found")
     
-    # Safely get the limit, default to $0.10 if not set
-    limit_usd = getattr(website, 'member_ai_spend_limit_usd', 0.10)
-    if limit_usd is None: 
-        limit_usd = 0.10
+    # ✅ FIX: Safely get the limit and FORCE it to be a float
+    raw_limit = getattr(website, 'member_ai_spend_limit_usd', 0.10)
+    limit_usd = float(raw_limit) if raw_limit is not None else 0.10
         
     # 2. Get the Member's specific usage
     result = await db.execute(
@@ -465,9 +464,11 @@ async def get_site_member_usage(
     )
     usage = result.scalars().first()
     
-    # 3. Calculate remaining amounts safely
-    used_usd = usage.ai_spend_usd if usage else 0.0
+    # ✅ FIX: Safely get the used amount and FORCE it to be a float
+    used_usd = float(usage.ai_spend_usd) if usage and usage.ai_spend_usd is not None else 0.0
     total_calls = usage.ai_calls_count if usage else 0
+    
+    # Now that they are both guaranteed to be floats, the math will work perfectly!
     remaining_usd = max(0.0, limit_usd - used_usd)
     
     return MemberUsageResponse(
@@ -478,5 +479,4 @@ async def get_site_member_usage(
         remaining_usd=remaining_usd,
         total_calls=total_calls
     )
-
 #endregion ai_sitemember_use
