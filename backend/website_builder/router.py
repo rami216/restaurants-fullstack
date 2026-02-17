@@ -1150,9 +1150,10 @@ async def get_website_ai_analytics(
     website = await get_website_and_check_ownership(website_id, current_user, db)
 
     # 2. Fetch usages AND the actual member details using a JOIN
+    # ✅ FIX 1: Changed SiteMember.id to SiteMember.member_id
     result = await db.execute(
         select(SiteMemberUsage, SiteMember)
-        .join(SiteMember, SiteMemberUsage.member_id == SiteMember.id)
+        .join(SiteMember, SiteMemberUsage.member_id == SiteMember.member_id)
         .where(SiteMemberUsage.website_id == website_id)
         .order_by(SiteMemberUsage.ai_spend_usd.desc())
     )
@@ -1160,13 +1161,14 @@ async def get_website_ai_analytics(
     # .all() returns tuples of (usage_record, member_record)
     rows = result.all()
 
-    # 3. Format the data to include the Email and Name!
+    # 3. Format the data to include the Email!
     user_data = []
     for usage, member in rows:
         user_data.append({
             "member_id": str(usage.member_id),
             "email": member.email,
-            "name": member.name,
+            # ✅ FIX 2: Safely pass None for name since your DB doesn't have a name column yet
+            "name": None, 
             "ai_spend_usd": float(usage.ai_spend_usd) if usage.ai_spend_usd else 0.0,
             "ai_calls_count": usage.ai_calls_count or 0
         })
