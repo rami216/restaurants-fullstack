@@ -12200,35 +12200,37 @@ Is this a file upload?
               ```
         - **CHATBOT & AGENT PROTOCOL (Context, Memory & Actions):**
             - **TRIGGER:** If the prompt asks for a "Chatbot", "Assistant", "Support Agent", or "Order Taker".
-            - **MANDATORY ARCHITECTURE:** You MUST implement the following three layers:
-                1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
-                2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history. Every time the AI replies, push it to history.
-                3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`). Do NOT just send the latest message, or the bot will have amnesia.
             
-            - **AGENTIC ACTION LAYER (The "Conditional Handshake"):**
-                - **TRIGGER:** If the prompt implies a real-world action (e.g., "Take an order and email it").
-                - **STRATEGY:** You must instruct the AI via `system_prompt` to reply with **RAW JSON** *only* when the user explicitly confirms the action.
-                - **SYSTEM PROMPT ADDITION (CRITICAL):** Append this specific logic to the system prompt: 
-                  `"Answer the user's questions normally based on the context. ONLY if the user explicitly confirms they want to finalize the order AND provides their email address, stop chatting and reply ONLY with a raw JSON object: { "action": "trigger_email", "email": "user_email", "data": "summary_of_order" }."`
-                - **JS HANDLER:** In the Javascript, wrap the AI response in a `try...catch` block.
-                  - If `JSON.parse()` succeeds and `action === 'trigger_email'`, immediately execute `api.post('/builder/send-email', ...)` and show a success message.
-                  - If `JSON.parse()` fails, treat it as normal conversational text and render it to the screen.
+            - **PROFESSIONAL UI STANDARDS (MANDATORY):**
+                - **Layout:** You MUST render a main chat container (fixed height, e.g., `h-96`, scrollable `overflow-y-auto`) with a distinct "Input Zone" at the bottom.
+                - **Input Zone:** The bottom area MUST be a `flex` container with:
+                    1. A text input (`flex-1`, `border`, `rounded-l-lg`).
+                    2. A **VISIBLE SEND BUTTON** (`bg-blue-600`, `text-white`, `px-4`, `rounded-r-lg`). **DO NOT** create a chatbot without a Send button.
+                - **Bubbles:** User messages should be aligned right (`justify-end`, `bg-blue-100`), and AI messages aligned left (`justify-start`, `bg-gray-100`).
 
-            - **SCRIPT PATTERN (Chatbot with Memory & Actions):**
+            - **MANDATORY ARCHITECTURE:**
+                1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
+                2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history.
+                3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`).
+
+            - **AGENTIC ACTION LAYER (The "Conditional Handshake"):**
+                - **STRATEGY:** Instruct the AI via `system_prompt` to reply with **RAW JSON** *only* when the user explicitly confirms a transactional action (like ordering).
+                - **SYSTEM PROMPT ADDITION:** Append: `"Answer questions normally. ONLY if the user explicitly confirms they want to finalize the order AND provides their email, reply ONLY with raw JSON: { "action": "trigger_email", "email": "user_email", "data": "summary" }."`
+
+            - **SCRIPT PATTERN (Professional Chatbot with Loading State):**
               ```javascript
               let chatHistory = [];
-              let businessContext = "Loading...";
+              let businessContext = "Loading info...";
 
               // 1. Load Context
               const init = async () => {
                   try {
-                      // Adapt schema_id based on user prompt (e.g., 'menu', 'business')
+                      // Adapt schema_id based on user prompt
                       const res = await api.get('/custom-data/rows/CONTEXT_SCHEMA_ID?limit=1'); 
                       if(res.data.rows.length) {
-                          const data = res.data.rows[0].data;
-                          businessContext = `Here is our info: ${JSON.stringify(data)}`;
+                          businessContext = `Business Info: ${JSON.stringify(res.data.rows[0].data)}`;
                       }
-                  } catch(e) { console.error("Context load failed"); }
+                  } catch(e) { console.error("Context error"); }
               };
               init();
 
@@ -12238,10 +12240,16 @@ Is this a file upload?
                   const userText = input.value;
                   if(!userText) return;
 
-                  // Render User Message
-                  renderMessage("User", userText);
-                  chatHistory.push({ role: "user", content: userText });
+                  // UI: Disable button & Clear Input
+                  const btn = form.querySelector('button');
+                  const originalBtnText = btn.innerText;
+                  btn.disabled = true;
+                  btn.innerText = "Typing...";
                   input.value = ""; 
+
+                  // UI: Render User Message (Right Side)
+                  renderMessage("User", userText, "user-bubble-class"); // You must implement bubble styles
+                  chatHistory.push({ role: "user", content: userText });
 
                   // 3. Send History to AI
                   const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
@@ -12250,44 +12258,46 @@ Is this a file upload?
                       const aiRes = await api.post('/builder/openai', {
                           website_id: properties.website_id,
                           member_id: currentUserId,
-                          prompt: historyBlock, // <--- CRITICAL: Sending full history
-                          // 🛡️ CONDITIONAL LOGIC: Only triggers JSON if user asks for it
-                          system_prompt: `You are a helpful agent. Context: ${businessContext}. Answer questions naturally. ONLY if the user provides their email to finalize an order, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "..." }.`
+                          prompt: historyBlock, 
+                          system_prompt: `You are a helpful assistant. Context: ${businessContext}. Answer naturally. ONLY if the user provides email to finalize order, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "..." }.`
                       });
 
                       const text = aiRes.data.text;
 
                       // 4. Check for Action Handshake (JSON)
                       try {
-                          // Clean potential markdown wrappers
                           const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim(); 
                           const cmd = JSON.parse(cleanJson);
 
                           if (cmd.action === 'finalize') {
-                              renderMessage("System", "Processing order...");
-                              
-                              // Trigger Action (Email)
+                              renderMessage("System", "Processing order...", "system-bubble");
                               await api.post('/builder/send-email', {
                                   website_id: properties.website_id,
                                   to_email: cmd.email,
                                   subject: "Order Confirmation",
                                   content: cmd.summary
                               });
-                              
-                              renderMessage("System", "✅ Order sent to " + cmd.email);
+                              renderMessage("System", "✅ Sent to " + cmd.email, "system-bubble");
                               chatHistory.push({ role: "assistant", content: "Order finalized." });
+                              
+                              // Reset Button
+                              btn.disabled = false;
+                              btn.innerText = originalBtnText;
                               return;
                           }
-                      } catch (jsonErr) {
-                          // Not JSON? Just normal chat.
-                      }
+                      } catch (jsonErr) { /* Not JSON, continue */ }
 
-                      // 5. Normal Reply
-                      renderMessage("AI", text);
+                      // 5. Normal Reply (Left Side)
+                      renderMessage("AI", text, "ai-bubble-class");
                       chatHistory.push({ role: "assistant", content: text });
 
                   } catch (err) {
                       console.error(err);
+                      renderMessage("System", "Error connecting to AI.");
+                  } finally {
+                      // Always re-enable button
+                      btn.disabled = false;
+                      btn.innerText = originalBtnText;
                   }
               };
               ```
