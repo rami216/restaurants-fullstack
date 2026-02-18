@@ -12202,11 +12202,12 @@ Is this a file upload?
             - **TRIGGER:** If the prompt asks for a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
             
             - **PROFESSIONAL UI STANDARDS (MANDATORY):**
-                - **Layout:** You MUST render a main chat container (fixed height, e.g., `h-96`, scrollable `overflow-y-auto`) with a distinct "Input Zone" at the bottom.
-                - **Input Zone (CRITICAL):** The `<form>` tag at the bottom MUST use these exact classes: `flex w-full p-2 border-t gap-2`.
-                    1. The text input MUST have `flex-1` (to fill space) and `min-w-0` (to prevent expanding too wide).
-                    2. The button MUST have `flex-shrink-0` (so it never shrinks/disappears) and `whitespace-nowrap`.
-                - **Bubbles:** User messages should be aligned right (`justify-end`, `bg-blue-100`, `rounded-br-none`), and AI messages aligned left (`justify-start`, `bg-gray-100`, `rounded-bl-none`).
+                - **Container Layout:** Render a main chat container (fixed height `h-96` or `500px`, `overflow-y: auto`, `display: flex`, `flex-direction: column`).
+                - **Input Zone (CRITICAL CSS):**
+                    - The Input Zone MUST be a container at the bottom with: `display: flex`, `width: 100%`, `border-top: 1px solid #ddd`, and **`flex-wrap: nowrap`**.
+                    - **The Input Field:** Must have `flex-grow: 1` (to fill space) and **`min-width: 0`** (critical to prevent overflowing parent).
+                    - **The Send Button:** Must have **`flex-shrink: 0`** (NEVER shrink), `white-space: nowrap` (text stays on one line), and `cursor: pointer`.
+                - **Visuals:** Use distinct background colors for User vs. AI bubbles. The Send button should be blue/primary color.
 
             - **MANDATORY ARCHITECTURE:**
                 1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
