@@ -12203,9 +12203,9 @@ Is this a file upload?
             
             - **PROFESSIONAL UI STANDARDS (MANDATORY):**
                 - **Layout:** You MUST render a main chat container (fixed height, e.g., `h-96`, scrollable `overflow-y-auto`) with a distinct "Input Zone" at the bottom.
-                - **Input Zone:** The bottom area MUST be a `flex` container with:
-                    1. A text input (`flex-1`, `border`, `rounded-l-lg`).
-                    2. A **VISIBLE SEND BUTTON** (`bg-blue-600`, `text-white`, `px-4`, `rounded-r-lg`). **DO NOT** create a chatbot without a Send button.
+                - **Input Zone (CRITICAL):** The `<form>` tag at the bottom MUST use these exact classes: `flex w-full p-2 border-t gap-2`.
+                    1. The text input MUST have `flex-1` (to fill space) and `min-w-0` (to prevent expanding too wide).
+                    2. The button MUST have `flex-shrink-0` (so it never shrinks/disappears) and `whitespace-nowrap`.
                 - **Bubbles:** User messages should be aligned right (`justify-end`, `bg-blue-100`), and AI messages aligned left (`justify-start`, `bg-gray-100`).
 
             - **MANDATORY ARCHITECTURE:**
