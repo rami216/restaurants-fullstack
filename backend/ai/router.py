@@ -12199,28 +12199,33 @@ Is this a file upload?
               }
               ```
         - **CHATBOT & AGENT PROTOCOL (Context, Memory & Actions):**
-            - **TRIGGER:** If the prompt asks for a "Chatbot", "Assistant", "Support Agent", or "Order Taker".
+            - **TRIGGER:** If the prompt asks for a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
             
             - **PROFESSIONAL UI STANDARDS (MANDATORY):**
                 - **Layout:** You MUST render a main chat container (fixed height, e.g., `h-96`, scrollable `overflow-y-auto`) with a distinct "Input Zone" at the bottom.
                 - **Input Zone (CRITICAL):** The `<form>` tag at the bottom MUST use these exact classes: `flex w-full p-2 border-t gap-2`.
                     1. The text input MUST have `flex-1` (to fill space) and `min-w-0` (to prevent expanding too wide).
                     2. The button MUST have `flex-shrink-0` (so it never shrinks/disappears) and `whitespace-nowrap`.
-                - **Bubbles:** User messages should be aligned right (`justify-end`, `bg-blue-100`), and AI messages aligned left (`justify-start`, `bg-gray-100`).
+                - **Bubbles:** User messages should be aligned right (`justify-end`, `bg-blue-100`, `rounded-br-none`), and AI messages aligned left (`justify-start`, `bg-gray-100`, `rounded-bl-none`).
 
             - **MANDATORY ARCHITECTURE:**
                 1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
                 2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history.
                 3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`).
+
             - **ANTI-HARDCODING RULE (CRITICAL):**
                 - **FORBIDDEN:** You MUST NOT write local JavaScript logic to handle the conversation (e.g., do NOT write `if (input < 500) return 'Too low'`). 
                 - **REQUIREMENT:** Your JavaScript must be a "dumb pipe". It must ALWAYS send the user's input to `api.post('/builder/openai')` and display whatever the AI replies.
-                - **LOGIC LOCATION:** All logic (negotiation rules, math, decisions) must exist ONLY in the `system_prompt` string, never in the JS code.
-            - **AGENTIC ACTION LAYER (The "Conditional Handshake"):**
-                - **STRATEGY:** Instruct the AI via `system_prompt` to reply with **RAW JSON** *only* when the user explicitly confirms a transactional action (like ordering).
-                - **SYSTEM PROMPT ADDITION:** Append: `"Answer questions normally. ONLY if the user explicitly confirms they want to finalize the order AND provides their email, reply ONLY with raw JSON: { "action": "trigger_email", "email": "user_email", "data": "summary" }."`
+                - **LOGIC LOCATION:** All logic (negotiation rules, math, decisions) must exist ONLY in the `system_prompt` string.
 
-            - **SCRIPT PATTERN (Professional Chatbot with Loading State):**
+            - **AGENTIC ACTION LAYER (The "Strict Handshake"):**
+                - **TRIGGER:** If the prompt implies a real-world action (e.g., "email the offer", "save to database").
+                - **STRATEGY:** You must implement a "Silent JSON Trigger".
+                - **RULE 1 (The System Prompt):** You MUST explicitly define the JSON structure inside the `system_prompt` string. Example: *"If the user confirms, reply ONLY with JSON: { 'action': 'do_thing', 'data': '...' }."*
+                - **RULE 2 (The Javascript):** Write a `try...catch` block that parses the AI response. If `cmd.action` matches, execute the API call (`api.post`).
+                - **RULE 3 (Normal Chat):** Instruct the AI: "For all other messages, reply with standard plain text. Do NOT use JSON for normal conversation."
+
+            - **SCRIPT PATTERN (The "Perfect Agent"):**
               ```javascript
               let chatHistory = [];
               let businessContext = "Loading info...";
@@ -12243,15 +12248,15 @@ Is this a file upload?
                   const userText = input.value;
                   if(!userText) return;
 
-                  // UI: Disable button & Clear Input
+                  // UI: Disable button & Clear Input (Loading State)
                   const btn = form.querySelector('button');
                   const originalBtnText = btn.innerText;
                   btn.disabled = true;
                   btn.innerText = "Typing...";
                   input.value = ""; 
 
-                  // UI: Render User Message (Right Side)
-                  renderMessage("User", userText, "user-bubble-class"); // You must implement bubble styles
+                  // UI: Render User Message
+                  renderMessage("User", userText, "user-bubble-class"); 
                   chatHistory.push({ role: "user", content: userText });
 
                   // 3. Send History to AI
@@ -12262,7 +12267,8 @@ Is this a file upload?
                           website_id: properties.website_id,
                           member_id: currentUserId,
                           prompt: historyBlock, 
-                          system_prompt: `You are a helpful assistant. Context: ${businessContext}. Answer naturally. ONLY if the user provides email to finalize order, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "..." }.`
+                          // SYSTEM PROMPT matches JS check below
+                          system_prompt: `You are a helpful assistant. Context: ${businessContext}. Answer naturally. ONLY if the user provides email to finalize, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "..." }.`
                       });
 
                       const text = aiRes.data.text;
@@ -12274,23 +12280,26 @@ Is this a file upload?
 
                           if (cmd.action === 'finalize') {
                               renderMessage("System", "Processing order...", "system-bubble");
+                              
+                              // EXECUTE REAL WORLD ACTION
                               await api.post('/builder/send-email', {
                                   website_id: properties.website_id,
                                   to_email: cmd.email,
                                   subject: "Order Confirmation",
                                   content: cmd.summary
                               });
+
                               renderMessage("System", "✅ Sent to " + cmd.email, "system-bubble");
                               chatHistory.push({ role: "assistant", content: "Order finalized." });
                               
                               // Reset Button
                               btn.disabled = false;
                               btn.innerText = originalBtnText;
-                              return;
+                              return; // Stop here
                           }
                       } catch (jsonErr) { /* Not JSON, continue */ }
 
-                      // 5. Normal Reply (Left Side)
+                      // 5. Normal Reply
                       renderMessage("AI", text, "ai-bubble-class");
                       chatHistory.push({ role: "assistant", content: text });
 
