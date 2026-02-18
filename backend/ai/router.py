@@ -12198,6 +12198,99 @@ Is this a file upload?
                   };
               }
               ```
+        - **CHATBOT & AGENT PROTOCOL (Context, Memory & Actions):**
+            - **TRIGGER:** If the prompt asks for a "Chatbot", "Assistant", "Support Agent", or "Order Taker".
+            - **MANDATORY ARCHITECTURE:** You MUST implement the following three layers:
+                1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
+                2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history. Every time the AI replies, push it to history.
+                3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`). Do NOT just send the latest message, or the bot will have amnesia.
+            
+            - **AGENTIC ACTION LAYER (The "Conditional Handshake"):**
+                - **TRIGGER:** If the prompt implies a real-world action (e.g., "Take an order and email it").
+                - **STRATEGY:** You must instruct the AI via `system_prompt` to reply with **RAW JSON** *only* when the user explicitly confirms the action.
+                - **SYSTEM PROMPT ADDITION (CRITICAL):** Append this specific logic to the system prompt: 
+                  `"Answer the user's questions normally based on the context. ONLY if the user explicitly confirms they want to finalize the order AND provides their email address, stop chatting and reply ONLY with a raw JSON object: { "action": "trigger_email", "email": "user_email", "data": "summary_of_order" }."`
+                - **JS HANDLER:** In the Javascript, wrap the AI response in a `try...catch` block.
+                  - If `JSON.parse()` succeeds and `action === 'trigger_email'`, immediately execute `api.post('/builder/send-email', ...)` and show a success message.
+                  - If `JSON.parse()` fails, treat it as normal conversational text and render it to the screen.
+
+            - **SCRIPT PATTERN (Chatbot with Memory & Actions):**
+              ```javascript
+              let chatHistory = [];
+              let businessContext = "Loading...";
+
+              // 1. Load Context
+              const init = async () => {
+                  try {
+                      // Adapt schema_id based on user prompt (e.g., 'menu', 'business')
+                      const res = await api.get('/custom-data/rows/CONTEXT_SCHEMA_ID?limit=1'); 
+                      if(res.data.rows.length) {
+                          const data = res.data.rows[0].data;
+                          businessContext = `Here is our info: ${JSON.stringify(data)}`;
+                      }
+                  } catch(e) { console.error("Context load failed"); }
+              };
+              init();
+
+              // 2. Chat Handler
+              form.onsubmit = async (e) => {
+                  e.preventDefault();
+                  const userText = input.value;
+                  if(!userText) return;
+
+                  // Render User Message
+                  renderMessage("User", userText);
+                  chatHistory.push({ role: "user", content: userText });
+                  input.value = ""; 
+
+                  // 3. Send History to AI
+                  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+                  
+                  try {
+                      const aiRes = await api.post('/builder/openai', {
+                          website_id: properties.website_id,
+                          member_id: currentUserId,
+                          prompt: historyBlock, // <--- CRITICAL: Sending full history
+                          // 🛡️ CONDITIONAL LOGIC: Only triggers JSON if user asks for it
+                          system_prompt: `You are a helpful agent. Context: ${businessContext}. Answer questions naturally. ONLY if the user provides their email to finalize an order, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "..." }.`
+                      });
+
+                      const text = aiRes.data.text;
+
+                      // 4. Check for Action Handshake (JSON)
+                      try {
+                          // Clean potential markdown wrappers
+                          const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim(); 
+                          const cmd = JSON.parse(cleanJson);
+
+                          if (cmd.action === 'finalize') {
+                              renderMessage("System", "Processing order...");
+                              
+                              // Trigger Action (Email)
+                              await api.post('/builder/send-email', {
+                                  website_id: properties.website_id,
+                                  to_email: cmd.email,
+                                  subject: "Order Confirmation",
+                                  content: cmd.summary
+                              });
+                              
+                              renderMessage("System", "✅ Order sent to " + cmd.email);
+                              chatHistory.push({ role: "assistant", content: "Order finalized." });
+                              return;
+                          }
+                      } catch (jsonErr) {
+                          // Not JSON? Just normal chat.
+                      }
+
+                      // 5. Normal Reply
+                      renderMessage("AI", text);
+                      chatHistory.push({ role: "assistant", content: text });
+
+                  } catch (err) {
+                      console.error(err);
+                  }
+              };
+              ```
          - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
