@@ -12233,7 +12233,6 @@ Is this a file upload?
               // 1. Load Context
               const init = async () => {
                   try {
-                      // Adapt schema_id based on user prompt
                       const res = await api.get('/custom-data/rows/CONTEXT_SCHEMA_ID?limit=1'); 
                       if(res.data.rows.length) {
                           businessContext = `Business Info: ${JSON.stringify(res.data.rows[0].data)}`;
@@ -12248,18 +12247,16 @@ Is this a file upload?
                   const userText = input.value;
                   if(!userText) return;
 
-                  // UI: Disable button & Clear Input (Loading State)
+                  // UI: Disable button & Clear Input
                   const btn = form.querySelector('button');
                   const originalBtnText = btn.innerText;
                   btn.disabled = true;
                   btn.innerText = "Typing...";
                   input.value = ""; 
 
-                  // UI: Render User Message
                   renderMessage("User", userText, "user-bubble-class"); 
                   chatHistory.push({ role: "user", content: userText });
 
-                  // 3. Send History to AI
                   const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
                   
                   try {
@@ -12268,7 +12265,7 @@ Is this a file upload?
                           member_id: currentUserId,
                           prompt: historyBlock, 
                           // SYSTEM PROMPT matches JS check below
-                          system_prompt: `You are a helpful assistant. Context: ${businessContext}. Answer naturally. ONLY if the user provides email to finalize, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "..." }.`
+                          system_prompt: `You are a helpful agent. Context: ${businessContext}. Answer naturally. ONLY if the user provides email to finalize, reply with RAW JSON: { "action": "finalize", "email": "...", "summary": "Full HTML summary of the deal/order" }.`
                       });
 
                       const text = aiRes.data.text;
@@ -12279,27 +12276,28 @@ Is this a file upload?
                           const cmd = JSON.parse(cleanJson);
 
                           if (cmd.action === 'finalize') {
-                              renderMessage("System", "Processing order...", "system-bubble");
+                              renderMessage("System", "Processing...", "system-bubble");
                               
                               // EXECUTE REAL WORLD ACTION
+                              // FIX: We combine the static 'emailBody' with the dynamic 'cmd.summary'
+                              const finalBody = (properties.emailBody || "") + "<br/><hr/><br/>" + (cmd.summary || "");
+
                               await api.post('/builder/send-email', {
                                   website_id: properties.website_id,
                                   to_email: cmd.email,
-                                  subject: "Order Confirmation",
-                                  content: cmd.summary
+                                  subject: properties.emailSubject || "Update from Agent",
+                                  content: finalBody 
                               });
 
                               renderMessage("System", "✅ Sent to " + cmd.email, "system-bubble");
-                              chatHistory.push({ role: "assistant", content: "Order finalized." });
+                              chatHistory.push({ role: "assistant", content: "Action completed." });
                               
-                              // Reset Button
                               btn.disabled = false;
                               btn.innerText = originalBtnText;
-                              return; // Stop here
+                              return; 
                           }
                       } catch (jsonErr) { /* Not JSON, continue */ }
 
-                      // 5. Normal Reply
                       renderMessage("AI", text, "ai-bubble-class");
                       chatHistory.push({ role: "assistant", content: text });
 
@@ -12307,7 +12305,6 @@ Is this a file upload?
                       console.error(err);
                       renderMessage("System", "Error connecting to AI.");
                   } finally {
-                      // Always re-enable button
                       btn.disabled = false;
                       btn.innerText = originalBtnText;
                   }
