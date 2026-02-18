@@ -2016,6 +2016,54 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
   const [currentView, setCurrentView] = useState("page"); // 'page' or 'cart'
   const router = useRouter();
 
+  // useEffect(() => {
+  //   const style = document.createElement("style");
+  //   style.textContent = `
+  //   /* 1. Global Page Layout Fixes */
+  //   body, html {
+  //     overflow-x: hidden;
+  //     max-width: 100vw;
+  //     margin: 0;
+  //     padding: 0;
+  //   }
+  //   * {
+  //     box-sizing: border-box;
+  //   }
+
+  //   /* 2. Force forms and inputs to respect container width */
+  //   form, .form-container {
+  //     width: 100% !important;
+  //     display: flex !important;
+  //     flex-direction: column !important;
+  //   }
+
+  //   /* This ensures 'eg:' and 'En' inputs don't shrink */
+  //   input, textarea, select {
+  //     width: 100% !important;
+  //     max-width: 100% !important;
+  //     min-width: 100% !important; /* Added min-width for extra safety */
+  //     box-sizing: border-box !important;
+  //     display: block !important;
+  //   }
+
+  //   /* 3. Ensure Tailwind utility classes aren't overridden by parent flex */
+  //   .w-full {
+  //     width: 100% !important;
+  //     min-width: 100% !important;
+  //   }
+
+  //   /* 4. Fix for the bunched up Navbar text in your screenshot */
+  //   nav a, nav button {
+  //     display: inline-block;
+  //     white-space: nowrap;
+  //   }
+  // `;
+  //   document.head.appendChild(style);
+
+  //   return () => {
+  //     document.head.removeChild(style);
+  //   };
+  // }, []);
   useEffect(() => {
     const style = document.createElement("style");
     style.textContent = `
@@ -2030,32 +2078,42 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       box-sizing: border-box;
     }
 
-    /* 2. Force forms and inputs to respect container width */
-    form, .form-container {
+    /* 2. Force STANDARD forms (Login/Contact) to be vertical */
+    /* CRITICAL FIX: We use :not(.input-zone) so we don't break the Chatbot layout */
+    form:not(.input-zone), .form-container:not(.input-zone) {
       width: 100% !important;
       display: flex !important;
       flex-direction: column !important;
     }
     
-    /* This ensures 'eg:' and 'En' inputs don't shrink */
-    input, textarea, select {
+    /* 3. Force STANDARD inputs to be full width */
+    /* CRITICAL FIX: We exclude inputs inside .input-zone so they can share space with the button */
+    form:not(.input-zone) input, 
+    form:not(.input-zone) textarea, 
+    form:not(.input-zone) select {
       width: 100% !important;
       max-width: 100% !important;
-      min-width: 100% !important; /* Added min-width for extra safety */
+      min-width: 100% !important;
       box-sizing: border-box !important;
       display: block !important;
     }
 
-    /* 3. Ensure Tailwind utility classes aren't overridden by parent flex */
+    /* 4. Ensure Tailwind utility classes aren't overridden by parent flex */
     .w-full {
       width: 100% !important;
       min-width: 100% !important;
     }
 
-    /* 4. Fix for the bunched up Navbar text in your screenshot */
+    /* 5. Fix for the bunched up Navbar text */
     nav a, nav button {
       display: inline-block;
       white-space: nowrap;
+    }
+    
+    /* 6. Chatbot Button Safety - Ensures button is never crushed even if global styles leak */
+    .input-zone button {
+        flex-shrink: 0 !important;
+        width: auto !important;
     }
   `;
     document.head.appendChild(style);
@@ -2064,7 +2122,6 @@ const PublicCanvas: React.FC<PublicCanvasProps> = ({
       document.head.removeChild(style);
     };
   }, []);
-
   const [currentPage, setCurrentPage] = useState<Page | undefined>(initialPage);
   const [activeCategory, setActiveCategory] = useState<string | null>(null);
 
