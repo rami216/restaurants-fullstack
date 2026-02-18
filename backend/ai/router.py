@@ -12212,7 +12212,10 @@ Is this a file upload?
                 1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
                 2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history.
                 3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`).
-
+            - **ANTI-HARDCODING RULE (CRITICAL):**
+                - **FORBIDDEN:** You MUST NOT write local JavaScript logic to handle the conversation (e.g., do NOT write `if (input < 500) return 'Too low'`). 
+                - **REQUIREMENT:** Your JavaScript must be a "dumb pipe". It must ALWAYS send the user's input to `api.post('/builder/openai')` and display whatever the AI replies.
+                - **LOGIC LOCATION:** All logic (negotiation rules, math, decisions) must exist ONLY in the `system_prompt` string, never in the JS code.
             - **AGENTIC ACTION LAYER (The "Conditional Handshake"):**
                 - **STRATEGY:** Instruct the AI via `system_prompt` to reply with **RAW JSON** *only* when the user explicitly confirms a transactional action (like ordering).
                 - **SYSTEM PROMPT ADDITION:** Append: `"Answer questions normally. ONLY if the user explicitly confirms they want to finalize the order AND provides their email, reply ONLY with raw JSON: { "action": "trigger_email", "email": "user_email", "data": "summary" }."`
