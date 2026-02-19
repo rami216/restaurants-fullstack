@@ -12198,134 +12198,115 @@ Is this a file upload?
                   };
               }
               ```
-        - **CHATBOT & AGENT PROTOCOL (Context, Memory & Actions):**
-            - **TRIGGER:** If the prompt asks for a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
-            
+        ### 🤖 CHATBOT & AGENT PROTOCOL (Context, Memory & Actions)
+            - **TRIGGER:** If the prompt mentions a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
+
             - **PROFESSIONAL UI STANDARDS (MANDATORY):**
-                - **Layout:** You MUST render a main chat container (fixed height, e.g., `h-96`, scrollable `overflow-y-auto`) with a distinct "Input Zone" at the bottom.
-                - **Input Zone (CRITICAL):** The `<form>` tag at the bottom MUST use these exact classes: `flex w-full p-2 border-t gap-2`.
-                    1. The text input MUST have `flex-1` (to fill space) and `min-w-0` (to prevent expanding too wide).
-                    2. The button MUST have `flex-shrink-0` (so it never shrinks/disappears) and `whitespace-nowrap`.
-                - **Bubbles:** User messages should be aligned right (`justify-end`, `bg-blue-100`, `rounded-br-none`), and AI messages aligned left (`justify-start`, `bg-gray-100`, `rounded-bl-none`).
+                - **Layout**: Render a main chat container with a fixed height (e.g., `500px`), `overflow-y-auto`, `display: flex`, and `flex-direction: column`.
+                - **Input Zone (CRITICAL CSS)**:
+                    - The Input Zone MUST be a `<form>` at the bottom with: `display: flex`, `width: 100%`, `border-top: 1px solid #ddd`, and `flex-wrap: nowrap`.
+                    - **The Input Field**: Must have `flex-grow: 1` to fill space and `min-w-0`.
+                    - **The Send Button**: Must have `flex-shrink: 0`, `white-space: nowrap`, and `cursor: pointer`.
+                - **Bubbles**: User messages right-aligned (e.g., `bg-blue-100`), AI messages left-aligned (e.g., `bg-gray-100`).
 
-            - **MANDATORY ARCHITECTURE:**
-                1.  **CONTEXT LOADING:** Fetch relevant business data (e.g., from a 'business_info' or 'menu' table) *on load* and store it in a variable.
-                2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history.
-                3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`).
-
-            - **ANTI-HARDCODING RULE (ULTIMATUM):**
-                - **FORBIDDEN:** You are STRICTLY FORBIDDEN from writing any logic, validation, or "if" statements inside the JavaScript `handleUserMessage` or `onclick` functions. 
-                - **NO LOCAL BRAIN:** Do NOT write functions to "calculate interest," "check for email," or "filter apartments" in JS.
-                - **MANDATORY FLOW:** The ONLY thing the JavaScript should do is:
-                    1. Render the user's message.
-                    2. Push to `chatHistory`.
-                    3. Send the WHOLE history to `api.post('/builder/openai')`.
-                    4. Wait for the response.
-                    5. Parse the JSON and execute the `action` if it exists.
+            - **ANTI-HARDCODING ULTIMATUM (FORBIDDEN LOGIC):**
+                - **NO LOCAL BRAIN**: You are STRICTLY FORBIDDEN from writing logic, validation, or "if" statements in JavaScript (e.g., do not "check if message has @", do not "calculate score").
+                - **NO LOCAL SEARCH**: Do not write functions to filter or search the database rows within the JS code.
+                - **DUMB PIPE ONLY**: The ONLY role of the JavaScript is to pass the user input to OpenAI and execute the resulting JSON actions.
 
             - **AGENTIC ACTION LAYER (The "Absolute Handshake"):**
-                - **TRIGGER:** If the prompt implies real-world actions (e.g., "save to database", "email the client", "record interest").
-                - **MULTI-ACTION STRATEGY:** If the AI needs to perform multiple actions (e.g., save data AND send an email), instruct it via the `system_prompt` to include all necessary keys in a single JSON object.
-                - **RULE 1 (The System Prompt):** You MUST explicitly define the JSON schema in the `system_prompt`. 
-                  - *Example:* "If the user is interested, reply ONLY with JSON: { 'action': 'save_and_email', 'email': '...', 'db_data': { 'apartment_name': '...', 'interest_rate': 0 }, 'email_content': '...' }."
-                - **RULE 2 (The Javascript):** The `try...catch` block must be able to handle sequential API calls (e.g., `api.post` to custom-data followed by `api.post` to send-email).
-                - **RULE 3 (Dumb Pipe):** The JS must never decide if a deal is good; it only executes the API calls requested by the AI's JSON.
+                - **MULTI-ACTION STRATEGY**: If the AI must perform multiple steps (e.g., save data AND email), it MUST include all instructions in a single JSON object.
+                - **RULE 1 (The System Prompt)**: You MUST explicitly define the JSON schema in the `system_prompt` inside the JS.
+                    - *Example*: "If ready to save and email, reply ONLY with JSON: { 'action': 'execute_workflow', 'email': '...', 'db_target': '...', 'db_payload': {...}, 'summary': '...' }."
+                - **RULE 2 (Sequential Execution)**: The JS must parse the JSON and use `await` to run database inserts before triggering emails.
 
             - **SCRIPT PATTERN (The "Universal Agent"):**
-              ```javascript
-              let chatHistory = [];
-              let businessContext = "Loading data...";
-              const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
 
-              // 1. DYNAMIC CONTEXT LOADING
-              const init = async () => {
-                  try {
-                      // Fetch rows from the primary schema to give the AI the "Facts"
-                      const res = await api.get(`/custom-data/rows/${properties.schema_id}?limit=50`); 
-                      if(res.data.rows.length) {
-                          businessContext = `Base Data: ${JSON.stringify(res.data.rows.map(r => r.data))}`;
-                      }
-                  } catch(e) { console.error("Data load failed"); }
-              };
-              init();
+            ```javascript
+            let chatHistory = [];
+            let businessContext = "Loading data...";
+            const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
 
-              // 2. Chat Handler
-              form.onsubmit = async (e) => {
-                  e.preventDefault();
-                  const userText = input.value;
-                  if(!userText) return;
+            // 1. DYNAMIC CONTEXT LOADING (Primary Data Source)
+            const init = async () => {
+                try {
+                    const res = await api.get(`/custom-data/rows/${properties.schema_id}?limit=100`); 
+                    if(res.data.rows.length) {
+                        businessContext = `Knowledge Base: ${JSON.stringify(res.data.rows.map(r => r.data))}`;
+                    }
+                } catch(e) { console.error("Context load failed", e); }
+            };
+            init();
 
-                  // UI Loading State
-                  const btn = form.querySelector('button');
-                  const originalBtnText = btn.innerText;
-                  btn.disabled = true; btn.innerText = "Typing...";
-                  input.value = ""; 
+            // 2. Chat Handler (Strictly a Dumb Pipe)
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                const userText = input.value.trim();
+                if(!userText) return;
 
-                  renderMessage("User", userText, "user-bubble-class"); 
-                  chatHistory.push({ role: "user", content: userText });
+                // UI Loading
+                const btn = form.querySelector('button');
+                const originalText = btn.innerText;
+                btn.disabled = true; btn.innerText = "...";
+                input.value = ""; 
 
-                  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-                  
-                  try {
-                      const aiRes = await api.post('/builder/openai', {
-                          website_id: properties.website_id,
-                          member_id: currentUserId,
-                          prompt: historyBlock, 
-                          system_prompt: `You are an intelligent business agent. Context: ${businessContext}. 
-                          ALWAYS get the user's email before executing any action.
-                          
-                          IF a transaction/interest is confirmed:
-                          Reply ONLY with RAW JSON: { 
-                              "action": "execute_workflow", 
-                              "email": "user_email", 
-                              "db_target": "TARGET_TABLE_NAME", 
-                              "db_payload": { "field1": "val", "field2": "val" },
-                              "summary": "HTML_CONTENT" 
-                          }.
-                          
-                          Otherwise, reply with plain text.`
-                      });
+                renderMessage("User", userText, "user-bubble-class"); 
+                chatHistory.push({ role: "user", content: userText });
 
-                      const text = aiRes.data.text;
+                try {
+                    const aiRes = await api.post('/builder/openai', {
+                        website_id: properties.website_id,
+                        member_id: currentUserId,
+                        prompt: chatHistory.map(m => `${m.role}: ${m.content}`).join('\n'), 
+                        system_prompt: `You are an intelligent agent. Context: ${businessContext}. 
+                        ALWAYS obtain the user's email before finalizing.
+                        IF an action is needed (save/email), reply ONLY with RAW JSON: { 
+                            "action": "execute_workflow", 
+                            "email": "user_email", 
+                            "db_target": "TARGET_TABLE_NAME", 
+                            "db_payload": { "field": "val" },
+                            "summary": "HTML_FOR_EMAIL" 
+                        }. Otherwise, reply with plain text.`
+                    });
 
-                      // 3. UNIVERSAL HANDSHAKE (The "Dumb Pipe" execution)
-                      try {
-                          const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                          const cmd = JSON.parse(cleanJson);
+                    const text = aiRes.data.text;
 
-                          if (cmd.action === 'execute_workflow') {
-                              renderMessage("System", "Processing...", "ai-bubble");
+                    // 3. UNIVERSAL HANDSHAKE EXECUTION
+                    try {
+                        const cmd = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
 
-                              // DYNAMIC DB INSERT
-                              await api.post(`/custom-data/rows/${cmd.db_target}`, { data: cmd.db_payload });
+                        if (cmd.action === 'execute_workflow') {
+                            renderMessage("System", "Processing...", "ai-bubble-class");
+                            
+                            // Sequential Actions
+                            if(cmd.db_target) {
+                                await api.post(`/custom-data/rows/${cmd.db_target}`, { data: cmd.db_payload });
+                            }
+                            
+                            if(cmd.summary) {
+                                await api.post('/builder/send-email', {
+                                    website_id: properties.website_id,
+                                    to_email: cmd.email,
+                                    subject: properties.emailSubject || "Update",
+                                    content: (properties.emailBody || "") + "<br/>" + cmd.summary
+                                });
+                            }
 
-                              // DYNAMIC EMAIL TRIGGER
-                              if (cmd.summary) {
-                                  await api.post('/builder/send-email', {
-                                      website_id: properties.website_id,
-                                      to_email: cmd.email,
-                                      subject: properties.emailSubject || "Update from Agent",
-                                      content: (properties.emailBody || "") + "<br/>" + cmd.summary
-                                  });
-                              }
+                            renderMessage("AI", "✅ Action completed and email sent.", "ai-bubble-class");
+                            chatHistory.push({ role: "assistant", content: "Action executed." });
+                            return; 
+                        }
+                    } catch (jsonErr) { /* Just chat if not JSON */ }
 
-                              renderMessage("System", "✅ Action completed and email sent.", "ai-bubble");
-                              chatHistory.push({ role: "assistant", content: "Workflow executed." });
-                              return; 
-                          }
-                      } catch (jsonErr) { /* Normal chat */ }
+                    renderMessage("AI", text, "ai-bubble-class");
+                    chatHistory.push({ role: "assistant", content: text });
 
-                      renderMessage("AI", text, "ai-bubble-class");
-                      chatHistory.push({ role: "assistant", content: text });
-
-                  } catch (err) {
-                      console.error(err);
-                      renderMessage("System", "Connection lost.");
-                  } finally {
-                      btn.disabled = false; btn.innerText = originalBtnText;
-                  }
-              };
-              ```
+                } catch (err) {
+                    renderMessage("System", "Error connecting to AI.");
+                } finally {
+                    btn.disabled = false; btn.innerText = originalText;
+                }
+            };
          - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
