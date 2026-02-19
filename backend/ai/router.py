@@ -13894,7 +13894,7 @@ Is this a file upload?
             ```
             - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
       
-        - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
+       - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
             - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
             - **UX PATTERN (AUTO-SUBMIT):** Do NOT require a separate submit button. The upload process MUST begin automatically as soon as the user selects a file using the `fileInput.onchange` event.
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
@@ -13902,7 +13902,7 @@ Is this a file upload?
             ```javascript
             const fileInput = container.querySelector('input[type="file"]');
             // Grab whatever visible button/label the AI created to update the text visually
-            const uiButton = container.querySelector('label') || container.querySelector('button');
+            const uiButton = container.querySelector('label') || container.querySelector('button') || container.querySelector('.upload-btn');
             
             if (fileInput) {
                 fileInput.onchange = async (e) => {
@@ -13942,7 +13942,8 @@ Is this a file upload?
                         
                         extractedData.receipt_url = fileUrl;
                         
-                        await api.post('/custom-data/rows/' + properties.schema_id, {
+                        // CRITICAL FIX: Use the native schemaId variable so it never says undefined
+                        await api.post('/custom-data/rows/' + schemaId, {
                             data: extractedData,
                             sitemember_id: memberId
                         });
