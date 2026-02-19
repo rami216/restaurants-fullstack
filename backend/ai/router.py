@@ -13880,19 +13880,19 @@ Is this a file upload?
 
                     ---
         - **DASHBOARD & VISUALIZATION PROTOCOL:**
-                - **TRIGGER:** If the user prompt asks for a "Dashboard", "Chart", "Graph", "Analytics", or "Visualization".
-                - **UI MANDATE (CRITICAL):** Chart.js strictly requires `<canvas>` elements. You MUST use `<canvas>` tags for all chart containers. Do NOT use `<div>` or `<svg>` for the charts.
-                - **LIBRARY INJECTION & EXECUTION (CRITICAL):** You MUST dynamically load Chart.js and guarantee it is fully loaded before executing any chart logic. Use this exact pattern:
-                ```javascript
-                const script = document.createElement('script');
-                script.src = '[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)';
-                script.onload = () => {
-                    // EXECUTED ONLY AFTER CHART.JS IS LOADED
-                    // Fetch data, sanitize, and render new Chart(...) here
-                };
-                document.head.appendChild(script);
-                ```
-                - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
+            - **TRIGGER:** If the user prompt asks for a "Dashboard", "Chart", "Graph", "Analytics", or "Visualization".
+            - **UI & LAYOUT MANDATE (CRITICAL):** Chart.js strictly requires `<canvas>` elements. To prevent charts from overflowing off-screen, the main dashboard container MUST have `width: 100%; max-width: 100%; box-sizing: border-box; overflow-x: hidden;`. Wrap each `<canvas>` in a `<div>` with `position: relative; width: 100%;`.
+            - **LIBRARY INJECTION & EXECUTION (CRITICAL):** You MUST dynamically load Chart.js and guarantee it is fully loaded before executing any chart logic. Use this exact pattern:
+            ```javascript
+            const script = document.createElement('script');
+            script.src = '[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)';
+            script.onload = () => {
+                // EXECUTED ONLY AFTER CHART.JS IS LOADED
+                // Fetch data, sanitize, and render new Chart(...) here
+            };
+            document.head.appendChild(script);
+            ```
+            - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
         - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
                 - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
                 - **UI MANDATE (CRITICAL):** You MUST wrap the file input and submit button inside a true HTML `<form>` tag. Do NOT use a `<div>` for the container, or `form.reset()` will throw a TypeError.
