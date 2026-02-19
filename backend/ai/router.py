@@ -12369,68 +12369,72 @@ Is this a file upload?
                 }
             };
 
-         - **PDF UPLOAD & AI PARSING PROTOCOL:**
-            - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
-            - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
-            - **SCRIPT PATTERN (Inside form.onsubmit):**
-              ```javascript
-              const fileInput = container.querySelector('input[type="file"]');
-              const submitBtn = form.querySelector('button[type="submit"]');
-              
-              if (fileInput && fileInput.files.length > 0) {
-                  submitBtn.disabled = true;
-                  
-                  try {
-                      // Grab the logged-in user's ID to track their AI usage
-                      const memberId = typeof window !== 'undefined' 
-                          ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
-                          : null;
-
-                      // 1. Upload the PDF
-                      submitBtn.textContent = 'Uploading...';
-                      const formData = new FormData();
-                      formData.append('file', fileInput.files[0]);
-                      const uploadRes = await api.post('/uploads/', formData);
-                      const pdfUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
-                      
-                      // 2. Parse the PDF Text
-                      submitBtn.textContent = 'Reading PDF...';
-                      const parseRes = await api.post('/builder/parse-pdf', { pdf_url: pdfUrl });
-                      const rawText = parseRes.data.text;
-                      
-                      // 3. Send Text to AI
-                      submitBtn.textContent = 'AI Analyzing...';
-                      const aiRes = await api.post('/builder/openai', {
-                          website_id: properties.website_id,
-                          member_id: memberId, // ✅ TRACKING THE USER
-                          prompt: `Analyze this document: ${rawText}`,
-                          system_prompt: properties.systemPrompt || "You are a strict HR recruiter. Analyze this document."
-                      });
-                      
-                      // 4. Save to Database (Merge AI result with form data)
-                      submitBtn.textContent = 'Saving...';
-                      const rowData = {};
-                      new FormData(form).forEach((v, k) => { if(k !== 'file') rowData[k] = v; });
-                      rowData.cv_url = pdfUrl; 
-                      rowData.ai_analysis = aiRes.data.text; 
-                      
-                      await api.post('/custom-data/rows/' + schemaId, { data: rowData, sitemember_id: memberId });
-                      
-                      alert("Analysis Complete!");
-                      form.reset();
-                  } catch (err) {
-                      console.error("PDF Workflow Error:", err);
-                      if (err?.response?.status === 403) {
-                          alert("AI Limit Reached: " + (err.response.data.detail || "Please upgrade your account."));
-                      } else {
-                          alert("Failed to process document.");
-                      }
-                  } finally {
-                      submitBtn.disabled = false;
-                      submitBtn.textContent = 'Submit';
-                  }
-              }
-              ```
+         - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
+                - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
+                - **UI MANDATE (CRITICAL):** You MUST wrap the file input and submit button inside a true HTML `<form>` tag. Do NOT use a `<div>` for the container, or `form.reset()` will throw a TypeError.
+                - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
+                - **SCRIPT PATTERN (Inside form.onsubmit):**
+                ```javascript
+                const form = container.querySelector('form');
+                const fileInput = form.querySelector('input[type="file"]');
+                const submitBtn = form.querySelector('button[type="submit"]');
+                
+                form.onsubmit = async (e) => {
+                    e.preventDefault();
+                    if (!fileInput.files.length) return alert("Please upload a file.");
+                    
+                    const originalText = submitBtn.textContent;
+                    submitBtn.disabled = true;
+                    
+                    try {
+                        // 1. Upload the PDF
+                        submitBtn.textContent = '1/3 Uploading...';
+                        const formData = new FormData();
+                        formData.append('file', fileInput.files[0]);
+                        const uploadRes = await api.post('/uploads/', formData);
+                        const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
+                        
+                        // 2. Parse the PDF Text
+                        submitBtn.textContent = '2/3 Reading PDF...';
+                        const parseRes = await api.post('/builder/parse-pdf', { pdf_url: fileUrl });
+                        const rawText = parseRes.data.text;
+                        
+                        // 3. Send Text to AI for JSON Extraction
+                        submitBtn.textContent = '3/3 AI Analyzing...';
+                        const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
+                        
+                        const aiRes = await api.post('/builder/openai', {
+                            website_id: properties.website_id,
+                            member_id: memberId,
+                            prompt: `Analyze this document text: ${rawText}`,
+                            system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.
+                            CRITICAL: You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly. Do not include markdown formatting or explanations.`
+                        });
+                        
+                        // 4. Save to Database
+                        submitBtn.textContent = 'Saving...';
+                        const cleanJson = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const extractedData = JSON.parse(cleanJson);
+                        
+                        // Map the file URL into the payload (fallback to receipt_url, file_url, or document_url based on schema)
+                        extractedData.receipt_url = fileUrl; 
+                        
+                        await api.post('/custom-data/rows/' + properties.schema_id, { 
+                            data: extractedData, 
+                            sitemember_id: memberId 
+                        });
+                        
+                        alert("✅ Document processed and saved successfully!");
+                        form.reset(); // This will now work because of the UI MANDATE
+                    } catch (err) {
+                        console.error("PDF Workflow Error:", err);
+                        alert("Failed to process document. Please try again.");
+                    } finally {
+                        submitBtn.disabled = false;
+                        submitBtn.textContent = originalText;
+                    }
+                };
+                ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
