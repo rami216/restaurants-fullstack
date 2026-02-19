@@ -13895,14 +13895,15 @@ Is this a file upload?
             - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
        - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
             - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
-            - **UI MANDATE (CRITICAL):** You MUST create a standard, visible `<input type="file">` and a completely separate `<button>` to trigger the upload. Do NOT hide the file input. Do NOT use a `<label>` as the trigger button.
+            - **UI MANDATE (CRITICAL):** You MUST wrap a visible `<input type="file">` and `<button type="submit">` inside an actual HTML `<form>` tag. Do NOT hide the input. 
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
-            - **SCRIPT PATTERN (Inside button.onclick):**
+            - **SCRIPT PATTERN (Inside form.onsubmit):**
             ```javascript
+            const form = container.querySelector('form');
             const fileInput = container.querySelector('input[type="file"]');
             const submitBtn = container.querySelector('button');
             
-            submitBtn.onclick = async (e) => {
+            form.onsubmit = async (e) => {
                 e.preventDefault();
                 if (!fileInput.files.length) return alert("Please upload a file.");
                 
@@ -13951,7 +13952,7 @@ Is this a file upload?
                     
                     // 5. CRASH-PROOF SUCCESS HANDLING
                     submitBtn.textContent = '✅ Saved!';
-                    fileInput.value = ''; 
+                    fileInput.value = ''; // Safely clear input instead of using form.reset()
                     setTimeout(() => { submitBtn.textContent = originalText; }, 3000);
                     
                 } catch (err) {
