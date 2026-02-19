@@ -12199,6 +12199,10 @@ Is this a file upload?
               }
               ```
        ### 🤖 CHATBOT & AGENT PROTOCOL (Context, Memory & Actions)
+            - **STRICT COMPLIANCE ULTIMATUM (READ CAREFULLY):** - When you generate the JavaScript for a chatbot, you MUST copy the `SCRIPT PATTERN` below **EXACTLY AS WRITTEN**. 
+                - You are FORBIDDEN from summarizing the `init()` function or the `system_prompt`. 
+                - The `system_prompt` in your generated code MUST contain the literal `EXECUTION PROTOCOL` and the raw JSON schema `{ "action": "execute_workflow", ... }`. DO NOT leave it out!
+                - The `init()` function MUST include the `db_id: r.row_id` mapping. DO NOT write your own fetch logic.
 
             - **TRIGGER:** If the prompt mentions a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
 
