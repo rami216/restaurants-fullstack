@@ -12435,6 +12435,20 @@ Is this a file upload?
                     }
                 };
                 ```
+        - **DASHBOARD & VISUALIZATION PROTOCOL:**
+            - **TRIGGER:** If the user prompt asks for a "Dashboard", "Chart", "Graph", "Analytics", or "Visualization".
+            - **UI MANDATE (CRITICAL):** Chart.js strictly requires `<canvas>` elements. You MUST use `<canvas>` tags for all chart containers. Do NOT use `<div>` or `<svg>` for the charts.
+            - **LIBRARY INJECTION & EXECUTION (CRITICAL):** You MUST dynamically load Chart.js and guarantee it is fully loaded before executing any chart logic. Use this exact pattern:
+            ```javascript
+            const script = document.createElement('script');
+            script.src = '[https://cdn.jsdelivr.net/npm/chart.js](https://cdn.jsdelivr.net/npm/chart.js)';
+            script.onload = () => {
+                // EXECUTED ONLY AFTER CHART.JS IS LOADED
+                // Fetch data, sanitize, and render new Chart(...) here
+            };
+            document.head.appendChild(script);
+            ```
+            - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
