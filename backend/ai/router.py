@@ -13896,48 +13896,47 @@ Is this a file upload?
       
         - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
             - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
-            - **UI MANDATE (CRITICAL):** You MUST create a visible `<input type="file">` and a `<button>`. Do NOT hide the file input. 
+            - **UX PATTERN (AUTO-SUBMIT):** Do NOT require a separate submit button. The upload process MUST begin automatically as soon as the user selects a file using the `fileInput.onchange` event.
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
-            - **SCRIPT PATTERN (Inside button.onclick):**
+            - **SCRIPT PATTERN (Inside fileInput.onchange):**
             ```javascript
-            // Find elements anywhere in the container, avoiding strict form requirements
             const fileInput = container.querySelector('input[type="file"]');
-            const submitBtn = container.querySelector('button') || container.querySelector('label') || container.querySelector('.submit-btn');
+            // Grab whatever visible button/label the AI created to update the text visually
+            const uiButton = container.querySelector('label') || container.querySelector('button');
             
-            if (submitBtn && fileInput) {
-                submitBtn.onclick = async (e) => {
-                    e.preventDefault();
-                    if (!fileInput.files.length) return alert("Please upload a file.");
+            if (fileInput) {
+                fileInput.onchange = async (e) => {
+                    if (!fileInput.files.length) return;
                     
-                    const originalText = submitBtn.textContent || "Upload";
-                    submitBtn.disabled = true;
+                    const originalText = uiButton ? uiButton.textContent : 'Upload';
+                    if (uiButton) uiButton.style.pointerEvents = 'none'; // Prevent double clicks
                     
                     try {
                         // 1. Upload the PDF
-                        submitBtn.textContent = '1/3 Uploading...';
+                        if (uiButton) uiButton.textContent = '1/3 Uploading...';
                         const formData = new FormData();
                         formData.append('file', fileInput.files[0]);
                         const uploadRes = await api.post('/uploads/', formData);
                         const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
                         
                         // 2. Parse the PDF Text
-                        submitBtn.textContent = '2/3 Reading PDF...';
+                        if (uiButton) uiButton.textContent = '2/3 Reading PDF...';
                         const parseRes = await api.post('/builder/parse-pdf', { pdf_url: fileUrl });
                         const rawText = parseRes.data.text;
                         
                         // 3. Send Text to AI for JSON Extraction
-                        submitBtn.textContent = '3/3 AI Analyzing...';
+                        if (uiButton) uiButton.textContent = '3/3 AI Analyzing...';
                         const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
                         
                         const aiRes = await api.post('/builder/openai', {
                             website_id: properties.website_id,
                             member_id: memberId,
                             prompt: `Analyze this document text: ${rawText}`,
-                            system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.\nCRITICAL RULES:\n1. You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly.\n2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT (e.g., convert "20/02/2026" or "Feb 19" to "2026-02-20").\n3. Do not include markdown formatting or explanations.`
+                            system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.\nCRITICAL RULES:\n1. You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly.\n2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT.\n3. Do not include markdown formatting or explanations.`
                         });
                         
                         // 4. Save to Database
-                        submitBtn.textContent = 'Saving...';
+                        if (uiButton) uiButton.textContent = 'Saving...';
                         const cleanJson = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
                         const extractedData = JSON.parse(cleanJson);
                         
@@ -13948,20 +13947,25 @@ Is this a file upload?
                             sitemember_id: memberId
                         });
                         
-                        // 5. Safe Success Handling (No form.reset crashes)
-                        submitBtn.textContent = '✅ Saved!';
-                        fileInput.value = ''; 
+                        // 5. Success Handling
+                        if (uiButton) uiButton.textContent = '✅ Saved!';
+                        fileInput.value = ''; // Safely clear input
                         
                         setTimeout(() => {
-                            submitBtn.textContent = originalText;
-                            submitBtn.disabled = false;
+                            if (uiButton) {
+                                uiButton.textContent = originalText;
+                                uiButton.style.pointerEvents = 'auto';
+                            }
                         }, 3000);
                         
                     } catch (err) {
                         console.error("PDF Workflow Error:", err);
                         alert("Failed to process document. Please try again.");
-                        submitBtn.textContent = originalText;
-                        submitBtn.disabled = false;
+                        if (uiButton) {
+                            uiButton.textContent = originalText;
+                            uiButton.style.pointerEvents = 'auto';
+                        }
+                        fileInput.value = ''; 
                     }
                 };
             }
