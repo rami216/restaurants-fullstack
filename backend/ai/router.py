@@ -12258,13 +12258,13 @@ Is this a file upload?
                         member_id: currentUserId,
                         prompt: historyBlock, 
                         system_prompt: `You are an intelligent agent. Context: ${businessContext}. 
-                        ALWAYS get the user's email before finalizing.
+                        ALWAYS obtain the user's email before finalizing.
                         IF ready to save/email, reply ONLY with RAW JSON: { 
                             "action": "execute_workflow", 
-                            "email": "...", 
+                            "email": "user_email", 
                             "db_target": "${properties.interestSchemaId}", 
                             "db_payload": { "client_email": "...", "apartment_name": "...", "interest_rate": 0 },
-                            "summary": "HTML content" 
+                            "summary": "WRITE_A_DETAILED_HTML_SUMMARY_OF_THE_APARTMENT_SPECS_HERE" 
                         }. Otherwise, reply with plain text.`
                     });
 
