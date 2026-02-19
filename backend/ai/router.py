@@ -13894,74 +13894,74 @@ Is this a file upload?
             ```
             - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
         - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
-                - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
-                - **UI MANDATE (CRITICAL):** You MUST wrap the file input and submit button inside a true HTML `<form>` tag. Do NOT use a `<div>` for the container, or `form.reset()` will throw a TypeError.
-                - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
-                - **SCRIPT PATTERN (Inside form.onsubmit):**
-                ```javascript
-                const form = container.querySelector('form');
-                const fileInput = form.querySelector('input[type="file"]');
-                const submitBtn = form.querySelector('button[type="submit"]');
+            - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
+            - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
+            - **SCRIPT PATTERN (Inside button.onclick):**
+            ```javascript
+            const fileInput = container.querySelector('input[type="file"]');
+            const submitBtn = container.querySelector('button');
+            
+            submitBtn.onclick = async (e) => {
+                e.preventDefault();
+                if (!fileInput.files.length) return alert("Please upload a file.");
                 
-                form.onsubmit = async (e) => {
-                    e.preventDefault();
-                    if (!fileInput.files.length) return alert("Please upload a file.");
+                const originalText = submitBtn.textContent;
+                submitBtn.disabled = true;
+                
+                try {
+                    // 1. Upload the PDF
+                    submitBtn.textContent = '1/3 Uploading...';
+                    const formData = new FormData();
+                    formData.append('file', fileInput.files[0]);
+                    const uploadRes = await api.post('/uploads/', formData);
+                    const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
                     
-                    const originalText = submitBtn.textContent;
-                    submitBtn.disabled = true;
+                    // 2. Parse the PDF Text
+                    submitBtn.textContent = '2/3 Reading PDF...';
+                    const parseRes = await api.post('/builder/parse-pdf', { pdf_url: fileUrl });
+                    const rawText = parseRes.data.text;
                     
-                    try {
-                        // 1. Upload the PDF
-                        submitBtn.textContent = '1/3 Uploading...';
-                        const formData = new FormData();
-                        formData.append('file', fileInput.files[0]);
-                        const uploadRes = await api.post('/uploads/', formData);
-                        const fileUrl = uploadRes.data ? uploadRes.data.url : uploadRes.url;
-                        
-                        // 2. Parse the PDF Text
-                        submitBtn.textContent = '2/3 Reading PDF...';
-                        const parseRes = await api.post('/builder/parse-pdf', { pdf_url: fileUrl });
-                        const rawText = parseRes.data.text;
-                        
-                        // 3. Send Text to AI for JSON Extraction
-                        submitBtn.textContent = '3/3 AI Analyzing...';
-                        const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
-                        
-                        const aiRes = await api.post('/builder/openai', {
-                            website_id: properties.website_id,
-                            member_id: memberId,
-                            prompt: `Analyze this document text: ${rawText}`,
-                            system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.
+                    // 3. Send Text to AI for JSON Extraction
+                    submitBtn.textContent = '3/3 AI Analyzing...';
+                    const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
+                    
+                    const aiRes = await api.post('/builder/openai', {
+                        website_id: properties.website_id,
+                        member_id: memberId,
+                        prompt: `Analyze this document text: ${rawText}`,
+                        system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.
                         CRITICAL RULES:
                         1. You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly.
                         2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT (e.g., convert "20/02/2026" or "Feb 19" to "2026-02-20").
                         3. Do not include markdown formatting or explanations.`
-                        });
-                        
-                        // 4. Save to Database
-                        submitBtn.textContent = 'Saving...';
-                        const cleanJson = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-                        const extractedData = JSON.parse(cleanJson);
-                        
-                        // Map the file URL into the payload (fallback to receipt_url, file_url, or document_url based on schema)
-                        extractedData.receipt_url = fileUrl; 
-                        
-                        await api.post('/custom-data/rows/' + properties.schema_id, { 
-                            data: extractedData, 
-                            sitemember_id: memberId 
-                        });
-                        
-                        alert("✅ Document processed and saved successfully!");
-                        form.reset(); // This will now work because of the UI MANDATE
-                    } catch (err) {
-                        console.error("PDF Workflow Error:", err);
-                        alert("Failed to process document. Please try again.");
-                    } finally {
-                        submitBtn.disabled = false;
-                        submitBtn.textContent = originalText;
-                    }
-                };
-                ```
+                    });
+                    
+                    // 4. Save to Database
+                    submitBtn.textContent = 'Saving...';
+                    const cleanJson = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const extractedData = JSON.parse(cleanJson);
+                    
+                    extractedData.receipt_url = fileUrl; 
+                    
+                    await api.post('/custom-data/rows/' + properties.schema_id, { 
+                        data: extractedData, 
+                        sitemember_id: memberId 
+                    });
+                    
+                    // 5. CRASH-PROOF SUCCESS HANDLING
+                    submitBtn.textContent = '✅ Saved!';
+                    fileInput.value = ''; // Safely clear the input without relying on form.reset()
+                    setTimeout(() => { submitBtn.textContent = originalText; }, 3000);
+                    
+                } catch (err) {
+                    console.error("PDF Workflow Error:", err);
+                    alert("Failed to process document. Please try again.");
+                    submitBtn.textContent = originalText;
+                } finally {
+                    submitBtn.disabled = false;
+                }
+            };
+            ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
