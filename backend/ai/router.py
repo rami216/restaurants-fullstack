@@ -13932,7 +13932,10 @@ Is this a file upload?
                             member_id: memberId,
                             prompt: `Analyze this document text: ${rawText}`,
                             system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.
-                            CRITICAL: You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly. Do not include markdown formatting or explanations.`
+                        CRITICAL RULES:
+                        1. You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly.
+                        2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT (e.g., convert "20/02/2026" or "Feb 19" to "2026-02-20").
+                        3. Do not include markdown formatting or explanations.`
                         });
                         
                         // 4. Save to Database
