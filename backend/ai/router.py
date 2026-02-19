@@ -13895,17 +13895,16 @@ Is this a file upload?
             - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
        - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
             - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
-            - **UI MANDATE (CRITICAL):** You MUST wrap a visible `<input type="file">` and `<button type="submit">` inside an actual HTML `<form>` tag. Do NOT hide the input. 
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
-            - **SCRIPT PATTERN (Inside form.onsubmit):**
+            - **SCRIPT PATTERN (Inside button.onclick):**
             ```javascript
-            const form = container.querySelector('form');
             const fileInput = container.querySelector('input[type="file"]');
-            const submitBtn = container.querySelector('button');
+            // The AI sometimes uses a button, sometimes a label. This catches both so it never dies.
+            const submitBtn = container.querySelector('button') || container.querySelector('label');
             
-            form.onsubmit = async (e) => {
+            submitBtn.onclick = async (e) => {
                 e.preventDefault();
-                if (!fileInput.files.length) return alert("Please upload a file.");
+                if (!fileInput || !fileInput.files.length) return alert("Please upload a file.");
                 
                 const originalText = submitBtn.textContent;
                 submitBtn.disabled = true;
@@ -13950,17 +13949,13 @@ Is this a file upload?
                         sitemember_id: memberId 
                     });
                     
-                    // 5. CRASH-PROOF SUCCESS HANDLING
-                    submitBtn.textContent = '✅ Saved!';
-                    fileInput.value = ''; // Safely clear input instead of using form.reset()
-                    setTimeout(() => { submitBtn.textContent = originalText; }, 3000);
-                    
+                    alert("✅ Document processed and saved successfully!");
                 } catch (err) {
                     console.error("PDF Workflow Error:", err);
                     alert("Failed to process document. Please try again.");
-                    submitBtn.textContent = originalText;
                 } finally {
                     submitBtn.disabled = false;
+                    submitBtn.textContent = originalText;
                 }
             };
             ```
