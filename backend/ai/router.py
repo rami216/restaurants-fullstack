@@ -13895,16 +13895,17 @@ Is this a file upload?
             - **DATA SANITIZATION (CRITICAL):** Database values often contain raw currency strings (e.g., "$ 170.00", "74,58"). When summing, grouping, or passing data to a chart, you MUST clean the data using this exact formula: `parseFloat(String(val).replace(/[^0-9.,-]/g, '').replace(',', '.')) || 0;`. Never do math on raw row data without this sanitizer.
        - **PDF UPLOAD & DATA EXTRACTION PROTOCOL:**
             - **TRIGGER:** If the prompt explicitly asks to "use AI to read a PDF", "process invoice", "read receipt", or "extract document data".
+            - **UI MANDATE (CRITICAL):** You MUST wrap the file input and submit button inside a true HTML `<form>` tag. Do NOT use a `<div>` for the container, or `form.reset()` will throw a TypeError.
             - **WORKFLOW:** You MUST chain THREE API calls together sequentially: Upload -> Parse -> AI Analyze.
-            - **SCRIPT PATTERN (Inside button.onclick):**
+            - **SCRIPT PATTERN (Inside form.onsubmit):**
             ```javascript
-            const fileInput = container.querySelector('input[type="file"]');
-            // The AI sometimes uses a button, sometimes a label. This catches both so it never dies.
-            const submitBtn = container.querySelector('button') || container.querySelector('label');
+            const form = container.querySelector('form');
+            const fileInput = form.querySelector('input[type="file"]');
+            const submitBtn = form.querySelector('button[type="submit"]');
             
-            submitBtn.onclick = async (e) => {
+            form.onsubmit = async (e) => {
                 e.preventDefault();
-                if (!fileInput || !fileInput.files.length) return alert("Please upload a file.");
+                if (!fileInput.files.length) return alert("Please upload a file.");
                 
                 const originalText = submitBtn.textContent;
                 submitBtn.disabled = true;
@@ -13942,14 +13943,16 @@ Is this a file upload?
                     const cleanJson = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
                     const extractedData = JSON.parse(cleanJson);
                     
-                    extractedData.receipt_url = fileUrl; 
+                    // Map the file URL into the payload (fallback to receipt_url, file_url, or document_url based on schema)
+                    extractedData.receipt_url = fileUrl;
                     
-                    await api.post('/custom-data/rows/' + properties.schema_id, { 
-                        data: extractedData, 
-                        sitemember_id: memberId 
+                    await api.post('/custom-data/rows/' + properties.schema_id, {
+                        data: extractedData,
+                        sitemember_id: memberId
                     });
                     
                     alert("✅ Document processed and saved successfully!");
+                    form.reset(); // This will now work because of the UI MANDATE
                 } catch (err) {
                     console.error("PDF Workflow Error:", err);
                     alert("Failed to process document. Please try again.");
