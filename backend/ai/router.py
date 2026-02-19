@@ -12199,35 +12199,31 @@ Is this a file upload?
               }
               ```
         ### 🤖 CHATBOT & AGENT PROTOCOL (Context, Memory & Actions)
+
             - **TRIGGER:** If the prompt mentions a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
 
             - **PROFESSIONAL UI STANDARDS (MANDATORY):**
-                - **Layout**: Render a main chat container with a fixed height (e.g., `500px`), `overflow-y-auto`, `display: flex`, and `flex-direction: column`.
-                - **Input Zone (CRITICAL CSS)**:
-                    - The Input Zone MUST be a `<form>` at the bottom with: `display: flex`, `width: 100%`, `border-top: 1px solid #ddd`, and `flex-wrap: nowrap`.
-                    - **The Input Field**: Must have `flex-grow: 1` to fill space and `min-w-0`.
-                    - **The Send Button**: Must have `flex-shrink: 0`, `white-space: nowrap`, and `cursor: pointer`.
-                - **Bubbles**: User messages right-aligned (e.g., `bg-blue-100`), AI messages left-aligned (e.g., `bg-gray-100`).
+                - **Layout**: Render a chat container with a fixed height (e.g., `500px`), `overflow-y-auto`, `display: flex`, and `flex-direction: column`.
+                - **Input Zone (CRITICAL)**: Use a `<form>` at the bottom with: `display: flex`, `width: 100%`, `border-top: 1px solid #ddd`, and `flex-wrap: nowrap`.
+                - **Bubbles**: User messages right-aligned (`bg-blue-100`), AI messages left-aligned (`bg-gray-100`).
 
             - **ANTI-HARDCODING ULTIMATUM (FORBIDDEN LOGIC):**
-                - **NO LOCAL BRAIN**: You are STRICTLY FORBIDDEN from writing logic, validation, or "if" statements in JavaScript (e.g., do not "check if message has @", do not "calculate score").
-                - **NO LOCAL SEARCH**: Do not write functions to filter or search the database rows within the JS code.
-                - **DUMB PIPE ONLY**: The ONLY role of the JavaScript is to pass the user input to OpenAI and execute the resulting JSON actions.
+                - **DUMB PIPE ONLY**: You are STRICTLY FORBIDDEN from writing logic (if/else, filters, search) in JS. 
+                - **REQUIREMENT**: The JS must ONLY pass input to `api.post('/builder/openai')` and execute the returned JSON.
 
             - **AGENTIC ACTION LAYER (The "Absolute Handshake"):**
-                - **MULTI-ACTION STRATEGY**: If the AI must perform multiple steps (e.g., save data AND email), it MUST include all instructions in a single JSON object.
-                - **RULE 1 (The System Prompt)**: You MUST explicitly define the JSON schema in the `system_prompt` inside the JS.
-                    - *Example*: "If ready to save and email, reply ONLY with JSON: { 'action': 'execute_workflow', 'email': '...', 'db_target': '...', 'db_payload': {...}, 'summary': '...' }."
-                - **RULE 2 (Sequential Execution)**: The JS must parse the JSON and use `await` to run database inserts before triggering emails.
+                - **MULTI-ACTION STRATEGY**: If the AI needs to save data AND email, it MUST use a single JSON object.
+                - **RULE 1 (The System Prompt)**: Define the JSON schema inside the JS `system_prompt`.
+                - **RULE 2 (Sequential Execution)**: Use `await` for the DB post before the email post.
 
-            - **SCRIPT PATTERN (The "Universal Agent"):**
+            - **SCRIPT PATTERN (The "Perfect Agent"):**
 
             ```javascript
             let chatHistory = [];
             let businessContext = "Loading data...";
             const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
 
-            // 1. DYNAMIC CONTEXT LOADING (Primary Data Source)
+            // 1. DYNAMIC CONTEXT LOADING
             const init = async () => {
                 try {
                     const res = await api.get(`/custom-data/rows/${properties.schema_id}?limit=100`); 
@@ -12238,13 +12234,13 @@ Is this a file upload?
             };
             init();
 
-            // 2. Chat Handler (Strictly a Dumb Pipe)
+            // 2. Chat Handler (The Brain Connection)
             form.onsubmit = async (e) => {
                 e.preventDefault();
                 const userText = input.value.trim();
                 if(!userText) return;
 
-                // UI Loading
+                // UI Feedback
                 const btn = form.querySelector('button');
                 const originalText = btn.innerText;
                 btn.disabled = true; btn.innerText = "...";
@@ -12253,50 +12249,51 @@ Is this a file upload?
                 renderMessage("User", userText, "user-bubble-class"); 
                 chatHistory.push({ role: "user", content: userText });
 
+                const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+
                 try {
+                    // THE CRITICAL BRAIN CALL
                     const aiRes = await api.post('/builder/openai', {
                         website_id: properties.website_id,
                         member_id: currentUserId,
-                        prompt: chatHistory.map(m => `${m.role}: ${m.content}`).join('\n'), 
+                        prompt: historyBlock, 
                         system_prompt: `You are an intelligent agent. Context: ${businessContext}. 
-                        ALWAYS obtain the user's email before finalizing.
-                        IF an action is needed (save/email), reply ONLY with RAW JSON: { 
+                        ALWAYS get the user's email before finalizing.
+                        IF ready to save/email, reply ONLY with RAW JSON: { 
                             "action": "execute_workflow", 
-                            "email": "user_email", 
-                            "db_target": "TARGET_TABLE_NAME", 
-                            "db_payload": { "field": "val" },
-                            "summary": "HTML_FOR_EMAIL" 
+                            "email": "...", 
+                            "db_target": "${properties.interestSchemaId}", 
+                            "db_payload": { "client_email": "...", "apartment_name": "...", "interest_rate": 0 },
+                            "summary": "HTML content" 
                         }. Otherwise, reply with plain text.`
                     });
 
                     const text = aiRes.data.text;
 
-                    // 3. UNIVERSAL HANDSHAKE EXECUTION
+                    // 3. THE HANDSHAKE EXECUTION
                     try {
-                        const cmd = JSON.parse(text.replace(/```json/g, '').replace(/```/g, '').trim());
+                        const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const cmd = JSON.parse(cleanJson);
 
                         if (cmd.action === 'execute_workflow') {
-                            renderMessage("System", "Processing...", "ai-bubble-class");
+                            renderMessage("System", "💾 Processing...", "ai-bubble-class");
                             
-                            // Sequential Actions
-                            if(cmd.db_target) {
-                                await api.post(`/custom-data/rows/${cmd.db_target}`, { data: cmd.db_payload });
-                            }
+                            // STEP A: Save to Interests Table
+                            await api.post(`/custom-data/rows/${cmd.db_target}`, { data: cmd.db_payload });
                             
-                            if(cmd.summary) {
-                                await api.post('/builder/send-email', {
-                                    website_id: properties.website_id,
-                                    to_email: cmd.email,
-                                    subject: properties.emailSubject || "Update",
-                                    content: (properties.emailBody || "") + "<br/>" + cmd.summary
-                                });
-                            }
+                            // STEP B: Send Email
+                            await api.post('/builder/send-email', {
+                                website_id: properties.website_id,
+                                to_email: cmd.email,
+                                subject: properties.emailSubject || "Update",
+                                content: (properties.emailBody || "") + "<br/>" + cmd.summary
+                            });
 
-                            renderMessage("AI", "✅ Action completed and email sent.", "ai-bubble-class");
-                            chatHistory.push({ role: "assistant", content: "Action executed." });
+                            renderMessage("AI", "✅ Interest recorded and email sent!", "ai-bubble-class");
+                            chatHistory.push({ role: "assistant", content: "Workflow executed." });
                             return; 
                         }
-                    } catch (jsonErr) { /* Just chat if not JSON */ }
+                    } catch (jsonErr) { /* Normal chat */ }
 
                     renderMessage("AI", text, "ai-bubble-class");
                     chatHistory.push({ role: "assistant", content: text });
