@@ -12213,10 +12213,15 @@ Is this a file upload?
                 2.  **MEMORY ARRAY:** You MUST create a global `let chatHistory = [];` array. Every time the user sends a message, push it to history.
                 3.  **FULL HISTORY PROMPT:** When calling OpenAI, the `prompt` payload MUST be the *joined string* of the entire history (e.g., `chatHistory.map(m => m.role + ': ' + m.content).join('\n')`).
 
-            - **ANTI-HARDCODING RULE (CRITICAL):**
-                - **FORBIDDEN:** You MUST NOT write local JavaScript logic to handle the conversation (e.g., do NOT write `if (input < 500) return 'Too low'`). 
-                - **REQUIREMENT:** Your JavaScript must be a "dumb pipe". It must ALWAYS send the user's input to `api.post('/builder/openai')` and display whatever the AI replies.
-                - **LOGIC LOCATION:** All logic (negotiation rules, math, decisions) must exist ONLY in the `system_prompt` string.
+            - **ANTI-HARDCODING RULE (ULTIMATUM):**
+                - **FORBIDDEN:** You are STRICTLY FORBIDDEN from writing any logic, validation, or "if" statements inside the JavaScript `handleUserMessage` or `onclick` functions. 
+                - **NO LOCAL BRAIN:** Do NOT write functions to "calculate interest," "check for email," or "filter apartments" in JS.
+                - **MANDATORY FLOW:** The ONLY thing the JavaScript should do is:
+                    1. Render the user's message.
+                    2. Push to `chatHistory`.
+                    3. Send the WHOLE history to `api.post('/builder/openai')`.
+                    4. Wait for the response.
+                    5. Parse the JSON and execute the `action` if it exists.
 
             - **AGENTIC ACTION LAYER (The "Absolute Handshake"):**
                 - **TRIGGER:** If the prompt implies real-world actions (e.g., "save to database", "email the client", "record interest").
@@ -12226,102 +12231,100 @@ Is this a file upload?
                 - **RULE 2 (The Javascript):** The `try...catch` block must be able to handle sequential API calls (e.g., `api.post` to custom-data followed by `api.post` to send-email).
                 - **RULE 3 (Dumb Pipe):** The JS must never decide if a deal is good; it only executes the API calls requested by the AI's JSON.
 
-            - **SCRIPT PATTERN (The "Perfect Agent"):**
+            - **SCRIPT PATTERN (The "Universal Agent"):**
               ```javascript
+              let chatHistory = [];
+              let businessContext = "Loading data...";
+              const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
 
-                    let chatHistory = [];
-                    let businessContext = "Loading data...";
+              // 1. DYNAMIC CONTEXT LOADING
+              const init = async () => {
+                  try {
+                      // Fetch rows from the primary schema to give the AI the "Facts"
+                      const res = await api.get(`/custom-data/rows/${properties.schema_id}?limit=50`); 
+                      if(res.data.rows.length) {
+                          businessContext = `Base Data: ${JSON.stringify(res.data.rows.map(r => r.data))}`;
+                      }
+                  } catch(e) { console.error("Data load failed"); }
+              };
+              init();
 
-                    // 1. DYNAMIC CONTEXT LOADING
-                    const init = async () => {
-                        try {
-                            // The AI will replace CONTEXT_SCHEMA_ID with the primary table name (e.g., 'apartments' or 'jobs')
-                            const res = await api.get('/custom-data/rows/CONTEXT_SCHEMA_ID?limit=50'); 
-                            if(res.data.rows.length) {
-                                // AI logic: Store the rows so the brain knows what we have in stock
-                                businessContext = `Base Data: ${JSON.stringify(res.data.rows.map(r => r.data))}`;
-                            }
-                        } catch(e) { console.error("Data load failed"); }
-                    };
-                    init();
+              // 2. Chat Handler
+              form.onsubmit = async (e) => {
+                  e.preventDefault();
+                  const userText = input.value;
+                  if(!userText) return;
 
-                    // 2. Chat Handler
-                    form.onsubmit = async (e) => {
-                        e.preventDefault();
-                        const userText = input.value;
-                        if(!userText) return;
+                  // UI Loading State
+                  const btn = form.querySelector('button');
+                  const originalBtnText = btn.innerText;
+                  btn.disabled = true; btn.innerText = "Typing...";
+                  input.value = ""; 
 
-                        // UI Loading State
-                        const btn = form.querySelector('button');
-                        const originalBtnText = btn.innerText;
-                        btn.disabled = true; btn.innerText = "Typing...";
-                        input.value = ""; 
+                  renderMessage("User", userText, "user-bubble-class"); 
+                  chatHistory.push({ role: "user", content: userText });
 
-                        renderMessage("User", userText, "user-bubble-class"); 
-                        chatHistory.push({ role: "user", content: userText });
+                  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+                  
+                  try {
+                      const aiRes = await api.post('/builder/openai', {
+                          website_id: properties.website_id,
+                          member_id: currentUserId,
+                          prompt: historyBlock, 
+                          system_prompt: `You are an intelligent business agent. Context: ${businessContext}. 
+                          ALWAYS get the user's email before executing any action.
+                          
+                          IF a transaction/interest is confirmed:
+                          Reply ONLY with RAW JSON: { 
+                              "action": "execute_workflow", 
+                              "email": "user_email", 
+                              "db_target": "TARGET_TABLE_NAME", 
+                              "db_payload": { "field1": "val", "field2": "val" },
+                              "summary": "HTML_CONTENT" 
+                          }.
+                          
+                          Otherwise, reply with plain text.`
+                      });
 
-                        const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-                        
-                        try {
-                            const aiRes = await api.post('/builder/openai', {
-                                website_id: properties.website_id,
-                                member_id: currentUserId,
-                                prompt: historyBlock, 
-                                system_prompt: `You are an intelligent business agent. Context: ${businessContext}. 
-                                ALWAYS try to get the user's email early.
-                                
-                                IF the user is ready for a transaction or recording interest:
-                                Reply ONLY with RAW JSON: { 
-                                    "action": "execute_workflow", 
-                                    "email": "user_email", 
-                                    "db_target": "TARGET_TABLE_NAME", 
-                                    "db_payload": { "field1": "val", "field2": "val" },
-                                    "summary": "HTML_FOR_EMAIL" 
-                                }.
-                                
-                                For normal conversation, use plain text.`
-                            });
+                      const text = aiRes.data.text;
 
-                            const text = aiRes.data.text;
+                      // 3. UNIVERSAL HANDSHAKE (The "Dumb Pipe" execution)
+                      try {
+                          const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                          const cmd = JSON.parse(cleanJson);
 
-                            // 3. UNIVERSAL HANDSHAKE
-                            try {
-                                const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                                const cmd = JSON.parse(cleanJson);
+                          if (cmd.action === 'execute_workflow') {
+                              renderMessage("System", "Processing...", "ai-bubble");
 
-                                if (cmd.action === 'execute_workflow') {
-                                    renderMessage("System", "Processing request...", "ai-bubble");
+                              // DYNAMIC DB INSERT
+                              await api.post(`/custom-data/rows/${cmd.db_target}`, { data: cmd.db_payload });
 
-                                    // ACTION A: DYNAMIC DB INSERT
-                                    // Uses the table name and data structure provided by the AI
-                                    await api.post(`/custom-data/rows/${cmd.db_target}`, { data: cmd.db_payload });
+                              // DYNAMIC EMAIL TRIGGER
+                              if (cmd.summary) {
+                                  await api.post('/builder/send-email', {
+                                      website_id: properties.website_id,
+                                      to_email: cmd.email,
+                                      subject: properties.emailSubject || "Update from Agent",
+                                      content: (properties.emailBody || "") + "<br/>" + cmd.summary
+                                  });
+                              }
 
-                                    // ACTION B: EMAIL TRIGGER
-                                    if (cmd.summary) {
-                                        await api.post('/builder/send-email', {
-                                            website_id: properties.website_id,
-                                            to_email: cmd.email,
-                                            subject: properties.emailSubject || "Update from Agent",
-                                            content: (properties.emailBody || "") + "<br/>" + cmd.summary
-                                        });
-                                    }
+                              renderMessage("System", "✅ Action completed and email sent.", "ai-bubble");
+                              chatHistory.push({ role: "assistant", content: "Workflow executed." });
+                              return; 
+                          }
+                      } catch (jsonErr) { /* Normal chat */ }
 
-                                    renderMessage("System", "✅ Process complete and email sent.", "ai-bubble");
-                                    chatHistory.push({ role: "assistant", content: "Workflow executed." });
-                                    return; 
-                                }
-                            } catch (jsonErr) { /* Normal chat */ }
+                      renderMessage("AI", text, "ai-bubble-class");
+                      chatHistory.push({ role: "assistant", content: text });
 
-                            renderMessage("AI", text, "ai-bubble-class");
-                            chatHistory.push({ role: "assistant", content: text });
-
-                        } catch (err) {
-                            console.error(err);
-                            renderMessage("System", "Connection lost.");
-                        } finally {
-                            btn.disabled = false; btn.innerText = originalBtnText;
-                        }
-                    };
+                  } catch (err) {
+                      console.error(err);
+                      renderMessage("System", "Connection lost.");
+                  } finally {
+                      btn.disabled = false; btn.innerText = originalBtnText;
+                  }
+              };
               ```
          - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
