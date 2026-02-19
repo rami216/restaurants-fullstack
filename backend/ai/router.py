@@ -12198,173 +12198,172 @@ Is this a file upload?
                   };
               }
               ```
-        ### 🤖 CHATBOT & AGENT PROTOCOL (Context, Memory & Actions)
+       ### 🤖 CHATBOT & AGENT PROTOCOL (Context, Memory & Actions)
 
-                - **TRIGGER:** If the prompt mentions a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
+            - **TRIGGER:** If the prompt mentions a "Chatbot", "Assistant", "Support Agent", "Negotiator", or "Order Taker".
 
-                - **PROFESSIONAL UI STANDARDS (MANDATORY):**
-                    - **Layout**: Render a chat container with a fixed height (e.g., `500px`), `overflow-y-auto`, `display: flex`, and `flex-direction: column`.
-                    - **Input Zone (CRITICAL)**: Use a `<form>` at the bottom with: `display: flex`, `width: 100%`, `border-top: 1px solid #ddd`, and `flex-wrap: nowrap`.
-                    - **Bubbles**: User messages right-aligned (`bg-blue-100`), AI messages left-aligned (`bg-gray-100`).
+            - **PROFESSIONAL UI STANDARDS (MANDATORY):**
+                - **Layout**: Render a chat container with a fixed height (e.g., `500px`), `overflow-y-auto`, `display: flex`, and `flex-direction: column`.
+                - **Input Zone (CRITICAL)**: Use a `<form>` at the bottom with: `display: flex`, `width: 100%`, `border-top: 1px solid #ddd`, and `flex-wrap: nowrap`.
+                - **Bubbles**: User messages right-aligned (`bg-blue-100`), AI messages left-aligned (`bg-gray-100`).
 
-                - **DECISION TREE - WHEN TO ADD WORKFLOW EXECUTION:**
-                    - **READ ONLY (Info/Support Bot)**
-                        - **TRIGGER KEYWORDS**: "answer questions", "help users", "provide information", "support bot"
-                        - **ACTION**: Load data as context, respond conversationally, **DO NOT** include workflow execution
-                    
-                    - **ACTION-BASED (Lead Capture/Booking/Registration)**
-                        - **TRIGGER KEYWORDS**: "save", "book", "register", "capture leads", "record interest", "send email", "create booking"
-                        - **ACTION**: Load data as context, respond conversationally, **INCLUDE** workflow execution
+            - **DECISION TREE - WHEN TO ADD WORKFLOW EXECUTION:**
+                - **READ ONLY (Info/Support Bot)**
+                    - **TRIGGER KEYWORDS**: "answer questions", "help users", "provide information", "support bot"
+                    - **ACTION**: Load data as context, respond conversationally, **DO NOT** include workflow execution
+                
+                - **ACTION-BASED (Lead Capture/Booking/Registration)**
+                    - **TRIGGER KEYWORDS**: "save", "book", "register", "capture leads", "record interest", "send email", "create booking"
+                    - **ACTION**: Load data as context, respond conversationally, **INCLUDE** workflow execution
 
-                - **ANTI-HARDCODING ULTIMATUM (FORBIDDEN LOGIC):**
-                    - **DUMB PIPE ONLY**: You are STRICTLY FORBIDDEN from writing logic (if/else, filters, search) in JS. 
-                    - **REQUIREMENT**: The JS must ONLY pass input to `api.post('/builder/openai')` and execute the returned JSON.
+            - **ANTI-HARDCODING ULTIMATUM (FORBIDDEN LOGIC):**
+                - **DUMB PIPE ONLY**: You are STRICTLY FORBIDDEN from writing logic (if/else, filters, search) in JS. 
+                - **REQUIREMENT**: The JS must ONLY pass input to `api.post('/builder/openai')` and execute the returned JSON.
 
-                - **AGENTIC ACTION LAYER (The "Absolute Handshake"):**
-                    - **MULTI-ACTION STRATEGY**: If the AI needs to save data AND email, it MUST use a single JSON object.
-                    - **RULE 1 (The System Prompt)**: Define the JSON schema inside the JS `system_prompt` with STRICT execution criteria.
-                    - **RULE 2 (Sequential Execution)**: Use `await` for the DB post before the email post.
-                    - **RULE 3 (Confirmation Guard)**: The AI must see explicit user confirmation before returning the action JSON.
+            - **AGENTIC ACTION LAYER (The "Absolute Handshake"):**
+                - **MULTI-ACTION STRATEGY**: If the AI needs to save data AND email, it MUST use a single JSON object.
+                - **RULE 1 (The System Prompt)**: Define the JSON schema inside the JS `system_prompt` with STRICT execution criteria.
+                - **RULE 2 (Sequential Execution)**: Use `await` for the DB post before the email post.
+                - **RULE 3 (Confirmation Guard)**: The AI must see explicit user confirmation before returning the action JSON.
 
-                - **SCRIPT PATTERN (The "Perfect Agent"):**
-                ```javascript
-                let chatHistory = [];
-                let businessContext = "Loading data...";
-                const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
+            - **SCRIPT PATTERN (The "Perfect Agent"):**
+            ```javascript
+            let chatHistory = [];
+            let businessContext = "Loading data...";
+            const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
 
-                // 1. DYNAMIC CONTEXT LOADING
-                const init = async () => {
-                    try {
-                        const res = await api.get(`/custom-data/rows/${properties.schema_id}?limit=100`); 
-                        if(res.data.rows.length) {
-                            businessContext = `Knowledge Base: ${JSON.stringify(res.data.rows.map(r => r.data))}`;
-                        }
-                    } catch(e) { console.error("Context load failed", e); }
-                };
-                init();
-
-                // Helper to render messages
-                const renderMessage = (role, text, cssClass) => {
-                    const chatDisplay = container.querySelector('.chat-display');
-                    const bubble = document.createElement('div');
-                    bubble.className = `chat-bubble ${cssClass}`;
-                    bubble.innerHTML = `<strong>${role}:</strong> ${text}`;
-                    chatDisplay.appendChild(bubble);
-                    chatDisplay.scrollTop = chatDisplay.scrollHeight;
-                };
-
-                // 2. Chat Handler (The Brain Connection)
-                const form = container.querySelector('form');
-                const input = form.querySelector('input[type="text"]');
-
-                form.onsubmit = async (e) => {
-                    e.preventDefault();
-                    const userText = input.value.trim();
-                    if(!userText) return;
-
-                    // UI Feedback
-                    const btn = form.querySelector('button[type="submit"]');
-                    const originalText = btn.innerText;
-                    btn.disabled = true;
-                    btn.innerText = "...";
-                    input.value = ""; 
-
-                    renderMessage("You", userText, "user-bubble"); 
-                    chatHistory.push({ role: "user", content: userText });
-
-                    const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
-
-                    try {
-                        // THE CRITICAL BRAIN CALL
-                        const aiRes = await api.post('/builder/openai', {
-                            website_id: properties.website_id,
-                            member_id: currentUserId,
-                            prompt: historyBlock, 
-                            system_prompt: `You are an intelligent ${properties.agentRole || 'assistant'}. 
-
-                KNOWLEDGE BASE:
-                ${businessContext}
-
-                YOUR MISSION:
-                1. Help the user find what they need by asking clarifying questions
-                2. Present relevant options from the knowledge base
-                3. Guide them through the process naturally
-                4. ONLY save data or send emails when the user EXPLICITLY confirms they want to proceed
-
-                CRITICAL RULES:
-                - ALWAYS get the user's email BEFORE offering final options
-                - Present options clearly and ask "Would you like to proceed with this one?"
-                - DO NOT execute actions until you see confirmation phrases like: "yes", "proceed", "book it", "I want this", "save it"
-                - If user just provides info (email, preferences), acknowledge it and continue the conversation
-
-                EXECUTION PROTOCOL:
-                When user explicitly confirms, reply ONLY with this EXACT JSON format:
-                {
-                    "action": "execute_workflow",
-                    "email": "actual_user_email_from_conversation",
-                    "db_target": "${properties.targetSchemaId || properties.interestSchemaId || properties.schema_id}",
-                    "db_payload": { 
-                        ${properties.workflowPayloadExample || '"client_email": "user@example.com", "selected_item": "item_name"'}
-                    },
-                    "summary": "<div style='font-family: sans-serif; padding: 20px;'><h2>Selection Details</h2><p>Include the actual details here from the conversation</p></div>"
-                }
-
-                CRITICAL: The "summary" field MUST contain actual HTML with the real details of what was selected.
-
-                Otherwise, reply with normal conversational text.`
-                        });
-
-                        const text = aiRes.data.text;
-
-                        // 3. THE HANDSHAKE EXECUTION
-                        try {
-                            const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
-                            const cmd = JSON.parse(cleanJson);
-
-                            if (cmd.action === 'execute_workflow') {
-                                renderMessage("System", "💾 Saving your information...", "system-bubble");
-                                
-                                // STEP A: Save to Database
-                                await api.post(`/custom-data/rows/${cmd.db_target}`, { 
-                                    data: cmd.db_payload,
-                                    sitemember_id: currentUserId 
-                                });
-                                
-                                // STEP B: Send Email (if configured)
-                                if (properties.emailSubject || properties.emailBody) {
-                                    await api.post('/builder/send-email', {
-                                        website_id: properties.website_id,
-                                        to_email: cmd.email,
-                                        subject: properties.emailSubject || "Thank you for your interest",
-                                        content: (properties.emailBody || "") + "<br/>" + cmd.summary
-                                    });
-                                    renderMessage("AI", "✅ All set! I've saved your information and sent you an email with the details.", "ai-bubble");
-                                } else {
-                                    renderMessage("AI", "✅ All set! I've saved your information.", "ai-bubble");
-                                }
-                                
-                                chatHistory.push({ role: "assistant", content: "Workflow completed successfully." });
-                                return; 
-                            }
-                        } catch (jsonErr) { 
-                            // Not JSON - normal conversation
-                        }
-
-                        // Normal conversational response
-                        renderMessage("AI", text, "ai-bubble");
-                        chatHistory.push({ role: "assistant", content: text });
-
-                    } catch (err) {
-                        console.error("Chat error:", err);
-                        renderMessage("System", "Sorry, I encountered an error. Please try again.", "error-bubble");
-                    } finally {
-                        btn.disabled = false;
-                        btn.innerText = originalText;
+            // 1. DYNAMIC CONTEXT LOADING (FIXED TO INCLUDE ROW IDs)
+            const init = async () => {
+                try {
+                    const res = await api.get(`/custom-data/rows/${properties.schema_id}?limit=100`); 
+                    if(res.data.rows.length) {
+                        // WE MUST PASS THE row_id TO THE AI SO IT CAN USE IT FOR RELATIONS
+                        businessContext = `Knowledge Base: ${JSON.stringify(res.data.rows.map(r => ({ db_id: r.row_id, ...r.data })))}`;
                     }
-                };
-                ```
+                } catch(e) { console.error("Context load failed", e); }
+            };
+            init();
 
-                ---
+            // Helper to render messages
+            const renderMessage = (role, text, cssClass) => {
+                const chatDisplay = container.querySelector('.chat-display');
+                const bubble = document.createElement('div');
+                bubble.className = `chat-bubble ${cssClass}`;
+                bubble.innerHTML = `<strong>${role}:</strong> ${text}`;
+                chatDisplay.appendChild(bubble);
+                chatDisplay.scrollTop = chatDisplay.scrollHeight;
+            };
+
+            // 2. Chat Handler (The Brain Connection)
+            const form = container.querySelector('form');
+            const input = form.querySelector('input[type="text"]');
+
+            form.onsubmit = async (e) => {
+                e.preventDefault();
+                const userText = input.value.trim();
+                if(!userText) return;
+
+                // UI Feedback
+                const btn = form.querySelector('button[type="submit"]');
+                const originalText = btn.innerText;
+                btn.disabled = true;
+                btn.innerText = "...";
+                input.value = ""; 
+
+                renderMessage("You", userText, "user-bubble"); 
+                chatHistory.push({ role: "user", content: userText });
+
+                const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+
+                try {
+                    // THE CRITICAL BRAIN CALL
+                    const aiRes = await api.post('/builder/openai', {
+                        website_id: properties.website_id,
+                        member_id: currentUserId,
+                        prompt: historyBlock, 
+                        system_prompt: `You are an intelligent ${properties.agentRole || 'assistant'}. 
+
+            KNOWLEDGE BASE:
+            ${businessContext}
+
+            YOUR MISSION:
+            1. Help the user find what they need.
+            2. ONLY save data or send emails when the user EXPLICITLY confirms they want to proceed (e.g., "yes", "I want this").
+            3. ALWAYS get the user's email BEFORE offering final options.
+
+            CRITICAL RULES:
+            - Present options clearly and ask "Would you like to proceed with this one?"
+            - DO NOT execute actions until you see confirmation phrases like: "yes", "proceed", "book it", "I want this", "save it"
+            - If user just provides info (email, preferences), acknowledge it and continue the conversation
+
+            EXECUTION PROTOCOL:
+            When user explicitly confirms, reply ONLY with this EXACT JSON format:
+            {
+                "action": "execute_workflow",
+                "email": "actual_user_email_from_conversation",
+                "db_target": "${properties.targetSchemaId || properties.interestSchemaId || properties.schema_id}",
+                "db_payload": { 
+                    ${properties.workflowPayloadExample || '"client_email": "user@example.com", "selected_item": "USE_THE_db_id_HERE"'}
+                },
+                "summary": "<div style='font-family: sans-serif; padding: 20px;'><h2>Selection Details</h2><p>Include the actual details here from the conversation</p></div>"
+            }
+
+            CRITICAL JSON RULES (MANDATORY):
+            - If mapping to a database RELATION, you MUST use the "db_id" from the Knowledge Base, NEVER the text name.
+            - If a field requires a NUMBER (like interest_rate or price), output an ACTUAL INTEGER (e.g., 85), NOT a string.
+            - The "summary" field MUST contain actual HTML with the real details of what was selected.
+
+            Otherwise, reply with normal conversational text.`
+                    });
+
+                    const text = aiRes.data.text;
+
+                    // 3. THE HANDSHAKE EXECUTION
+                    try {
+                        const cleanJson = text.replace(/```json/g, '').replace(/```/g, '').trim();
+                        const cmd = JSON.parse(cleanJson);
+
+                        if (cmd.action === 'execute_workflow') {
+                            renderMessage("System", "💾 Saving your information...", "system-bubble");
+                            
+                            // STEP A: Save to Database
+                            await api.post(`/custom-data/rows/${cmd.db_target}`, { 
+                                data: cmd.db_payload,
+                                sitemember_id: currentUserId 
+                            });
+                            
+                            // STEP B: Send Email (if configured)
+                            if (properties.emailSubject || properties.emailBody) {
+                                await api.post('/builder/send-email', {
+                                    website_id: properties.website_id,
+                                    to_email: cmd.email,
+                                    subject: properties.emailSubject || "Thank you for your interest",
+                                    content: (properties.emailBody || "") + "<br/>" + cmd.summary
+                                });
+                                renderMessage("AI", "✅ All set! I've saved your information and sent you an email with the details.", "ai-bubble");
+                            } else {
+                                renderMessage("AI", "✅ All set! I've saved your information.", "ai-bubble");
+                            }
+                            
+                            chatHistory.push({ role: "assistant", content: "Workflow completed successfully." });
+                            return; 
+                        }
+                    } catch (jsonErr) { 
+                        // Not JSON - normal conversation
+                    }
+
+                    // Normal conversational response
+                    renderMessage("AI", text, "ai-bubble");
+                    chatHistory.push({ role: "assistant", content: text });
+
+                } catch (err) {
+                    console.error("Chat error:", err);
+                    renderMessage("System", "Sorry, I encountered an error. Please try again.", "error-bubble");
+                } finally {
+                    btn.disabled = false;
+                    btn.innerText = originalText;
+                }
+            };
 
          - **PDF UPLOAD & AI PARSING PROTOCOL:**
             - **TRIGGER:** If the prompt EXPLICITLY asks to "use AI to read a PDF", "analyze a document", "extract text from file", or "score an uploaded CV".
