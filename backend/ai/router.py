@@ -13976,20 +13976,22 @@ Is this a file upload?
             - **TRIGGER:** If the user prompt asks to "send a webhook", "connect to Zapier/Make", "send to Slack", or "ping an external URL".
             - **EDITABLE PROPERTY (CRITICAL):** You MUST create an editable property called `webhookUrl` with a blank default `""`. Label it "Zapier/Webhook URL". This allows the user to paste their unique hook URL directly into the UI.
             - **SCRIPT PATTERN (Fire & Forget):**
-            Whenever the primary action completes (like a form submit or a database save), you MUST grab the `data` payload and send it to the webhook URL. 
+            Whenever the primary action completes, you MUST grab the `data` payload and send it to the webhook URL. 
+            CRITICAL CORS RULE: Zapier blocks `application/json` from browsers. You MUST convert the data to `URLSearchParams` and send it as `application/x-www-form-urlencoded` to bypass the preflight check.
             ```javascript
             // Put this immediately AFTER your database save (or inside your form submit if no DB is used)
             if (properties.webhookUrl && properties.webhookUrl.trim() !== '') {
                 try {
-                    // Fire and forget POST request formatted perfectly for Zapier/Make auto-parsing
+                    // The Jedi Mind Trick: Convert JSON to URL-Encoded to bypass CORS preflight
+                    const urlEncodedData = new URLSearchParams(data).toString();
+                    
                     fetch(properties.webhookUrl, {
                         method: 'POST',
                         headers: {
-                            'Accept': 'application/json',
-                            'Content-Type': 'application/json'
+                            'Content-Type': 'application/x-www-form-urlencoded'
                         },
-                        body: JSON.stringify(data)
-                    }).catch(e => console.log('Webhook silent fail (normal for some ad-blockers)'));
+                        body: urlEncodedData
+                    }).catch(e => console.log('Webhook sent silently'));
                 } catch (webhookErr) {
                     console.log('Webhook execution error:', webhookErr);
                 }
