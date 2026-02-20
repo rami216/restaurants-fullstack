@@ -179,10 +179,35 @@ async def webhook(
     # 1. Parse Website ID safely
     try:
         raw = json.loads(payload)
-        md = raw.get("data", {}).get("object", {}).get("metadata", {}) or {}
+        event_type = raw.get("type")
+        obj = raw.get("data", {}).get("object", {})
+        md = obj.get("metadata") or {}
+        
+        # A. Try getting it from metadata first (Month 1 - Checkout Session)
         website_id_str = md.get("website_id")
-    except Exception:
+        
+        # B. If missing, it's likely Month 2+ (Invoice or Subscription Event)
+        if not website_id_str:
+            sub_id = None
+            if event_type == "invoice.payment_succeeded":
+                sub_id = obj.get("subscription")
+            elif event_type in ["customer.subscription.deleted", "customer.subscription.canceled"]:
+                sub_id = obj.get("id") # The object itself is the subscription here
+            
+            if sub_id:
+                # Ask our database which website this subscription belongs to!
+                existing_sub = await db.scalar(
+                    select(SitePurchase).where(SitePurchase.payment_intent_id == sub_id)
+                )
+                if existing_sub:
+                    website_id_str = str(existing_sub.website_id)
+
+    except Exception as e:
+        print(f"❌ Payload parsing failed: {e}")
         return {"status": "ignored (payload parsing failed)"}
+
+    if not website_id_str:
+        return {"status": "ignored (no website_id in metadata or db)"}
 
     if not website_id_str:
         return {"status": "ignored (no website_id in metadata)"}
