@@ -22,6 +22,7 @@ type ProductRow = {
   currency: string;
   amount_cents: number;
   active: boolean;
+  is_ai_product: boolean; // <--- ADD THIS
 };
 
 export default function BuilderPaymentsPage() {
@@ -50,7 +51,7 @@ export default function BuilderPaymentsPage() {
   const [pCurrency, setPCurrency] = React.useState("usd");
   const [pAmount, setPAmount] = React.useState<string | number>("");
   const [pActive, setPActive] = React.useState(true);
-
+  const [pIsAiProduct, setPIsAiProduct] = React.useState(false); // <--- ADD THIS
   // Build webhook URL from public API base. This MUST be your API host (not a custom domain).
   const API_BASE =
     process.env.NEXT_PUBLIC_API_BASE_URL ||
@@ -210,6 +211,7 @@ export default function BuilderPaymentsPage() {
           currency: pCurrency.trim().toLowerCase(),
           amount_cents,
           active: pActive,
+          is_ai_product: pIsAiProduct, // <--- ADD THIS
         },
       );
       await loadProducts();
@@ -221,6 +223,7 @@ export default function BuilderPaymentsPage() {
       setPAmount("");
       setPPriceId("");
       setPActive(true);
+      setPIsAiProduct(false); // <--- ADD THIS
     } catch (err: any) {
       setProdError(
         err?.response?.data?.detail ||
@@ -406,7 +409,7 @@ export default function BuilderPaymentsPage() {
                   required
                 />
               </div>
-              <div className="flex items-end">
+              <div className="flex flex-col justify-end gap-2 pb-1">
                 <label className="flex items-center gap-2 text-sm">
                   <input
                     type="checkbox"
@@ -414,6 +417,14 @@ export default function BuilderPaymentsPage() {
                     onChange={(e) => setPActive(e.target.checked)}
                   />
                   Active
+                </label>
+                <label className="flex items-center gap-2 text-sm text-blue-700 font-medium">
+                  <input
+                    type="checkbox"
+                    checked={pIsAiProduct}
+                    onChange={(e) => setPIsAiProduct(e.target.checked)}
+                  />
+                  Is AI Product
                 </label>
               </div>
             </div>
@@ -444,7 +455,14 @@ export default function BuilderPaymentsPage() {
                     className="text-sm flex items-center justify-between border rounded px-3 py-2"
                   >
                     <div>
-                      <div className="font-medium">{p.name}</div>
+                      <div className="font-medium flex items-center gap-2">
+                        {p.name}
+                        {p.is_ai_product && (
+                          <span className="bg-blue-100 text-blue-800 text-[10px] uppercase font-bold px-1.5 py-0.5 rounded">
+                            AI
+                          </span>
+                        )}
+                      </div>
                       <div className="opacity-70">
                         {p.currency.toUpperCase()}{" "}
                         {(p.amount_cents / 100).toFixed(2)} ·{" "}
