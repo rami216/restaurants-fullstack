@@ -338,16 +338,34 @@ async def search_data_rows(
                 base_query = base_query.where(json_text_value != "")
                 base_query = base_query.where(json_text_value.is_not(None))
 
+            # Helper to handle both Floats (prices) and Strings (dates) safely
+            def apply_range_filter(query, operator_symbol, value):
+                try:
+                    # If it's a number, cast it so math works perfectly
+                    num_val = float(value)
+                    if operator_symbol == ">": return query.where(json_text_value.cast(Float) > num_val)
+                    if operator_symbol == "<": return query.where(json_text_value.cast(Float) < num_val)
+                    if operator_symbol == ">=": return query.where(json_text_value.cast(Float) >= num_val)
+                    if operator_symbol == "<=": return query.where(json_text_value.cast(Float) <= num_val)
+                except ValueError:
+                    # If it fails float conversion (like "2026-02-20"), use raw string comparison!
+                    if operator_symbol == ">": return query.where(json_text_value > str(value))
+                    if operator_symbol == "<": return query.where(json_text_value < str(value))
+                    if operator_symbol == ">=": return query.where(json_text_value >= str(value))
+                    if operator_symbol == "<=": return query.where(json_text_value <= str(value))
+                return query
+
             if ">" in condition:
-                base_query = base_query.where(json_text_value.cast(Float) > float(condition[">"]))
+                base_query = apply_range_filter(base_query, ">", condition[">"])
             if "<" in condition:
-                base_query = base_query.where(json_text_value.cast(Float) < float(condition["<"]))
+                base_query = apply_range_filter(base_query, "<", condition["<"])
             if ">=" in condition:
-                base_query = base_query.where(json_text_value.cast(Float) >= float(condition[">="]))
+                base_query = apply_range_filter(base_query, ">=", condition[">="])
             if "<=" in condition:
-                base_query = base_query.where(json_text_value.cast(Float) <= float(condition["<="]))
+                base_query = apply_range_filter(base_query, "<=", condition["<="])
+                
             if "ilike" in condition: 
-                # ✅ THE ILIKE FIX: Use .op("ilike") to force the search without SQLAlchemy type crashes
+                # ✅ THE ILIKE FIX: Use .op("ilike")
                 base_query = base_query.where(json_text_value.op("ilike")(f"%{condition['ilike']}%"))
         else:
             # ✅ BOOLEAN SAFETY: Convert Python True/False to JSON "true"/"false"
