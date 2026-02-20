@@ -13927,11 +13927,11 @@ Is this a file upload?
                         if (uiButton) uiButton.textContent = '3/3 AI Analyzing...';
                         const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
                         
-                        // 🧠 CRITICAL FIX: Dynamically tell OpenAI exactly what database columns to fill!
+                        // 🧠 DYNAMIC COLUMNS: Look up exact schema fields
                         const expectedKeys = properties.schema_fields ? properties.schema_fields.map(f => f.id).join(', ') : 'vendor, amount, date, category';
                         
                         const aiRes = await api.post('/builder/openai', {
-                            website_id: properties.website_id,
+                            website_id: properties.website_id, // 🛑 CRITICAL: NEVER USE schema_id HERE! MUST BE website_id!
                             member_id: memberId,
                             prompt: `Analyze this document text: ${rawText}`,
                             system_prompt: `You are an expert data extractor. Extract these exact JSON keys from the document: ${expectedKeys}.\nCRITICAL RULES:\n1. You MUST reply ONLY with RAW JSON. The keys MUST match exactly.\n2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT.\n3. Do not include markdown formatting or explanations.`
