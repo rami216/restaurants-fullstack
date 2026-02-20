@@ -42,6 +42,7 @@ class SiteProduct(Base):
     amount_cents = Column(Numeric(10, 0), nullable=False)
 
     active = Column(Boolean, nullable=False, default=True)
+    is_ai_product = Column(Boolean, nullable=False, server_default="false")
 
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now())

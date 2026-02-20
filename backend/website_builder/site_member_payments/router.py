@@ -19,6 +19,8 @@ import smtplib # <--- Add this
 from email.mime.text import MIMEText # <--- Add this
 from email.mime.multipart import MIMEMultipart # <--- Add this
 from website_builder.models import WebsiteEmailConfig
+from ..site_commerce_models import SiteMemberUsage
+
 router = APIRouter(prefix="/users-stripe-account", tags=["SiteMemberPayments"])
 
 # =========================
@@ -395,8 +397,9 @@ async def webhook(
                 print(f"❌ Database Insert Error (Cart): {e}")
                 traceback.print_exc()
                 return {"status": "error", "message": str(e)}
-    # ✅ CASE 3: SUBSCRIPTION CREATED / RENEWED (Invoice Paid)
    
+   
+    # ✅ CASE 3: SUBSCRIPTION CREATED / RENEWED (Invoice Paid)
     elif event["type"] == "invoice.payment_succeeded":
         invoice = event["data"]["object"]
         
@@ -417,7 +420,7 @@ async def webhook(
                     amount_paid = invoice.get("amount_paid", 0) / 100.0
                     currency = invoice.get("currency", "eur")
 
-                    # Logic Fix: Check if this user already has an entry for THIS product
+                    # --- 1. UPDATE OR CREATE THE PURCHASE RECORD ---
                     existing = await db.scalar(
                         select(SitePurchase).where(
                             SitePurchase.website_id == UUID(website_id),
@@ -427,7 +430,6 @@ async def webhook(
                     )
                     
                     if not existing:
-                        # CREATE the purchase record so the visibility logic works!
                         db.add(SitePurchase(
                             website_id=UUID(website_id),
                             member_id=UUID(member_id),
@@ -441,9 +443,38 @@ async def webhook(
                         existing.status = "active"
                         existing.payment_intent_id = subscription_id
                     
+                    # --- 2. THE GATEKEEPER: CHECK IF IT IS AN AI PRODUCT ---
+                    product = await db.scalar(
+                        select(SiteProduct).where(
+                            SiteProduct.product_id == UUID(product_id),
+                            SiteProduct.website_id == UUID(website_id)
+                        )
+                    )
+
+                    # Only reset the AI spend if this specific product is flagged as an AI product
+                    if product and getattr(product, 'is_ai_product', False):
+                        
+                        # Find the user's specific usage record for this website
+                        usage_record = await db.scalar(
+                            select(SiteMemberUsage).where(
+                                SiteMemberUsage.website_id == UUID(website_id),
+                                SiteMemberUsage.member_id == UUID(member_id)
+                            )
+                        )
+                        
+                        if usage_record:
+                            usage_record.ai_spend_usd = 0.0
+                            print(f"✅ Reset AI spend to $0.00 for member {member_id} on website {website_id}")
+                        else:
+                            print(f"⚠️ Member {member_id} paid for AI, but has no SiteMemberUsage record yet.")
+
+                    # --- 3. SAVE EVERYTHING ---
                     await db.commit()
+                    print(f"✅ Successfully processed subscription renewal for member {member_id}")
+
                 except Exception as e:
                     print(f"❌ Database Insert Error (Subscription): {e}")
+                    traceback.print_exc()
     # ✅ CASE 4: SUBSCRIPTION CANCELLED OR FAILED
     elif event["type"] in ["customer.subscription.deleted", "customer.subscription.canceled"]:
         sub = event["data"]["object"]
@@ -494,6 +525,7 @@ async def list_products_owner(
             currency=r.currency,
             amount_cents=int(r.amount_cents),
             active=r.active,
+            is_ai_product=r.is_ai_product,  # <--- ADD THIS LINE
         )
         for r in rows.scalars().all()
     ]
@@ -505,7 +537,8 @@ class UpsertProductDTO(BaseModel):
     currency: str
     amount_cents: int
     active: bool = True
-
+    is_ai_product: bool = False # <--- 1. Add this to receive the checkbox value
+    
 @router.post("/builder/websites/{website_id}/products")
 async def create_product_owner(
     website_id: str,
@@ -525,6 +558,7 @@ async def create_product_owner(
         currency=body.currency.lower(),
         amount_cents=body.amount_cents,
         active=body.active,
+        is_ai_product=body.is_ai_product # <--- 2. Save it to your database
     )
     db.add(p)
     await db.commit()
@@ -564,6 +598,7 @@ async def update_product_owner(
     row.currency = body.currency.lower()
     row.amount_cents = body.amount_cents
     row.active = body.active
+    row.is_ai_product = body.is_ai_product # <--- ADD THIS LINE
 
     await db.commit()
     return {"ok": True}
