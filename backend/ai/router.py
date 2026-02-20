@@ -14007,7 +14007,7 @@ Is this a file upload?
         - **STRIPE SUBSCRIPTION & CHECKOUT PROTOCOL (MONETIZATION):**
             - **TRIGGER:** If the user prompt asks for a "Pricing Table", "Checkout Button", "Paywall", "Buy Now", "Subscription Card", or "Premium Plan".
             - **EDITABLE PROPERTIES (CRITICAL):** You MUST create these two editable properties:
-                1. `stripePriceId`: Default `""`. Label: "Stripe Price ID".
+                1. `productId`: Default `""`. Label: "Product". (This should trigger the native product dropdown).
                 2. `checkoutAction`: Default `"subscribe"`. Label: "Action (purchase or subscribe)". 
             - **UI DESIGN:** Build a professional pricing card or paywall. The checkout `<button>` MUST have the class `checkout-btn` so the script can find it.
             - **SCRIPT PATTERN (Checkout Redirect):**
@@ -14036,7 +14036,7 @@ Is this a file upload?
                       try {
                           // We pass your price_... string directly into the product_id field your backend expects
                           const res = await api.post(`/users-stripe-account/public/websites/${properties.website_id}/checkout`, {
-                              product_id: properties.stripePriceId, 
+                              product_id: properties.productId, 
                               member_id: currentUserId,
                               action: properties.checkoutAction || "subscribe",
                               success_url: window.location.href.split('?')[0] + "?payment=success",
