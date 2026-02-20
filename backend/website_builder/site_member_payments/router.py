@@ -176,31 +176,43 @@ async def webhook(
 ):
     payload = await request.body()
 
-    # 1. Parse Website ID safely
+    # 1. Parse Website ID safely with EXTREME DEBUGGING
     try:
         raw = json.loads(payload)
         event_type = raw.get("type")
         obj = raw.get("data", {}).get("object", {})
         md = obj.get("metadata") or {}
         
-        # A. Try getting it from metadata first (Month 1 - Checkout Session)
-        website_id_str = md.get("website_id")
+        print(f"\n--- 🚨 WEBHOOK DEBUG START 🚨 ---")
+        print(f"1. Event Type: {event_type}")
         
-        # B. If missing, it's likely Month 2+ (Invoice or Subscription Event)
+        # A. Try getting it from metadata first
+        website_id_str = md.get("website_id")
+        print(f"2. Metadata website_id: {website_id_str}")
+        
+        # B. If missing, do the DB Lookup
         if not website_id_str:
             sub_id = None
             if event_type == "invoice.payment_succeeded":
                 sub_id = obj.get("subscription")
             elif event_type in ["customer.subscription.deleted", "customer.subscription.canceled"]:
-                sub_id = obj.get("id") # The object itself is the subscription here
+                sub_id = obj.get("id")
+            
+            print(f"3. Extracted sub_id from Stripe: {sub_id}")
             
             if sub_id:
-                # Ask our database which website this subscription belongs to!
+                print(f"4. Querying Database for payment_intent_id == {sub_id}...")
                 existing_sub = await db.scalar(
                     select(SitePurchase).where(SitePurchase.payment_intent_id == sub_id)
                 )
+                
                 if existing_sub:
                     website_id_str = str(existing_sub.website_id)
+                    print(f"5. ✅ FOUND IT! Attached to website: {website_id_str}")
+                else:
+                    print(f"5. ❌ DATABASE MISS: Could not find any row in site_purchases with payment_intent_id '{sub_id}'")
+
+        print(f"--- 🚨 WEBHOOK DEBUG END 🚨 ---\n")
 
     except Exception as e:
         print(f"❌ Payload parsing failed: {e}")
@@ -209,10 +221,7 @@ async def webhook(
     if not website_id_str:
         return {"status": "ignored (no website_id in metadata or db)"}
 
-    if not website_id_str:
-        return {"status": "ignored (no website_id in metadata)"}
-
-    # 2. Get Secret
+    # 2. Get Secret (KEEP THE REST OF YOUR CODE EXACTLY AS IT IS BELOW THIS)
     account = await db.scalar(
         select(WebsiteStripeAccount).where(WebsiteStripeAccount.website_id == website_id_str)
     )
