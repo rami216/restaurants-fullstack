@@ -176,7 +176,7 @@ async def webhook(
 ):
     payload = await request.body()
 
-    # 1. Parse Website ID safely with EXTREME DEBUGGING
+    # 1. Parse Website ID safely with THE ID HUNTER
     try:
         raw = json.loads(payload)
         event_type = raw.get("type")
@@ -188,29 +188,36 @@ async def webhook(
         
         # A. Try getting it from metadata first
         website_id_str = md.get("website_id")
-        print(f"2. Metadata website_id: {website_id_str}")
         
-        # B. If missing, do the DB Lookup
+        # B. If missing, hunt for the ID in the database
         if not website_id_str:
-            sub_id = None
+            possible_ids = []
+            
             if event_type == "invoice.payment_succeeded":
-                sub_id = obj.get("subscription")
+                # Hunt everywhere Stripe might hide the ID
+                if obj.get("subscription"): possible_ids.append(obj.get("subscription"))
+                if obj.get("payment_intent"): possible_ids.append(obj.get("payment_intent"))
+                for line in obj.get("lines", {}).get("data", []):
+                    if line.get("subscription"): possible_ids.append(line.get("subscription"))
+                        
             elif event_type in ["customer.subscription.deleted", "customer.subscription.canceled"]:
-                sub_id = obj.get("id")
+                possible_ids.append(obj.get("id"))
             
-            print(f"3. Extracted sub_id from Stripe: {sub_id}")
+            # Clean list and search Database
+            possible_ids = list(set([pid for pid in possible_ids if pid]))
+            print(f"2. Hunting Database for ANY of these IDs: {possible_ids}")
             
-            if sub_id:
-                print(f"4. Querying Database for payment_intent_id == {sub_id}...")
+            for pid in possible_ids:
                 existing_sub = await db.scalar(
-                    select(SitePurchase).where(SitePurchase.payment_intent_id == sub_id)
+                    select(SitePurchase).where(SitePurchase.payment_intent_id == pid)
                 )
-                
                 if existing_sub:
                     website_id_str = str(existing_sub.website_id)
-                    print(f"5. ✅ FOUND IT! Attached to website: {website_id_str}")
-                else:
-                    print(f"5. ❌ DATABASE MISS: Could not find any row in site_purchases with payment_intent_id '{sub_id}'")
+                    print(f"3. ✅ FOUND IT! Matched ID '{pid}' to website: {website_id_str}")
+                    break
+            
+            if not website_id_str:
+                print(f"3. ❌ DATABASE MISS: None of the IDs matched.")
 
         print(f"--- 🚨 WEBHOOK DEBUG END 🚨 ---\n")
 
@@ -221,7 +228,7 @@ async def webhook(
     if not website_id_str:
         return {"status": "ignored (no website_id in metadata or db)"}
 
-    # 2. Get Secret (KEEP THE REST OF YOUR CODE EXACTLY AS IT IS BELOW THIS)
+    # 2. Get Secret
     account = await db.scalar(
         select(WebsiteStripeAccount).where(WebsiteStripeAccount.website_id == website_id_str)
     )
@@ -461,22 +468,31 @@ async def webhook(
     # ✅ CASE 3: SUBSCRIPTION CREATED / RENEWED (Invoice Paid)
     elif event["type"] == "invoice.payment_succeeded":
         invoice = event["data"]["object"]
-        subscription_id = invoice.get("subscription")
         
-        if subscription_id:
+        # 🚨 THE ID HUNTER (Grab the ID from wherever Stripe hid it)
+        active_id = invoice.get("subscription")
+        if not active_id:
+            for line in invoice.get("lines", {}).get("data", []):
+                if line.get("subscription"):
+                    active_id = line.get("subscription")
+                    break
+        if not active_id:
+            active_id = invoice.get("payment_intent")
+            
+        print(f"🔍 CASE 3: Processing Renewal for ID: {active_id}")
+        
+        if active_id:
             try:
-                # 1. NATIVE LOOKUP: Ask our database who this belongs to (Ignore Stripe Metadata!)
+                # 1. NATIVE LOOKUP: Ask our database who this belongs to
                 existing = await db.scalar(
-                    select(SitePurchase).where(SitePurchase.payment_intent_id == subscription_id)
+                    select(SitePurchase).where(SitePurchase.payment_intent_id == active_id)
                 )
                 
                 if existing:
-                    # Grab everything we need securely from our own database!
                     website_id = existing.website_id
                     member_id = existing.member_id
                     product_id = existing.product_id
                     
-                    # Ensure status stays active
                     existing.status = "active"
                     
                     # 2. THE GATEKEEPER: CHECK IF IT IS AN AI PRODUCT
@@ -487,9 +503,7 @@ async def webhook(
                         )
                     )
 
-                    # Only reset the AI spend if this specific product is flagged as an AI product
                     if product and getattr(product, 'is_ai_product', False):
-                        
                         usage_record = await db.scalar(
                             select(SiteMemberUsage).where(
                                 SiteMemberUsage.website_id == website_id,
@@ -499,17 +513,15 @@ async def webhook(
                         
                         if usage_record:
                             usage_record.ai_spend_usd = 0.0
-                            print(f"✅ Reset AI spend to $0.00 for member {member_id} on website {website_id}")
+                            print(f"✅ RENEWAL RESET: AI spend to $0.00 for member {member_id}")
                         else:
-                            print(f"⚠️ Member {member_id} paid for AI, but has no SiteMemberUsage record yet.")
+                            print(f"⚠️ Member {member_id} paid for AI, but has no usage record yet.")
 
                     # 3. SAVE EVERYTHING
                     await db.commit()
                     print(f"✅ Successfully processed subscription renewal for member {member_id}")
                 else:
-                    # This happens gracefully on Month 1 due to the race condition, which is fine 
-                    # because checkout.session.completed handles Month 1!
-                    print(f"⚠️ Invoice paid for {subscription_id}, but no SitePurchase found yet.")
+                    print(f"⚠️ Invoice paid for {active_id}, but no SitePurchase found yet.")
 
             except Exception as e:
                 print(f"❌ Database Error (Invoice Succeeded): {e}")
