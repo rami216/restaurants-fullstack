@@ -14003,6 +14003,62 @@ Is this a file upload?
             - You MUST convert arrays into clean, human-readable text strings BEFORE adding them to the payload. 
             - **Example:** `const listString = rows.map(r => r.data.name + ' - ' + r.data.amount).join('\\n');`
             - Never send raw JSON arrays to the `URLSearchParams` constructor.
+            
+        - **STRIPE SUBSCRIPTION & CHECKOUT PROTOCOL (MONETIZATION):**
+            - **TRIGGER:** If the user prompt asks for a "Pricing Table", "Checkout Button", "Paywall", "Buy Now", "Subscription Card", or "Premium Plan".
+            - **EDITABLE PROPERTIES (CRITICAL):** You MUST create these two editable properties:
+                1. `stripeProductId`: Default `""`. Label: "Zygoflow Product ID".
+                2. `checkoutAction`: Default `"subscribe"`. Label: "Action (purchase or subscribe)". 
+            - **UI DESIGN:** Build a professional pricing card, storefront item, or paywall. The checkout <button>MUST have the classcheckout-btn, be prominent, and clearly state the action (e.g., "Upgrade Now").
+            - **SCRIPT PATTERN (Checkout Redirect):**
+              Whenever the checkout button is clicked, you MUST call the backend to create a Stripe session and redirect the user.
+              ```javascript
+              const checkoutBtns = container.querySelectorAll('.checkout-btn');
+              
+              checkoutBtns.forEach(btn => {
+                  btn.onclick = async (e) => {
+                      e.preventDefault();
+                      
+                      const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
+                      
+                      if (!currentUserId) {
+                          alert('Please log in to purchase or subscribe.');
+                          return;
+                      }
+
+                      if (!properties.stripeProductId || properties.stripeProductId.trim() === '') {
+                          alert('Setup Error: Please connect a Product ID in the editor.');
+                          return;
+                      }
+
+                      const originalText = btn.textContent;
+                      btn.disabled = true;
+                      btn.textContent = 'Redirecting to secure checkout...';
+                      
+                      try {
+                          // Call the exact Zygoflow endpoint for Stripe Checkout
+                          const res = await api.post(`/users-stripe-account/public/websites/${properties.website_id}/checkout`, {
+                              product_id: properties.stripeProductId,
+                              member_id: currentUserId,
+                              action: properties.checkoutAction || "subscribe",
+                              success_url: window.location.href.split('?')[0] + "?payment=success",
+                              cancel_url: window.location.href.split('?')[0] + "?payment=canceled"
+                          });
+                          
+                          if (res.data && res.data.checkout_url) {
+                              window.location.href = res.data.checkout_url; // Redirect to Stripe Hosted Checkout
+                          } else {
+                              throw new Error("No checkout URL returned");
+                          }
+                      } catch (err) {
+                          console.error('Stripe error:', err);
+                          alert('Checkout failed to load. Please try again.');
+                          btn.disabled = false;
+                          btn.textContent = originalText;
+                      }
+                  };
+              });
+              ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
