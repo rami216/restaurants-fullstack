@@ -13973,25 +13973,28 @@ Is this a file upload?
             }
             ```
         - **WEBHOOK & ZAPIER PROTOCOL (EXTERNAL INTEGRATION):**
-                - **TRIGGER:** If the user prompt asks to "send a webhook", "connect to Zapier/Make", "send to Slack", or "ping an external URL".
-                - **EDITABLE PROPERTY (CRITICAL):** You MUST create an editable property called `webhookUrl` with a blank default `""`. Label it "Zapier/Webhook URL". This allows the user to paste their unique hook URL directly into the UI.
-                - **SCRIPT PATTERN (Fire & Forget):**
-                Whenever the primary action completes (like a form submit or a database save), you MUST grab the `data` payload and send it to the webhook URL. Wrap it in a `try/catch` so a failed webhook doesn't crash the user's UI.
-                ```javascript
-                // Put this immediately AFTER your api.post database save!
-                if (properties.webhookUrl && properties.webhookUrl.trim() !== '') {
-                    try {
-                        // Fire and forget POST request to Zapier/Make
-                        fetch(properties.webhookUrl, {
-                            method: 'POST',
-                            headers: { 'Content-Type': 'application/json' },
-                            body: JSON.stringify(data) // Sends the exact same data payload
-                        }).catch(e => console.log('Webhook silent fail:', e));
-                    } catch (webhookErr) {
-                        console.log('Webhook execution error:', webhookErr);
-                    }
+            - **TRIGGER:** If the user prompt asks to "send a webhook", "connect to Zapier/Make", "send to Slack", or "ping an external URL".
+            - **EDITABLE PROPERTY (CRITICAL):** You MUST create an editable property called `webhookUrl` with a blank default `""`. Label it "Zapier/Webhook URL". This allows the user to paste their unique hook URL directly into the UI.
+            - **SCRIPT PATTERN (Fire & Forget):**
+            Whenever the primary action completes (like a form submit or a database save), you MUST grab the `data` payload and send it to the webhook URL. 
+            ```javascript
+            // Put this immediately AFTER your database save (or inside your form submit if no DB is used)
+            if (properties.webhookUrl && properties.webhookUrl.trim() !== '') {
+                try {
+                    // Fire and forget POST request formatted perfectly for Zapier/Make auto-parsing
+                    fetch(properties.webhookUrl, {
+                        method: 'POST',
+                        headers: {
+                            'Accept': 'application/json',
+                            'Content-Type': 'application/json'
+                        },
+                        body: JSON.stringify(data)
+                    }).catch(e => console.log('Webhook silent fail (normal for some ad-blockers)'));
+                } catch (webhookErr) {
+                    console.log('Webhook execution error:', webhookErr);
                 }
-                ```
+            }
+            ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
