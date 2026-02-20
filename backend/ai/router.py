@@ -14004,58 +14004,19 @@ Is this a file upload?
             - **Example:** `const listString = rows.map(r => r.data.name + ' - ' + r.data.amount).join('\\n');`
             - Never send raw JSON arrays to the `URLSearchParams` constructor.
             
-        - **STRIPE SUBSCRIPTION & CHECKOUT PROTOCOL (MONETIZATION):**
-            - **TRIGGER:** If the user prompt asks for a "Pricing Table", "Checkout Button", "Paywall", "Buy Now", "Subscription Card", or "Premium Plan".
-            - **EDITABLE PROPERTIES (CRITICAL):** You MUST create these two editable properties:
-                1. `productId`: Default `""`. Label: "Product". (This should trigger the native product dropdown).
-                2. `checkoutAction`: Default `"subscribe"`. Label: "Action (purchase or subscribe)". 
-            - **UI DESIGN:** Build a professional pricing card or paywall. The checkout `<button>` MUST have the class `checkout-btn` so the script can find it.
-            - **SCRIPT PATTERN (Checkout Redirect):**
+        - **NATIVE PRICING CARDS & CHECKOUT BUTTONS:**
+            - **TRIGGER:** If the user prompt asks for a "Pricing Table", "Subscription Card", "Paywall", or "Checkout".
+            - **UI DESIGN:** Build a beautiful HTML/CSS pricing card. The main call-to-action `<button>` MUST have the class `checkout-btn`.
+            - **NO CUSTOM CHECKOUT APIS:** Do NOT write custom fetch/API requests for Stripe. The user will use Zygoflow's native "Interactivity" menu to connect the product.
+            - **SCRIPT PATTERN (Click Isolation):** Because Zygoflow's native interactivity applies to the entire component wrapper, you MUST include this script to prevent the background text/card from being clickable. It intercepts the click and only allows it to pass if the button was clicked:
               ```javascript
-              const checkoutBtns = container.querySelectorAll('.checkout-btn');
-              
-              checkoutBtns.forEach(btn => {
-                  btn.onclick = async (e) => {
+              container.addEventListener('click', (e) => {
+                  // If they clicked anything other than the button, kill the native wrapper event
+                  if (!e.target.closest('.checkout-btn')) {
+                      e.stopImmediatePropagation();
                       e.preventDefault();
-                      const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
-                      
-                      if (!currentUserId) {
-                          alert('Please log in to purchase.');
-                          return;
-                      }
-
-                      if (!properties.stripePriceId) {
-                          alert('Error: Please enter a Stripe Price ID in the properties sidebar.');
-                          return;
-                      }
-
-                      const originalText = btn.textContent;
-                      btn.disabled = true;
-                      btn.textContent = 'Redirecting...';
-                      
-                      try {
-                          // We pass your price_... string directly into the product_id field your backend expects
-                          const res = await api.post(`/users-stripe-account/public/websites/${properties.website_id}/checkout`, {
-                              product_id: properties.productId, 
-                              member_id: currentUserId,
-                              action: properties.checkoutAction || "subscribe",
-                              success_url: window.location.href.split('?')[0] + "?payment=success",
-                              cancel_url: window.location.href.split('?')[0] + "?payment=canceled"
-                          });
-                          
-                          if (res.data && res.data.checkout_url) {
-                              window.location.href = res.data.checkout_url;
-                          } else {
-                              throw new Error("No URL returned");
-                          }
-                      } catch (err) {
-                          console.error('Stripe error:', err);
-                          alert('Checkout failed. Make sure the Price ID is active in your dashboard.');
-                          btn.disabled = false;
-                          btn.textContent = originalText;
-                      }
-                  };
-              });
+                  }
+              }, true); // The 'true' uses the capture phase to block the click before Zygoflow triggers the native action
               ```
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
