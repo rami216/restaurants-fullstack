@@ -13901,7 +13901,6 @@ Is this a file upload?
             - **SCRIPT PATTERN (Inside fileInput.onchange):**
             ```javascript
             const fileInput = container.querySelector('input[type="file"]');
-            // Grab whatever visible button/label the AI created to update the text visually
             const uiButton = container.querySelector('label') || container.querySelector('button') || container.querySelector('.upload-btn');
             
             if (fileInput) {
@@ -13909,7 +13908,7 @@ Is this a file upload?
                     if (!fileInput.files.length) return;
                     
                     const originalText = uiButton ? uiButton.textContent : 'Upload';
-                    if (uiButton) uiButton.style.pointerEvents = 'none'; // Prevent double clicks
+                    if (uiButton) uiButton.style.pointerEvents = 'none'; 
                     
                     try {
                         // 1. Upload the PDF
@@ -13928,11 +13927,14 @@ Is this a file upload?
                         if (uiButton) uiButton.textContent = '3/3 AI Analyzing...';
                         const memberId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
                         
+                        // 🧠 CRITICAL FIX: Dynamically tell OpenAI exactly what database columns to fill!
+                        const expectedKeys = properties.schema_fields ? properties.schema_fields.map(f => f.id).join(', ') : 'vendor, amount, date, category';
+                        
                         const aiRes = await api.post('/builder/openai', {
                             website_id: properties.website_id,
                             member_id: memberId,
                             prompt: `Analyze this document text: ${rawText}`,
-                            system_prompt: `You are an expert data extractor. Extract the details requested by the user's app from this document.\nCRITICAL RULES:\n1. You MUST reply ONLY with RAW JSON. The JSON keys must match the database columns exactly.\n2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT.\n3. Do not include markdown formatting or explanations.`
+                            system_prompt: `You are an expert data extractor. Extract these exact JSON keys from the document: ${expectedKeys}.\nCRITICAL RULES:\n1. You MUST reply ONLY with RAW JSON. The keys MUST match exactly.\n2. ALL DATES MUST BE CONVERTED TO 'YYYY-MM-DD' FORMAT.\n3. Do not include markdown formatting or explanations.`
                         });
                         
                         // 4. Save to Database
@@ -13942,7 +13944,6 @@ Is this a file upload?
                         
                         extractedData.receipt_url = fileUrl;
                         
-                        // CRITICAL FIX: Use the native schemaId variable so it never says undefined
                         await api.post('/custom-data/rows/' + schemaId, {
                             data: extractedData,
                             sitemember_id: memberId
@@ -13950,7 +13951,7 @@ Is this a file upload?
                         
                         // 5. Success Handling
                         if (uiButton) uiButton.textContent = '✅ Saved!';
-                        fileInput.value = ''; // Safely clear input
+                        fileInput.value = ''; 
                         
                         setTimeout(() => {
                             if (uiButton) {
