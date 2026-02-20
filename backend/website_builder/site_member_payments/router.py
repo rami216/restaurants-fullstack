@@ -243,7 +243,6 @@ async def webhook(
         md = session.get("metadata") or {}
         
         # 2. If empty and it's a subscription, fetch the metadata from the Sub object
-        # This is the missing piece for your subscription logic!
         if not md.get("type") and session.get("subscription"):
             stripe.api_key = account.stripe_secret_key
             subscription_obj = stripe.Subscription.retrieve(session.get("subscription"))
@@ -267,7 +266,7 @@ async def webhook(
                     print("⚠️ Metadata keys still missing after retrieval attempt.")
                     return {"status": "ignored (missing metadata)"}
                 
-                # Check for existing record
+                # --- STEP A: SAVE OR UPDATE THE PURCHASE RECORD ---
                 existing = await db.scalar(
                     select(SitePurchase).where(SitePurchase.payment_intent_id == identifier)
                 )
@@ -277,18 +276,43 @@ async def webhook(
                         website_id=UUID(website_id),
                         member_id=UUID(member_id),
                         product_id=UUID(product_id),
-                        # Mark as 'active' for subs, 'paid' for one-time
                         status="active" if md.get("type") == "site_member_subscription" else "paid",
                         payment_intent_id=identifier,
                         amount_paid=amount_total / 100.0,
                         currency=currency
                     ))
-                    await db.commit()
                     print(f"✅ SUCCESS: Unlocked {product_id} for member {member_id}")
                 else:
-                    # Update status if it exists but wasn't active
                     existing.status = "active" if md.get("type") == "site_member_subscription" else "paid"
-                    await db.commit()
+                
+                # Commit the purchase first to ensure data integrity
+                await db.commit()
+
+                # --- STEP B: MONTH 1 AI RESET GATEKEEPER ---
+                # Only attempt reset if this is a subscription type
+                if md.get("type") == "site_member_subscription":
+                    product = await db.scalar(
+                        select(SiteProduct).where(
+                            SiteProduct.product_id == UUID(product_id),
+                            SiteProduct.website_id == UUID(website_id)
+                        )
+                    )
+
+                    # Only reset if the product is explicitly flagged as an AI Product
+                    if product and getattr(product, 'is_ai_product', False):
+                        usage_record = await db.scalar(
+                            select(SiteMemberUsage).where(
+                                SiteMemberUsage.website_id == UUID(website_id),
+                                SiteMemberUsage.member_id == UUID(member_id)
+                            )
+                        )
+                        
+                        if usage_record:
+                            usage_record.ai_spend_usd = 0.0
+                            await db.commit() # Save the reset
+                            print(f"⚡ MONTH 1 RESET: AI usage cleared for member {member_id}")
+                        else:
+                            print(f"ℹ️ No usage record found for member {member_id} to reset.")
 
             except Exception as e:
                 print(f"❌ Database Error in Webhook: {e}")
