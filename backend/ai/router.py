@@ -13997,6 +13997,12 @@ Is this a file upload?
                 }
             }
             ```
+        - **WEBHOOK DATA FLATTENING RULE (ANTI-[object Object] BUG):**
+            - `URLSearchParams` cannot process nested arrays or objects. If you pass an array to it, it will output `[object Object]`.
+            - Before constructing the webhook payload, you MUST check if any data (like a list of filtered rows, expenses, or cart items) is an array or object.
+            - You MUST convert arrays into clean, human-readable text strings BEFORE adding them to the payload. 
+            - **Example:** `const listString = rows.map(r => r.data.name + ' - ' + r.data.amount).join('\\n');`
+            - Never send raw JSON arrays to the `URLSearchParams` constructor.
         - API OPERATIONS (STRICT):
             - **API CALL SYNTAX (CRITICAL):**
                 - ALWAYS use parentheses with template literals: `api.get(\`/path/\${var}\`)`
