@@ -424,66 +424,43 @@ async def webhook(
                 return {"status": "error", "message": str(e)}
    
    
+    
     # ✅ CASE 3: SUBSCRIPTION CREATED / RENEWED (Invoice Paid)
     elif event["type"] == "invoice.payment_succeeded":
         invoice = event["data"]["object"]
+        subscription_id = invoice.get("subscription")
         
-        if invoice.get("subscription"):
-            subscription_id = invoice.get("subscription")
-            
-            stripe.api_key = account.stripe_secret_key
-            sub = stripe.Subscription.retrieve(subscription_id)
-            md = sub.get("metadata", {})
-            
-            # Use the type we set in the checkout session
-            if md.get("type") == "site_member_subscription":
-                try:
-                    website_id = md.get("website_id")
-                    member_id = md.get("member_id")
-                    product_id = md.get("product_id")
+        if subscription_id:
+            try:
+                # 1. NATIVE LOOKUP: Ask our database who this belongs to (Ignore Stripe Metadata!)
+                existing = await db.scalar(
+                    select(SitePurchase).where(SitePurchase.payment_intent_id == subscription_id)
+                )
+                
+                if existing:
+                    # Grab everything we need securely from our own database!
+                    website_id = existing.website_id
+                    member_id = existing.member_id
+                    product_id = existing.product_id
                     
-                    amount_paid = invoice.get("amount_paid", 0) / 100.0
-                    currency = invoice.get("currency", "eur")
-
-                    # --- 1. UPDATE OR CREATE THE PURCHASE RECORD ---
-                    existing = await db.scalar(
-                        select(SitePurchase).where(
-                            SitePurchase.website_id == UUID(website_id),
-                            SitePurchase.member_id == UUID(member_id),
-                            SitePurchase.product_id == UUID(product_id)
-                        )
-                    )
+                    # Ensure status stays active
+                    existing.status = "active"
                     
-                    if not existing:
-                        db.add(SitePurchase(
-                            website_id=UUID(website_id),
-                            member_id=UUID(member_id),
-                            product_id=UUID(product_id),
-                            status="active",
-                            payment_intent_id=subscription_id, # Link to Sub ID
-                            amount_paid=amount_paid,
-                            currency=currency
-                        ))
-                    else:
-                        existing.status = "active"
-                        existing.payment_intent_id = subscription_id
-                    
-                    # --- 2. THE GATEKEEPER: CHECK IF IT IS AN AI PRODUCT ---
+                    # 2. THE GATEKEEPER: CHECK IF IT IS AN AI PRODUCT
                     product = await db.scalar(
                         select(SiteProduct).where(
-                            SiteProduct.product_id == UUID(product_id),
-                            SiteProduct.website_id == UUID(website_id)
+                            SiteProduct.product_id == product_id,
+                            SiteProduct.website_id == website_id
                         )
                     )
 
                     # Only reset the AI spend if this specific product is flagged as an AI product
                     if product and getattr(product, 'is_ai_product', False):
                         
-                        # Find the user's specific usage record for this website
                         usage_record = await db.scalar(
                             select(SiteMemberUsage).where(
-                                SiteMemberUsage.website_id == UUID(website_id),
-                                SiteMemberUsage.member_id == UUID(member_id)
+                                SiteMemberUsage.website_id == website_id,
+                                SiteMemberUsage.member_id == member_id
                             )
                         )
                         
@@ -493,13 +470,17 @@ async def webhook(
                         else:
                             print(f"⚠️ Member {member_id} paid for AI, but has no SiteMemberUsage record yet.")
 
-                    # --- 3. SAVE EVERYTHING ---
+                    # 3. SAVE EVERYTHING
                     await db.commit()
                     print(f"✅ Successfully processed subscription renewal for member {member_id}")
+                else:
+                    # This happens gracefully on Month 1 due to the race condition, which is fine 
+                    # because checkout.session.completed handles Month 1!
+                    print(f"⚠️ Invoice paid for {subscription_id}, but no SitePurchase found yet.")
 
-                except Exception as e:
-                    print(f"❌ Database Insert Error (Subscription): {e}")
-                    traceback.print_exc()
+            except Exception as e:
+                print(f"❌ Database Error (Invoice Succeeded): {e}")
+                traceback.print_exc()
     # ✅ CASE 4: SUBSCRIPTION CANCELLED OR FAILED
     elif event["type"] in ["customer.subscription.deleted", "customer.subscription.canceled"]:
         sub = event["data"]["object"]
