@@ -14007,38 +14007,36 @@ Is this a file upload?
         - **STRIPE SUBSCRIPTION & CHECKOUT PROTOCOL (MONETIZATION):**
             - **TRIGGER:** If the user prompt asks for a "Pricing Table", "Checkout Button", "Paywall", "Buy Now", "Subscription Card", or "Premium Plan".
             - **EDITABLE PROPERTIES (CRITICAL):** You MUST create these two editable properties:
-                1. `stripeProductId`: Default `""`. Label: "Zygoflow Product ID".
+                1. `stripePriceId`: Default `""`. Label: "Stripe Price ID".
                 2. `checkoutAction`: Default `"subscribe"`. Label: "Action (purchase or subscribe)". 
-            - **UI DESIGN:** Build a professional pricing card, storefront item, or paywall. The checkout <button>MUST have the classcheckout-btn, be prominent, and clearly state the action (e.g., "Upgrade Now").
+            - **UI DESIGN:** Build a professional pricing card or paywall. The checkout `<button>` MUST have the class `checkout-btn` so the script can find it.
             - **SCRIPT PATTERN (Checkout Redirect):**
-              Whenever the checkout button is clicked, you MUST call the backend to create a Stripe session and redirect the user.
               ```javascript
               const checkoutBtns = container.querySelectorAll('.checkout-btn');
               
               checkoutBtns.forEach(btn => {
                   btn.onclick = async (e) => {
                       e.preventDefault();
-                      
                       const currentUserId = typeof window !== 'undefined' ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) : null;
                       
                       if (!currentUserId) {
-                          alert('Please log in to purchase or subscribe.');
+                          alert('Please log in to purchase.');
                           return;
                       }
 
-                      if (!properties.stripeProductId || properties.stripeProductId.trim() === '') {
-                          alert('Setup Error: Please connect a Product ID in the editor.');
+                      if (!properties.stripePriceId) {
+                          alert('Error: Please enter a Stripe Price ID in the properties sidebar.');
                           return;
                       }
 
                       const originalText = btn.textContent;
                       btn.disabled = true;
-                      btn.textContent = 'Redirecting to secure checkout...';
+                      btn.textContent = 'Redirecting...';
                       
                       try {
-                          // Call the exact Zygoflow endpoint for Stripe Checkout
+                          // We pass your price_... string directly into the product_id field your backend expects
                           const res = await api.post(`/users-stripe-account/public/websites/${properties.website_id}/checkout`, {
-                              product_id: properties.stripeProductId,
+                              product_id: properties.stripePriceId, 
                               member_id: currentUserId,
                               action: properties.checkoutAction || "subscribe",
                               success_url: window.location.href.split('?')[0] + "?payment=success",
@@ -14046,13 +14044,13 @@ Is this a file upload?
                           });
                           
                           if (res.data && res.data.checkout_url) {
-                              window.location.href = res.data.checkout_url; // Redirect to Stripe Hosted Checkout
+                              window.location.href = res.data.checkout_url;
                           } else {
-                              throw new Error("No checkout URL returned");
+                              throw new Error("No URL returned");
                           }
                       } catch (err) {
                           console.error('Stripe error:', err);
-                          alert('Checkout failed to load. Please try again.');
+                          alert('Checkout failed. Make sure the Price ID is active in your dashboard.');
                           btn.disabled = false;
                           btn.textContent = originalText;
                       }
