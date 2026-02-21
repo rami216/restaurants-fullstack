@@ -193,9 +193,16 @@ async def stripe_webhook(
                 
         await db.commit()
 
+   
     # ✅ CASE 2: MONTH 2+ (Renewals)
     elif event['type'] == 'invoice.payment_succeeded':
-        stripe_subscription_id = session.get('subscription')
+        
+        # 🚨 STRIPE API FIX: Find the subscription ID where Stripe hides it
+        parent_obj = session.get("parent") or {}
+        sub_details = parent_obj.get("subscription_details") or {}
+        
+        stripe_subscription_id = session.get('subscription') or sub_details.get("subscription")
+        
         if stripe_subscription_id:
             result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
             owner = result.scalars().first()
@@ -206,9 +213,13 @@ async def stripe_webhook(
                 # 🔥 NEW: Reset the website monthly spend to 0 on Renewal
                 web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
                 websites = web_result.scalars().all()
-                for w in websites:
-                    w.monthly_spend_usd = 0.0
-                    print(f"✅ Renewal Reset: Set monthly_spend_usd to 0 for website {w.website_id}")
+                
+                if websites:
+                    for w in websites:
+                        w.monthly_spend_usd = 0.0
+                        print(f"✅ Zygoflow Renewal Reset: Set monthly_spend_usd to 0 for website {w.website_id}")
+                else:
+                    print(f"ℹ️ Zygoflow Renewal paid, but user has no active websites.")
                 
                 await db.commit()
 
