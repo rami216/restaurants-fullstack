@@ -13596,15 +13596,17 @@ Is this a file upload?
                     system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with valid RAW JSON. NO markdown formatting. If the user wants to save multiple items to a database, you MUST use a JSON Array of objects with the exact schema keys. If generating UI text, use a flat JSON object."
                 });
                 
-               let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+                let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                
+                // 🛡️ CRITICAL PARSING UPGRADE: Match BOTH JSON Objects {...} AND JSON Arrays [...]
+                const jsonMatch = cleanText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
                 if (jsonMatch) cleanText = jsonMatch[0];
                 
                 let parsedData;
                 try {
                     parsedData = JSON.parse(cleanText);
                 } catch(e) {
-                    // 🛡️ ULTIMATE FALLBACK: If the AI gets chatty and says "Sure!", we catch the crash and just wrap the raw text safely so the UI still works!
+                    // 🛡️ ULTIMATE FALLBACK: If the AI gets chatty, catch the crash and wrap it safely!
                     parsedData = { "Generated Result": cleanText };
                 }
 
