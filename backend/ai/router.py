@@ -13593,7 +13593,7 @@ Is this a file upload?
                     member_id: memberId,
                     prompt: `Your prompt here...`,
                     // 🛡️ CRITICAL: Hardcode the JSON format rule by appending it!
-                    system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with valid RAW JSON. NO markdown formatting. If the user wants to save multiple items to a database, you MUST use a JSON Array of objects with the exact schema keys. If generating UI text, use a flat JSON object."
+                    system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with valid RAW JSON. NO markdown formatting. If the user wants to save multiple items to a database, you MUST output a STRICTLY FLAT JSON Array of objects. DO NOT nest or group objects (e.g., do not group exercises under days). Every single item MUST be its own independent object in the main array. You MUST use exact lowercase keys with underscores matching the requested database schema. Example: [{\"day\":\"Day 1\", \"exercise_name\":\"Squats\", \"weight\":100}]. If generating UI text, use a flat JSON object."
                 });
                 
                 let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
