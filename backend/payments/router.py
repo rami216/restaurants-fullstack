@@ -163,54 +163,66 @@ async def stripe_webhook(
 
     session = event['data']['object']
     
+    print(f"\n--- 🚨 ZYGOFLOW WEBHOOK DEBUG START 🚨 ---")
+    print(f"1. Event Type: {event['type']}")
+    
     # ✅ CASE 1: MONTH 1 (First time they buy)
     if event['type'] == 'checkout.session.completed':
-        user_id = session.get('metadata', {}).get('user_id')
-        if not user_id: return {"status": "User ID not in metadata"}
+        md = session.get('metadata', {})
+        print(f"2. Metadata received: {md}")
+        
+        user_id = md.get('user_id')
+        payment_type = md.get('type')
+        
+        if not user_id: 
+            print("❌ ERROR: User ID not found in metadata.")
+            return {"status": "User ID not in metadata"}
 
         result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.user_id == int(user_id)))
         owner = result.scalars().first()
-        if not owner: return {"status": "Owner not found"}
+        if not owner: 
+            print(f"❌ ERROR: Could not find RestaurantOwner with user_id={user_id}")
+            return {"status": "Owner not found"}
         
-        payment_type = session.get('metadata', {}).get('type')
+        print(f"3. Found Owner: {owner.id}. Payment Type: {payment_type}")
+        
         if payment_type == 'subscription':
+            stripe_sub_id = session.get('subscription')
+            print(f"4. Updating Owner to ACTIVE. Sub ID: {stripe_sub_id}")
             owner.stripe_customer_id = session.get('customer')
-            owner.stripe_subscription_id = session.get('subscription')
+            owner.stripe_subscription_id = stripe_sub_id
             owner.subscription_status = 'active'
             
-            # 🔥 NEW: Reset the website monthly spend to 0 on Month 1
-            # Note: Adjust 'owner.id' below if your foreign key is named differently (e.g., owner.restaurant_id)
+            print(f"5. Searching for Websites belonging to restaurant_id: {owner.id}")
             web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
             websites = web_result.scalars().all()
-            for w in websites:
-                w.monthly_spend_usd = 0.0
-                print(f"✅ Month 1 Reset: Set monthly_spend_usd to 0 for website {w.website_id}")
-
-        elif payment_type == 'top-up':
-            amount_added = session.get('metadata', {}).get('amount')
-            if amount_added:
-                owner.credit_balance += Decimal(amount_added)
-                
+            
+            if websites:
+                for w in websites:
+                    w.monthly_spend_usd = 0.0
+                    print(f"✅ Month 1 Reset: Set monthly_spend_usd to 0 for website {w.website_id}")
+            else:
+                print(f"ℹ️ User subscribed, but has no websites yet. Skipping spend reset.")
+        
         await db.commit()
+        print("✅ DB Commit Successful for Checkout Session.")
 
-   
     # ✅ CASE 2: MONTH 2+ (Renewals)
     elif event['type'] == 'invoice.payment_succeeded':
-        
-        # 🚨 STRIPE API FIX: Find the subscription ID where Stripe hides it
         parent_obj = session.get("parent") or {}
         sub_details = parent_obj.get("subscription_details") or {}
         
         stripe_subscription_id = session.get('subscription') or sub_details.get("subscription")
+        print(f"2. Extracted Subscription ID: {stripe_subscription_id}")
         
         if stripe_subscription_id:
             result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
             owner = result.scalars().first()
             
             if owner:
-                owner.subscription_status = 'active' # Ensure they stay active
+                print(f"3. Found Owner {owner.id} for this subscription.")
+                owner.subscription_status = 'active' 
                 
-                # 🔥 NEW: Reset the website monthly spend to 0 on Renewal
                 web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
                 websites = web_result.scalars().all()
                 
@@ -222,18 +234,11 @@ async def stripe_webhook(
                     print(f"ℹ️ Zygoflow Renewal paid, but user has no active websites.")
                 
                 await db.commit()
+                print("✅ DB Commit Successful for Invoice Succeeded.")
+            else:
+                print(f"❌ DATABASE MISS: No RestaurantOwner found with stripe_subscription_id={stripe_subscription_id}")
+        else:
+            print("❌ No subscription ID found in this invoice event.")
 
-    # ✅ CASE 3: CANCELLATIONS
-    elif event['type'] in ['customer.subscription.updated', 'customer.subscription.deleted']:
-        subscription = event['data']['object']
-        stripe_subscription_id = subscription.get('id')
-        
-        result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
-        owner = result.scalars().first()
-        
-        if owner:
-            owner.subscription_status = subscription.get('status')
-            await db.commit()
-            print(f"⚠️ Subscription status changed to: {owner.subscription_status}")
-    
+    print(f"--- 🚨 ZYGOFLOW WEBHOOK DEBUG END 🚨 ---\n")
     return {"status": "success"}
