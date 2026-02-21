@@ -13583,83 +13583,112 @@ Is this a file upload?
             - **REQUIREMENT:** You **MUST** add `website_id: "WEBSITE_UUID_FROM_CONTEXT"` to the `properties` block.
             - **EDITABLE CONTENT RULE:** You MUST create an editable property for the `systemPrompt` (e.g., "You are an expert copywriter") so the user can tweak the AI's behavior.
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE & DEFENSIVE RENDERING):**
-                - **TRIGGER:** Whenever the user asks the AI to generate data for multiple database columns or UI sections.
-                - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern. If parsing fails, you MUST throw an error rather than saving a "garbage" row.
+                - **TRIGGER:** Whenever the user asks the AI to generate data for multiple database columns, lists, or UI sections.
+                - **FAIL-SAFE UI RULE:** If the AI fails, do NOT show raw `alert()` errors to the user. Log them to the console and cleanly reset the button.
+                - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern. If parsing fails, throw an error to trigger the catch block rather than saving a "garbage" row.
                 ```javascript
-                const aiRes = await api.post('/builder/openai', {
-                    website_id: properties.website_id,
-                    member_id: memberId,
-                    prompt: `Your prompt here...`,
-                    // 🛡️ THE STRANGLEHOLD: Demand the array and enforce the SILENCE RULE
-                    system_prompt: (properties.systemPrompt || "You are an expert.") + " THE SILENCE RULE: You must NOT say 'Certainly!' or 'Here is your plan.' You MUST reply ONLY with a valid RAW JSON Array. No chat. No markdown. No conversational text allowed. Example: [{\"day\":\"Day 1\", \"exercise_name\":\"Squats\"}]"
-                });
+                // Example Trigger setup
+                const generateBtn = container.querySelector('.generate-ai-btn');
+                if (generateBtn) {
+                    generateBtn.onclick = async (e) => {
+                        e.preventDefault();
+                        generateBtn.disabled = true;
+                        generateBtn.textContent = 'Generating...';
+                        
+                        try {
+                            const memberId = typeof window !== 'undefined' 
+                                ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
+                                : null;
 
-                // 🛡️ THE CLEANER: Strip away any markdown and hunt ONLY for the [ ] array
-                let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const jsonMatch = cleanText.match(/\[[\s\S]*\]/); 
+                            const aiRes = await api.post('/builder/openai', {
+                                website_id: properties.website_id,
+                                member_id: memberId,
+                                prompt: `Your prompt here...`,
+                                // 🛡️ THE STRANGLEHOLD: Demand the array and enforce the SILENCE RULE (Universal)
+                                system_prompt: (properties.systemPrompt || "You are an expert.") + " THE SILENCE RULE: You must NOT say 'Certainly!' or 'Here is your data.' You MUST reply ONLY with a valid RAW JSON Array. No chat. No markdown. No conversational text allowed. Example: [{\"field1\":\"value1\", \"field2\":\"value2\"}]"
+                            });
 
-                if (!jsonMatch) {
-                    throw new Error("AI failed to return a list. Please try again.");
+                            // 🛡️ THE CLEANER: Strip away any markdown and hunt ONLY for the [ ] array
+                            let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                            const jsonMatch = cleanText.match(/\[[\s\S]*\]/); 
+
+                            if (!jsonMatch) {
+                                throw new Error("AI failed to return a parsable list.");
+                            }
+
+                            let parsedData;
+                            try {
+                                parsedData = JSON.parse(jsonMatch[0]);
+                            } catch(e) {
+                                // 🛡️ AUTO-REPAIR: Try wrapping it if the AI forgot the outer brackets
+                                try {
+                                    parsedData = JSON.parse(`[${jsonMatch[0]}]`);
+                                } catch(innerE) {
+                                    throw new Error("Invalid list format from AI.");
+                                }
+                            }
+
+                            // 🛡️ FINAL GUARD: Ensure we have a real array before running the save loop
+                            if (!Array.isArray(parsedData) || parsedData.length === 0) {
+                                throw new Error("AI did not return a valid or populated array.");
+                            }
+
+                            const safeDataArray = parsedData;
+                            // Proceed with your saving loop universally: 
+                            // for (const item of safeDataArray) { await api.post(...) }
+                            
+                            // Optional: Show success UI here
+
+                        } catch (err) {
+                            // 🛡️ SILENT RECOVERY: Log it for devs, keep the UI clean for users
+                            console.error("AI Generation Error:", err);
+                            // Optionally display a polite inline message to the user here instead of an alert
+                        } finally {
+                            generateBtn.disabled = false;
+                            generateBtn.textContent = 'Generate';
+                        }
+                    };
                 }
-
-                let parsedData;
-                try {
-                    parsedData = JSON.parse(jsonMatch[0]);
-                } catch(e) {
-                    // 🛡️ AUTO-REPAIR: Try wrapping it if the AI forgot the outer brackets
-                    try {
-                        parsedData = JSON.parse(`[${jsonMatch[0]}]`);
-                    } catch(innerE) {
-                        throw new Error("Invalid list format from AI. Please try again.");
-                    }
-                }
-
-                // 🛡️ FINAL GUARD: Ensure we have a real list before running the save loop
-                if (!Array.isArray(parsedData)) {
-                    throw new Error("AI did not return a valid list.");
-                }
-
-                const safeDataArray = parsedData;
-                // Proceed with your loop: for (const item of safeDataArray) { ... }
                 ```
-            - **SCRIPT PATTERN (Standard Text Generation):**
-              ```javascript
-              const generateBtn = container.querySelector('.generate-ai-btn');
-              const targetInput = container.querySelector('.target-input'); // Where the AI text goes
-              const topicInput = container.querySelector('.topic-input'); // What the user typed
+                - **SCRIPT PATTERN (Standard Text Generation):**
+                ```javascript
+                const generateBtn = container.querySelector('.generate-ai-btn');
+                const targetInput = container.querySelector('.target-input'); // Where the AI text goes
+                const topicInput = container.querySelector('.topic-input'); // What the user typed
 
-              if (generateBtn && targetInput) {
-                  generateBtn.onclick = async (e) => {
-                      e.preventDefault(); // Prevent form submission
-                      
-                      const topic = topicInput ? topicInput.value : "General topic";
-                      
-                      generateBtn.disabled = true;
-                      generateBtn.textContent = 'AI is thinking...';
-                      
-                      try {
-                          const memberId = typeof window !== 'undefined' 
-                              ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
-                              : null;
-                          const res = await api.post('/builder/openai', {
-                              website_id: properties.website_id,
-                              member_id: memberId, // ✅ NOW WE ARE TRACKING THE SPECIFIC USER
-                              prompt: `Write content about: ${topic}`,
-                              system_prompt: properties.systemPrompt || "You are a helpful assistant."
-                          });
-                          
-                          // Inject the result into the target input or display div
-                          targetInput.value = res.data.text; 
-                      } catch (err) {
-                          console.error(err);
-                          alert(`AI Error: ${err.response?.data?.detail || "Failed to generate text."}`);
-                      } finally {
-                          generateBtn.disabled = false;
-                          generateBtn.textContent = 'Generate with AI';
-                      }
-                  };
-              }
-              ```
+                if (generateBtn && targetInput) {
+                    generateBtn.onclick = async (e) => {
+                        e.preventDefault(); // Prevent form submission
+                        
+                        const topic = topicInput ? topicInput.value : "General topic";
+                        
+                        generateBtn.disabled = true;
+                        generateBtn.textContent = 'Thinking...';
+                        
+                        try {
+                            const memberId = typeof window !== 'undefined' 
+                                ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
+                                : null;
+                            const res = await api.post('/builder/openai', {
+                                website_id: properties.website_id,
+                                member_id: memberId, // ✅ NOW WE ARE TRACKING THE SPECIFIC USER
+                                prompt: `Write content about: ${topic}`,
+                                system_prompt: properties.systemPrompt || "You are a helpful assistant."
+                            });
+                            
+                            // Inject the result into the target input or display div
+                            targetInput.value = res.data.text; 
+                        } catch (err) {
+                            console.error("Standard Text AI Error:", err);
+                            // Fail silently or politely rather than breaking the UI
+                            targetInput.value = "Failed to generate. Please try again."; 
+                        } finally {
+                            generateBtn.disabled = false;
+                            generateBtn.textContent = 'Generate';
+                        }
+                    };
+                }
+                ```
               ### 🤖 CHATBOT & AGENT PROTOCOL (Context, Memory & Actions)
                     - **STRICT COMPLIANCE ULTIMATUM (READ CAREFULLY):** - When you generate the JavaScript for a chatbot, you MUST copy the `SCRIPT PATTERN` below **EXACTLY AS WRITTEN**. 
                         - You are FORBIDDEN from summarizing the `init()` function or the `system_prompt`. 
