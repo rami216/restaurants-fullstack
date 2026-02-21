@@ -13583,42 +13583,43 @@ Is this a file upload?
             - **REQUIREMENT:** You **MUST** add `website_id: "WEBSITE_UUID_FROM_CONTEXT"` to the `properties` block.
             - **EDITABLE CONTENT RULE:** You MUST create an editable property for the `systemPrompt` (e.g., "You are an expert copywriter") so the user can tweak the AI's behavior.
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE & DEFENSIVE RENDERING):**
-                - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* or rendered into multiple UI sections (e.g., generating 3 separate meals, or a Title + Description, or a Weekly Schedule), you MUST format the AI response as JSON.
-                - **ABSOLUTE PROHIBITION:** NEVER blindly use `.split('\n')` on AI-generated JSON values. You MUST write defensive JavaScript because the AI might return an array or object unexpectedly.
-                - **CRITICAL VARIABLE DECLARATION RULE:** NEVER use `const cleanText` when parsing AI responses. You MUST use `let cleanText` because the variable is reassigned during regex matching. Using `const` will throw a fatal JavaScript TypeError and crash the application.
-                - **MANDATORY SCRIPT PATTERN:** You MUST append the JSON instructions DIRECTLY into the API call, and you MUST use the defensive parsing pattern below to prevent crashes:
+                - **TRIGGER:** Whenever the user asks the AI to generate data for multiple database columns or UI sections.
+                - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern. If parsing fails, you MUST throw an error rather than saving a "garbage" row.
                 ```javascript
                 const aiRes = await api.post('/builder/openai', {
                     website_id: properties.website_id,
                     member_id: memberId,
                     prompt: `Your prompt here...`,
-                    // 🛡️ CRITICAL: Hardcode the JSON format rule by appending it!
-                    system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with valid RAW JSON. NO markdown formatting. If the user wants to save multiple items to a database, you MUST output a STRICTLY FLAT JSON Array of objects. DO NOT nest or group objects (e.g., do not group exercises under days). Every single item MUST be its own independent object in the main array. You MUST use exact lowercase keys with underscores matching the requested database schema. Example: [{\"day\":\"Day 1\", \"exercise_name\":\"Squats\", \"weight\":100}]. If generating UI text, use a flat JSON object."
+                    // 🛡️ THE STRANGLEHOLD: Demand the array and provide a schema.
+                    system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with a valid RAW JSON Array. No chat. No markdown. Example: [{\"day\":\"Day 1\", \"exercise_name\":\"Squats\"}]"
                 });
                 
                 let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                const jsonMatch = cleanText.match(/\[[\s\S]*\]/); // 🛡️ ONLY match arrays [ ]
                 
-                // 🛡️ CRITICAL PARSING UPGRADE: Match BOTH JSON Objects {...} AND JSON Arrays [...]
-                const jsonMatch = cleanText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
-                if (jsonMatch) cleanText = jsonMatch[0];
-                
-                let parsedData;
-                try {
-                    parsedData = JSON.parse(cleanText);
-                } catch(e) {
-                    // 🛡️ ULTIMATE FALLBACK: Catch the crash and wrap it safely in an ARRAY so loops don't crash!
-                    parsedData = [{ "Generated Result": cleanText }];
+                if (!jsonMatch) {
+                    throw new Error("AI failed to return a list. Please try again.");
                 }
 
-                // 🛡️ CRITICAL DEFENSIVE LOOPING RULE (PREVENTS "NOT ITERABLE" CRASHES):
-                // If you are going to loop over the data (e.g., to save rows to a database), you MUST ensure it is an array.
-                const safeDataArray = Array.isArray(parsedData) ? parsedData : [parsedData];
-                // ALWAYS use safeDataArray for your loops: for (const item of safeDataArray) { ... }
+                let parsedData;
+                try {
+                    parsedData = JSON.parse(jsonMatch[0]);
+                } catch(e) {
+                    // 🛡️ ATTEMPT REPAIR: If it's a list of objects missing the outer brackets
+                    try {
+                        parsedData = JSON.parse(`[${jsonMatch[0]}]`);
+                    } catch(innerE) {
+                        throw new Error("Invalid list format from AI. Please try again.");
+                    }
+                }
 
-                // 🛡️ CRITICAL DEFENSIVE RENDERING RULE:
-                // Whenever you iterate over safeDataArray to render HTML, you MUST safely cast the value to a string so the app never crashes if the AI returns an array or object.
-                // Example usage inside your render loop:
-                // const safeValue = typeof val === 'string' ? val : (Array.isArray(val) ? val.join('<br>') : JSON.stringify(val));
+                // 🛡️ FINAL GUARD: If it's not an array, do not proceed to the save loop.
+                if (!Array.isArray(parsedData)) {
+                    throw new Error("AI did not return a valid workout list.");
+                }
+
+                const safeDataArray = parsedData;
+                // Now run your loop: for (const item of safeDataArray) { ... }
                 ```
             - **SCRIPT PATTERN (Standard Text Generation):**
               ```javascript
