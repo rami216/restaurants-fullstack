@@ -13585,6 +13585,7 @@ Is this a file upload?
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE & DEFENSIVE RENDERING):**
                 - **TRIGGER:** Whenever the user asks the AI to generate data for multiple database columns, lists, or UI sections.
                 - **FAIL-SAFE UI RULE:** If the AI fails, do NOT show raw `alert()` errors to the user. Log them to the console and cleanly reset the button.
+                - **TOP-LEVEL OWNERSHIP RULE:** When saving the generated list to the database, you MUST ensure `sitemember_id` is a top-level parameter. It MUST NOT be nested inside the `data` object.
                 - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern. If parsing fails, throw an error to trigger the catch block rather than saving a "garbage" row.
                 ```javascript
                 // Example Trigger setup
@@ -13634,8 +13635,17 @@ Is this a file upload?
                             }
 
                             const safeDataArray = parsedData;
-                            // Proceed with your saving loop universally: 
-                            // for (const item of safeDataArray) { await api.post(...) }
+                            
+                            // 🛡️ THE SAVE LOOP (TOP-LEVEL OWNERSHIP ENFORCED)
+                            for (const item of safeDataArray) { 
+                                // Clean the item in case the AI accidentally stuffed the ID inside
+                                const { sitemember_id, ...cleanData } = item;
+                                
+                                await api.post(`/custom-data/rows/${properties.target_schema_id}`, {
+                                    data: cleanData, // The actual content goes here
+                                    sitemember_id: memberId // TOP-LEVEL PARAMETER
+                                });
+                            }
                             
                             // Optional: Show success UI here
 
