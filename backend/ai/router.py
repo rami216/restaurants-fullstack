@@ -13606,15 +13606,19 @@ Is this a file upload?
                 try {
                     parsedData = JSON.parse(cleanText);
                 } catch(e) {
-                    // 🛡️ ULTIMATE FALLBACK: If the AI gets chatty, catch the crash and wrap it safely!
-                    parsedData = { "Generated Result": cleanText };
+                    // 🛡️ ULTIMATE FALLBACK: Catch the crash and wrap it safely in an ARRAY so loops don't crash!
+                    parsedData = [{ "Generated Result": cleanText }];
                 }
 
+                // 🛡️ CRITICAL DEFENSIVE LOOPING RULE (PREVENTS "NOT ITERABLE" CRASHES):
+                // If you are going to loop over the data (e.g., to save rows to a database), you MUST ensure it is an array.
+                const safeDataArray = Array.isArray(parsedData) ? parsedData : [parsedData];
+                // ALWAYS use safeDataArray for your loops: for (const item of safeDataArray) { ... }
+
                 // 🛡️ CRITICAL DEFENSIVE RENDERING RULE:
-                // Whenever you iterate over parsedData to render HTML, you MUST safely cast the value to a string so the app never crashes if the AI returns an array or object.
+                // Whenever you iterate over safeDataArray to render HTML, you MUST safely cast the value to a string so the app never crashes if the AI returns an array or object.
                 // Example usage inside your render loop:
                 // const safeValue = typeof val === 'string' ? val : (Array.isArray(val) ? val.join('<br>') : JSON.stringify(val));
-                // Then use safeValue.split('\n') or just render safeValue directly.
                 ```
             - **SCRIPT PATTERN (Standard Text Generation):**
               ```javascript
