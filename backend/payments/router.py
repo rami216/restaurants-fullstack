@@ -184,7 +184,8 @@ async def stripe_webhook(
             print(f"❌ ERROR: Could not find RestaurantOwner with user_id={user_id}")
             return {"status": "Owner not found"}
         
-        print(f"3. Found Owner: {owner.id}. Payment Type: {payment_type}")
+        # 🐛 FIX: Changed owner.id to owner.restaurant_id
+        print(f"3. Found Owner: {owner.restaurant_id}. Payment Type: {payment_type}")
         
         if payment_type == 'subscription':
             stripe_sub_id = session.get('subscription')
@@ -193,8 +194,9 @@ async def stripe_webhook(
             owner.stripe_subscription_id = stripe_sub_id
             owner.subscription_status = 'active'
             
-            print(f"5. Searching for Websites belonging to restaurant_id: {owner.id}")
-            web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
+            # 🐛 FIX: Changed owner.id to owner.restaurant_id
+            print(f"5. Searching for Websites belonging to restaurant_id: {owner.restaurant_id}")
+            web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.restaurant_id))
             websites = web_result.scalars().all()
             
             if websites:
@@ -220,10 +222,12 @@ async def stripe_webhook(
             owner = result.scalars().first()
             
             if owner:
-                print(f"3. Found Owner {owner.id} for this subscription.")
+                # 🐛 FIX: Changed owner.id to owner.restaurant_id
+                print(f"3. Found Owner {owner.restaurant_id} for this subscription.")
                 owner.subscription_status = 'active' 
                 
-                web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
+                # 🐛 FIX: Changed owner.id to owner.restaurant_id
+                web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.restaurant_id))
                 websites = web_result.scalars().all()
                 
                 if websites:
