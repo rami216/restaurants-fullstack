@@ -13590,13 +13590,14 @@ Is this a file upload?
                     website_id: properties.website_id,
                     member_id: memberId,
                     prompt: `Your prompt here...`,
-                    // 🛡️ THE STRANGLEHOLD: Demand the array and provide a schema.
-                    system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with a valid RAW JSON Array. No chat. No markdown. Example: [{\"day\":\"Day 1\", \"exercise_name\":\"Squats\"}]"
+                    // 🛡️ THE STRANGLEHOLD: Demand the array and enforce the SILENCE RULE
+                    system_prompt: (properties.systemPrompt || "You are an expert.") + " THE SILENCE RULE: You must NOT say 'Certainly!' or 'Here is your plan.' You MUST reply ONLY with a valid RAW JSON Array. No chat. No markdown. No conversational text allowed. Example: [{\"day\":\"Day 1\", \"exercise_name\":\"Squats\"}]"
                 });
-                
+
+                // 🛡️ THE CLEANER: Strip away any markdown and hunt ONLY for the [ ] array
                 let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-                const jsonMatch = cleanText.match(/\[[\s\S]*\]/); // 🛡️ ONLY match arrays [ ]
-                
+                const jsonMatch = cleanText.match(/\[[\s\S]*\]/); 
+
                 if (!jsonMatch) {
                     throw new Error("AI failed to return a list. Please try again.");
                 }
@@ -13605,7 +13606,7 @@ Is this a file upload?
                 try {
                     parsedData = JSON.parse(jsonMatch[0]);
                 } catch(e) {
-                    // 🛡️ ATTEMPT REPAIR: If it's a list of objects missing the outer brackets
+                    // 🛡️ AUTO-REPAIR: Try wrapping it if the AI forgot the outer brackets
                     try {
                         parsedData = JSON.parse(`[${jsonMatch[0]}]`);
                     } catch(innerE) {
@@ -13613,13 +13614,13 @@ Is this a file upload?
                     }
                 }
 
-                // 🛡️ FINAL GUARD: If it's not an array, do not proceed to the save loop.
+                // 🛡️ FINAL GUARD: Ensure we have a real list before running the save loop
                 if (!Array.isArray(parsedData)) {
-                    throw new Error("AI did not return a valid workout list.");
+                    throw new Error("AI did not return a valid list.");
                 }
 
                 const safeDataArray = parsedData;
-                // Now run your loop: for (const item of safeDataArray) { ... }
+                // Proceed with your loop: for (const item of safeDataArray) { ... }
                 ```
             - **SCRIPT PATTERN (Standard Text Generation):**
               ```javascript
