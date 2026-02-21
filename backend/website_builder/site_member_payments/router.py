@@ -181,7 +181,13 @@ async def webhook(
         raw = json.loads(payload)
         event_type = raw.get("type")
         obj = raw.get("data", {}).get("object", {})
-        md = obj.get("metadata") or {}
+        
+        # STRIPE API FIX: Check the new "parent" object location
+        parent_obj = obj.get("parent") or {}
+        sub_details = parent_obj.get("subscription_details") or {}
+        
+        # Check standard metadata first, then fallback to new subscription_details metadata
+        md = obj.get("metadata") or sub_details.get("metadata") or {}
         
         print(f"\n--- 🚨 WEBHOOK DEBUG START 🚨 ---")
         print(f"1. Event Type: {event_type}")
@@ -194,11 +200,9 @@ async def webhook(
             possible_ids = []
             
             if event_type == "invoice.payment_succeeded":
-                # Hunt everywhere Stripe might hide the ID
                 if obj.get("subscription"): possible_ids.append(obj.get("subscription"))
                 if obj.get("payment_intent"): possible_ids.append(obj.get("payment_intent"))
-                for line in obj.get("lines", {}).get("data", []):
-                    if line.get("subscription"): possible_ids.append(line.get("subscription"))
+                if sub_details.get("subscription"): possible_ids.append(sub_details.get("subscription"))
                         
             elif event_type in ["customer.subscription.deleted", "customer.subscription.canceled"]:
                 possible_ids.append(obj.get("id"))
@@ -469,15 +473,11 @@ async def webhook(
     elif event["type"] == "invoice.payment_succeeded":
         invoice = event["data"]["object"]
         
-        # 🚨 THE ID HUNTER (Grab the ID from wherever Stripe hid it)
-        active_id = invoice.get("subscription")
-        if not active_id:
-            for line in invoice.get("lines", {}).get("data", []):
-                if line.get("subscription"):
-                    active_id = line.get("subscription")
-                    break
-        if not active_id:
-            active_id = invoice.get("payment_intent")
+        # 🚨 STRIPE API FIX: Find the subscription ID
+        parent_obj = invoice.get("parent") or {}
+        sub_details = parent_obj.get("subscription_details") or {}
+        
+        active_id = invoice.get("subscription") or sub_details.get("subscription")
             
         print(f"🔍 CASE 3: Processing Renewal for ID: {active_id}")
         
