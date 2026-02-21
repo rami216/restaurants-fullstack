@@ -13596,10 +13596,17 @@ Is this a file upload?
                     system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with a raw JSON object containing exactly the requested keys. The values MUST be simple text strings. NO nested objects, NO arrays, NO markdown. Example: {\"Day 1\": \"Bench Press 3x5\", \"Day 2\": \"Squats 3x5\"}"
                 });
                 
-                let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+               let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
                 const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
                 if (jsonMatch) cleanText = jsonMatch[0];
-                const parsedData = JSON.parse(cleanText);
+                
+                let parsedData;
+                try {
+                    parsedData = JSON.parse(cleanText);
+                } catch(e) {
+                    // 🛡️ ULTIMATE FALLBACK: If the AI gets chatty and says "Sure!", we catch the crash and just wrap the raw text safely so the UI still works!
+                    parsedData = { "Generated Result": cleanText };
+                }
 
                 // 🛡️ CRITICAL DEFENSIVE RENDERING RULE:
                 // Whenever you iterate over parsedData to render HTML, you MUST safely cast the value to a string so the app never crashes if the AI returns an array or object.
