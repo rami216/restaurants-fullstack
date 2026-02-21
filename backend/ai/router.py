@@ -13586,7 +13586,8 @@ Is this a file upload?
                 - **TRIGGER:** Whenever the user asks the AI to generate data for multiple database columns, lists, or UI sections.
                 - **FAIL-SAFE UI RULE:** If the AI fails, do NOT show raw `alert()` errors to the user. Log them to the console and cleanly reset the button.
                 - **TOP-LEVEL OWNERSHIP RULE:** When saving the generated list to the database, you MUST ensure `sitemember_id` is a top-level parameter. It MUST NOT be nested inside the `data` object.
-                - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern. If parsing fails, throw an error to trigger the catch block rather than saving a "garbage" row.
+                - **NO CUSTOM PARSERS RULE (ZYGOFLOW MODE):** You are STRICTLY FORBIDDEN from writing custom JSON parsing logic. You MUST use the exact defensive regex pattern `cleanText.match(/\[[\s\S]*\]/)` to strip away conversational AI text before parsing. Do not trust the AI to return clean JSON.
+                - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern word-for-word for the parsing step. If parsing fails, throw an error to trigger the catch block.
                 ```javascript
                 // Example Trigger setup
                 const generateBtn = container.querySelector('.generate-ai-btn');
@@ -13609,7 +13610,7 @@ Is this a file upload?
                                 system_prompt: (properties.systemPrompt || "You are an expert.") + " THE SILENCE RULE: You must NOT say 'Certainly!' or 'Here is your data.' You MUST reply ONLY with a valid RAW JSON Array. No chat. No markdown. No conversational text allowed. Example: [{\"field1\":\"value1\", \"field2\":\"value2\"}]"
                             });
 
-                            // 🛡️ THE CLEANER: Strip away any markdown and hunt ONLY for the [ ] array
+                            // 🛡️ THE ZYGOFLOW CLEANER: Strip away any markdown and hunt ONLY for the [ ] array
                             let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
                             const jsonMatch = cleanText.match(/\[[\s\S]*\]/); 
 
