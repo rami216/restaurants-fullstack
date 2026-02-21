@@ -6,12 +6,12 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.future import select
 import os
 from decimal import Decimal
-
+ 
 from database import get_db
 from models import User, RestaurantOwner
 from auth.auth_handler import get_current_active_user
 from schemas import CheckoutSessionResponse, BillingPortalResponse, TopUpRequest
-
+from website_builder.models import Website
 
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
@@ -101,6 +101,51 @@ async def create_billing_portal_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
+# @router.post("/webhook")
+# async def stripe_webhook(
+#     request: Request,
+#     stripe_signature: str = Header(None),
+#     db: AsyncSession = Depends(get_db)
+# ):
+#     body = await request.body()
+#     try:
+#         event = stripe.Webhook.construct_event(
+#             payload=body, sig_header=stripe_signature, secret=STRIPE_WEBHOOK_SECRET
+#         )
+#     except Exception as e:
+#         print(f"Webhook Error: {e}")
+#         raise HTTPException(status_code=400, detail=str(e))
+
+#     session = event['data']['object']
+#     if event['type'] == 'checkout.session.completed':
+#         user_id = session.get('metadata', {}).get('user_id')
+#         if not user_id: return {"status": "User ID not in metadata"}
+
+#         result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.user_id == int(user_id)))
+#         owner = result.scalars().first()
+#         if not owner: return {"status": "Owner not found"}
+        
+#         payment_type = session.get('metadata', {}).get('type')
+#         if payment_type == 'subscription':
+#             owner.stripe_customer_id = session.get('customer')
+#             owner.stripe_subscription_id = session.get('subscription')
+#             owner.subscription_status = 'active'
+#         elif payment_type == 'top-up':
+#             amount_added = session.get('metadata', {}).get('amount')
+#             if amount_added:
+#                 owner.credit_balance += Decimal(amount_added)
+#         await db.commit()
+
+#     elif event['type'] in ['customer.subscription.updated', 'customer.subscription.deleted']:
+#         subscription = event['data']['object']
+#         stripe_subscription_id = subscription.get('id')
+#         result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
+#         owner = result.scalars().first()
+#         if owner:
+#             owner.subscription_status = subscription.get('status')
+#             await db.commit()
+    
+#     return {"status": "success"}
 @router.post("/webhook")
 async def stripe_webhook(
     request: Request,
@@ -117,6 +162,8 @@ async def stripe_webhook(
         raise HTTPException(status_code=400, detail=str(e))
 
     session = event['data']['object']
+    
+    # ✅ CASE 1: MONTH 1 (First time they buy)
     if event['type'] == 'checkout.session.completed':
         user_id = session.get('metadata', {}).get('user_id')
         if not user_id: return {"status": "User ID not in metadata"}
@@ -130,19 +177,52 @@ async def stripe_webhook(
             owner.stripe_customer_id = session.get('customer')
             owner.stripe_subscription_id = session.get('subscription')
             owner.subscription_status = 'active'
+            
+            # 🔥 NEW: Reset the website monthly spend to 0 on Month 1
+            # Note: Adjust 'owner.id' below if your foreign key is named differently (e.g., owner.restaurant_id)
+            web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
+            websites = web_result.scalars().all()
+            for w in websites:
+                w.monthly_spend_usd = 0.0
+                print(f"✅ Month 1 Reset: Set monthly_spend_usd to 0 for website {w.website_id}")
+
         elif payment_type == 'top-up':
             amount_added = session.get('metadata', {}).get('amount')
             if amount_added:
                 owner.credit_balance += Decimal(amount_added)
+                
         await db.commit()
 
+    # ✅ CASE 2: MONTH 2+ (Renewals)
+    elif event['type'] == 'invoice.payment_succeeded':
+        stripe_subscription_id = session.get('subscription')
+        if stripe_subscription_id:
+            result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
+            owner = result.scalars().first()
+            
+            if owner:
+                owner.subscription_status = 'active' # Ensure they stay active
+                
+                # 🔥 NEW: Reset the website monthly spend to 0 on Renewal
+                web_result = await db.execute(select(Website).where(Website.restaurant_id == owner.id))
+                websites = web_result.scalars().all()
+                for w in websites:
+                    w.monthly_spend_usd = 0.0
+                    print(f"✅ Renewal Reset: Set monthly_spend_usd to 0 for website {w.website_id}")
+                
+                await db.commit()
+
+    # ✅ CASE 3: CANCELLATIONS
     elif event['type'] in ['customer.subscription.updated', 'customer.subscription.deleted']:
         subscription = event['data']['object']
         stripe_subscription_id = subscription.get('id')
+        
         result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
         owner = result.scalars().first()
+        
         if owner:
             owner.subscription_status = subscription.get('status')
             await db.commit()
+            print(f"⚠️ Subscription status changed to: {owner.subscription_status}")
     
     return {"status": "success"}
