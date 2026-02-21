@@ -13582,24 +13582,30 @@ Is this a file upload?
             - **ENDPOINT:** Use `await api.post('/builder/openai', payload)`
             - **REQUIREMENT:** You **MUST** add `website_id: "WEBSITE_UUID_FROM_CONTEXT"` to the `properties` block.
             - **EDITABLE CONTENT RULE:** You MUST create an editable property for the `systemPrompt` (e.g., "You are an expert copywriter") so the user can tweak the AI's behavior.
-            - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE):**
-                - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* (e.g., generating 3 separate meals, or a Title + Description), you MUST format the AI response as JSON.
-                - **ABSOLUTE PROHIBITION:** NEVER use `.split('\n')`. You MUST force JSON.
-                - **MANDATORY SCRIPT PATTERN:** You MUST append the JSON instructions DIRECTLY into the API call in the script so it cannot be overridden or forgotten:
-                  ```javascript
-                  const aiRes = await api.post('/builder/openai', {
-                      website_id: properties.website_id,
-                      member_id: memberId,
-                      prompt: `Your prompt here...`,
-                      // 🛡️ CRITICAL: Hardcode the JSON format rule by appending it!
-                      system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with a raw JSON object containing exactly the requested keys. The values MUST be simple text strings. NO nested objects, NO arrays, NO markdown. Example: {\"meal_1\": \"Chicken and Rice\", \"meal_2\": \"Eggs\"}"
-                  });
-                  
-                  let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
-                  const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
-                  if (jsonMatch) cleanText = jsonMatch[0];
-                  const parsedData = JSON.parse(cleanText);
-                  ```
+            - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE & DEFENSIVE RENDERING):**
+                    - **TRIGGER:** Whenever the user asks the AI to generate data that will be saved into *more than one database column* or rendered into multiple UI sections (e.g., generating 3 separate meals, or a Title + Description, or a Weekly Schedule), you MUST format the AI response as JSON.
+                    - **ABSOLUTE PROHIBITION:** NEVER blindly use `.split('\n')` on AI-generated JSON values. You MUST write defensive JavaScript because the AI might return an array or object unexpectedly.
+                    - **MANDATORY SCRIPT PATTERN:** You MUST append the JSON instructions DIRECTLY into the API call, and you MUST use the defensive parsing pattern below to prevent crashes:
+                    ```javascript
+                    const aiRes = await api.post('/builder/openai', {
+                        website_id: properties.website_id,
+                        member_id: memberId,
+                        prompt: `Your prompt here...`,
+                        // 🛡️ CRITICAL: Hardcode the JSON format rule by appending it!
+                        system_prompt: (properties.systemPrompt || "You are an expert.") + " You MUST reply ONLY with a raw JSON object containing exactly the requested keys. The values MUST be simple text strings. NO nested objects, NO arrays, NO markdown. Example: {\"Day 1\": \"Bench Press 3x5\", \"Day 2\": \"Squats 3x5\"}"
+                    });
+                    
+                    let cleanText = aiRes.data.text.replace(/```json/g, '').replace(/```/g, '').trim();
+                    const jsonMatch = cleanText.match(/\{[\s\S]*\}/);
+                    if (jsonMatch) cleanText = jsonMatch[0];
+                    const parsedData = JSON.parse(cleanText);
+
+                    // 🛡️ CRITICAL DEFENSIVE RENDERING RULE:
+                    // Whenever you iterate over parsedData to render HTML, you MUST safely cast the value to a string so the app never crashes if the AI returns an array or object.
+                    // Example usage inside your render loop:
+                    // const safeValue = typeof val === 'string' ? val : (Array.isArray(val) ? val.join('<br>') : JSON.stringify(val));
+                    // Then use safeValue.split('\n') or just render safeValue directly.
+                    ```
             - **SCRIPT PATTERN (Standard Text Generation):**
               ```javascript
               const generateBtn = container.querySelector('.generate-ai-btn');
