@@ -13585,7 +13585,7 @@ Is this a file upload?
             - **MULTI-COLUMN AI EXTRACTION (STRICT JSON RULE & DEFENSIVE RENDERING):**
                 - **TRIGGER:** Whenever the user asks the AI to generate data for multiple database columns, lists, or UI sections.
                 - **FAIL-SAFE UI RULE:** If the AI fails, do NOT show raw `alert()` errors to the user. Log them to the console and cleanly reset the button.
-                - **TOP-LEVEL OWNERSHIP RULE:** When saving the generated list to the database, you MUST ensure `sitemember_id` is a top-level parameter. It MUST NOT be nested inside the `data` object.
+                - **UNIVERSAL DATABASE SECURITY RULE:** Whenever you write a script to CREATE (POST) or UPDATE (PUT/PATCH) any row in the database, you MUST ALWAYS attach the 'sitemember_id' (fetched from localStorage) as a top-level parameter in the API payload. If you do not include this in your update/create scripts, the database will throw a Permission Denied error. It MUST NEVER be nested inside the 'data' object.
                 - **NO CUSTOM PARSERS RULE (ZYGOFLOW MODE):** You are STRICTLY FORBIDDEN from writing custom JSON parsing logic. You MUST use the exact defensive regex pattern `cleanText.match(/\[[\s\S]*\]/)` to strip away conversational AI text before parsing. Do not trust the AI to return clean JSON.
                 - **MANDATORY SCRIPT PATTERN:** You MUST use this defensive pattern word-for-word for the parsing step. If parsing fails, throw an error to trigger the catch block.
                 ```javascript
