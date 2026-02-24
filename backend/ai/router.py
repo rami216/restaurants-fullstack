@@ -15259,6 +15259,12 @@ const aiRes = await api.post('/builder/openai', {
 
 // RULE 1 — strip markdown first, always:
 let cleanText = aiRes.data.text.replace(/```json/g,'').replace(/```/g,'').trim();
+// RULE 1b — fix bare word values (e.g. bodyweight → "bodyweight"):
+cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match, word, next) => {
+  if (word === 'true' || word === 'false' || word === 'null') return match;
+  return `: "${word}"${next}`;
+});
+
 
 // Handle both array [...] and single object {...}:
 const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
