@@ -15213,12 +15213,23 @@ Add `website_id`, `emailSubject`, `emailBody` to properties and editableProps.
 
 ## AI / OPENAI GENERATION
 
+Trigger: prompt implies "generate text", "write", "summarize", "auto-fill", "generate and save".
 
-Trigger: prompt implies "generate text", "write", "summarize", "auto-fill".
-**RULE 1 — MANDATORY:** After EVERY AI response, strip markdown BEFORE parsing.
+**RULE 1 — MANDATORY PARSING:** After EVERY AI response, strip markdown BEFORE parsing.
 Never call JSON.parse() on a raw AI response directly. Always clean first.
 If you skip this step, the component will crash silently and show "Failed".
 
+**RULE 2 — DECIDE THE OUTPUT MODE FIRST:**
+Before writing any code, ask: "Does this AI response get saved to a database, or displayed as text?"
+
+- If SAVING TO DATABASE → use FLAT ARRAY MODE
+- If DISPLAYING AS TEXT → use TEXT MODE
+
+---
+
+### FLAT ARRAY MODE (saving to database)
+
+The system_prompt MUST enforce flat structure:
 ```js
 const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
@@ -15226,30 +15237,56 @@ const memberId = typeof window !== 'undefined'
 
 const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
-  member_id: memberId,  // NEVER omit — billing will break
+  member_id: memberId,
   prompt: `...`,
   system_prompt: (properties.systemPrompt || "You are a helpful assistant.")
-    + " THE SILENCE RULE: Reply ONLY with raw JSON. No markdown, no chat."
+    + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item must map to exactly one database row. No nested objects, no wrapper keys, no grouped structures. No markdown, no chat. Example format: [{\"field1\":\"value\",\"field2\":\"value\"}]"
 });
 
-// Parse defensively:
+// RULE 1 — strip markdown first, always:
 let cleanText = aiRes.data.text.replace(/```json/g,'').replace(/```/g,'').trim();
 const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
 if (!jsonMatch) throw new Error("AI returned no parsable array.");
 const parsedData = JSON.parse(jsonMatch[0]);
-```
 
-Save loop with top-level ownership:
-```js
+// Save every item as its own row:
 for (const item of parsedData) {
   const { sitemember_id, ...cleanData } = item;
   await api.post(`/custom-data/rows/${schemaId}`, { data: cleanData, sitemember_id: memberId });
 }
 ```
 
-Add `website_id` and `systemPrompt` to properties/editableProps.
+---
+
+### TEXT MODE (displaying as text)
+
+The system_prompt asks for plain text only:
+```js
+const memberId = typeof window !== 'undefined'
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+  : null;
+
+const aiRes = await api.post('/builder/openai', {
+  website_id: properties.website_id,
+  member_id: memberId,
+  prompt: `...`,
+  system_prompt: (properties.systemPrompt || "You are a helpful assistant.")
+    + " Reply with plain text only. No JSON, no markdown formatting, no backticks."
+});
+
+// RULE 1 — strip markdown first, always:
+const resultText = aiRes.data.text.replace(/```/g,'').trim();
+
+// Inject into the target element:
+const targetEl = container.querySelector('.ai-result');
+if (targetEl) targetEl.textContent = resultText;
+```
 
 ---
+
+Add `systemPrompt` to properties/editableProps.
+Add `website_id` to properties only (never in editableProps).
+
 
 ## CHATBOT
 
