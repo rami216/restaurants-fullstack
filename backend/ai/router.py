@@ -15229,7 +15229,21 @@ Before writing any code, ask: "Does this AI response get saved to a database, or
 
 ### FLAT ARRAY MODE (saving to database)
 
-The system_prompt MUST enforce flat structure:
+**RULE 3 — THE SILENCE RULE IS MANDATORY AND MUST ALWAYS BE APPENDED.**
+The generated code MUST construct system_prompt in two parts: the context, then THE SILENCE RULE at the end.
+THE SILENCE RULE is NEVER optional. NEVER skip it. NEVER forget to append it.
+
+WRONG ❌:
+```js
+system_prompt: "You are a fitness assistant. Generate a plan."
+```
+
+CORRECT ✅:
+```js
+system_prompt: "You are a fitness assistant. Generate a plan." + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item = one database row. No nested objects, no wrapper keys, no markdown, no chat. Example: [{\"field1\":\"value\",\"field2\":\"value\"}]"
+```
+
+Full pattern:
 ```js
 const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
@@ -15239,18 +15253,21 @@ const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: (properties.systemPrompt || "You are a helpful assistant.")
-    + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item must map to exactly one database row. No nested objects, no wrapper keys, no grouped structures. No markdown, no chat. Example format: [{\"field1\":\"value\",\"field2\":\"value\"}]"
+  system_prompt: "Your context here." 
+    + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item = one database row. No nested objects, no wrapper keys, no markdown, no chat. Example: [{\"field1\":\"value\",\"field2\":\"value\"}]"
 });
 
 // RULE 1 — strip markdown first, always:
 let cleanText = aiRes.data.text.replace(/```json/g,'').replace(/```/g,'').trim();
-const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
-if (!jsonMatch) throw new Error("AI returned no parsable array.");
-const parsedData = JSON.parse(jsonMatch[0]);
+
+// Handle both array [...] and single object {...}:
+const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
+if (!jsonMatch) throw new Error("AI returned no parsable data.");
+const parsed = JSON.parse(jsonMatch[0]);
+const dataArray = Array.isArray(parsed) ? parsed : [parsed];
 
 // Save every item as its own row:
-for (const item of parsedData) {
+for (const item of dataArray) {
   const { sitemember_id, ...cleanData } = item;
   await api.post(`/custom-data/rows/${schemaId}`, { data: cleanData, sitemember_id: memberId });
 }
@@ -15260,7 +15277,19 @@ for (const item of parsedData) {
 
 ### TEXT MODE (displaying as text)
 
-The system_prompt asks for plain text only:
+**RULE 3 — NEVER append THE SILENCE RULE in text mode. Ask for plain text only.**
+
+WRONG ❌:
+```js
+system_prompt: "You are a helpful assistant. Reply with JSON..."
+```
+
+CORRECT ✅:
+```js
+system_prompt: "You are a helpful assistant. Reply with plain text only. No JSON, no markdown, no backticks."
+```
+
+Full pattern:
 ```js
 const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
@@ -15270,14 +15299,13 @@ const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: (properties.systemPrompt || "You are a helpful assistant.")
-    + " Reply with plain text only. No JSON, no markdown formatting, no backticks."
+  system_prompt: "Your context here. Reply with plain text only. No JSON, no markdown, no backticks."
 });
 
 // RULE 1 — strip markdown first, always:
 const resultText = aiRes.data.text.replace(/```/g,'').trim();
 
-// Inject into the target element:
+// Inject into target element:
 const targetEl = container.querySelector('.ai-result');
 if (targetEl) targetEl.textContent = resultText;
 ```
