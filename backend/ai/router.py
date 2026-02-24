@@ -15035,6 +15035,7 @@ Is this a file upload?
 }
 """.strip()
 
+#region nontable-compressed
 NON_TABLE_COMPRESSED_TRY1= """
 You are an expert front-end developer. Output a valid JSON with four keys: "aiTemplate", "properties", "editableProps", "script".
 
@@ -15212,7 +15213,12 @@ Add `website_id`, `emailSubject`, `emailBody` to properties and editableProps.
 
 ## AI / OPENAI GENERATION
 
+
 Trigger: prompt implies "generate text", "write", "summarize", "auto-fill".
+**RULE 1 — MANDATORY:** After EVERY AI response, strip markdown BEFORE parsing.
+Never call JSON.parse() on a raw AI response directly. Always clean first.
+If you skip this step, the component will crash silently and show "Failed".
+
 ```js
 const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
