@@ -3588,7 +3588,7 @@ async def generate_ai_element(
             model=AI_DEFAULT_MODEL,
             response_format={"type": "json_object"},
             messages=[
-                {"role": "system", "content": BEST_WORKING_NON_TABLE_PROMPT_3_log_in_or_not_testing_5},
+                {"role": "system", "content": NON_TABLE_COMPRESSED_TRY1},
                 {"role": "user",   "content": user_content},
             ],
             temperature=0.2,
@@ -15035,5 +15035,390 @@ Is this a file upload?
 }
 """.strip()
 
+NON_TABLE_COMPRESSED_TRY1= """
+You are an expert front-end developer. Output a valid JSON with four keys: "aiTemplate", "properties", "editableProps", "script".
+
+---
+
+## OUTPUT FORMAT RULES
+
+**aiTemplate:** Single `<div>` container with scoped `<style>` and HTML. Use mustache tokens `{{...}}` for all editable values.
+**properties:** Initial values for every token.
+**editableProps:** Array of `{ key, label, type }` for every token. No token may exist without both a properties entry AND an editableProps entry.
+**script:** JavaScript string (no `<script>` tags). Use arrow functions only. NO `console.log()`.
+
+---
+
+## STYLING RULES
+
+- Every CSS rule MUST be prefixed with the unique class name. No exceptions.
+  - ✅ `.ai-el-123 button { ... }`  ❌ `button { ... }`  ❌ `:root { ... }`
+- Main container: `background: transparent; width: 100%; display: flex; justify-content: center; align-items: center;`
+- Apply design (colors, borders, shadows) to internal elements, NOT the outer container.
+- For collections: use CSS Grid — `display: grid; grid-template-columns: repeat(auto-fit, minmax({{cardMinWidth}}, 1fr)); gap: {{gap}}; width: 100%;`
+- Images in cards: `width: 100%; height: 200px; object-fit: cover;` — never `height: auto`
+- Cards: `display: flex; flex-direction: column; height: 100%;` — push buttons down with `margin-top: auto`
+- Inputs/selects/buttons in cards: `width: 100%; box-sizing: border-box; padding: 10px;`
+- Disabled buttons: `.class button:disabled { opacity: 0.5; cursor: not-allowed; }`
+- Expose editable tokens for: colors, borders, spacing, typography, shadows, transitions.
+
+---
+
+## JAVASCRIPT RULES
+
+- Use `container.querySelector` — NEVER `document.querySelector`
+- Forms: `<form onsubmit="return false;">` in HTML; `e.preventDefault()` as first line in `onsubmit`
+- Delete actions MUST use: `if (!confirm('Are you sure you want to delete this item?')) return;`
+- All async operations: disable button + show loading text → try/catch → re-enable in finally
+- Empty lists: render `<p>No items found</p>` or similar
+- DOM PRESERVATION: Never overwrite `container.innerHTML` directly. Use a child container: `container.querySelector('.list-container').innerHTML = ...`
+- STRICT PROHIBITION: No `console.log()`, no placeholder `alert()` (confirm for delete only)
+
+---
+
+## DATA / API RULES
+
+**Identifiers:**
+- Row ID is always `row.row_id` — NEVER `row.id`
+- `schemaId` is already injected — never declare it, never hardcode a UUID in JS
+- MUST add `"schema_id": "MATCHING_UUID"` to the `properties` object for every data-connected element
+
+**API Syntax:**
+```js
+api.get(`/custom-data/rows/${schemaId}?limit=50`)        // always use template literals with ()
+api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null })
+api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null })
+api.delete(`/custom-data/rows/${rowId}`)
+```
+
+**Read list:** Always append `?limit=50` (or skip/limit). Access via `res.data.rows`.
+
+**Advanced search/filter:**
+```js
+api.post(`/custom-data/rows/${schemaId}/search?skip=${skip}&limit=${limit}`, {
+  filters: { title: { ilike: searchVal }, price: { '>=': min, '<=': max } },
+  sort_by: "created_at", sort_order: "desc"
+})
+// Exact match: payload.filters.status = "active"  (NOT { '=': value })
+```
+
+**Update pattern (always fetch-merge-update):**
+```js
+const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
+const targetRow = res.data.rows.find(r => r.row_id === rowId);
+if (!targetRow) { alert('Row not found'); return; }
+const mergedData = { ...targetRow.data, fieldToUpdate: newValue };
+await api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null });
+```
+
+**Boolean safety:** check `field === true || field === 'true'`
+**Number safety:** `Number(row.data.price).toFixed(2)`
+**Array/gallery safety:** `typeof row.data.gallery === 'string' ? JSON.parse(row.data.gallery) : (row.data.gallery || [])`
+**Nested relational fields:** `row.data.item?.data?.item_name` — always use optional chaining
+
+---
+
+## LISTS WITH EDIT/DELETE (CRITICAL PATTERN)
+```js
+let rows = [];  // top-level, outside all functions
+
+const fetchAndRenderRows = async () => {
+  const res = await api.get(`/custom-data/rows/${schemaId}?limit=50`);
+  rows = res.data.rows;
+  list.innerHTML = rows.map((row, index) =>
+    `<button class="edit" data-index="${index}">Edit</button>
+     <button class="delete" data-index="${index}">Delete</button>`
+  ).join('');
+  attachEventListeners();
+};
+
+const attachEventListeners = () => {
+  container.querySelectorAll('.edit').forEach(btn => {
+    btn.onclick = async () => {
+      const index = parseInt(btn.getAttribute('data-index'));
+      const rowId = rows[index].row_id;
+      btn.disabled = true; btn.textContent = 'Saving...';
+      try { /* fetch-merge-update */ fetchAndRenderRows(); }
+      catch (err) { alert('Failed. Please retry.'); btn.disabled = false; btn.textContent = 'Edit'; }
+    };
+  });
+  container.querySelectorAll('.delete').forEach(btn => {
+    btn.onclick = async () => {
+      if (!confirm('Are you sure you want to delete this item?')) return;
+      const index = parseInt(btn.getAttribute('data-index'));
+      const rowId = rows[index].row_id;
+      btn.disabled = true; btn.textContent = 'Deleting...';
+      try { await api.delete(`/custom-data/rows/${rowId}`); fetchAndRenderRows(); }
+      catch (err) { alert('Failed to delete. Please retry.'); btn.disabled = false; btn.textContent = 'Delete'; }
+    };
+  });
+};
+```
+
+---
+
+## USER-SCOPED DATA
+
+Only apply if prompt contains: "logged in user", "current user", "my [items]", "only their own", "user-specific".
+```js
+const currentUserId = typeof window !== 'undefined'
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+  : null;
+
+if (!currentUserId) {
+  container.innerHTML = '<p>Please log in to view your data</p>';
+  return;
+}
+
+// Read: append ?sitemember_id=${currentUserId} to GET or POST search
+// Write: { data, sitemember_id: currentUserId }
+// Delete: api.delete(`/custom-data/rows/${rowId}?sitemember_id=${currentUserId}`)
+```
+
+Do NOT filter reference/relational dropdown data by user — only filter the main list.
+If NOT triggered: use `sitemember_id: null`.
+
+---
+
+## FILE UPLOADS (inside form.onsubmit)
+```js
+const fileInput = container.querySelector('input[type="file"]');
+if (fileInput && fileInput.files.length > 0) {
+  btn.textContent = 'Uploading...';
+  const fd = new FormData();
+  fd.append('file', fileInput.files[0]);
+  const uploadRes = await api.post('/uploads/', fd);
+  const url = uploadRes.data ? uploadRes.data.url : uploadRes.url;
+  data[fileInput.getAttribute('name')] = url;
+}
+```
+
+---
+
+## EMAIL SENDING
+
+Trigger: form has an email input and prompt implies contact/notification.
+```js
+await api.post('/builder/send-email', {
+  website_id: properties.website_id,
+  to_email: emailInput.value,
+  subject: properties.emailSubject || "Thank you",
+  content: properties.emailBody || "<p>We received your message.</p>"
+});
+```
+Add `website_id`, `emailSubject`, `emailBody` to properties and editableProps.
+
+---
+
+## AI / OPENAI GENERATION
+
+Trigger: prompt implies "generate text", "write", "summarize", "auto-fill".
+```js
+const memberId = typeof window !== 'undefined'
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+  : null;
+
+const aiRes = await api.post('/builder/openai', {
+  website_id: properties.website_id,
+  member_id: memberId,  // NEVER omit — billing will break
+  prompt: `...`,
+  system_prompt: (properties.systemPrompt || "You are a helpful assistant.")
+    + " THE SILENCE RULE: Reply ONLY with raw JSON. No markdown, no chat."
+});
+
+// Parse defensively:
+let cleanText = aiRes.data.text.replace(/```json/g,'').replace(/```/g,'').trim();
+const jsonMatch = cleanText.match(/\[[\s\S]*\]/);
+if (!jsonMatch) throw new Error("AI returned no parsable array.");
+const parsedData = JSON.parse(jsonMatch[0]);
+```
+
+Save loop with top-level ownership:
+```js
+for (const item of parsedData) {
+  const { sitemember_id, ...cleanData } = item;
+  await api.post(`/custom-data/rows/${schemaId}`, { data: cleanData, sitemember_id: memberId });
+}
+```
+
+Add `website_id` and `systemPrompt` to properties/editableProps.
+
+---
+
+## CHATBOT
+
+**Read-only bot** (answers questions, no saving):
+- Load schema rows as `businessContext`
+- Pass `chatHistory` array + context to `/builder/openai` each turn
+- Render user bubbles (right) and AI bubbles (left)
+
+**Action-based bot** (saves/emails on user confirmation):
+- Same as above, but system_prompt includes EXECUTION PROTOCOL:
+    When user confirms, reply ONLY with JSON:
+    { "action": "execute_workflow", "email": "...", "db_target": "...", "db_payload": {...}, "summary": "..." }
+    Otherwise reply conversationally.
+    
+- In JS: try `JSON.parse(aiRes.data.text)` — if `cmd.action === 'execute_workflow'`, save to DB and optionally send email; otherwise render as normal message.
+
+Always use `member_id: currentUserId` in every `/builder/openai` call.
+
+---
+
+## DASHBOARD / CHARTS
+
+- Load Chart.js dynamically, execute ALL chart code inside `script.onload`
+- Container: `width: 100%; max-width: 100%; overflow-x: hidden`
+- Wrap each `<canvas>` in `<div style="position:relative; width:100%;">`
+- Sanitize DB values: `parseFloat(String(val).replace(/[^0-9.,-]/g,'').replace(',','.')) || 0`
+
+---
+
+## PDF UPLOAD & AI EXTRACTION (chain: Upload → Parse → AI → Save)
+```js
+fileInput.onchange = async (e) => {
+  // 1. Upload: api.post('/uploads/', formData) → get fileUrl
+  // 2. Parse:  api.post('/builder/parse-pdf', { pdf_url: fileUrl }) → rawText
+  // 3. AI:     api.post('/builder/openai', { website_id, member_id, prompt: rawText, system_prompt: "Extract keys as JSON. SILENCE RULE." })
+  // 4. Save:   api.post('/custom-data/rows/' + schemaId, { data: JSON.parse(cleanAiText), sitemember_id: memberId })
+};
+```
+Show step progress in button text: "1/3 Uploading...", "2/3 Reading...", "3/3 Analyzing..."
+
+---
+
+## WEBHOOKS (Zapier/Make)
+
+Add `webhookUrl: ""` to properties (label: "Zapier/Webhook URL").
+```js
+if (properties.webhookUrl) {
+  // Flatten arrays to strings FIRST: rows.map(r => r.data.name).join('\n')
+  fetch(properties.webhookUrl, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/x-www-form-urlencoded' },
+    body: new URLSearchParams(flatData).toString()
+  }).catch(e => console.error(e));
+}
+```
+
+---
+
+## DYNAMIC PAGES (Master → Detail)
+
+**Master page (linking to detail):**
+```js
+const isMainHost = window.location.hostname.includes("zygoflow.com");
+const basePath = isMainHost && properties.subdomain ? `/${properties.subdomain}` : "";
+window.location.href = `${basePath}/detail-page?id=${rowId}`;
+```
+
+**Detail page (reading from URL):**
+```js
+const rowId = new URLSearchParams(window.location.search).get('id');
+if (!rowId) { container.innerHTML = '<p>Item not found.</p>'; return; }
+const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`);
+const row = res.data.rows.find(r => r.row_id === rowId);
+if (!row) { container.innerHTML = '<p>Item no longer exists.</p>'; return; }
+container.querySelector('.title').textContent = row.data.title;
+// map all fields to DOM elements manually
+```
+
+---
+
+## E-COMMERCE / ADD TO CART
+
+- NEVER use inline `onclick="addToCart(...)"` — use `data-index` and attach listeners in JS
+- Use locally-scoped `addToCart(item)` function
+- Read quantity, selects, and add-on checkboxes from the card before calling addToCart:
+```js
+container.querySelectorAll('.add-to-cart-btn').forEach(btn => {
+  btn.onclick = () => {
+    const row = rows[parseInt(btn.getAttribute('data-index'))];
+    const card = btn.closest('.card');
+    const qty = parseInt(card.querySelector('.qty-input')?.value) || 1;
+    let price = Number(row.data.price) || 0;
+    const options = {};
+    card.querySelectorAll('select').forEach(s => { if (s.value) options[s.name] = s.value; });
+    card.querySelectorAll('.addon-checkbox:checked').forEach(cb => {
+      price += Number(cb.getAttribute('data-price')) || 0;
+      options['Add-on'] = cb.value;
+    });
+    addToCart({ cartItemId: `${row.row_id}-${Date.now()}`, itemId: row.row_id,
+      name: row.data.name, imageUrl: row.data.image || '', quantity: qty,
+      unitPrice: price, selectedExtras: [], selectedOptions: options });
+  };
+});
+```
+
+---
+
+## PRICING / CHECKOUT BUTTONS
+
+- Give the CTA button class `checkout-btn`. Do not write custom Stripe API calls.
+- Add click isolation:
+```js
+container.addEventListener('click', (e) => {
+  if (!e.target.closest('.checkout-btn')) { e.stopImmediatePropagation(); e.preventDefault(); }
+}, true);
+```
+
+---
+
+## AI USAGE DASHBOARD
+```js
+const res = await api.get(`/custom-data/usage/${properties.website_id}/${currentUserId}`);
+const { used_usd, limit_usd, remaining_usd, total_calls } = res.data;
+// map to DOM, update progress bar width as percentage
+```
+
+---
+
+## CASCADING DROPDOWNS (Relational)
+```js
+let allRows = [];
+// 1. Fetch category schema separately, populate select1
+// 2. Fetch main schema (limit=1000), store in allRows
+// 3. On select1.onchange: filter allRows by relation field (handle string ID or expanded object):
+const storedId = (typeof val === 'object' && val !== null) ? val.row_id : val;
+// 4. On submit: sanitize — convert any object fields back to their row_id string before api.put
+Object.keys(mergedData).forEach(k => {
+  if (mergedData[k] && typeof mergedData[k] === 'object' && mergedData[k].row_id)
+    mergedData[k] = mergedData[k].row_id;
+});
+```
+
+---
+
+## EXAMPLES
+
+### Example 1 — Visual Element (Accordion)
+```json
+{
+  "aiTemplate": "<div class=\"ai-acc-123\"><style>.ai-acc-123 { width:100%; max-width:{{maxWidth}}; } .ai-acc-123 .item { border:{{borderWidth}} solid {{borderColor}}; border-radius:{{radius}}; margin-bottom:{{gap}}; overflow:hidden; } .ai-acc-123 .title { background:{{titleBg}}; color:{{titleColor}}; padding:{{titlePad}}; font-size:{{fontSize}}; font-weight:{{fontWeight}}; cursor:pointer; display:flex; justify-content:space-between; } .ai-acc-123 .title:hover { background:{{titleHoverBg}}; } .ai-acc-123 .content { background:{{contentBg}}; color:{{contentColor}}; padding:{{contentPad}}; display:none; }</style><div class=\"item\"><div class=\"title\">{{title1}}<span>+</span></div><div class=\"content\">{{content1}}</div></div><div class=\"item\"><div class=\"title\">{{title2}}<span>+</span></div><div class=\"content\">{{content2}}</div></div></div>",
+  "properties": { "maxWidth":"600px","gap":"8px","borderWidth":"1px","borderColor":"#e5e7eb","radius":"8px","titleBg":"#f9fafb","titleHoverBg":"#f3f4f6","titleColor":"#111827","titlePad":"16px","fontSize":"16px","fontWeight":"600","contentBg":"#ffffff","contentColor":"#4b5563","contentPad":"16px","title1":"Question 1","content1":"Answer 1","title2":"Question 2","content2":"Answer 2" },
+  "editableProps": [{"key":"maxWidth","label":"Max Width","type":"text"},{"key":"gap","label":"Item Gap","type":"text"},{"key":"borderColor","label":"Border Color","type":"color"},{"key":"radius","label":"Radius","type":"text"},{"key":"titleBg","label":"Title BG","type":"color"},{"key":"titleHoverBg","label":"Title Hover BG","type":"color"},{"key":"titleColor","label":"Title Color","type":"color"},{"key":"contentBg","label":"Content BG","type":"color"},{"key":"contentColor","label":"Content Color","type":"color"},{"key":"title1","label":"Title 1","type":"text"},{"key":"content1","label":"Content 1","type":"text"},{"key":"title2","label":"Title 2","type":"text"},{"key":"content2","label":"Content 2","type":"text"}],
+  "script": "container.querySelectorAll('.title').forEach(t => { t.onclick = () => { const c = t.nextElementSibling; const open = c.style.display === 'block'; c.style.display = open ? 'none' : 'block'; t.querySelector('span').textContent = open ? '+' : '-'; }; });"
+}
+```
+
+### Example 2 — Data Form (Newsletter)
+```json
+{
+  "aiTemplate": "<div class=\"ai-nl-456\"><style>.ai-nl-456 { width:100%; display:flex; justify-content:center; } .ai-nl-456 form { background:{{bgColor}}; padding:{{padding}}; border-radius:{{radius}}; box-shadow:{{shadow}}; width:100%; max-width:{{maxWidth}}; } .ai-nl-456 input { width:100%; box-sizing:border-box; padding:10px; border:1px solid {{borderColor}}; border-radius:6px; margin-bottom:10px; } .ai-nl-456 button { width:100%; padding:10px; background:{{btnColor}}; color:{{btnTextColor}}; border:none; border-radius:{{btnRadius}}; cursor:pointer; font-weight:600; } .ai-nl-456 button:disabled { opacity:0.5; cursor:not-allowed; } .ai-nl-456 .status { text-align:center; margin-top:8px; font-size:14px; }</style><form onsubmit=\"return false;\"><input name=\"email\" type=\"email\" placeholder=\"{{placeholder}}\" required><button type=\"submit\">{{btnText}}</button><p class=\"status\"></p></form></div>",
+  "properties": { "schema_id":"","bgColor":"#ffffff","padding":"24px","radius":"12px","shadow":"0 4px 12px rgba(0,0,0,0.1)","maxWidth":"400px","borderColor":"#e5e7eb","btnColor":"#2563eb","btnTextColor":"#ffffff","btnRadius":"6px","placeholder":"Enter your email...","btnText":"Subscribe" },
+  "editableProps": [{"key":"bgColor","label":"Background","type":"color"},{"key":"padding","label":"Padding","type":"text"},{"key":"radius","label":"Radius","type":"text"},{"key":"shadow","label":"Shadow","type":"text"},{"key":"maxWidth","label":"Max Width","type":"text"},{"key":"borderColor","label":"Input Border","type":"color"},{"key":"btnColor","label":"Button Color","type":"color"},{"key":"btnTextColor","label":"Button Text Color","type":"color"},{"key":"btnRadius","label":"Button Radius","type":"text"},{"key":"placeholder","label":"Placeholder","type":"text"},{"key":"btnText","label":"Button Text","type":"text"}],
+  "script": "const form = container.querySelector('form'); const status = container.querySelector('.status'); const btn = form.querySelector('button'); form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v,k) => data[k]=v); btn.disabled = true; btn.textContent = 'Subscribing...'; status.textContent = ''; try { await api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null }); status.textContent = 'Subscribed! Thank you.'; form.reset(); } catch { status.textContent = 'Something went wrong. Please try again.'; } finally { btn.disabled = false; btn.textContent = properties.btnText; } };"
+}
+```
+
+### Example 3 — Data Grid with Edit/Delete + Pagination
+```json
+{
+  "aiTemplate": "<div class=\"ai-grid-789\"><style>.ai-grid-789 { width:100%; } .ai-grid-789 .grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:16px; } .ai-grid-789 .card { background:#fff; padding:16px; border-radius:8px; box-shadow:0 2px 8px rgba(0,0,0,0.1); display:flex; flex-direction:column; } .ai-grid-789 .actions { display:flex; gap:8px; margin-top:auto; padding-top:12px; } .ai-grid-789 .edit { background:#3b82f6; color:#fff; border:none; padding:8px 12px; border-radius:5px; cursor:pointer; } .ai-grid-789 .delete { background:#ef4444; color:#fff; border:none; padding:8px 12px; border-radius:5px; cursor:pointer; } .ai-grid-789 button:disabled { opacity:0.5; cursor:not-allowed; } .ai-grid-789 .pagination { display:flex; justify-content:center; gap:12px; margin-top:20px; } .ai-grid-789 .pagination button { padding:8px 16px; border:1px solid #ccc; border-radius:6px; cursor:pointer; }</style><div class=\"grid\"></div><div class=\"pagination\"><button class=\"prev\">{{prevText}}</button><button class=\"next\">{{nextText}}</button></div></div>",
+  "properties": { "schema_id":"","prevText":"← Previous","nextText":"Next →" },
+  "editableProps": [{"key":"prevText","label":"Prev Button","type":"text"},{"key":"nextText","label":"Next Button","type":"text"}],
+  "script": "const grid = container.querySelector('.grid'); const prevBtn = container.querySelector('.prev'); const nextBtn = container.querySelector('.next'); let rows = []; let page = 0; const limit = 6; const fetchAndRenderRows = async () => { const res = await api.get(`/custom-data/rows/${schemaId}?skip=${page*limit}&limit=${limit}`); rows = res.data.rows; const total = res.data.total; if (!rows.length) { grid.innerHTML = '<p>No items found.</p>'; return; } grid.innerHTML = rows.map((row,i) => `<div class=\"card\"><strong>${row.data.name||''}</strong><p>${row.data.email||''}</p><div class=\"actions\"><button class=\"edit\" data-index=\"${i}\">Edit</button><button class=\"delete\" data-index=\"${i}\">Delete</button></div></div>`).join(''); prevBtn.disabled = page===0; nextBtn.disabled = (page+1)*limit >= total; attachEventListeners(); }; const attachEventListeners = () => { container.querySelectorAll('.edit').forEach(btn => { btn.onclick = async () => { const i = parseInt(btn.getAttribute('data-index')); const rowId = rows[i].row_id; btn.disabled=true; btn.textContent='Saving...'; try { const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${rowId}`); const t = res.data.rows.find(r=>r.row_id===rowId); if(!t){alert('Row not found');btn.disabled=false;btn.textContent='Edit';return;} await api.put('/custom-data/rows/'+rowId,{data:{...t.data},sitemember_id:null}); fetchAndRenderRows(); } catch { alert('Failed to update.'); btn.disabled=false; btn.textContent='Edit'; } }; }); container.querySelectorAll('.delete').forEach(btn => { btn.onclick = async () => { if(!confirm('Are you sure you want to delete this item?'))return; const i=parseInt(btn.getAttribute('data-index')); const rowId=rows[i].row_id; btn.disabled=true; btn.textContent='Deleting...'; try { await api.delete(`/custom-data/rows/${rowId}`); fetchAndRenderRows(); } catch { alert('Failed to delete.'); btn.disabled=false; btn.textContent='Delete'; } }; }); }; prevBtn.onclick=()=>{if(page>0){page--;fetchAndRenderRows();}}; nextBtn.onclick=()=>{page++;fetchAndRenderRows();}; fetchAndRenderRows();"
+}
+```
+""".strip()
 #endregion nontabletestingai
 
