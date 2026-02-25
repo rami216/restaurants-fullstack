@@ -15291,7 +15291,12 @@ const aiRes = await api.post('/builder/openai', {
 });
 
 // RULE 1 — strip markdown first, always:
-let cleanText = aiRes.data.text.replace(/```json/g,'').replace(/```/g,'').trim();
+let cleanText = aiRes.data.text
+  .replace(/```json/g, '')
+  .replace(/```/g, '')
+  .replace(/^json\s*/i, '')
+  .replace(/^JSON\s*/i, '')
+  .trim();
 // RULE 1b — MANDATORY: fix bare word values BEFORE parsing.
 // OpenAI often returns unquoted words like bodyweight, moderate, heavy instead of strings.
 // This line is NOT optional. If you skip it, JSON.parse will crash silently.
@@ -15345,7 +15350,13 @@ const aiRes = await api.post('/builder/openai', {
 });
 
 // RULE 1 — strip markdown first, always:
-const resultText = aiRes.data.text.replace(/```/g,'').trim();
+const resultText = aiRes.data.text
+  .replace(/```json/g, '')
+  .replace(/```/g, '')
+  .replace(/^json\s*/i, '')
+  .replace(/^JSON\s*/i, '')
+  .trim();
+
 
 // Inject into target element:
 const targetEl = container.querySelector('.ai-result');
