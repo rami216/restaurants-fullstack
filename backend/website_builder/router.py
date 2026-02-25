@@ -1188,7 +1188,8 @@ class FetchExternalPayload(BaseModel):
     url: str
     method: Optional[str] = "GET"
     headers: Optional[dict] = None
-    json_body: Optional[dict] = None
+    body: Optional[dict] = None
+
 
 @router.post("/fetch-external")
 async def fetch_external_api(payload: FetchExternalPayload):
