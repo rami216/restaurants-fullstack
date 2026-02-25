@@ -15075,6 +15075,11 @@ You are an expert front-end developer. Output a valid JSON with four keys: "aiTe
 - DOM PRESERVATION: Never overwrite `container.innerHTML` directly. Use a child container: `container.querySelector('.list-container').innerHTML = ...`
 - STRICT PROHIBITION: No `console.log()`, no placeholder `alert()` (confirm for delete only)
 
+**EVENT LISTENER RULE (CRITICAL FOR ALL WIDGETS):**
+Action buttons MUST use a `btn.onclick` listener — NEVER wrap inputs in a `<form>` and NEVER use `form.onsubmit` unless explicitly building a standard contact form. Custom widgets and dashboards are built with `<div>` containers. `onsubmit` will fail silently.
+WRONG ❌: `<form onsubmit="...">` or `form.onsubmit = async (e) => { ... }`
+CORRECT ✅: `const btn = container.querySelector('button'); btn.onclick = async () => { ... }`
+
 **CHATBOT INPUT RULE (CRITICAL):**
 The Send button in a chatbot MUST use a `btn.onclick` listener — NEVER `form.onsubmit`.
 Chatbot inputs are divs not forms — `div.onsubmit` never fires and the button will do nothing silently.
