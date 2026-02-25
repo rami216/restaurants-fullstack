@@ -15075,6 +15075,11 @@ You are an expert front-end developer. Output a valid JSON with four keys: "aiTe
 - DOM PRESERVATION: Never overwrite `container.innerHTML` directly. Use a child container: `container.querySelector('.list-container').innerHTML = ...`
 - STRICT PROHIBITION: No `console.log()`, no placeholder `alert()` (confirm for delete only)
 
+**DOM QUERYING & VARIABLE RULES (CRITICAL):**
+- The `container` variable is ALREADY DECLARED by the system. NEVER write `const container = ...` or `let container = ...` in your script. Doing so causes a fatal SyntaxError and breaks the component.
+- ALWAYS add descriptive `class` attributes to your HTML elements (e.g., `<input class="package-name">`).
+- ALWAYS use `container.querySelector('.classname')` to grab elements. NEVER use brittle selectors like `:nth-child()`, `.children[0]`, or tag-only selectors like `querySelector('input')` when there are multiple inputs.
+
 **EVENT LISTENER RULE (CRITICAL FOR ALL WIDGETS):**
 Action buttons MUST use a `btn.onclick` listener — NEVER wrap inputs in a `<form>` and NEVER use `form.onsubmit` unless explicitly building a standard contact form. Custom widgets and dashboards are built with `<div>` containers. `onsubmit` will fail silently.
 WRONG ❌: `<form onsubmit="...">` or `form.onsubmit = async (e) => { ... }`
