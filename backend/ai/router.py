@@ -15130,17 +15130,17 @@ let rows = [];  // top-level, outside all functions
 const fetchAndRenderRows = async () => {
   const res = await api.get(`/custom-data/rows/${schemaId}?limit=50`);
   rows = res.data.rows;
-  list.innerHTML = rows.map((row, index) =>
-    `<button class="edit" data-index="${index}">Edit</button>
-     <button class="delete" data-index="${index}">Delete</button>`
-  ).join('');
+  list.innerHTML = rows.map((row) =>
+  `<button class="edit" data-id="${row.row_id}">Edit</button>
+   <button class="delete" data-id="${row.row_id}">Delete</button>`
+).join('');
   attachEventListeners();
 };
 
 const attachEventListeners = () => {
   container.querySelectorAll('.edit').forEach(btn => {
     btn.onclick = async () => {
-      const index = parseInt(btn.getAttribute('data-index'));
+      const rowId = btn.getAttribute('data-id');
       const rowId = rows[index].row_id;
       btn.disabled = true; btn.textContent = 'Saving...';
       try { /* fetch-merge-update */ fetchAndRenderRows(); }
@@ -15150,7 +15150,7 @@ const attachEventListeners = () => {
   container.querySelectorAll('.delete').forEach(btn => {
     btn.onclick = async () => {
       if (!confirm('Are you sure you want to delete this item?')) return;
-      const index = parseInt(btn.getAttribute('data-index'));
+      const rowId = btn.getAttribute('data-id');
       const rowId = rows[index].row_id;
       btn.disabled = true; btn.textContent = 'Deleting...';
       try { await api.delete(`/custom-data/rows/${rowId}`); fetchAndRenderRows(); }
@@ -15159,16 +15159,6 @@ const attachEventListeners = () => {
   });
 };
 ``` 
-**FILTER + INDEX MISMATCH RULE (CRITICAL):**
-If rows are filtered before rendering (e.g. by day, category, status),
-NEVER use the original array index as data-index.
-Instead store the row_id directly on the button:
-`<button class="done-btn" data-id="${row.row_id}">Mark as Done</button>`
-Then in the listener read it as:
-`const rowId = btn.getAttribute('data-id');`
-`const row = rows.find(r => r.row_id === rowId);`
-NEVER do `rows[index]` when a filter is active — the index will not match.
-
 ---
 
 ## USER-SCOPED DATA
