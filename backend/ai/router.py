@@ -15349,17 +15349,12 @@ Add `website_id` to properties only (never in editableProps).
 
 ----
 
-## CHATBOT
-
-**DECISION TREE — pick the right pattern first:**
-- User asks questions only, no saving → **READ-ONLY BOT**
-- User needs to book, register, save, update, delete, or send email → **ACTION-BASED BOT**
-
----
-
-### READ-ONLY BOT
-```js
-let chatHistory = [];
+##CHATBOT##
+DECISION TREE — pick the right pattern first:
+ . User asks questions only, no saving → READ-ONLY BOT
+ . User needs to book, register, save, update, delete, or send email → ACTION-BASED BOT
+READ-ONLY BOT:
+    let chatHistory = [];
 let businessContext = "";
 
 // Step 1 — Always load fresh data before every message
@@ -15378,11 +15373,14 @@ const buildSystemPrompt = () => `You are a helpful customer support assistant.
 KNOWLEDGE BASE (live, up to date):
 ${businessContext}
 
+CONVERSATION SO FAR:
+${chatHistory.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n')}
+
 RULES:
-- Answer ONLY based on the knowledge base above
-- If the answer is not in the knowledge base, say "I don't have that information, please contact us directly."
-- Never make up information that is not in the knowledge base
-- Be conversational, friendly, and concise`;
+- Use the knowledge base to answer questions — summarize it, paraphrase it, explain it freely
+- For general questions like "what do you do?" or "tell me about the business" — give a friendly summary
+- Only say "I don't have that information, please contact us directly" if the topic is genuinely not in the knowledge base
+- Never invent prices, addresses, or facts not in the knowledge base`;
 
 const renderMessage = (role, text, cssClass) => {
   const chatDisplay = container.querySelector('.chat-display');
@@ -15396,15 +15394,14 @@ const renderMessage = (role, text, cssClass) => {
 // Load context on init
 loadContext();
 
-const form = container.querySelector('form');
-const input = form.querySelector('input[type="text"]');
+// ✅ CRITICAL: Use btn.onclick — NEVER form.onsubmit. Chatbot inputs are divs not forms.
+const input = container.querySelector('.chat-input input');
+const btn = container.querySelector('.chat-input button');
 
-form.onsubmit = async (e) => {
-  e.preventDefault();
+btn.onclick = async () => {
   const userText = input.value.trim();
   if (!userText) return;
 
-  const btn = form.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '...';
   input.value = '';
@@ -15417,7 +15414,6 @@ form.onsubmit = async (e) => {
 
   // Truncate to last 20 messages — prevents token overflow
   if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
-  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
   try {
     const currentUserId = typeof window !== 'undefined'
@@ -15427,8 +15423,8 @@ form.onsubmit = async (e) => {
     const aiRes = await api.post('/builder/openai', {
       website_id: properties.website_id,
       member_id: currentUserId,
-      prompt: historyBlock,
-      system_prompt: buildSystemPrompt() // ✅ context is always inside here — never anywhere else
+      prompt: userText,             // ✅ ONLY the latest message — history is in system_prompt
+      system_prompt: buildSystemPrompt() // ✅ knowledge base + history always inside here
     });
 
     renderMessage('AI', aiRes.data.text, 'ai-bubble');
@@ -15441,14 +15437,8 @@ form.onsubmit = async (e) => {
     btn.textContent = 'Send';
   }
 };
-```
-
----
-
-### ACTION-BASED BOT
-
-Supports: **create, update, delete, email, and multi-step workflows**
-```js
+ACTION-BASED BOT:
+Supports: create, update, delete, email, and multi-step workflows
 let chatHistory = [];
 let businessContext = "";
 
@@ -15472,11 +15462,15 @@ const buildSystemPrompt = () => `You are a helpful assistant.
 KNOWLEDGE BASE (live, up to date):
 ${businessContext}
 
+CONVERSATION SO FAR:
+${chatHistory.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n')}
+
 YOUR MISSION:
-1. Answer questions based on the knowledge base
-2. Help the user complete their request by asking clarifying questions
-3. ONLY execute actions when the user EXPLICITLY confirms with words like "yes", "confirm", "book it", "proceed"
-4. ALWAYS collect the user's email before executing any action
+1. Use the knowledge base to answer questions — summarize it, paraphrase it, explain it freely
+2. For general questions like "what do you do?" or "tell me about the business" — give a friendly summary
+3. Help the user complete their request by asking clarifying questions
+4. ONLY execute actions when the user EXPLICITLY confirms with words like "yes", "confirm", "book it", "proceed"
+5. ALWAYS collect the user's email before executing any action
 
 EXECUTION PROTOCOL:
 When user explicitly confirms, reply ONLY with this exact JSON and nothing else.
@@ -15541,15 +15535,14 @@ const executeStep = async (step) => {
 // Load context on init
 loadContext();
 
-const form = container.querySelector('form');
-const input = form.querySelector('input[type="text"]');
+// ✅ CRITICAL: Use btn.onclick — NEVER form.onsubmit. Chatbot inputs are divs not forms.
+const input = container.querySelector('.chat-input input');
+const btn = container.querySelector('.chat-input button');
 
-form.onsubmit = async (e) => {
-  e.preventDefault();
+btn.onclick = async () => {
   const userText = input.value.trim();
   if (!userText) return;
 
-  const btn = form.querySelector('button[type="submit"]');
   btn.disabled = true;
   btn.textContent = '...';
   input.value = '';
@@ -15562,14 +15555,13 @@ form.onsubmit = async (e) => {
 
   // Truncate to last 20 messages — prevents token overflow
   if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
-  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
 
   try {
     const aiRes = await api.post('/builder/openai', {
       website_id: properties.website_id,
       member_id: currentUserId,
-      prompt: historyBlock,
-      system_prompt: buildSystemPrompt() // ✅ context is always inside here — never anywhere else
+      prompt: userText,             // ✅ ONLY the latest message — history is in system_prompt
+      system_prompt: buildSystemPrompt() // ✅ knowledge base + history always inside here
     });
 
     const text = aiRes.data.text;
@@ -15616,38 +15608,26 @@ form.onsubmit = async (e) => {
     btn.textContent = 'Send';
   }
 };
-```
+CRITICAL RULES FOR BOTH PATTERNS:
+- KNOWLEDGE BASE INJECTION (MOST CRITICAL):
+    Always use buildSystemPrompt() — this guarantees businessContext AND chatHistory are inside system_prompt. Never pass them as separate fields.
+    WRONG ❌ — API ignores this completely:
+        system_prompt: "You are an assistant.",
+        context: businessContext
 
----
-
-**CRITICAL RULES FOR BOTH PATTERNS:**
-
-- **KNOWLEDGE BASE INJECTION (MOST CRITICAL):**
-  Always use `buildSystemPrompt()` function — this guarantees `businessContext` is inside `system_prompt` every single time. Never pass it as a separate field.
-
-  WRONG ❌ — API ignores this completely:
-```js
-  system_prompt: "You are an assistant.",
-  context: businessContext
-```
-  CORRECT ✅ — only way that works:
-```js
-  system_prompt: buildSystemPrompt() // businessContext is already inside
-```
-
-- **LIVE DATA:** Call `await loadContext()` on every message before the API call — never skip this
-
-- **TOKEN OVERFLOW:** Always truncate `chatHistory` to last 20 messages before every API call
-
-- **OWNERSHIP IN STEPS:**
-  - `owned: true` → `sitemember_id: currentUserId`
-  - `owned: false` → `sitemember_id: null`
-
-- **MULTI-STEP:** All steps execute in order — if one fails the catch block stops everything
-
-- **MEMBER ID:** Always include `member_id: currentUserId` in every `/builder/openai` call
-
-- **PROPERTIES:** `website_id` in properties only, never editableProps. `emailSubject` and `emailBody` in both properties and editableProps for action-based bots only
+    CORRECT ✅ — only way that works:
+        prompt: userText,                  // latest message only
+        system_prompt: buildSystemPrompt() // everything else goes here
+    -PROMPT = LATEST MESSAGE ONLY: Always pass prompt: userText — never pass the full history as prompt. Chat history belongs inside buildSystemPrompt() under "CONVERSATION SO FAR"
+    -SEND BUTTON: Always use btn.onclick — NEVER form.onsubmit. Chatbot containers are divs not forms. div.onsubmit never fires and the button will silently do nothing.
+    -LIVE DATA: Call await loadContext() on every message before the API call — never skip this
+    -TOKEN OVERFLOW: Always truncate chatHistory to last 20 messages before every API call
+    -OWNERSHIP IN STEPS:
+        - owned: true → sitemember_id: currentUserId
+        - owned: false → sitemember_id: null
+    -MULTI-STEP: All steps execute in order — if one fails the catch block stops everything
+    -MEMBER ID: Always include member_id: currentUserId in every /builder/openai call
+    -PROPERTIES:website_id in properties only, never editableProps. emailSubject and emailBody in both properties and editableProps for action-based bots only
 ----
 
 ## DASHBOARD / CHARTS
