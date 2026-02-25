@@ -15348,14 +15348,19 @@ Add `systemPrompt` to properties/editableProps.
 Add `website_id` to properties only (never in editableProps).
 
 ----
+## CHATBOT
 
-##CHATBOT##
-DECISION TREE — pick the right pattern first:
+**DECISION TREE — pick the right pattern first:**
 - User asks questions only, NO email sending, NO saving → **READ-ONLY BOT**
 - User needs to book, register, save, update, delete, OR send any kind of email → **ACTION-BASED BOT**
 - If the prompt mentions "send email", "email the client", "offer to email" → ALWAYS ACTION-BASED BOT
-READ-ONLY BOT:
-    let chatHistory = [];
+
+---
+
+### READ-ONLY BOT
+
+```js
+let chatHistory = [];
 let businessContext = "";
 
 // Step 1 — Always load fresh data before every message
@@ -15375,7 +15380,7 @@ KNOWLEDGE BASE (live, up to date):
 ${businessContext}
 
 CONVERSATION SO FAR:
-${chatHistory.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n')}
+${chatHistory.map(m => `${m.role}: ${m.content}`).join('\n')}
 
 RULES:
 - Use the knowledge base to answer questions — summarize it, paraphrase it, explain it freely
@@ -15408,7 +15413,6 @@ btn.onclick = async () => {
   input.value = '';
 
   renderMessage('You', userText, 'user-bubble');
-  chatHistory.push({ role: 'user', content: userText });
 
   // Reload context on every message — fresh live data every time
   await loadContext();
@@ -15421,15 +15425,20 @@ btn.onclick = async () => {
       ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
       : null;
 
+    // ✅ CRITICAL ORDER: call API FIRST, then push to history
+    // history does not include current message yet — no duplicates, no slice needed
     const aiRes = await api.post('/builder/openai', {
       website_id: properties.website_id,
       member_id: currentUserId,
-      prompt: userText,             // ✅ ONLY the latest message — history is in system_prompt
-      system_prompt: buildSystemPrompt() // ✅ knowledge base + history always inside here
+      prompt: userText,              // ✅ latest message only
+      system_prompt: buildSystemPrompt() // ✅ full history + knowledge base inside here
     });
 
-    renderMessage('AI', aiRes.data.text, 'ai-bubble');
+    // Save AFTER the API call — both user and AI messages together
+    chatHistory.push({ role: 'user', content: userText });
     chatHistory.push({ role: 'assistant', content: aiRes.data.text });
+
+    renderMessage('AI', aiRes.data.text, 'ai-bubble');
 
   } catch(err) {
     renderMessage('System', 'Sorry, something went wrong. Please try again.', 'error-bubble');
@@ -15438,8 +15447,15 @@ btn.onclick = async () => {
     btn.textContent = 'Send';
   }
 };
-ACTION-BASED BOT:
-Supports: create, update, delete, email, and multi-step workflows
+```
+
+---
+
+### ACTION-BASED BOT
+
+Supports: **create, update, delete, email, and multi-step workflows**
+
+```js
 let chatHistory = [];
 let businessContext = "";
 
@@ -15464,14 +15480,16 @@ KNOWLEDGE BASE (live, up to date):
 ${businessContext}
 
 CONVERSATION SO FAR:
-${chatHistory.slice(0, -1).map(m => `${m.role}: ${m.content}`).join('\n')}
+${chatHistory.map(m => `${m.role}: ${m.content}`).join('\n')}
 
 YOUR MISSION:
 1. Use the knowledge base to answer questions — summarize it, paraphrase it, explain it freely
 2. For general questions like "what do you do?" or "tell me about the business" — give a friendly summary
 3. Help the user complete their request by asking clarifying questions
-4. ONLY execute actions when the user EXPLICITLY confirms with words like "yes", "confirm", "book it", "proceed"
-5. ALWAYS collect the user's email before executing any action
+4. Collect the user's email address ONCE — never ask for it again after they provide it
+5. Ask for confirmation ONCE — as soon as the user says "yes", "confirm", "ok", "sure", "proceed", or any similar positive response, immediately execute. Never ask again.
+6. NEVER re-ask for information the user has already provided in the conversation
+7. As soon as you have: (a) what they want and (b) their email — summarize and execute immediately on first confirmation
 
 EXECUTION PROTOCOL:
 When user explicitly confirms, reply ONLY with this exact JSON and nothing else.
@@ -15549,7 +15567,6 @@ btn.onclick = async () => {
   input.value = '';
 
   renderMessage('You', userText, 'user-bubble');
-  chatHistory.push({ role: 'user', content: userText });
 
   // Reload context on every message — fresh live data every time
   await loadContext();
@@ -15558,11 +15575,13 @@ btn.onclick = async () => {
   if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
 
   try {
+    // ✅ CRITICAL ORDER: call API FIRST, then push to history
+    // history does not include current message yet — no duplicates, no slice needed
     const aiRes = await api.post('/builder/openai', {
       website_id: properties.website_id,
       member_id: currentUserId,
-      prompt: userText,             // ✅ ONLY the latest message — history is in system_prompt
-      system_prompt: buildSystemPrompt() // ✅ knowledge base + history always inside here
+      prompt: userText,              // ✅ latest message only
+      system_prompt: buildSystemPrompt() // ✅ full history + knowledge base inside here
     });
 
     const text = aiRes.data.text;
@@ -15590,17 +15609,22 @@ btn.onclick = async () => {
           });
         }
 
-        renderMessage('AI', '✅ ' + (cmd.summary || 'Your request has been processed.'), 'ai-bubble');
+        // Save to history AFTER execution
+        chatHistory.push({ role: 'user', content: userText });
         chatHistory.push({ role: 'assistant', content: 'Workflow completed: ' + cmd.summary });
+
+        renderMessage('AI', '✅ ' + (cmd.summary || 'Your request has been processed.'), 'ai-bubble');
         return;
       }
     } catch(jsonErr) {
       // Not JSON — normal conversation, continue below
     }
 
-    // Normal conversational response
-    renderMessage('AI', text, 'ai-bubble');
+    // Save to history AFTER API call — both user and AI messages together
+    chatHistory.push({ role: 'user', content: userText });
     chatHistory.push({ role: 'assistant', content: text });
+
+    renderMessage('AI', text, 'ai-bubble');
 
   } catch(err) {
     renderMessage('System', 'Sorry, something went wrong. Please try again.', 'error-bubble');
@@ -15609,26 +15633,60 @@ btn.onclick = async () => {
     btn.textContent = 'Send';
   }
 };
-CRITICAL RULES FOR BOTH PATTERNS:
-- KNOWLEDGE BASE INJECTION (MOST CRITICAL):
-    Always use buildSystemPrompt() — this guarantees businessContext AND chatHistory are inside system_prompt. Never pass them as separate fields.
-    WRONG ❌ — API ignores this completely:
-        system_prompt: "You are an assistant.",
-        context: businessContext
+```
 
-    CORRECT ✅ — only way that works:
-        prompt: userText,                  // latest message only
-        system_prompt: buildSystemPrompt() // everything else goes here
-    -PROMPT = LATEST MESSAGE ONLY: Always pass prompt: userText — never pass the full history as prompt. Chat history belongs inside buildSystemPrompt() under "CONVERSATION SO FAR"
-    -SEND BUTTON: Always use btn.onclick — NEVER form.onsubmit. Chatbot containers are divs not forms. div.onsubmit never fires and the button will silently do nothing.
-    -LIVE DATA: Call await loadContext() on every message before the API call — never skip this
-    -TOKEN OVERFLOW: Always truncate chatHistory to last 20 messages before every API call
-    -OWNERSHIP IN STEPS:
-        - owned: true → sitemember_id: currentUserId
-        - owned: false → sitemember_id: null
-    -MULTI-STEP: All steps execute in order — if one fails the catch block stops everything
-    -MEMBER ID: Always include member_id: currentUserId in every /builder/openai call
-    -PROPERTIES:website_id in properties only, never editableProps. emailSubject and emailBody in both properties and editableProps for action-based bots only
+---
+
+**CRITICAL RULES FOR BOTH PATTERNS:**
+
+- **KNOWLEDGE BASE INJECTION (MOST CRITICAL):**
+  Always use `buildSystemPrompt()` — this guarantees `businessContext` AND `chatHistory` are inside `system_prompt`. Never pass them as separate fields.
+
+  WRONG ❌ — API ignores this completely:
+  ```js
+  system_prompt: "You are an assistant.",
+  context: businessContext
+  ```
+  CORRECT ✅ — only way that works:
+  ```js
+  prompt: userText,                   // latest message only
+  system_prompt: buildSystemPrompt()  // everything else goes here
+  ```
+
+- **HISTORY ORDER (CRITICAL):** Always call the API FIRST, then push to `chatHistory` AFTER. Never push before the API call — it causes duplicates and the AI sees the current message twice.
+
+  WRONG ❌ — pushes before API call, causes duplicate:
+  ```js
+  chatHistory.push({ role: 'user', content: userText }); // too early!
+  const aiRes = await api.post(...)
+  ```
+  CORRECT ✅ — push after API call:
+  ```js
+  const aiRes = await api.post(...)
+  chatHistory.push({ role: 'user', content: userText }); // after
+  chatHistory.push({ role: 'assistant', content: aiRes.data.text }); // after
+  ```
+
+- **NO slice():** Never use `chatHistory.slice(0, -1)` — it removes the last message and breaks memory. Always use `chatHistory.map(...)` with no slice.
+
+- **PROMPT = LATEST MESSAGE ONLY:** Always pass `prompt: userText` — never pass the full history as prompt. Chat history belongs inside `buildSystemPrompt()` under "CONVERSATION SO FAR"
+
+- **SEND BUTTON:** Always use `btn.onclick` — NEVER `form.onsubmit`. Chatbot containers are divs not forms. `div.onsubmit` never fires and the button will silently do nothing.
+
+- **LIVE DATA:** Call `await loadContext()` on every message before the API call — never skip this
+
+- **TOKEN OVERFLOW:** Always truncate `chatHistory` to last 20 messages before every API call
+
+- **OWNERSHIP IN STEPS:**
+  - `owned: true` → `sitemember_id: currentUserId`
+  - `owned: false` → `sitemember_id: null`
+
+- **MULTI-STEP:** All steps execute in order — if one fails the catch block stops everything
+
+- **MEMBER ID:** Always include `member_id: currentUserId` in every `/builder/openai` call
+
+- **PROPERTIES:** `website_id` in properties only, never editableProps. `emailSubject` and `emailBody` in both properties and editableProps for action-based bots only
+
 ----
 
 ## DASHBOARD / CHARTS
