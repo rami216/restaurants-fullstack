@@ -15819,6 +15819,9 @@ For external APIs that block CORS, use the backend proxy instead of direct `fetc
 Because the request goes through the internal API (`api.post`) AND the backend proxy, the final response is double-wrapped. You MUST ALWAYS access the actual external API JSON payload using `res.data.data`. 
 If you only use `res.data`, your code will fail to find the external API's fields.
 
+**CRITICAL POST REQUEST RULE:**
+If the external API requires a POST request with a JSON body, you MUST pass the `body` parameter to the proxy as a RAW JavaScript object. DO NOT use `JSON.stringify()`. The backend proxy will handle the stringification.
+
 ```js
 // Build headers conditionally (only add Auth if a key exists)
 const headers = { 'Content-Type': 'application/json' };
@@ -15829,8 +15832,9 @@ if (properties.apiKey) {
 // Call any external API without CORS issues:
 const res = await api.post('/builder/fetch-external', {
   url: '[https://external-api.com/endpoint](https://external-api.com/endpoint)',
-  method: 'GET', // or POST
-  headers: headers
+  method: 'POST', // or GET
+  headers: headers,
+  body: { key: "value" } // CRITICAL: Raw object, NEVER JSON.stringify({ key: "value" })
 });
 
 // CRITICAL: Always use res.data.data to get the actual external response
