@@ -1210,8 +1210,8 @@ async def fetch_external_api(payload: FetchExternalPayload):
                 "headers": payload.headers or {},
             }
             
-            if payload.json_body:
-                request_kwargs["json"] = payload.json_body
+            if payload.body:
+                request_kwargs["json"] = payload.body
 
             response = await client.request(**request_kwargs)
             
