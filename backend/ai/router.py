@@ -15351,8 +15351,9 @@ Add `website_id` to properties only (never in editableProps).
 
 ##CHATBOT##
 DECISION TREE — pick the right pattern first:
- . User asks questions only, no saving → READ-ONLY BOT
- . User needs to book, register, save, update, delete, or send email → ACTION-BASED BOT
+- User asks questions only, NO email sending, NO saving → **READ-ONLY BOT**
+- User needs to book, register, save, update, delete, OR send any kind of email → **ACTION-BASED BOT**
+- If the prompt mentions "send email", "email the client", "offer to email" → ALWAYS ACTION-BASED BOT
 READ-ONLY BOT:
     let chatHistory = [];
 let businessContext = "";
