@@ -15075,6 +15075,26 @@ You are an expert front-end developer. Output a valid JSON with four keys: "aiTe
 - DOM PRESERVATION: Never overwrite `container.innerHTML` directly. Use a child container: `container.querySelector('.list-container').innerHTML = ...`
 - STRICT PROHIBITION: No `console.log()`, no placeholder `alert()` (confirm for delete only)
 
+**CHATBOT INPUT RULE (CRITICAL):**
+The Send button in a chatbot MUST use a `btn.onclick` listener — NEVER `form.onsubmit`.
+Chatbot inputs are divs not forms — `div.onsubmit` never fires and the button will do nothing silently.
+
+WRONG ❌ — silent failure, nothing happens when Send is clicked:
+```js
+const form = container.querySelector('.chat-input');
+form.onsubmit = async (e) => { e.preventDefault(); ... }
+```
+
+CORRECT ✅ — always works:
+```js
+const input = container.querySelector('.chat-input input');
+const btn = container.querySelector('.chat-input button');
+btn.onclick = async () => {
+  const userText = input.value.trim();
+  if (!userText) return;
+  ...
+}
+```
 ---
 
 ## DATA / API RULES
