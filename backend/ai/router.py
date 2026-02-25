@@ -15327,25 +15327,308 @@ if (targetEl) targetEl.textContent = resultText;
 Add `systemPrompt` to properties/editableProps.
 Add `website_id` to properties only (never in editableProps).
 
+----
 
 ## CHATBOT
 
-**Read-only bot** (answers questions, no saving):
-- Load schema rows as `businessContext`
-- Pass `chatHistory` array + context to `/builder/openai` each turn
-- Render user bubbles (right) and AI bubbles (left)
-
-**Action-based bot** (saves/emails on user confirmation):
-- Same as above, but system_prompt includes EXECUTION PROTOCOL:
-    When user confirms, reply ONLY with JSON:
-    { "action": "execute_workflow", "email": "...", "db_target": "...", "db_payload": {...}, "summary": "..." }
-    Otherwise reply conversationally.
-    
-- In JS: try `JSON.parse(aiRes.data.text)` — if `cmd.action === 'execute_workflow'`, save to DB and optionally send email; otherwise render as normal message.
-
-Always use `member_id: currentUserId` in every `/builder/openai` call.
+**DECISION TREE — pick the right pattern first:**
+- User asks questions only, no saving → **READ-ONLY BOT**
+- User needs to book, register, save, update, delete, or send email → **ACTION-BASED BOT**
 
 ---
+
+### READ-ONLY BOT
+```js
+let chatHistory = [];
+let businessContext = "";
+
+// Step 1 — Always load fresh data before every message
+const loadContext = async () => {
+  try {
+    const res = await api.get(`/custom-data/rows/${schemaId}?limit=100`);
+    businessContext = res.data.rows.map(r => r.data.info || JSON.stringify(r.data)).join('\n');
+  } catch(e) { businessContext = "No information available."; }
+};
+
+// Step 2 — Always build system_prompt using this function
+// NEVER pass businessContext as a separate field — it MUST be inside system_prompt
+// If you pass it as context/knowledge/data it will be ignored and AI will answer with zero knowledge
+const buildSystemPrompt = () => `You are a helpful customer support assistant.
+
+KNOWLEDGE BASE (live, up to date):
+${businessContext}
+
+RULES:
+- Answer ONLY based on the knowledge base above
+- If the answer is not in the knowledge base, say "I don't have that information, please contact us directly."
+- Never make up information that is not in the knowledge base
+- Be conversational, friendly, and concise`;
+
+const renderMessage = (role, text, cssClass) => {
+  const chatDisplay = container.querySelector('.chat-display');
+  const bubble = document.createElement('div');
+  bubble.className = cssClass;
+  bubble.textContent = `${role}: ${text}`;
+  chatDisplay.appendChild(bubble);
+  chatDisplay.scrollTop = chatDisplay.scrollHeight;
+};
+
+// Load context on init
+loadContext();
+
+const form = container.querySelector('form');
+const input = form.querySelector('input[type="text"]');
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const userText = input.value.trim();
+  if (!userText) return;
+
+  const btn = form.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = '...';
+  input.value = '';
+
+  renderMessage('You', userText, 'user-bubble');
+  chatHistory.push({ role: 'user', content: userText });
+
+  // Reload context on every message — fresh live data every time
+  await loadContext();
+
+  // Truncate to last 20 messages — prevents token overflow
+  if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+
+  try {
+    const currentUserId = typeof window !== 'undefined'
+      ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+      : null;
+
+    const aiRes = await api.post('/builder/openai', {
+      website_id: properties.website_id,
+      member_id: currentUserId,
+      prompt: historyBlock,
+      system_prompt: buildSystemPrompt() // ✅ context is always inside here — never anywhere else
+    });
+
+    renderMessage('AI', aiRes.data.text, 'ai-bubble');
+    chatHistory.push({ role: 'assistant', content: aiRes.data.text });
+
+  } catch(err) {
+    renderMessage('System', 'Sorry, something went wrong. Please try again.', 'error-bubble');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }
+};
+```
+
+---
+
+### ACTION-BASED BOT
+
+Supports: **create, update, delete, email, and multi-step workflows**
+```js
+let chatHistory = [];
+let businessContext = "";
+
+const currentUserId = typeof window !== 'undefined'
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
+  : null;
+
+// Step 1 — Always load fresh data before every message
+const loadContext = async () => {
+  try {
+    const res = await api.get(`/custom-data/rows/${schemaId}?limit=100`);
+    businessContext = res.data.rows.map(r => r.data.info || JSON.stringify(r.data)).join('\n');
+  } catch(e) { businessContext = "No information available."; }
+};
+
+// Step 2 — Always build system_prompt using this function
+// NEVER pass businessContext as a separate field — it MUST be inside system_prompt
+// If you pass it as context/knowledge/data it will be ignored and AI will answer with zero knowledge
+const buildSystemPrompt = () => `You are a helpful assistant.
+
+KNOWLEDGE BASE (live, up to date):
+${businessContext}
+
+YOUR MISSION:
+1. Answer questions based on the knowledge base
+2. Help the user complete their request by asking clarifying questions
+3. ONLY execute actions when the user EXPLICITLY confirms with words like "yes", "confirm", "book it", "proceed"
+4. ALWAYS collect the user's email before executing any action
+
+EXECUTION PROTOCOL:
+When user explicitly confirms, reply ONLY with this exact JSON and nothing else.
+No markdown, no explanation, just raw JSON:
+
+FOR SINGLE ACTION:
+{
+  "action": "execute_workflow",
+  "email": "user email from conversation",
+  "steps": [
+    { "db_action": "create or update or delete", "db_target": "schema_id for create — row_id for update or delete", "db_payload": { "field": "value" }, "owned": true or false }
+  ],
+  "summary": "plain text summary of what was done to show the user"
+}
+
+FOR MULTI-STEP (e.g. mark slot as taken AND create booking record):
+{
+  "action": "execute_workflow",
+  "email": "user email from conversation",
+  "steps": [
+    { "db_action": "update", "db_target": "row_id_of_slot", "db_payload": { "available": false }, "owned": false },
+    { "db_action": "create", "db_target": "schema_id_of_bookings", "db_payload": { "name": "John", "email": "john@example.com", "slot": "Monday 9am" }, "owned": true }
+  ],
+  "summary": "Your booking for Monday 9am is confirmed!"
+}
+
+owned: true = row belongs to the user (use currentUserId)
+owned: false = row belongs to admin/system (use null)
+
+Otherwise reply with normal conversational text.`;
+
+const renderMessage = (role, text, cssClass) => {
+  const chatDisplay = container.querySelector('.chat-display');
+  const bubble = document.createElement('div');
+  bubble.className = cssClass;
+  bubble.textContent = `${role}: ${text}`;
+  chatDisplay.appendChild(bubble);
+  chatDisplay.scrollTop = chatDisplay.scrollHeight;
+};
+
+// Execute a single DB step
+const executeStep = async (step) => {
+  if (step.db_action === 'create') {
+    await api.post(`/custom-data/rows/${step.db_target}`, {
+      data: step.db_payload,
+      sitemember_id: step.owned ? currentUserId : null
+    });
+  } else if (step.db_action === 'update') {
+    const res = await api.get(`/custom-data/rows/${schemaId}?row_id=${step.db_target}`);
+    const targetRow = res.data.rows.find(r => r.row_id === step.db_target);
+    if (!targetRow) throw new Error(`Row not found: ${step.db_target}`);
+    const mergedData = { ...targetRow.data, ...step.db_payload };
+    await api.put(`/custom-data/rows/${step.db_target}`, {
+      data: mergedData,
+      sitemember_id: step.owned ? currentUserId : null
+    });
+  } else if (step.db_action === 'delete') {
+    await api.delete(`/custom-data/rows/${step.db_target}?sitemember_id=${step.owned ? currentUserId : null}`);
+  }
+};
+
+// Load context on init
+loadContext();
+
+const form = container.querySelector('form');
+const input = form.querySelector('input[type="text"]');
+
+form.onsubmit = async (e) => {
+  e.preventDefault();
+  const userText = input.value.trim();
+  if (!userText) return;
+
+  const btn = form.querySelector('button[type="submit"]');
+  btn.disabled = true;
+  btn.textContent = '...';
+  input.value = '';
+
+  renderMessage('You', userText, 'user-bubble');
+  chatHistory.push({ role: 'user', content: userText });
+
+  // Reload context on every message — fresh live data every time
+  await loadContext();
+
+  // Truncate to last 20 messages — prevents token overflow
+  if (chatHistory.length > 20) chatHistory = chatHistory.slice(-20);
+  const historyBlock = chatHistory.map(m => `${m.role}: ${m.content}`).join('\n');
+
+  try {
+    const aiRes = await api.post('/builder/openai', {
+      website_id: properties.website_id,
+      member_id: currentUserId,
+      prompt: historyBlock,
+      system_prompt: buildSystemPrompt() // ✅ context is always inside here — never anywhere else
+    });
+
+    const text = aiRes.data.text;
+
+    // Try to parse as workflow command
+    try {
+      const cleanJson = text.replace(/```json/g,'').replace(/```/g,'').trim();
+      const cmd = JSON.parse(cleanJson);
+
+      if (cmd.action === 'execute_workflow') {
+        renderMessage('System', '⏳ Processing your request...', 'system-bubble');
+
+        // Execute ALL steps in order
+        for (const step of cmd.steps) {
+          await executeStep(step);
+        }
+
+        // Send confirmation email if configured
+        if (cmd.email && (properties.emailSubject || properties.emailBody)) {
+          await api.post('/builder/send-email', {
+            website_id: properties.website_id,
+            to_email: cmd.email,
+            subject: properties.emailSubject || 'Confirmation',
+            content: (properties.emailBody || '') + (cmd.summary || '')
+          });
+        }
+
+        renderMessage('AI', '✅ ' + (cmd.summary || 'Your request has been processed.'), 'ai-bubble');
+        chatHistory.push({ role: 'assistant', content: 'Workflow completed: ' + cmd.summary });
+        return;
+      }
+    } catch(jsonErr) {
+      // Not JSON — normal conversation, continue below
+    }
+
+    // Normal conversational response
+    renderMessage('AI', text, 'ai-bubble');
+    chatHistory.push({ role: 'assistant', content: text });
+
+  } catch(err) {
+    renderMessage('System', 'Sorry, something went wrong. Please try again.', 'error-bubble');
+  } finally {
+    btn.disabled = false;
+    btn.textContent = 'Send';
+  }
+};
+```
+
+---
+
+**CRITICAL RULES FOR BOTH PATTERNS:**
+
+- **KNOWLEDGE BASE INJECTION (MOST CRITICAL):**
+  Always use `buildSystemPrompt()` function — this guarantees `businessContext` is inside `system_prompt` every single time. Never pass it as a separate field.
+
+  WRONG ❌ — API ignores this completely:
+```js
+  system_prompt: "You are an assistant.",
+  context: businessContext
+```
+  CORRECT ✅ — only way that works:
+```js
+  system_prompt: buildSystemPrompt() // businessContext is already inside
+```
+
+- **LIVE DATA:** Call `await loadContext()` on every message before the API call — never skip this
+
+- **TOKEN OVERFLOW:** Always truncate `chatHistory` to last 20 messages before every API call
+
+- **OWNERSHIP IN STEPS:**
+  - `owned: true` → `sitemember_id: currentUserId`
+  - `owned: false` → `sitemember_id: null`
+
+- **MULTI-STEP:** All steps execute in order — if one fails the catch block stops everything
+
+- **MEMBER ID:** Always include `member_id: currentUserId` in every `/builder/openai` call
+
+- **PROPERTIES:** `website_id` in properties only, never editableProps. `emailSubject` and `emailBody` in both properties and editableProps for action-based bots only
+----
 
 ## DASHBOARD / CHARTS
 
