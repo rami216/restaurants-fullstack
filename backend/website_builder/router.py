@@ -1181,3 +1181,50 @@ async def get_website_ai_analytics(
         "total_calls": total_calls,
         "users": user_data
     }
+    
+    #region FetchExternalPayload
+    
+class FetchExternalPayload(BaseModel):
+    url: str
+    method: Optional[str] = "GET"
+    headers: Optional[dict] = None
+    json_body: Optional[dict] = None
+
+@router.post("/fetch-external")
+async def fetch_external_api(payload: FetchExternalPayload):
+    """
+    Acts as a proxy to fetch external APIs and bypass browser CORS.
+    """
+    # ⚠️ SECURITY WARNING (SSRF Protection):
+    # In a real production app, you should restrict which URLs can be fetched 
+    # to prevent people from scanning your internal AWS/server network (localhost, 169.254.x.x)
+    if "localhost" in payload.url or "127.0.0.1" in payload.url:
+        raise HTTPException(status_code=403, detail="Internal network requests blocked.")
+
+    try:
+        async with httpx.AsyncClient() as client:
+            request_kwargs = {
+                "method": payload.method.upper(),
+                "url": payload.url,
+                "headers": payload.headers or {},
+            }
+            
+            if payload.json_body:
+                request_kwargs["json"] = payload.json_body
+
+            response = await client.request(**request_kwargs)
+            
+            # Return JSON if possible, otherwise return plain text
+            try:
+                data = response.json()
+            except ValueError:
+                data = response.text
+
+            return {
+                "status_code": response.status_code, 
+                "data": data,
+                "headers": dict(response.headers)
+            }
+            
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=f"External API fetch failed: {str(e)}")

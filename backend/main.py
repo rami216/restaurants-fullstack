@@ -60,6 +60,7 @@ PUBLIC_RULES = [
     ("/builder/send-email", {"POST", "OPTIONS"}),  # <--- Add this line
     ("/builder/openai", {"POST", "OPTIONS"}),
     ("/builder/parse-pdf", {"POST", "OPTIONS"}),
+    ("/builder/fetch-external", {"POST", "OPTIONS"}),
 
     
 ]

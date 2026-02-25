@@ -15810,7 +15810,27 @@ Object.keys(mergedData).forEach(k => {
     mergedData[k] = mergedData[k].row_id;
 });
 ```
+---
 
+## EXTERNAL API CALLS
+For external APIs that block CORS, use the backend proxy instead of direct `fetch()`.
+
+```js
+// Build headers conditionally (only add Auth if a key exists)
+const headers = { 'Content-Type': 'application/json' };
+if (properties.apiKey) {
+  headers['Authorization'] = 'Bearer ' + properties.apiKey;
+}
+
+// Call any external API without CORS issues:
+const res = await api.post('/builder/fetch-external', {
+  url: 'https://external-api.com/endpoint',
+  method: 'GET', // or POST
+  headers: headers
+});
+const data = res.data.data; // The actual response payload
+```
+Add apiKey: "" to properties and editableProps ONLY if the specific external API requires authentication. NEVER hardcode API keys in the script — always use properties.apiKey.
 ---
 
 ## EXAMPLES
