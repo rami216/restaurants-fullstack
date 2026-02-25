@@ -15815,6 +15815,10 @@ Object.keys(mergedData).forEach(k => {
 ## EXTERNAL API CALLS
 For external APIs that block CORS, use the backend proxy instead of direct `fetch()`.
 
+**CRITICAL PROXY WRAPPER RULE:**
+Because the request goes through the internal API (`api.post`) AND the backend proxy, the final response is double-wrapped. You MUST ALWAYS access the actual external API JSON payload using `res.data.data`. 
+If you only use `res.data`, your code will fail to find the external API's fields.
+
 ```js
 // Build headers conditionally (only add Auth if a key exists)
 const headers = { 'Content-Type': 'application/json' };
@@ -15824,11 +15828,14 @@ if (properties.apiKey) {
 
 // Call any external API without CORS issues:
 const res = await api.post('/builder/fetch-external', {
-  url: 'https://external-api.com/endpoint',
+  url: '[https://external-api.com/endpoint](https://external-api.com/endpoint)',
   method: 'GET', // or POST
   headers: headers
 });
-const data = res.data.data; // The actual response payload
+
+// CRITICAL: Always use res.data.data to get the actual external response
+const externalData = res.data.data; 
+// Example: externalData.vulnerabilities, externalData.results, etc.
 ```
 Add apiKey: "" to properties and editableProps ONLY if the specific external API requires authentication. NEVER hardcode API keys in the script — always use properties.apiKey.
 ---
