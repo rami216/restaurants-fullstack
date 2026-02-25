@@ -1019,7 +1019,7 @@ class OpenAIPayload(BaseModel):
     member_id: Optional[UUID] = None
     prompt: str
     system_prompt: Optional[str] = "You are a helpful AI assistant."
-    max_tokens: Optional[int] = 500
+    max_tokens: Optional[int] = 4000
 
 @router.post("/openai")
 async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(get_db)):
