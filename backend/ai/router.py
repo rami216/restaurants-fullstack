@@ -15272,7 +15272,10 @@ const aiRes = await api.post('/builder/openai', {
 
 // RULE 1 — strip markdown first, always:
 let cleanText = aiRes.data.text.replace(/```json/g,'').replace(/```/g,'').trim();
-// RULE 1b — fix bare word values (e.g. bodyweight → "bodyweight"):
+// RULE 1b — MANDATORY: fix bare word values BEFORE parsing.
+// OpenAI often returns unquoted words like bodyweight, moderate, heavy instead of strings.
+// This line is NOT optional. If you skip it, JSON.parse will crash silently.
+// ALWAYS include this line word for word in every component that parses AI responses:
 cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match, word, next) => {
   if (word === 'true' || word === 'false' || word === 'null') return match;
   return `: "${word}"${next}`;
