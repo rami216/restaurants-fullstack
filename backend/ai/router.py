@@ -15158,7 +15158,16 @@ const attachEventListeners = () => {
     };
   });
 };
-```
+``` 
+**FILTER + INDEX MISMATCH RULE (CRITICAL):**
+If rows are filtered before rendering (e.g. by day, category, status),
+NEVER use the original array index as data-index.
+Instead store the row_id directly on the button:
+`<button class="done-btn" data-id="${row.row_id}">Mark as Done</button>`
+Then in the listener read it as:
+`const rowId = btn.getAttribute('data-id');`
+`const row = rows.find(r => r.row_id === rowId);`
+NEVER do `rows[index]` when a filter is active — the index will not match.
 
 ---
 
