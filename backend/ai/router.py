@@ -15984,19 +15984,27 @@ const { used_usd, limit_usd, remaining_usd, total_calls } = res.data;
 
 ---
 
-## CASCADING DROPDOWNS (Relational)
-```js
-let allRows = [];
-// 1. Fetch category schema separately, populate select1
-// 2. Fetch main schema (limit=1000), store in allRows
-// 3. On select1.onchange: filter allRows by relation field (handle string ID or expanded object):
-const storedId = (typeof val === 'object' && val !== null) ? val.row_id : val;
-// 4. On submit: sanitize — convert any object fields back to their row_id string before api.put
+## CASCADING DROPDOWNS & RELATIONAL DATA (CRITICAL)
+When the user asks to link two tables, or build dropdowns that depend on each other (e.g., Courses -> Lectures), you MUST follow this exact ID-matching pattern. Never filter by text names.
+
+1. PARENT DROPDOWN (e.g., Course): When populating the first dropdown, the visible text is the name, but the value MUST be the row_id.
+`<option value="${row.row_id}">${row.data.course_name}</option>`
+
+2. CHILD FILTERING (e.g., Lectures): When the parent dropdown changes, use its selected `value` (which is now the row_id) to filter the child table. 
+
+3. SAFE RELATION EXTRACTION: In the child table, the connection field might be saved as a plain string ID, or an expanded object. You MUST safely extract the ID before comparing:
+```javascript
+const selectedParentId = parentSelect.value;
+const filteredChildren = allChildRows.filter(childRow => {
+  const relField = childRow.data.parent_field_name; // e.g., childRow.data.course_name
+  const childsParentId = (relField && typeof relField === 'object') ? relField.row_id : relField;
+  return childsParentId === selectedParentId;
+});
+4. On submit: sanitize — convert any object fields back to their row_id string before api.put
 Object.keys(mergedData).forEach(k => {
   if (mergedData[k] && typeof mergedData[k] === 'object' && mergedData[k].row_id)
     mergedData[k] = mergedData[k].row_id;
 });
-```
 ---
 
 ## EXTERNAL API CALLS
