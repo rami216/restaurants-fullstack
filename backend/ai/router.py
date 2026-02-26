@@ -15270,9 +15270,9 @@ Before writing any code, ask: "What is the destination of this AI response?"
 
 **DECISION TREE — pick mode before writing any code:**
 ```
-AI response saved to database rows?         YES → FLAT ARRAY MODE
-AI response is a simple paragraph/sentence? YES → TEXT MODE
-AI response drives UI rendering?            YES → STRUCTURED UI MODE
+AI response saved to database rows?          YES → FLAT ARRAY MODE
+AI response is a simple paragraph/sentence?  YES → TEXT MODE
+AI response drives UI rendering?             YES → STRUCTURED UI MODE
 ```
 
 ---
@@ -15391,21 +15391,16 @@ Use when: AI response needs to render charts, grids, scored results, dashboards,
 
 Examples: legal contract analyzer, cybersecurity report, financial dashboard, quiz results, nutrition breakdown, personality assessment, any element with cards/scores/sections driven by AI data.
 
-**RULE 3 — REQUEST JSON, NORMALIZE KEYS, NORMALIZE ARRAY ITEMS.**
+**RULE 3 — REQUEST JSON. NEVER read parsedData with hardcoded key names.**
 
-There are THREE failure points in STRUCTURED UI MODE — all three must be handled:
+OpenAI invents different key names every single time — `criticalRisks`, `CriticalRisks`, `critical_risks`, `issues`, `findings.issues` — your JS will silently get `undefined` and crash if you hardcode key names.
 
-**Failure 1 — Key casing mismatch:**
-OpenAI may return `criticalRisks`, `CriticalRisks`, `critical risks`, or `critical_risks` for the same field. Your JS gets `undefined` and crashes silently.
-Solution: always run `normalizeKeys()` immediately after JSON.parse() — converts everything to snake_case.
+The solution is a **resilient extractor** that finds the data by its TYPE and SHAPE, not by its name:
+- Score → first number found in parsedData
+- Summary → first string longer than 100 chars found in parsedData  
+- Categories → all arrays of objects found in parsedData, rendered as panels automatically
 
-**Failure 2 — Arrays of strings instead of objects:**
-OpenAI may return `["risk one", "risk two"]` instead of `[{"title": "risk one", "description": "..."}]`. Your JS crashes when trying to access `.title` on a string.
-Solution: always run `normalizeArrayItems()` on every array before rendering — converts plain strings to objects automatically.
-
-**Failure 3 — Vague system_prompt produces wrong structure:**
-If you don't tell the AI each array item must be an OBJECT with specific fields, it will return plain strings.
-Solution: always explicitly describe the object shape in the system_prompt, e.g. "each item must be an object with title (string) and description (string) fields, never a plain string."
+This means it works regardless of what OpenAI names the fields.
 
 **THE SILENCE RULE for STRUCTURED UI MODE:**
 ```js
@@ -15441,46 +15436,56 @@ cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match,
   return `: "${word}"${next}`;
 });
 
-// Extract valid JSON from response:
+// Extract valid JSON:
 const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
+const parsedData = JSON.parse(jsonMatch[0]);
 
-// KEY NORMALIZER — converts ALL keys to snake_case regardless of what OpenAI returns
-// Handles: camelCase, PascalCase, spaces, hyphens → snake_case
-// Runs recursively on nested objects and arrays
-const toSnakeCase = (str) => str
-  .replace(/([A-Z])/g, '_$1')
-  .replace(/[\s\-]+/g, '_')
-  .replace(/__+/g, '_')
-  .replace(/^_/, '')
-  .toLowerCase();
-
-const normalizeKeys = (obj) => {
-  if (Array.isArray(obj)) return obj.map(normalizeKeys);
-  if (obj !== null && typeof obj === 'object') {
-    return Object.fromEntries(
-      Object.entries(obj).map(([k, v]) => [toSnakeCase(k), normalizeKeys(v)])
-    );
-  }
-  return obj;
-};
-
-// ARRAY ITEM NORMALIZER — converts plain strings to objects
+// ARRAY ITEM NORMALIZER — converts plain strings to objects universally
 // OpenAI sometimes returns ["string"] instead of [{"title":"string","description":""}]
-// Apply to EVERY array before rendering — never access array items directly
 const normalizeArrayItems = (arr) =>
   Array.isArray(arr) ? arr.map(item =>
     typeof item === 'string' ? { title: item, description: '' } : item
   ) : [];
 
-// Parse, normalize keys, then use normalizeArrayItems on every array:
-const parsedData = normalizeKeys(JSON.parse(jsonMatch[0]));
+// RESILIENT EXTRACTOR — finds data by type/shape, never by key name
+// Works regardless of what OpenAI names the fields
 
-// ALWAYS extract data like this — with fallbacks and array normalization:
-// const score = parsedData.score || parsedData.health_score || 0;
-// const risks = normalizeArrayItems(parsedData.critical_risks || []);
-// const missing = normalizeArrayItems(parsedData.missing_clauses || []);
-// const summary = parsedData.summary || parsedData.plain_english_summary || '';
+// Score → first number found anywhere in parsedData
+const score = Object.values(parsedData).find(v => typeof v === 'number') || 0;
+
+// Summary → first string longer than 100 chars found anywhere in parsedData
+// Also handles summary as an object with a description field
+const rawSummary = Object.values(parsedData).find(v => typeof v === 'string' && v.length > 100)
+  || Object.values(parsedData).find(v => v && typeof v === 'object' && !Array.isArray(v) && v.description)?.description
+  || '';
+
+// Categories → ALL arrays of objects found in parsedData, rendered as panels
+// Recursively searches nested objects too
+const extractArrays = (obj, depth = 0) => {
+  if (depth > 2) return [];
+  const results = [];
+  for (const [key, val] of Object.entries(obj)) {
+    if (Array.isArray(val) && val.length > 0) {
+      results.push({ key, label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), items: normalizeArrayItems(val) });
+    } else if (val && typeof val === 'object' && !Array.isArray(val)) {
+      results.push(...extractArrays(val, depth + 1));
+    }
+  }
+  return results;
+};
+
+const allCategories = extractArrays(parsedData);
+
+// Now render allCategories dynamically — each category becomes a panel
+// Each item has item.title and item.description guaranteed by normalizeArrayItems
+// Example:
+// allCategories.forEach(category => {
+//   const panel = document.createElement('div');
+//   panel.innerHTML = `<h4>${category.label}</h4>` +
+//     category.items.map(item => `<div><strong>${item.title}</strong><p>${item.description}</p></div>`).join('');
+//   container.querySelector('.panels').appendChild(panel);
+// });
 
 // Use parsedData to render DOM — do NOT call api.post to custom-data rows
 // ALWAYS check element exists before updating: if (el) el.innerHTML = ...
@@ -15492,17 +15497,18 @@ const parsedData = normalizeKeys(JSON.parse(jsonMatch[0]));
 |---|---|
 | `json{...}` or `JSON{...}` prefix | `.replace(/^json\s*/i, '')` |
 | Markdown backticks | `.replace(/```json/g, '')` |
-| camelCase keys (`criticalRisks`) | `normalizeKeys()` |
-| PascalCase keys (`CriticalRisks`) | `normalizeKeys()` |
-| Spaced keys (`critical risks`) | `normalizeKeys()` |
+| Wrong key names (`criticalRisks` vs `critical_risks`) | Resilient extractor — finds by type not name |
+| Nested structure (`findings.issues`) | `extractArrays()` searches recursively |
 | Arrays of plain strings | `normalizeArrayItems()` |
 | Bare word values (`bodyweight`) | bare word regex |
-| Missing fields | `parsedData.field \|\| []` fallbacks |
+| Missing fields | score/summary/categories always have fallbacks |
 | Empty/unparseable response | `jsonMatch` check + try/catch |
 
+---
 
 Add `website_id` to properties only (never in editableProps).
 Add `systemPrompt` to properties and editableProps when the system prompt should be user-editable.
+
 ----
 
 
