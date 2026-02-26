@@ -15366,21 +15366,22 @@ if (targetEl) targetEl.textContent = resultText;
 
 
 --- STRUCTURED UI MODE (complex JSON that drives UI — no database) ---
-Use when: AI response needs to render charts, grids, scored results, dashboards, multi-section displays, risk analyzers, or any complex UI — but does NOT save rows to a database.
-Examples: legal contract analyzer, cybersecurity report, financial dashboard, quiz results, nutrition breakdown.
+Use when: AI response needs to render charts, grids, scored results, dashboards, multi-section displays, risk analyzers, or any complex UI.
 
-RULE 3 — THE "STRICT SCHEMA" CONTRACT (NO TELEPHONE GAME)
+RULE 3 — THE "LOWERCASE SNAKE_CASE" RULE (NO TELEPHONE GAME)
 You (the AI Builder) are the Lead Engineer. When the user gives you lazy/loose UI instructions, you MUST translate them into a strict JSON schema. Do NOT pass the user's loose English directly to the runtime AI.
+CRITICAL: To prevent variable mismatch crashes, you MUST use EXACTLY THE SAME lower_case_snake_case format for your JSON schema keys, your JavaScript variables, and your HTML IDs. NEVER use camelCase!
+
 1. Define exact, lowercase, underscore-separated keys (e.g., `score`, `critical_risks`).
-2. Write this exact schema into the `system_prompt` using BACKTICKS (`). Never use double quotes (") to wrap the system prompt, as the JSON quotes inside will break the JavaScript.
-3. Use those EXACT SAME keys in your JavaScript failsafe logic.
+2. Write this exact schema into the `system_prompt` using BACKTICKS (`). Never use double quotes (") to wrap the system prompt.
+3. Use those EXACT SAME snake_case keys when extracting from `parsedData`.
 
-WRONG ❌ (Lazy Builder causing the Telephone Game):
-system_prompt: `Analyze the contract and give me a Contract Health score and lists for Critical Risks...` + ` THE SILENCE RULE...`
-// Fails because the runtime AI invents keys like "ContractHealth" and the JS looks for "score".
+WRONG ❌ (Case mismatch crashes the app):
+system_prompt: `... {"critical_risks": []}`
+JS: const risks = parsedData.criticalRisks || []; // FAILS!
 
-CORRECT ✅ (Strict Builder):
-system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: {"score": integer, "critical_risks": [{"title": "string", "description": "string"}], "missing_clauses": [{"title": "string", "description": "string"}]}`
+CORRECT ✅ (Universal snake_case):
+system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: {"score": integer, "critical_risks": [{"title": "string", "description": "string"}]}`
   + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
 
 Full pattern:
@@ -15388,11 +15389,11 @@ const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
-const aiRes = await await api.post('/builder/openai', {
+const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your strict JSON schema here... }.`
+  system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your strict lower_case_snake_case JSON schema here... }.`
     + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
 });
 
@@ -15415,11 +15416,16 @@ const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsedData = JSON.parse(jsonMatch[0]);
 
-// RULE 4 — FAILSAFE RENDERING (CRITICAL):
-// Use parsedData to render DOM elements SAFELY. You MUST use the exact keys you defined in the schema.
-// Example: const score = parsedData.score || 0;
-// Example: const criticalRisks = parsedData.critical_risks || [];
-// Example: criticalRisks.forEach(item => { ... });
+// RULE 4 — FAILSAFE DOM UPDATES (CRITICAL):
+// 1. Use the EXACT lower_case_snake_case keys defined in the schema.
+// 2. NEVER assume a DOM element exists. Always check `if (element)` before updating `innerHTML` or `textContent`.
+// Example:
+// const score = parsedData.score || 0;
+// const critical_risks = parsedData.critical_risks || [];
+// const scoreEl = container.querySelector('#health_score');
+// if (scoreEl) scoreEl.textContent = score;
+// const risksEl = container.querySelector('#critical_risks');
+// if (risksEl) risksEl.innerHTML = critical_risks.length ? critical_risks.map(r => `<div>${r.title}</div>`).join('') : 'None found';
 // do NOT call api.post to custom-data rows
 
 ---
