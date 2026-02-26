@@ -15363,22 +15363,20 @@ const resultText = aiRes.data.text
 // Inject into target element:
 const targetEl = container.querySelector('.ai-result');
 if (targetEl) targetEl.textContent = resultText;
-
-
 --- STRUCTURED UI MODE (complex JSON that drives UI — no database) ---
 Use when: AI response needs to render charts, grids, scored results, dashboards, multi-section displays, risk analyzers, or any complex UI — but does NOT save rows to a database.
 Examples: legal contract analyzer, cybersecurity report, financial dashboard, quiz results, nutrition breakdown.
 
 RULE 3 — DYNAMIC SCHEMA ENFORCEMENT & FAILSAFE RENDERING
-You (the AI Builder) MUST dynamically infer the required data structure from the user's UI request. You MUST embed a strict JSON schema definition directly into the `system_prompt` so the runtime AI knows EXACTLY what keys to return.
-Then, you MUST write failsafe JavaScript using fallbacks (e.g., `|| []`, `|| 0`, `?.`) so the UI never crashes if the AI hallucinates keys.
+You (the AI Builder) MUST dynamically infer the required data structure from the user's UI request. You MUST embed a strict JSON schema definition directly into the `system_prompt`.
+CRITICAL: You MUST use backticks (`) for the system_prompt string. Never use double quotes ("), because the double quotes inside your JSON schema will break the JavaScript syntax!
 
-WRONG ❌:
-system_prompt: "Analyze this and return JSON." + " THE SILENCE RULE..." // Missing strict schema
+WRONG ❌ (Will cause a SyntaxError):
+system_prompt: "Output keys: {"score": 100}" + " THE SILENCE RULE..."
 
-CORRECT ✅:
-system_prompt: "Your context here. You MUST output a JSON object with EXACTLY these keys: {\"score\": integer, \"items\": [{\"title\": string, \"desc\": string}]}."
-  + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or ["
+CORRECT ✅ (Uses backticks for safe JSON schema injection):
+system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: {"score": integer, "items": [{"title": "string", "desc": "string"}]}`
+  + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
 
 Full pattern:
 const memberId = typeof window !== 'undefined'
@@ -15389,8 +15387,8 @@ const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: "Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your dynamic schema here... }."
-    + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or ["
+  system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your dynamic schema here... }.`
+    + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
 });
 
 // RULE 1 — strip markdown first, always:
@@ -15422,6 +15420,7 @@ const parsedData = JSON.parse(jsonMatch[0]);
 ---
 Add website_id to properties only (never in editableProps).
 Add systemPrompt to properties and editableProps when the system prompt should be user-editable.
+
 ----
 
 
