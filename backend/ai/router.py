@@ -15319,15 +15319,13 @@ let cleanText = aiRes.data.text
   .trim();
 
 // RULE 1b — MANDATORY: fix bare word values BEFORE parsing.
-// OpenAI often returns unquoted words like bodyweight, moderate, heavy instead of strings.
-// This line is NOT optional. If you skip it, JSON.parse will crash silently.
 cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match, word, next) => {
   if (word === 'true' || word === 'false' || word === 'null') return match;
   return `: "${word}"${next}`;
 });
 
-// Handle both array [...] and single object {...}:
-const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
+// RULE 1c — EXTRACT OUTERMOST JSON SAFELY:
+const jsonMatch = cleanText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsed = JSON.parse(jsonMatch[0]);
 const dataArray = Array.isArray(parsed) ? parsed : [parsed];
@@ -15455,11 +15453,10 @@ cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match,
   return `: "${word}"${next}`;
 });
 
-// Extract valid JSON:
-const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
+// RULE 1c — EXTRACT OUTERMOST JSON SAFELY:
+const jsonMatch = cleanText.match(/\{[\s\S]*\}|\[[\s\S]*\]/);
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsedData = JSON.parse(jsonMatch[0]);
-
 // ARRAY ITEM NORMALIZER — converts plain strings to objects universally
 // OpenAI sometimes returns ["string"] instead of [{"title":"string","description":""}]
 const normalizeArrayItems = (arr) =>
