@@ -15243,20 +15243,18 @@ await api.post('/builder/send-email', {
 Add `website_id`, `emailSubject`, `emailBody` to properties and editableProps.
 
 ---
-## AI / OPENAI GENERATION
+AI / OPENAI GENERATION
 Trigger: prompt implies "generate text", "write", "summarize", "auto-fill", "generate and save", "analyze", "score", "extract", "render results".
-
 RULE 1 — MANDATORY PARSING: After EVERY AI response, strip markdown BEFORE parsing.
 Never call JSON.parse() on a raw AI response directly. Always clean first.
 If you skip this step, the component will crash silently and show "Failed".
 Always strip using this exact block — applies to ALL three modes:
-let cleanText = aiRes.data.text
+jslet cleanText = aiRes.data.text
   .replace(/```json/g, '')
   .replace(/```/g, '')
   .replace(/^json\s*/i, '')
   .replace(/^JSON\s*/i, '')
   .trim();
-
 RULE 2 — DECIDE THE OUTPUT MODE FIRST:
 Before writing any code, ask: "What is the destination of this AI response?"
 
@@ -15265,32 +15263,20 @@ If SIMPLE PARAGRAPH OR SENTENCE → use TEXT MODE
 If RENDERING COMPLEX UI (charts, grids, dashboards, scored results, multi-section displays, legal analyzers, risk scores) → use STRUCTURED UI MODE
 
 DECISION TREE — pick mode before writing any code:
-AI response saved to database rows?
-  YES → FLAT ARRAY MODE
+AI response saved to database rows?        YES → FLAT ARRAY MODE
+AI response is a simple paragraph/sentence? YES → TEXT MODE
+AI response drives UI rendering?            YES → STRUCTURED UI MODE
 
-AI response displayed as a simple paragraph or sentence?
-  YES → TEXT MODE
-
-AI response drives UI rendering (cards, scores, charts, sections, grids)?
-  YES → STRUCTURED UI MODE
-
-
---- FLAT ARRAY MODE (saving to database) ---
-Use when: AI generates content that gets saved as rows in your database (workout plans, meal plans, bulk content, generated listings).
-
+FLAT ARRAY MODE (saving to database)
+Use when: AI generates content saved as rows in your database (workout plans, meal plans, bulk content, listings).
 RULE 3 — THE SILENCE RULE IS MANDATORY AND MUST ALWAYS BE APPENDED.
-The generated code MUST construct system_prompt in two parts: the context, then THE SILENCE RULE at the end.
-THE SILENCE RULE is NEVER optional. NEVER skip it. NEVER forget to append it.
-
 WRONG ❌:
-system_prompt: "You are a fitness assistant. Generate a plan."
-
+jssystem_prompt: "You are a fitness assistant. Generate a plan."
 CORRECT ✅:
-system_prompt: "You are a fitness assistant. Generate a plan."
+jssystem_prompt: "You are a fitness assistant. Generate a plan."
   + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item = one database row. No nested objects, no wrapper keys, no markdown, no chat. Example: [{\"field1\":\"value\",\"field2\":\"value\"}]"
-
 Full pattern:
-const memberId = typeof window !== 'undefined'
+jsconst memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
@@ -15302,46 +15288,35 @@ const aiRes = await api.post('/builder/openai', {
     + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item = one database row. No nested objects, no wrapper keys, no markdown, no chat. Example: [{\"field1\":\"value\",\"field2\":\"value\"}]"
 });
 
-// RULE 1 — strip markdown first, always:
 let cleanText = aiRes.data.text
-  .replace(/```json/g, '')
-  .replace(/```/g, '')
-  .replace(/^json\s*/i, '')
-  .replace(/^JSON\s*/i, '')
-  .trim();
+  .replace(/```json/g, '').replace(/```/g, '')
+  .replace(/^json\s*/i, '').replace(/^JSON\s*/i, '').trim();
 
-// RULE 1b — MANDATORY: fix bare word values BEFORE parsing.
+// Fix bare word values:
 cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match, word, next) => {
   if (word === 'true' || word === 'false' || word === 'null') return match;
   return `: "${word}"${next}`;
 });
 
-// Handle both array [...] and single object {...}:
 const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsed = JSON.parse(jsonMatch[0]);
 const dataArray = Array.isArray(parsed) ? parsed : [parsed];
 
-// Save every item as its own row:
 for (const item of dataArray) {
   const { sitemember_id, ...cleanData } = item;
   await api.post(`/custom-data/rows/${schemaId}`, { data: cleanData, sitemember_id: memberId });
 }
 
-
---- TEXT MODE (simple text display) ---
-Use when: AI generates a short paragraph, summary, email, or sentence that gets displayed directly as text — no JSON, no database, no complex UI.
-
-RULE 3 — NEVER request JSON in text mode. Ask for plain text only.
-
+TEXT MODE (simple text display)
+Use when: AI generates a short paragraph, summary, email, or sentence — no JSON, no database, no complex UI.
+RULE 3 — NEVER request JSON. Ask for plain text only.
 WRONG ❌:
-system_prompt: "You are a helpful assistant. Reply with JSON..."
-
+jssystem_prompt: "Reply with JSON..."
 CORRECT ✅:
-system_prompt: "You are a helpful assistant. Reply with plain text only. No JSON, no markdown, no backticks."
-
+jssystem_prompt: "Reply with plain text only. No JSON, no markdown, no backticks."
 Full pattern:
-const memberId = typeof window !== 'undefined'
+jsconst memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
@@ -15352,40 +15327,43 @@ const aiRes = await api.post('/builder/openai', {
   system_prompt: "Your context here. Reply with plain text only. No JSON, no markdown, no backticks."
 });
 
-// RULE 1 — strip markdown first, always:
 const resultText = aiRes.data.text
-  .replace(/```json/g, '')
-  .replace(/```/g, '')
-  .replace(/^json\s*/i, '')
-  .replace(/^JSON\s*/i, '')
-  .trim();
+  .replace(/```json/g, '').replace(/```/g, '')
+  .replace(/^json\s*/i, '').replace(/^JSON\s*/i, '').trim();
 
-// Inject into target element:
 const targetEl = container.querySelector('.ai-result');
 if (targetEl) targetEl.textContent = resultText;
 
+STRUCTURED UI MODE (complex JSON that drives UI — no database)
+Use when: AI response renders charts, grids, scored results, dashboards, multi-section displays, analyzers — but does NOT save to database.
+RULE 3 — REQUEST JSON AND ALWAYS NORMALIZE KEYS AFTER PARSING.
+The biggest failure point in STRUCTURED UI MODE is key mismatch:
+OpenAI may return criticalRisks, CriticalRisks, critical risks, or critical_risks
+for the exact same field. Your JavaScript will silently get undefined and crash.
+The solution is a key normalizer — run it on every parsed object immediately after JSON.parse().
+It converts ALL keys to snake_case regardless of what OpenAI returns.
+This means your JS always uses snake_case and never breaks no matter what OpenAI decides.
+js// KEY NORMALIZER — run this on parsedData immediately after JSON.parse()
+// Converts camelCase, PascalCase, spaces, hyphens → snake_case
+// Apply recursively to handle nested objects and arrays
+const toSnakeCase = (str) => str
+  .replace(/([A-Z])/g, '_$1')
+  .replace(/[\s\-]+/g, '_')
+  .replace(/__+/g, '_')
+  .replace(/^_/, '')
+  .toLowerCase();
 
---- STRUCTURED UI MODE (complex JSON that drives UI — no database) ---
-Use when: AI response needs to render charts, grids, scored results, dashboards, multi-section displays, risk analyzers, or any complex UI.
-
-RULE 3 — THE "LOWERCASE SNAKE_CASE" RULE (NO TELEPHONE GAME)
-You (the AI Builder) are the Lead Engineer. When the user gives you lazy/loose UI instructions, you MUST translate them into a strict JSON schema. Do NOT pass the user's loose English directly to the runtime AI.
-CRITICAL: To prevent variable mismatch crashes, you MUST use EXACTLY THE SAME lower_case_snake_case format for your JSON schema keys, your JavaScript variables, and your HTML IDs. NEVER use camelCase!
-
-1. Define exact, lowercase, underscore-separated keys (e.g., `score`, `critical_risks`).
-2. Write this exact schema into the `system_prompt` using BACKTICKS (`). Never use double quotes (") to wrap the system prompt.
-3. Use those EXACT SAME snake_case keys when extracting from `parsedData`.
-
-WRONG ❌ (Case mismatch crashes the app):
-system_prompt: `... {"critical_risks": []}`
-JS: const risks = parsedData.criticalRisks || []; // FAILS!
-
-CORRECT ✅ (Universal snake_case):
-system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: {"score": integer, "critical_risks": [{"title": "string", "description": "string"}]}`
-  + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
-
+const normalizeKeys = (obj) => {
+  if (Array.isArray(obj)) return obj.map(normalizeKeys);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj).map(([k, v]) => [toSnakeCase(k), normalizeKeys(v)])
+    );
+  }
+  return obj;
+};
 Full pattern:
-const memberId = typeof window !== 'undefined'
+jsconst memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
@@ -15393,42 +15371,55 @@ const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your strict lower_case_snake_case JSON schema here... }.`
-    + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
+  system_prompt: "Your context here."
+    + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no conversational text. First character must be { or ["
 });
 
-// RULE 1 — strip markdown first, always:
+// RULE 1 — strip markdown:
 let cleanText = aiRes.data.text
-  .replace(/```json/g, '')
-  .replace(/```/g, '')
-  .replace(/^json\s*/i, '')
-  .replace(/^JSON\s*/i, '')
-  .trim();
+  .replace(/```json/g, '').replace(/```/g, '')
+  .replace(/^json\s*/i, '').replace(/^JSON\s*/i, '').trim();
 
-// RULE 1b — fix bare word values BEFORE parsing:
+// Fix bare word values:
 cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match, word, next) => {
   if (word === 'true' || word === 'false' || word === 'null') return match;
   return `: "${word}"${next}`;
 });
 
-// Extract valid JSON from response:
+// Extract JSON:
 const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}/);
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
-const parsedData = JSON.parse(jsonMatch[0]);
 
-// RULE 4 — FAILSAFE DOM UPDATES (CRITICAL):
-// 1. Use the EXACT lower_case_snake_case keys defined in the schema.
-// 2. NEVER assume a DOM element exists. Always check `if (element)` before updating `innerHTML` or `textContent`.
-// Example:
-// const score = parsedData.score || 0;
-// const critical_risks = parsedData.critical_risks || [];
-// const scoreEl = container.querySelector('#health_score');
-// if (scoreEl) scoreEl.textContent = score;
-// const risksEl = container.querySelector('#critical_risks');
-// if (risksEl) risksEl.innerHTML = critical_risks.length ? critical_risks.map(r => `<div>${r.title}</div>`).join('') : 'None found';
-// do NOT call api.post to custom-data rows
+// Parse and immediately normalize ALL keys to snake_case:
+const toSnakeCase = (str) => str
+  .replace(/([A-Z])/g, '_$1')
+  .replace(/[\s\-]+/g, '_')
+  .replace(/__+/g, '_')
+  .replace(/^_/, '')
+  .toLowerCase();
 
----
+const normalizeKeys = (obj) => {
+  if (Array.isArray(obj)) return obj.map(normalizeKeys);
+  if (obj !== null && typeof obj === 'object') {
+    return Object.fromEntries(
+      Object.entries(obj).map(([k, v]) => [toSnakeCase(k), normalizeKeys(v)])
+    );
+  }
+  return obj;
+};
+
+const parsedData = normalizeKeys(JSON.parse(jsonMatch[0]));
+
+// Now safely access with snake_case — always works regardless of what OpenAI returned:
+// parsedData.health_score      ← works even if AI returned "healthScore" or "HealthScore"
+// parsedData.critical_risks    ← works even if AI returned "criticalRisks" or "Critical Risks"
+// parsedData.missing_clauses   ← works even if AI returned "missingClauses" or "Missing Clauses"
+// Always use fallbacks:
+// const score = parsedData.health_score || parsedData.score || 0;
+// const risks = parsedData.critical_risks || [];
+
+// Use parsedData to render DOM — do NOT call api.post to custom-data rows
+
 Add website_id to properties only (never in editableProps).
 Add systemPrompt to properties and editableProps when the system prompt should be user-editable.
 ----
