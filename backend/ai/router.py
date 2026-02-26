@@ -15363,19 +15363,24 @@ const resultText = aiRes.data.text
 // Inject into target element:
 const targetEl = container.querySelector('.ai-result');
 if (targetEl) targetEl.textContent = resultText;
+
+
 --- STRUCTURED UI MODE (complex JSON that drives UI — no database) ---
 Use when: AI response needs to render charts, grids, scored results, dashboards, multi-section displays, risk analyzers, or any complex UI — but does NOT save rows to a database.
 Examples: legal contract analyzer, cybersecurity report, financial dashboard, quiz results, nutrition breakdown.
 
-RULE 3 — DYNAMIC SCHEMA ENFORCEMENT & FAILSAFE RENDERING
-You (the AI Builder) MUST dynamically infer the required data structure from the user's UI request. You MUST embed a strict JSON schema definition directly into the `system_prompt`.
-CRITICAL: You MUST use backticks (`) for the system_prompt string. Never use double quotes ("), because the double quotes inside your JSON schema will break the JavaScript syntax!
+RULE 3 — THE "STRICT SCHEMA" CONTRACT (NO TELEPHONE GAME)
+You (the AI Builder) are the Lead Engineer. When the user gives you lazy/loose UI instructions, you MUST translate them into a strict JSON schema. Do NOT pass the user's loose English directly to the runtime AI.
+1. Define exact, lowercase, underscore-separated keys (e.g., `score`, `critical_risks`).
+2. Write this exact schema into the `system_prompt` using BACKTICKS (`). Never use double quotes (") to wrap the system prompt, as the JSON quotes inside will break the JavaScript.
+3. Use those EXACT SAME keys in your JavaScript failsafe logic.
 
-WRONG ❌ (Will cause a SyntaxError):
-system_prompt: "Output keys: {"score": 100}" + " THE SILENCE RULE..."
+WRONG ❌ (Lazy Builder causing the Telephone Game):
+system_prompt: `Analyze the contract and give me a Contract Health score and lists for Critical Risks...` + ` THE SILENCE RULE...`
+// Fails because the runtime AI invents keys like "ContractHealth" and the JS looks for "score".
 
-CORRECT ✅ (Uses backticks for safe JSON schema injection):
-system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: {"score": integer, "items": [{"title": "string", "desc": "string"}]}`
+CORRECT ✅ (Strict Builder):
+system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: {"score": integer, "critical_risks": [{"title": "string", "description": "string"}], "missing_clauses": [{"title": "string", "description": "string"}]}`
   + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
 
 Full pattern:
@@ -15383,11 +15388,11 @@ const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
-const aiRes = await api.post('/builder/openai', {
+const aiRes = await await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your dynamic schema here... }.`
+  system_prompt: `Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your strict JSON schema here... }.`
     + ` THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or [`
 });
 
@@ -15411,16 +15416,15 @@ if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsedData = JSON.parse(jsonMatch[0]);
 
 // RULE 4 — FAILSAFE RENDERING (CRITICAL):
-// Use parsedData to render DOM elements SAFELY. Never assume arrays exist.
+// Use parsedData to render DOM elements SAFELY. You MUST use the exact keys you defined in the schema.
 // Example: const score = parsedData.score || 0;
-// Example: const items = parsedData.items || [];
-// Example: items.forEach(item => { ... });
+// Example: const criticalRisks = parsedData.critical_risks || [];
+// Example: criticalRisks.forEach(item => { ... });
 // do NOT call api.post to custom-data rows
 
 ---
 Add website_id to properties only (never in editableProps).
 Add systemPrompt to properties and editableProps when the system prompt should be user-editable.
-
 ----
 
 
