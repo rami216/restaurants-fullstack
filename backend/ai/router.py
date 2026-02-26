@@ -15243,19 +15243,20 @@ await api.post('/builder/send-email', {
 Add `website_id`, `emailSubject`, `emailBody` to properties and editableProps.
 
 ---
-
-##AI / OPENAI GENERATION
+## AI / OPENAI GENERATION
 Trigger: prompt implies "generate text", "write", "summarize", "auto-fill", "generate and save", "analyze", "score", "extract", "render results".
+
 RULE 1 — MANDATORY PARSING: After EVERY AI response, strip markdown BEFORE parsing.
 Never call JSON.parse() on a raw AI response directly. Always clean first.
 If you skip this step, the component will crash silently and show "Failed".
 Always strip using this exact block — applies to ALL three modes:
-jslet cleanText = aiRes.data.text
+let cleanText = aiRes.data.text
   .replace(/```json/g, '')
   .replace(/```/g, '')
   .replace(/^json\s*/i, '')
   .replace(/^JSON\s*/i, '')
   .trim();
+
 RULE 2 — DECIDE THE OUTPUT MODE FIRST:
 Before writing any code, ask: "What is the destination of this AI response?"
 
@@ -15273,18 +15274,23 @@ AI response displayed as a simple paragraph or sentence?
 AI response drives UI rendering (cards, scores, charts, sections, grids)?
   YES → STRUCTURED UI MODE
 
-FLAT ARRAY MODE (saving to database)
+
+--- FLAT ARRAY MODE (saving to database) ---
 Use when: AI generates content that gets saved as rows in your database (workout plans, meal plans, bulk content, generated listings).
+
 RULE 3 — THE SILENCE RULE IS MANDATORY AND MUST ALWAYS BE APPENDED.
 The generated code MUST construct system_prompt in two parts: the context, then THE SILENCE RULE at the end.
 THE SILENCE RULE is NEVER optional. NEVER skip it. NEVER forget to append it.
+
 WRONG ❌:
-jssystem_prompt: "You are a fitness assistant. Generate a plan."
+system_prompt: "You are a fitness assistant. Generate a plan."
+
 CORRECT ✅:
-jssystem_prompt: "You are a fitness assistant. Generate a plan."
+system_prompt: "You are a fitness assistant. Generate a plan."
   + " THE SILENCE RULE: Reply ONLY with a flat raw JSON array. Every item = one database row. No nested objects, no wrapper keys, no markdown, no chat. Example: [{\"field1\":\"value\",\"field2\":\"value\"}]"
+
 Full pattern:
-jsconst memberId = typeof window !== 'undefined'
+const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
@@ -15305,8 +15311,6 @@ let cleanText = aiRes.data.text
   .trim();
 
 // RULE 1b — MANDATORY: fix bare word values BEFORE parsing.
-// OpenAI often returns unquoted words like bodyweight, moderate, heavy instead of strings.
-// This line is NOT optional. If you skip it, JSON.parse will crash silently.
 cleanText = cleanText.replace(/:\s*([a-zA-Z]+[a-zA-Z0-9]*)\s*([,}\]])/g, (match, word, next) => {
   if (word === 'true' || word === 'false' || word === 'null') return match;
   return `: "${word}"${next}`;
@@ -15324,15 +15328,20 @@ for (const item of dataArray) {
   await api.post(`/custom-data/rows/${schemaId}`, { data: cleanData, sitemember_id: memberId });
 }
 
-TEXT MODE (simple text display)
+
+--- TEXT MODE (simple text display) ---
 Use when: AI generates a short paragraph, summary, email, or sentence that gets displayed directly as text — no JSON, no database, no complex UI.
+
 RULE 3 — NEVER request JSON in text mode. Ask for plain text only.
+
 WRONG ❌:
-jssystem_prompt: "You are a helpful assistant. Reply with JSON..."
+system_prompt: "You are a helpful assistant. Reply with JSON..."
+
 CORRECT ✅:
-jssystem_prompt: "You are a helpful assistant. Reply with plain text only. No JSON, no markdown, no backticks."
+system_prompt: "You are a helpful assistant. Reply with plain text only. No JSON, no markdown, no backticks."
+
 Full pattern:
-jsconst memberId = typeof window !== 'undefined'
+const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
@@ -15355,18 +15364,24 @@ const resultText = aiRes.data.text
 const targetEl = container.querySelector('.ai-result');
 if (targetEl) targetEl.textContent = resultText;
 
-STRUCTURED UI MODE (complex JSON that drives UI — no database)
+
+--- STRUCTURED UI MODE (complex JSON that drives UI — no database) ---
 Use when: AI response needs to render charts, grids, scored results, dashboards, multi-section displays, risk analyzers, or any complex UI — but does NOT save rows to a database.
-Examples: legal contract analyzer, cybersecurity report, financial dashboard, quiz results, nutrition breakdown, personality assessment.
-RULE 3 — REQUEST JSON BUT SKIP ALL DATABASE LOGIC.
-WRONG ❌ — do not use flat array or text mode for complex UI:
-jssystem_prompt: "Reply with plain text only..."   // kills JSON parsing
-system_prompt: "Reply with a flat array..."       // wrong structure for nested UI data
+Examples: legal contract analyzer, cybersecurity report, financial dashboard, quiz results, nutrition breakdown.
+
+RULE 3 — DYNAMIC SCHEMA ENFORCEMENT & FAILSAFE RENDERING
+You (the AI Builder) MUST dynamically infer the required data structure from the user's UI request. You MUST embed a strict JSON schema definition directly into the `system_prompt` so the runtime AI knows EXACTLY what keys to return.
+Then, you MUST write failsafe JavaScript using fallbacks (e.g., `|| []`, `|| 0`, `?.`) so the UI never crashes if the AI hallucinates keys.
+
+WRONG ❌:
+system_prompt: "Analyze this and return JSON." + " THE SILENCE RULE..." // Missing strict schema
+
 CORRECT ✅:
-jssystem_prompt: "Your context here."
-  + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no conversational text. First character must be { or ["
+system_prompt: "Your context here. You MUST output a JSON object with EXACTLY these keys: {\"score\": integer, \"items\": [{\"title\": string, \"desc\": string}]}."
+  + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or ["
+
 Full pattern:
-jsconst memberId = typeof window !== 'undefined'
+const memberId = typeof window !== 'undefined'
   ? localStorage.getItem('siteMemberId:' + (properties.subdomain || ''))
   : null;
 
@@ -15374,8 +15389,8 @@ const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: "Your context here."
-    + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no conversational text. First character must be { or ["
+  system_prompt: "Your context here. You MUST output a JSON object with EXACTLY these keys: { ...your dynamic schema here... }."
+    + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no chat. First character must be { or ["
 });
 
 // RULE 1 — strip markdown first, always:
@@ -15397,9 +15412,14 @@ const jsonMatch = cleanText.match(/\[[\s\S]*\]/) || cleanText.match(/\{[\s\S]*\}
 if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsedData = JSON.parse(jsonMatch[0]);
 
-// Use parsedData to render DOM elements — do NOT call api.post to custom-data rows
-// Example: parsedData.score, parsedData.critical_risks, parsedData.summary
+// RULE 4 — FAILSAFE RENDERING (CRITICAL):
+// Use parsedData to render DOM elements SAFELY. Never assume arrays exist.
+// Example: const score = parsedData.score || 0;
+// Example: const items = parsedData.items || [];
+// Example: items.forEach(item => { ... });
+// do NOT call api.post to custom-data rows
 
+---
 Add website_id to properties only (never in editableProps).
 Add systemPrompt to properties and editableProps when the system prompt should be user-editable.
 ----
