@@ -15397,14 +15397,33 @@ OpenAI invents different key names every single time — `criticalRisks`, `Criti
 
 The solution is a **resilient extractor** that finds the data by its TYPE and SHAPE, not by its name:
 - Score → first number found in parsedData
-- Summary → first string longer than 100 chars found in parsedData  
+- Summary → first string longer than 100 chars found in parsedData
 - Categories → all arrays of objects found in parsedData, rendered as panels automatically
 
 This means it works regardless of what OpenAI names the fields.
 
+**MULTI-PANEL RULE — count the panels, tell the AI to match:**
+Before writing the system_prompt, count how many separate panels/columns/sections the UI has.
+Then explicitly tell the AI to return that exact number of separate arrays — one per panel.
+Never let the AI decide how many arrays to return — it will always collapse them into one.
+
+WRONG ❌ — AI collapses everything into one array:
+```
+system_prompt: "Return findings as JSON."
+→ AI returns: { "findings": [...all items mixed together...] }
+→ Result: only 1 panel fills, rest are empty
+```
+
+CORRECT ✅ — tell the AI exactly how many separate arrays to return:
+```
+system_prompt: "Return a separate array for each of the N sections shown in the UI. Never combine them into one array."
+→ AI returns: { "section_1": [...], "section_2": [...], "section_3": [...] }
+→ Result: all N panels fill correctly
+```
+
 **THE SILENCE RULE for STRUCTURED UI MODE:**
 ```js
-system_prompt: "Your context here. Each item in every array must be an object with title and description fields — never plain strings in arrays."
+system_prompt: "Your context here. Return a separate array for each section in the UI — never combine them into one single array. Each item in every array must be an object with title and description fields — never plain strings."
   + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no conversational text. First character must be { or ["
 ```
 
@@ -15418,7 +15437,7 @@ const aiRes = await api.post('/builder/openai', {
   website_id: properties.website_id,
   member_id: memberId,
   prompt: `...`,
-  system_prompt: "Your context here. Each item in every array must be an object with title and description fields — never plain strings in arrays."
+  system_prompt: "Your context here. Return a separate array for each section in the UI — never combine them into one single array. Each item in every array must be an object with title and description fields — never plain strings."
     + " THE SILENCE RULE: Reply ONLY with valid raw JSON. No markdown, no backticks, no prefix words, no conversational text. First character must be { or ["
 });
 
@@ -15454,20 +15473,23 @@ const normalizeArrayItems = (arr) =>
 // Score → first number found anywhere in parsedData
 const score = Object.values(parsedData).find(v => typeof v === 'number') || 0;
 
-// Summary → first string longer than 100 chars found anywhere in parsedData
-// Also handles summary as an object with a description field
+// Summary → first string longer than 100 chars, or summary object with description field
 const rawSummary = Object.values(parsedData).find(v => typeof v === 'string' && v.length > 100)
   || Object.values(parsedData).find(v => v && typeof v === 'object' && !Array.isArray(v) && v.description)?.description
   || '';
 
 // Categories → ALL arrays of objects found in parsedData, rendered as panels
-// Recursively searches nested objects too
+// Recursively searches nested objects too — finds arrays even if OpenAI wraps them
 const extractArrays = (obj, depth = 0) => {
   if (depth > 2) return [];
   const results = [];
   for (const [key, val] of Object.entries(obj)) {
     if (Array.isArray(val) && val.length > 0) {
-      results.push({ key, label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()), items: normalizeArrayItems(val) });
+      results.push({
+        key,
+        label: key.replace(/_/g, ' ').replace(/\b\w/g, c => c.toUpperCase()),
+        items: normalizeArrayItems(val)
+      });
     } else if (val && typeof val === 'object' && !Array.isArray(val)) {
       results.push(...extractArrays(val, depth + 1));
     }
@@ -15477,13 +15499,16 @@ const extractArrays = (obj, depth = 0) => {
 
 const allCategories = extractArrays(parsedData);
 
-// Now render allCategories dynamically — each category becomes a panel
+// Render allCategories dynamically — each category becomes a panel
 // Each item has item.title and item.description guaranteed by normalizeArrayItems
+// allCategories[0] = first panel, allCategories[1] = second panel, etc.
 // Example:
 // allCategories.forEach(category => {
 //   const panel = document.createElement('div');
 //   panel.innerHTML = `<h4>${category.label}</h4>` +
-//     category.items.map(item => `<div><strong>${item.title}</strong><p>${item.description}</p></div>`).join('');
+//     (category.items.length
+//       ? category.items.map(item => `<div><strong>${item.title}</strong><p>${item.description}</p></div>`).join('')
+//       : '<p>None found</p>');
 //   container.querySelector('.panels').appendChild(panel);
 // });
 
@@ -15499,6 +15524,7 @@ const allCategories = extractArrays(parsedData);
 | Markdown backticks | `.replace(/```json/g, '')` |
 | Wrong key names (`criticalRisks` vs `critical_risks`) | Resilient extractor — finds by type not name |
 | Nested structure (`findings.issues`) | `extractArrays()` searches recursively |
+| All arrays collapsed into one | MULTI-PANEL RULE in system_prompt |
 | Arrays of plain strings | `normalizeArrayItems()` |
 | Bare word values (`bodyweight`) | bare word regex |
 | Missing fields | score/summary/categories always have fallbacks |
