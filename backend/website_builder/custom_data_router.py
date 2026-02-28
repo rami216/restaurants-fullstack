@@ -662,23 +662,20 @@ async def get_aggregate_stats(
     sitemember_id: Optional[UUID] = Query(None),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Calculates sum, avg, min, max, or count for a specific JSON field directly in the database.
-    Supports the exact same dynamic filters as the search endpoint.
-    """
     schema = await db.get(CustomDataSchema, schema_id)
     if not schema:
         raise HTTPException(status_code=404, detail="Schema not found.")
 
+    # 1. Build the filtered base query
     base_query = select(CustomDataRow).where(CustomDataRow.schema_id == schema_id)
-    
+
     if sitemember_id is not None:
         base_query = base_query.where(CustomDataRow.sitemember_id == sitemember_id)
 
-    # 1. Apply the same JSON Filters dynamically (Re-used from your search endpoint)
+    # Apply JSON filters (same logic as /search)
     for filter_field, condition in query.filters.items():
         json_text_value = CustomDataRow.data.op("->>")(filter_field)
-        
+
         if isinstance(condition, dict):
             if any(op in condition for op in [">", "<", ">=", "<="]):
                 base_query = base_query.where(json_text_value != "")
@@ -687,59 +684,66 @@ async def get_aggregate_stats(
             def apply_range_filter(q, operator_symbol, value):
                 try:
                     num_val = float(value)
-                    if operator_symbol == ">": return q.where(json_text_value.cast(Float) > num_val)
-                    if operator_symbol == "<": return q.where(json_text_value.cast(Float) < num_val)
+                    if operator_symbol == ">":  return q.where(json_text_value.cast(Float) > num_val)
+                    if operator_symbol == "<":  return q.where(json_text_value.cast(Float) < num_val)
                     if operator_symbol == ">=": return q.where(json_text_value.cast(Float) >= num_val)
                     if operator_symbol == "<=": return q.where(json_text_value.cast(Float) <= num_val)
                 except ValueError:
-                    if operator_symbol == ">": return q.where(json_text_value > str(value))
-                    if operator_symbol == "<": return q.where(json_text_value < str(value))
+                    if operator_symbol == ">":  return q.where(json_text_value > str(value))
+                    if operator_symbol == "<":  return q.where(json_text_value < str(value))
                     if operator_symbol == ">=": return q.where(json_text_value >= str(value))
                     if operator_symbol == "<=": return q.where(json_text_value <= str(value))
                 return q
 
-            if ">" in condition: base_query = apply_range_filter(base_query, ">", condition[">"])
-            if "<" in condition: base_query = apply_range_filter(base_query, "<", condition["<"])
+            if ">" in condition:  base_query = apply_range_filter(base_query, ">",  condition[">"])
+            if "<" in condition:  base_query = apply_range_filter(base_query, "<",  condition["<"])
             if ">=" in condition: base_query = apply_range_filter(base_query, ">=", condition[">="])
             if "<=" in condition: base_query = apply_range_filter(base_query, "<=", condition["<="])
-            if "ilike" in condition: base_query = base_query.where(json_text_value.op("ilike")(f"%{condition['ilike']}%"))
+            if "ilike" in condition:
+                base_query = base_query.where(json_text_value.op("ilike")(f"%{condition['ilike']}%"))
         else:
             if isinstance(condition, bool):
                 base_query = base_query.where(json_text_value == str(condition).lower())
             else:
                 base_query = base_query.where(json_text_value == str(condition))
 
-    # 2. Setup the Aggregate Math Operation
-    target_field_text = CustomDataRow.data.op("->>")(query.field)
-    
-    # We must cast the JSON text to a Float for math to work!
-    # Also, we ignore empty strings or nulls so they don't crash the math.
-    safe_target_field = target_field_text.cast(Float)
-    
+    # 2. Convert to subquery — ALL aggregate references must use sub.c, never CustomDataRow directly.
+    #    Using CustomDataRow after .select_from(subquery) causes a silent cross join
+    #    (N rows × N rows) which multiplies the result by N. sub.c avoids this entirely.
+    sub = base_query.subquery()
+
+    # Reference the target field through the subquery columns
+    sub_field_text = sub.c.data.op("->>")(query.field)
+
+    # 3. Build the aggregate function — everything from sub.c, never CustomDataRow
     if query.operation == "count":
-        agg_func = func.count(CustomDataRow.row_id)
-    elif query.operation == "sum":
-        agg_func = func.sum(safe_target_field)
-    elif query.operation == "avg":
-        agg_func = func.avg(safe_target_field)
-    elif query.operation == "max":
-        agg_func = func.max(safe_target_field)
-    elif query.operation == "min":
-        agg_func = func.min(safe_target_field)
+        agg_func = func.count(sub.c.row_id)
+        final_query = select(agg_func).select_from(sub)
     else:
-        raise HTTPException(status_code=400, detail="Invalid operation.")
+        # Filter to numeric-only values before casting to avoid cast errors
+        agg_query = select(sub).where(
+            sub_field_text.op("~")(r"^-?[0-9]+(\.[0-9]+)?$")
+        ).subquery()
 
-    # Apply the math ONLY to rows where the target field actually exists and is a valid number
-    if query.operation != "count":
-         # Regex to ensure it's a valid number format before casting
-         base_query = base_query.where(target_field_text.op('~')('^[0-9]+(\.[0-9]+)?$'))
+        agg_field = agg_query.c.data.op("->>")(query.field).cast(Float)
 
-    # 3. Execute the math query
-    final_query = select(agg_func).select_from(base_query.subquery())
+        if query.operation == "sum":
+            agg_func = func.sum(agg_field)
+        elif query.operation == "avg":
+            agg_func = func.avg(agg_field)
+        elif query.operation == "max":
+            agg_func = func.max(agg_field)
+        elif query.operation == "min":
+            agg_func = func.min(agg_field)
+        else:
+            raise HTTPException(status_code=400, detail="Invalid operation.")
+
+        final_query = select(agg_func).select_from(agg_query)
+
+    # 4. Execute
     result = await db.execute(final_query)
     calculated_value = result.scalar()
 
-    # Handle cases where the sum/avg is empty (returns None)
     if calculated_value is None:
         calculated_value = 0.0
 
