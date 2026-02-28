@@ -15278,7 +15278,7 @@ api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null })
 api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null })
 api.delete(`/custom-data/rows/${rowId}`)
 **BULK EXECUTION RULE:** When saving multiple items from an AI array, map them into the `operations` array and make ONE single `api.post()` call to the `/bulk` endpoint. NEVER put the `/bulk` API call inside a `forEach` loop or map function.
-- **BULK OWNERSHIP RULE (CRITICAL):** Every operation inside a `/bulk` request MUST include the `sitemember_id` (fetched from localStorage) to ensure the data is saved to the correct user's account. NEVER leave `sitemember_id` as null if a user is logged in.
+- **BULK OWNERSHIP RULE:** When the prompt is user-scoped ("logged in user", "current user", "my items"), every operation inside a `/bulk` request MUST use `sitemember_id: currentUserId`. When the prompt is NOT user-scoped (public data, shared data, admin data), use `sitemember_id: null`. NEVER apply this rule outside of bulk — single-row saves follow the USER-SCOPED DATA section rules instead.
 ```js
 // BULK OPERATIONS (Stamping every item with the User ID):
 const currentUserId = typeof window !== 'undefined' 
