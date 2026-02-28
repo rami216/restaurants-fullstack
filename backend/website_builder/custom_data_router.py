@@ -11,7 +11,7 @@ from auth.auth_handler import get_current_active_user
 from website_builder.router import get_website_and_check_ownership
 from .site_commerce_models import SiteMemberUsage
 from .models import Website
-
+from typing import Literal
 router = APIRouter(prefix="/custom-data", tags=["Custom Data"])
 
 # --- Schemas ---
@@ -504,3 +504,247 @@ async def get_site_member_usage(
         total_calls=total_calls
     )
 #endregion ai_sitemember_use
+
+
+#region bulk
+class BulkRowOperation(BaseModel):
+    action: Literal["create", "update", "delete"]
+    row_id: Optional[UUID] = None        # required for update + delete
+    data: Optional[Dict[str, Any]] = None  # required for create + update
+    sitemember_id: Optional[UUID] = None
+
+class BulkRowRequest(BaseModel):
+    operations: List[BulkRowOperation]
+
+class BulkRowResult(BaseModel):
+    action: str
+    row_id: Optional[str] = None
+    status: str                          # "success" or "error"
+    error: Optional[str] = None
+
+class BulkRowResponse(BaseModel):
+    results: List[BulkRowResult]
+    total: int
+    succeeded: int
+    failed: int
+    
+@router.post("/rows/{schema_id}/bulk", response_model=BulkRowResponse)
+async def bulk_row_operations(
+    schema_id: UUID,
+    body: BulkRowRequest,
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Perform multiple create / update / delete operations in one request.
+    Uses nested transactions (savepoints) so one failure doesn't crash the others.
+    """
+    schema = await db.get(CustomDataSchema, schema_id)
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema not found.")
+
+    results: List[BulkRowResult] = []
+    ADMIN_UUID = "00000000-0000-0000-0000-000000000000"
+
+    for op in body.operations:
+        try:
+            # ✅ CRITICAL FIX: Use a Savepoint. If an error happens inside this block, 
+            # it only rolls back THIS specific row, keeping the rest of the batch safe!
+            async with db.begin_nested():
+                
+                # ── CREATE ──────────────────────────────────────────────
+                if op.action == "create":
+                    if op.data is None:
+                        raise ValueError("'data' is required for create.")
+                    
+                    new_row = CustomDataRow(
+                        schema_id=schema_id,
+                        data=op.data,
+                        sitemember_id=op.sitemember_id
+                    )
+                    db.add(new_row)
+                    await db.flush()  # Safe to do now because of begin_nested()
+                    
+                    results.append(BulkRowResult(
+                        action="create", row_id=str(new_row.row_id), status="success"
+                    ))
+
+                # ── UPDATE ──────────────────────────────────────────────
+                elif op.action == "update":
+                    if op.row_id is None: raise ValueError("'row_id' is required for update.")
+                    if op.data is None: raise ValueError("'data' is required for update.")
+
+                    row = await db.get(CustomDataRow, op.row_id)
+                    if not row: raise ValueError(f"Row {op.row_id} not found.")
+
+                    requesting_as_admin = str(op.sitemember_id) == ADMIN_UUID
+                    row_owned_by_admin  = str(row.sitemember_id) == ADMIN_UUID
+
+                    if not requesting_as_admin:
+                        if not row_owned_by_admin:
+                            if row.sitemember_id is not None and str(row.sitemember_id) != str(op.sitemember_id):
+                                raise ValueError("Permission denied: incorrect owner ID.")
+
+                    # ✅ CRITICAL FIX: Direct overwrite to match your PUT endpoint 
+                    row.data = op.data
+
+                    if not requesting_as_admin and not row_owned_by_admin:
+                        row.sitemember_id = op.sitemember_id
+
+                    results.append(BulkRowResult(
+                        action="update", row_id=str(op.row_id), status="success"
+                    ))
+
+                # ── DELETE ──────────────────────────────────────────────
+                elif op.action == "delete":
+                    if op.row_id is None: raise ValueError("'row_id' is required for delete.")
+
+                    row = await db.get(CustomDataRow, op.row_id)
+                    if not row:
+                        results.append(BulkRowResult(
+                            action="delete", row_id=str(op.row_id), status="success"
+                        ))
+                        continue # Skip the rest of the loop for this row
+
+                    if row.sitemember_id is not None:
+                        if op.sitemember_id is None or (str(row.sitemember_id) != str(op.sitemember_id) and str(op.sitemember_id) != ADMIN_UUID):
+                            raise ValueError("Permission denied to delete this row.")
+
+                    await db.delete(row)
+                    
+                    results.append(BulkRowResult(
+                        action="delete", row_id=str(op.row_id), status="success"
+                    ))
+
+                else:
+                    raise ValueError(f"Unknown action '{op.action}'.")
+
+        except Exception as e:
+            # If an error happens, the savepoint automatically rolls back JUST this operation!
+            results.append(BulkRowResult(
+                action=op.action,
+                row_id=str(op.row_id) if op.row_id else None,
+                status="error",
+                error=str(e)
+            ))
+
+    # Commit everything that succeeded in one shot
+    await db.commit()
+
+    return BulkRowResponse(
+        results=results,
+        total=len(results),
+        succeeded=sum(1 for r in results if r.status == "success"),
+        failed=sum(1 for r in results if r.status == "error")
+    )
+
+#endregion bulk
+
+#region Aggregate Stats
+
+
+class StatQuery(BaseModel):
+    field: str
+    operation: Literal["sum", "avg", "min", "max", "count"]
+    filters: Dict[str, Any] = {} 
+    
+class StatResponse(BaseModel):
+    operation: str
+    field: str
+    result: float
+
+# ============================================================
+# ADD THIS ENDPOINT to your custom_data router
+# ============================================================
+@router.post("/rows/{schema_id}/stats", response_model=StatResponse)
+async def get_aggregate_stats(
+    schema_id: UUID,
+    query: StatQuery,
+    sitemember_id: Optional[UUID] = Query(None),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Calculates sum, avg, min, max, or count for a specific JSON field directly in the database.
+    Supports the exact same dynamic filters as the search endpoint.
+    """
+    schema = await db.get(CustomDataSchema, schema_id)
+    if not schema:
+        raise HTTPException(status_code=404, detail="Schema not found.")
+
+    base_query = select(CustomDataRow).where(CustomDataRow.schema_id == schema_id)
+    
+    if sitemember_id is not None:
+        base_query = base_query.where(CustomDataRow.sitemember_id == sitemember_id)
+
+    # 1. Apply the same JSON Filters dynamically (Re-used from your search endpoint)
+    for filter_field, condition in query.filters.items():
+        json_text_value = CustomDataRow.data.op("->>")(filter_field)
+        
+        if isinstance(condition, dict):
+            if any(op in condition for op in [">", "<", ">=", "<="]):
+                base_query = base_query.where(json_text_value != "")
+                base_query = base_query.where(json_text_value.is_not(None))
+
+            def apply_range_filter(q, operator_symbol, value):
+                try:
+                    num_val = float(value)
+                    if operator_symbol == ">": return q.where(json_text_value.cast(Float) > num_val)
+                    if operator_symbol == "<": return q.where(json_text_value.cast(Float) < num_val)
+                    if operator_symbol == ">=": return q.where(json_text_value.cast(Float) >= num_val)
+                    if operator_symbol == "<=": return q.where(json_text_value.cast(Float) <= num_val)
+                except ValueError:
+                    if operator_symbol == ">": return q.where(json_text_value > str(value))
+                    if operator_symbol == "<": return q.where(json_text_value < str(value))
+                    if operator_symbol == ">=": return q.where(json_text_value >= str(value))
+                    if operator_symbol == "<=": return q.where(json_text_value <= str(value))
+                return q
+
+            if ">" in condition: base_query = apply_range_filter(base_query, ">", condition[">"])
+            if "<" in condition: base_query = apply_range_filter(base_query, "<", condition["<"])
+            if ">=" in condition: base_query = apply_range_filter(base_query, ">=", condition[">="])
+            if "<=" in condition: base_query = apply_range_filter(base_query, "<=", condition["<="])
+            if "ilike" in condition: base_query = base_query.where(json_text_value.op("ilike")(f"%{condition['ilike']}%"))
+        else:
+            if isinstance(condition, bool):
+                base_query = base_query.where(json_text_value == str(condition).lower())
+            else:
+                base_query = base_query.where(json_text_value == str(condition))
+
+    # 2. Setup the Aggregate Math Operation
+    target_field_text = CustomDataRow.data.op("->>")(query.field)
+    
+    # We must cast the JSON text to a Float for math to work!
+    # Also, we ignore empty strings or nulls so they don't crash the math.
+    safe_target_field = target_field_text.cast(Float)
+    
+    if query.operation == "count":
+        agg_func = func.count(CustomDataRow.row_id)
+    elif query.operation == "sum":
+        agg_func = func.sum(safe_target_field)
+    elif query.operation == "avg":
+        agg_func = func.avg(safe_target_field)
+    elif query.operation == "max":
+        agg_func = func.max(safe_target_field)
+    elif query.operation == "min":
+        agg_func = func.min(safe_target_field)
+    else:
+        raise HTTPException(status_code=400, detail="Invalid operation.")
+
+    # Apply the math ONLY to rows where the target field actually exists and is a valid number
+    if query.operation != "count":
+         # Regex to ensure it's a valid number format before casting
+         base_query = base_query.where(target_field_text.op('~')('^[0-9]+(\.[0-9]+)?$'))
+
+    # 3. Execute the math query
+    final_query = select(agg_func).select_from(base_query.subquery())
+    result = await db.execute(final_query)
+    calculated_value = result.scalar()
+
+    # Handle cases where the sum/avg is empty (returns None)
+    if calculated_value is None:
+        calculated_value = 0.0
+
+    return StatResponse(
+        operation=query.operation,
+        field=query.field,
+        result=float(calculated_value)
+    )

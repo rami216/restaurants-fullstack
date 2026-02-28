@@ -15120,6 +15120,21 @@ api.get(`/custom-data/rows/${schemaId}?limit=50`)        // always use template 
 api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null })
 api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null })
 api.delete(`/custom-data/rows/${rowId}`)
+// BULK OPERATIONS (Create/Update/Delete multiple at once):
+api.post(`/custom-data/rows/${schemaId}/bulk`, {
+  operations: [
+    { action: "create", data: { field: "val" }, sitemember_id: currentUserId },
+    { action: "update", row_id: targetRowId, data: { field: "newVal" }, sitemember_id: null },
+    { action: "delete", row_id: targetRowId, sitemember_id: currentUserId }
+  ]
+});
+
+// AGGREGATE STATS (Math inside the database):
+const statRes = await api.post(`/custom-data/rows/${schemaId}/stats`, {
+  field: "amount",           // JSON field to calculate
+  operation: "sum",          // "sum", "avg", "min", "max", "count"
+  filters: { status: "paid" } // Optional, exact same syntax as search endpoint
+});
 ```
 
 **Read list:** Always append `?limit=50` (or skip/limit). Access via `res.data.rows`.
@@ -15330,11 +15345,12 @@ if (!jsonMatch) throw new Error("AI returned no parsable data.");
 const parsed = JSON.parse(jsonMatch[0]);
 const dataArray = Array.isArray(parsed) ? parsed : [parsed];
 
-// Save every item as its own row:
-for (const item of dataArray) {
+// Save all items at once using bulk operations:
+const operations = dataArray.map(item => {
   const { sitemember_id, ...cleanData } = item;
-  await api.post(`/custom-data/rows/${schemaId}`, { data: cleanData, sitemember_id: memberId });
-}
+  return { action: "create", data: cleanData, sitemember_id: memberId };
+});
+await api.post(`/custom-data/rows/${schemaId}/bulk`, { operations });
 ```
 
 ---
@@ -15881,8 +15897,8 @@ btn.onclick = async () => {
 - Load Chart.js dynamically, execute ALL chart code inside `script.onload`
 - Container: `width: 100%; max-width: 100%; overflow-x: hidden`
 - Wrap each `<canvas>` in `<div style="position:relative; width:100%;">`
-- Sanitize DB values: `parseFloat(String(val).replace(/[^0-9.,-]/g,'').replace(',','.')) || 0`
-
+- NEVER fetch all rows just to calculate totals. ALWAYS use the `/stats` endpoint for sum, avg, count, min, and max.
+- Sanitize fallback DB values: `parseFloat(String(val).replace(/[^0-9.,-]/g,'').replace(',','.')) || 0`
 ---
 
 ## PDF UPLOAD & AI EXTRACTION (chain: Upload → Parse → AI → Save)
