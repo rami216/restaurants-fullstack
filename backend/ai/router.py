@@ -6,6 +6,7 @@ from pydantic import BaseModel, Field
 from openai import OpenAI, OpenAIError
 from typing import Dict, Any, List, Optional
 import re
+import anthropic
 
 from sqlalchemy import select
 from config import AI_DEFAULT_MODEL
@@ -20,6 +21,7 @@ from website_builder.custom_data_router import SchemaField
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+anthropic_client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
 
 SECTION_SYSTEM_PROMPT = """
 You are an expert layout designer creating the content for a website section. Your task is to generate a valid JSON object representing the 'subsections' and 'elements' based on a user's prompt.
@@ -3538,17 +3540,142 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
   "script": "const schema = properties.schema_fields || []; const dataDisplay = container.querySelector('.data-display'); const formContainer = container.querySelector('.form-container'); const addButton = container.querySelector('.add-new-btn'); const paginationControls = container.querySelector('.pagination-controls'); const titleElement = container.querySelector('h2, h3'); let editingRowId = null; let currentRows = []; let currentPage = 0; const rowsPerPage = 20; if (titleElement) { titleElement.textContent = properties.title; if (properties.titleColor) titleElement.style.color = properties.titleColor; } if (addButton) { addButton.textContent = properties.addButtonText; if (properties.buttonBgColor) addButton.style.backgroundColor = properties.buttonBgColor; } const crossTableMutations = [{ when: 'create', sourceField: 'time', target: { field: 'available', value: false } }]; const runCrossTableMutations = async (mode, formData, sitemember_id) => { const rules = crossTableMutations.filter(r => r.when === mode); for (const rule of rules) { const targetRowId = formData[rule.sourceField]; const fieldDef = schema.find(f => f.id === rule.sourceField); const targetSchemaId = fieldDef?.related_schema_id; if (targetRowId && targetSchemaId) { try { const res = await api.get(`/custom-data/rows/${targetSchemaId}?row_id=${targetRowId}`); const rows = res.data?.rows || res.rows || []; const existing = rows.find(r => r.row_id === targetRowId)?.data || {}; await api.put(`/custom-data/rows/${targetRowId}`, { data: { ...existing, [rule.target.field]: rule.target.value }, sitemember_id }); } catch (err) { console.error('Mutation failed:', err); } } } }; const fetchAndRenderRows = async () => { if (properties.hideData) return; try { const skip = currentPage * rowsPerPage; const res = await api.get('/custom-data/rows/' + schemaId + '?skip=' + skip + '&limit=' + rowsPerPage); currentRows = res.data?.rows || res.rows || []; dataDisplay.innerHTML = ''; const tmpl = container.querySelector('#displayTemplate').innerHTML; currentRows.forEach(row => { const div = document.createElement('div'); const rowData = { ...row.data }; schema.forEach(f => { if (f.type === 'boolean') { const val = rowData[f.id]; rowData[f.id] = (val === true || val === 'true') ? 'true' : 'false'; } if (f.type === 'relation' && rowData[f.id]) { const d = rowData[f.id].data || rowData[f.id]; let label = d[f.id]; if (!label) label = Object.values(d).filter(v => typeof v !== 'object')[0]; rowData[f.id].display_label = label || '---'; } if (rowData[f.id] && (f.type === 'file' || f.type === 'image')) { rowData[f.id] = String(rowData[f.id]); } }); div.innerHTML = Mustache.render(tmpl, { data: rowData, row_id: row.row_id }); dataDisplay.appendChild(div); }); renderPagination(); } catch (err) { console.error(err); } }; const renderPagination = () => { if (!paginationControls) return; paginationControls.innerHTML = ''; const prevBtn = document.createElement('button'); prevBtn.textContent = 'Previous'; prevBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'; prevBtn.disabled = currentPage === 0; prevBtn.onclick = () => { if (currentPage > 0) { currentPage--; fetchAndRenderRows(); } }; paginationControls.appendChild(prevBtn); const nextBtn = document.createElement('button'); nextBtn.textContent = 'Next'; nextBtn.className = 'px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed'; nextBtn.disabled = currentRows.length < rowsPerPage; nextBtn.onclick = () => { if (currentRows.length === rowsPerPage) { currentPage++; fetchAndRenderRows(); } }; paginationControls.appendChild(nextBtn); }; const generateForm = async (initialData = {}) => { formContainer.innerHTML = ''; formContainer.classList.remove('hidden'); const form = document.createElement('form'); form.className = 'grid grid-cols-1 md:grid-cols-2 gap-4'; const selects = {}; const relCache = {}; for (const field of schema) { const wrapper = document.createElement('div'); const label = document.createElement('label'); label.className = 'block text-sm font-semibold text-gray-700 mb-1'; label.textContent = field.label; wrapper.appendChild(label); if (field.type === 'relation') { const sel = document.createElement('select'); sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all'; selects[field.id] = sel; sel.name = field.id; const res = await api.get(`/custom-data/rows/${field.related_schema_id}?limit=1000`); const rows = res.data?.rows || res.rows || []; relCache[field.id] = rows; sel.innerHTML = '<option value=\"\">Select...</option>'; if (field.id === 'day') { const seen = new Set(); rows.forEach(r => { const txt = r.data.day; if (txt && !seen.has(txt)) { seen.add(txt); const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = txt; sel.appendChild(opt); } }); sel.addEventListener('change', () => { const selectedDayText = sel.options[sel.selectedIndex].textContent; const timeSelect = selects['time']; if (timeSelect) { timeSelect.innerHTML = '<option value=\"\">Select Time...</option>'; const availableTimes = relCache['time'].filter(r => r.data.day === selectedDayText && (r.data.available === true || r.data.available === 'true')); availableTimes.forEach(r => { const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = `${r.data.start_time} - ${r.data.end_time}`; timeSelect.appendChild(opt); }); } }); } else if (field.id !== 'time') { rows.forEach(r => { const val = Object.values(r.data).filter(v => typeof v !== 'object')[0]; const opt = document.createElement('option'); opt.value = r.row_id; opt.textContent = val; sel.appendChild(opt); }); } wrapper.appendChild(sel); } else if (field.type === 'boolean') { const sel = document.createElement('select'); sel.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all'; sel.name = field.id; sel.innerHTML = '<option value=\"true\">True</option><option value=\"false\">False</option>'; const isTrue = initialData[field.id] === true || initialData[field.id] === 'true'; sel.value = isTrue ? 'true' : 'false'; wrapper.appendChild(sel); } else if (field.type === 'file' || field.type === 'image') { const input = document.createElement('input'); input.type = 'file'; input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all'; const hiddenUrl = document.createElement('input'); hiddenUrl.type = 'hidden'; hiddenUrl.name = field.id; hiddenUrl.value = initialData[field.id] || ''; wrapper.appendChild(hiddenUrl); input.onchange = async (e) => { const file = e.target.files[0]; if (!file) return; const btn = form.querySelector('button[type=\"submit\"]') || form.querySelector('button'); const oldText = btn ? btn.innerText : 'Submit'; if(btn) { btn.disabled = true; btn.innerText = 'Uploading...'; } try { const formData = new FormData(); formData.append('file', file); const res = await api.post('/uploads/', formData); const url = res.data ? res.data.url : res.url; if (url) { hiddenUrl.value = url; const msg = document.createElement('span'); msg.className = 'text-xs text-green-600 block mt-1'; msg.innerText = '✓ Ready to save'; if(input.nextSibling?.className?.includes('text-green-600')) input.nextSibling.remove(); input.parentNode.insertBefore(msg, input.nextSibling); } } catch(err) { console.error('Upload error:', err); alert('Upload failed'); input.value = ''; } finally { if(btn) { btn.disabled = false; btn.innerText = oldText; } } }; wrapper.appendChild(input); } else { const input = document.createElement('input'); input.type = field.type; input.name = field.id; input.className = 'w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none transition-all'; input.value = initialData[field.id] || ''; wrapper.appendChild(input); } form.appendChild(wrapper); } const btn = document.createElement('button'); btn.textContent = editingRowId ? 'Update' : 'Submit'; btn.className = 'md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700 transition-colors mt-2'; form.appendChild(btn); form.onsubmit = async (e) => { e.preventDefault(); const data = {}; new FormData(form).forEach((v, k) => data[k] = v); if (data['time'] && data['day']) { const dayField = schema.find(f => f.id === 'day'); const timeField = schema.find(f => f.id === 'time'); if (dayField && timeField && dayField.related_schema_id === timeField.related_schema_id) { data['day'] = data['time']; } } const sitemember_id = properties.sitemember_id || null; try { if (editingRowId) { await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id }); await runCrossTableMutations('update', data, sitemember_id); } else { await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id }); await runCrossTableMutations('create', data, sitemember_id); } alert('Success!'); editingRowId = null; form.reset(); formContainer.classList.add('hidden'); if (!properties.hideData) fetchAndRenderRows(); } catch (err) { console.error(err); } }; formContainer.appendChild(form); }; container.addEventListener('click', async (e) => { const editBtn = e.target.closest('.edit-btn'); if (editBtn) { editingRowId = editBtn.dataset.rowId; const row = currentRows.find(r => r.row_id === editingRowId); if (row) generateForm(row.data); } const deleteBtn = e.target.closest('.delete-btn'); if (deleteBtn) { if (confirm('Delete?')) { const rowElement = deleteBtn.closest('.transition-shadow'); const originalText = deleteBtn.innerText; deleteBtn.innerText = '...'; deleteBtn.disabled = true; try { const sitemember_id = properties.sitemember_id || null; const rowId = deleteBtn.dataset.rowId; await api.delete(`/custom-data/rows/${rowId}?sitemember_id=${sitemember_id || ''}`); if (rowElement) rowElement.remove(); currentRows = currentRows.filter(r => r.row_id !== rowId); } catch (err) { console.error('Delete failed:', err); alert('Failed to delete.'); deleteBtn.innerText = originalText; deleteBtn.disabled = false; } } } }); if (addButton) { addButton.onclick = () => { editingRowId = null; generateForm(); }; } renderPagination();"
 }
 """.strip()
-#region generateelement
+
+
+
+#region genai-openai
 class GenerateRequest(BaseModel):
     prompt: str
     website_id: UUID | str
-#
+
 
 class GenerateRequestForElement(BaseModel):
     prompt: str
     unique_class_name: str
     website_id: UUID | str
 
+# @router.post("/generate-ai-element")
+# async def generate_ai_element(
+#     body: GenerateRequestForElement,
+#     db: AsyncSession = Depends(get_db),
+#     user: User = Depends(get_current_active_user),
+# ):
+#     try:
+#         # Guard: validate website_id exists
+#         if not body.website_id:
+#             raise HTTPException(400, "website_id is required")
+
+#         # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
+#         schema_result = await db.execute(
+#             select(CustomDataSchema)
+#             .where(CustomDataSchema.website_id == body.website_id)
+#         )
+#         existing_schemas = schema_result.scalars().all()
+        
+#         # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
+#         schemas_context = json.dumps([
+#             {
+#                 "name": s.name, 
+#                 "schema_id": str(s.schema_id), 
+#                 "fields": s.fields 
+#             } 
+#             for s in existing_schemas
+#         ])
+
+#         # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
+#         user_content = (
+#             f'PROMPT: "{body.prompt}"\n\n'
+#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
+#             f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
+#         )
+
+#         resp = openai.chat.completions.create(
+#             model=AI_DEFAULT_MODEL,
+#             response_format={"type": "json_object"},
+#             messages=[
+#                 {"role": "system", "content": NON_TABLE_COMPRESSED_TRY1},
+#                 {"role": "user",   "content": user_content},
+#             ],
+#             temperature=0.2,
+#             max_tokens=4096,
+#         )
+
+#         usage = getattr(resp, "usage", None)
+#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+
+#         content = resp.choices[0].message.content
+#         payload = json.loads(content)
+#         # 🔍 DEBUG: Log the raw AI response
+#         # print("=" * 80)
+#         # print("🤖 RAW AI RESPONSE:")
+#         # print("=" * 80)
+#         # print(json.dumps(payload, indent=2))
+#         # print("=" * 80)
+#         # print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
+#         # print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
+#         # print("=" * 80)
+#         # Strip <script> wrapper if present
+#         if isinstance(payload.get("script"), str):
+#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+#             if m:
+#                 payload["script"] = m.group(1).strip()
+
+#         # 🔍 ADD THIS DEBUG
+#         # print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
+#         # print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
+#         # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
+#         # This is needed for the script to dynamically fetch related data
+#         all_schemas_for_script = [
+#             {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
+#             for s in existing_schemas
+#         ]
+        
+#         # Ensure properties exists
+#         if "properties" not in payload:
+#             payload["properties"] = {}
+        
+#         # ✅ ADD THIS LINE RIGHT HERE:
+#         payload["properties"]["website_id"] = str(body.website_id)  # <--- INJECT REAL ID
+        
+#         # Add all_schemas to properties (the script needs this!)
+#         payload["properties"]["all_schemas"] = all_schemas_for_script
+        
+#         # If the AI specified a schema_id, ensure it's preserved
+#         if "schema_id" in payload.get("properties", {}):
+#             # Also add schema_fields for backward compatibility
+#             schema_id = payload["properties"]["schema_id"]
+#             matching_schema = next(
+#                 (s for s in existing_schemas if str(s.schema_id) == schema_id), 
+#                 None
+#             )
+#             if matching_schema:
+#                 payload["properties"]["schema_fields"] = matching_schema.fields
+
+#         # Track usage
+#         await track_ai_usage(
+#             db=db,
+#             website_id=body.website_id,
+#             user_id=user.id,
+#             model=model_used,
+#             feature="generate_element",
+#             prompt_tokens=prompt_tokens,
+#             completion_tokens=completion_tokens,
+#             meta={"unique_class_name": body.unique_class_name},
+#         )
+
+#         return payload
+
+#     except HTTPException:
+#         raise
+#     except Exception as e:
+#         import traceback; traceback.print_exc()
+#         raise HTTPException(500, f"generate-ai-element failed: {e}")
+
+#endregion openaigen
+
+#region genai-claude
 @router.post("/generate-ai-element")
 async def generate_ai_element(
     body: GenerateRequestForElement,
@@ -3584,62 +3711,42 @@ async def generate_ai_element(
             f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
         )
 
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": NON_TABLE_COMPRESSED_TRY1},
-                {"role": "user",   "content": user_content},
-            ],
-            temperature=0.2,
+        resp = anthropic_client.messages.create(
+            model="claude-sonnet-4-6",
             max_tokens=4096,
+            temperature=0.2,
+            system=NON_TABLE_COMPRESSED_TRY1,
+            messages=[
+                {"role": "user", "content": user_content},
+            ],
         )
 
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        prompt_tokens = resp.usage.input_tokens
+        completion_tokens = resp.usage.output_tokens
+        model_used = resp.model
 
-        content = resp.choices[0].message.content
+        content = resp.content[0].text
         payload = json.loads(content)
-        # 🔍 DEBUG: Log the raw AI response
-        # print("=" * 80)
-        # print("🤖 RAW AI RESPONSE:")
-        # print("=" * 80)
-        # print(json.dumps(payload, indent=2))
-        # print("=" * 80)
-        # print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
-        # print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
-        # print("=" * 80)
+
         # Strip <script> wrapper if present
         if isinstance(payload.get("script"), str):
             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
             if m:
                 payload["script"] = m.group(1).strip()
 
-        # 🔍 ADD THIS DEBUG
-        # print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
-        # print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
         # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
-        # This is needed for the script to dynamically fetch related data
         all_schemas_for_script = [
             {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
             for s in existing_schemas
         ]
         
-        # Ensure properties exists
         if "properties" not in payload:
             payload["properties"] = {}
         
-        # ✅ ADD THIS LINE RIGHT HERE:
-        payload["properties"]["website_id"] = str(body.website_id)  # <--- INJECT REAL ID
-        
-        # Add all_schemas to properties (the script needs this!)
+        payload["properties"]["website_id"] = str(body.website_id)
         payload["properties"]["all_schemas"] = all_schemas_for_script
         
-        # If the AI specified a schema_id, ensure it's preserved
         if "schema_id" in payload.get("properties", {}):
-            # Also add schema_fields for backward compatibility
             schema_id = payload["properties"]["schema_id"]
             matching_schema = next(
                 (s for s in existing_schemas if str(s.schema_id) == schema_id), 
@@ -3667,7 +3774,8 @@ async def generate_ai_element(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(500, f"generate-ai-element failed: {e}")
-    
+
+
 # @router.post("/generate-ai-element")
 # async def generate_ai_element(
 #     body: GenerateRequestForElement,
