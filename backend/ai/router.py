@@ -15278,21 +15278,26 @@ api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null })
 api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null })
 api.delete(`/custom-data/rows/${rowId}`)
 **BULK EXECUTION RULE:** When saving multiple items from an AI array, map them into the `operations` array and make ONE single `api.post()` call to the `/bulk` endpoint. NEVER put the `/bulk` API call inside a `forEach` loop or map function.
+- **BULK OWNERSHIP RULE (CRITICAL):** Every operation inside a `/bulk` request MUST include the `sitemember_id` (fetched from localStorage) to ensure the data is saved to the correct user's account. NEVER leave `sitemember_id` as null if a user is logged in.
 ```js
-// BULK OPERATIONS (Create/Update/Delete multiple at once):
+// BULK OPERATIONS (Stamping every item with the User ID):
+const currentUserId = typeof window !== 'undefined' 
+  ? localStorage.getItem('siteMemberId:' + (properties.subdomain || '')) 
+  : null;
+
 api.post(`/custom-data/rows/${schemaId}/bulk`, {
-  operations: [
-    { action: "create", data: { field: "val" }, sitemember_id: currentUserId },
-    { action: "update", row_id: targetRowId, data: { field: "newVal" }, sitemember_id: null },
-    { action: "delete", row_id: targetRowId, sitemember_id: currentUserId }
-  ]
+  operations: dataArray.map(item => ({
+    action: "create",
+    data: item,
+    sitemember_id: currentUserId // ✅ CRITICAL: Stamp ownership on every row
+  }))
 });
 
 // AGGREGATE STATS (Math inside the database):
-const statRes = await api.post(`/custom-data/rows/${schemaId}/stats`, {
-  field: "amount",           // JSON field to calculate
-  operation: "sum",          // "sum", "avg", "min", "max", "count"
-  filters: { status: "paid" } // Optional, exact same syntax as search endpoint
+// Always include sitemember_id in the stats fetch to filter by user
+const statRes = await api.post(`/custom-data/rows/${schemaId}/stats?sitemember_id=${currentUserId}`, {
+  field: "amount",
+  operation: "sum"
 });
 // CRITICAL: Assign directly. No loops, no +=.
 container.querySelector('.total-display').textContent = statRes.data.result;
