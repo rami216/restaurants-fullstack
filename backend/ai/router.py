@@ -3694,13 +3694,8 @@ async def generate_ai_element(
         )
         existing_schemas = schema_result.scalars().all()
         
-        # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
         schemas_context = json.dumps([
-            {
-                "name": s.name, 
-                "schema_id": str(s.schema_id), 
-                "fields": s.fields 
-            } 
+            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields}
             for s in existing_schemas
         ])
 
@@ -3713,7 +3708,7 @@ async def generate_ai_element(
 
         resp = anthropic_client.messages.create(
             model="claude-sonnet-4-6",
-            max_tokens=4096,
+            max_tokens=8192,
             temperature=0.2,
             system=NON_TABLE_COMPRESSED_TRY1,
             messages=[
@@ -3721,12 +3716,34 @@ async def generate_ai_element(
             ],
         )
 
+        # --- DEBUG ---
+        print("STOP REASON:", resp.stop_reason)
+        print("CLAUDE RESPONSE LENGTH:", len(resp.content[0].text) if resp.content else 0)
+        print("CLAUDE RESPONSE PREVIEW:", repr(resp.content[0].text[:300]) if resp.content else "EMPTY")
+
         prompt_tokens = resp.usage.input_tokens
         completion_tokens = resp.usage.output_tokens
         model_used = resp.model
 
-        content = resp.content[0].text
-        payload = json.loads(content)
+        # --- EXTRACT & VALIDATE CONTENT ---
+        if not resp.content or not resp.content[0].text.strip():
+            raise HTTPException(500, "Claude returned an empty response")
+
+        content = resp.content[0].text.strip()
+
+        # Strip markdown fences if Claude wrapped the JSON
+        if content.startswith("```"):
+            content = re.sub(r"^```json?\s*", "", content)
+            content = re.sub(r"\s*```$", "", content)
+            content = content.strip()
+
+        # Extract outermost JSON object safely
+        json_match = re.search(r"\{[\s\S]*\}", content)
+        if not json_match:
+            print("FULL CLAUDE RESPONSE:", repr(content))
+            raise HTTPException(500, "Claude response contained no valid JSON object")
+
+        payload = json.loads(json_match.group(0))
 
         # Strip <script> wrapper if present
         if isinstance(payload.get("script"), str):
@@ -3734,28 +3751,28 @@ async def generate_ai_element(
             if m:
                 payload["script"] = m.group(1).strip()
 
-        # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
+        # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT ---
         all_schemas_for_script = [
-            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
+            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields}
             for s in existing_schemas
         ]
-        
+
         if "properties" not in payload:
             payload["properties"] = {}
-        
+
         payload["properties"]["website_id"] = str(body.website_id)
         payload["properties"]["all_schemas"] = all_schemas_for_script
-        
+
         if "schema_id" in payload.get("properties", {}):
             schema_id = payload["properties"]["schema_id"]
             matching_schema = next(
-                (s for s in existing_schemas if str(s.schema_id) == schema_id), 
+                (s for s in existing_schemas if str(s.schema_id) == schema_id),
                 None
             )
             if matching_schema:
                 payload["properties"]["schema_fields"] = matching_schema.fields
 
-        # Track usage
+        # --- TRACK USAGE ---
         await track_ai_usage(
             db=db,
             website_id=body.website_id,
@@ -3774,6 +3791,7 @@ async def generate_ai_element(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(500, f"generate-ai-element failed: {e}")
+#endregion
 
 
 # @router.post("/generate-ai-element")
