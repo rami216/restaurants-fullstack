@@ -1,5 +1,3 @@
-// frontend/src/components/builder/ElementPalette.tsx
-
 "use client";
 
 import React, { useState, useEffect } from "react";
@@ -24,7 +22,7 @@ interface ElementPaletteProps {
   selectedLocationId: string | null;
   onLocationChange: (locationId: string) => void;
   categories: Category[];
-  websiteId: string; // <-- add this
+  websiteId: string;
 }
 
 const GOOGLE_MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
@@ -132,7 +130,6 @@ const availableElements = [
     name: "map",
     label: "Map",
     defaultProps: {
-      // Default to a central location, user will change this
       src: `https://www.google.com/maps/embed/v1/place?key=${GOOGLE_MAP_KEY}&q=Eiffel+Tower,Paris+France`,
       style: {
         width: "100%",
@@ -173,7 +170,7 @@ const availableElements = [
           width: "100%",
         },
       },
-      successRedirect: "", // leave empty to use http://localhost:3000/<subdomain>
+      successRedirect: "",
       style: {
         backgroundColor: "#f9fafb",
         padding: "2rem",
@@ -242,10 +239,9 @@ const availableElements = [
     defaultProps: {
       title: "Sample Video",
       length: "03:21",
-      src: "", // filled after upload in the editor
-      poster: "", // optional thumbnail
+      src: "",
+      poster: "",
       controls: true,
-      // card/container styles
       style: {
         backgroundColor: "#ffffff",
         borderRadius: "12px",
@@ -254,7 +250,6 @@ const availableElements = [
         maxWidth: "640px",
         width: "100%",
       },
-      // editable text styles
       titleStyle: { fontSize: "1.125rem", fontWeight: 700, color: "#111827" },
       metaStyle: { fontSize: ".875rem", color: "#6b7280" },
       videoStyle: { width: "100%", borderRadius: "10px" },
@@ -274,19 +269,23 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   categories,
   websiteId,
 }) => {
-  const { subscriptionStatus } = useSubscription(); // <-- 2. USE THE HOOK
-  const isSubscribed = subscriptionStatus === "active"; // <-- 3. CREATE A HELPER VARIABLE
+  const { subscriptionStatus } = useSubscription();
+  const isSubscribed = subscriptionStatus === "active";
   const [menuItems, setMenuItems] = useState<MenuItem[]>([]);
 
-  //for ai generated element
-
+  // --- AI Generator State ---
   const [aiPrompt, setAiPrompt] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
+  // ✅ NEW: Model Selection State
+  const [selectedAiModel, setSelectedAiModel] = useState<"openai" | "claude">(
+    "openai",
+  );
 
-  // ✅ NEW: State for the ADVANCED Data App generator
+  // --- Data App Generator State ---
   const [aiDataAppPrompt, setAiDataAppPrompt] = useState("");
   const [isGeneratingDataApp, setIsGeneratingDataApp] = useState(false);
 
+  // --- Data View Generator State ---
   const [aiDataViewPrompt, setAiDataViewPrompt] = useState("");
   const [isGeneratingDataView, setIsGeneratingDataView] = useState(false);
 
@@ -297,27 +296,25 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       const newElementId = `ai_${Date.now()}`;
       const uniqueClassName = `ai-element-${newElementId.substring(3, 10)}`;
 
-      const { data } = await api.post("/ai/generate-ai-element", {
+      // ✅ Dynamically choose the correct backend endpoint
+      const endpoint =
+        selectedAiModel === "openai"
+          ? "/ai/generate-ai-element-openai"
+          : "/ai/generate-ai-element-claude";
+
+      const { data } = await api.post(endpoint, {
         prompt: aiPrompt,
         unique_class_name: uniqueClassName,
         website_id: websiteId,
       });
 
-      // --- SAFETY STRIPPER: Remove unwanted alerts if GPT ignores instructions ---
-      // let cleanScript = data.script || "";
-      // if (cleanScript.includes("alert(")) {
-      //   console.warn("Stripped placeholder alert from AI script.");
-      //   cleanScript = "";
-      // }
-
       const aiEl: ElementType = {
         element_id: newElementId,
         element_type: "AI",
         position: 999,
-        // Sync initial AI data to master properties so it's not empty
         properties: {
           ...data.properties,
-          bgColor: "transparent", // Ensure the outer box is transparent
+          bgColor: "transparent",
         },
         aiPayload: {
           ...data,
@@ -340,18 +337,19 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
 
       onUpdate(updatedPage);
       setAiPrompt("");
-    } catch (err) {
+    } catch (err: any) {
       console.error(err);
-      alert("AI generation failed");
+      const errorMsg = err.response?.data?.detail || "AI generation failed";
+      alert(errorMsg);
     } finally {
       setLoadingAi(false);
     }
   };
+
   const handleGenerateDataApp = async () => {
     if (!aiDataAppPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setIsGeneratingDataApp(true);
     try {
-      // Generate a unique class name for CSS scoping
       const unique_class_name = `ai-data-app-${Date.now()}`;
 
       const { data: aiPayload } = await api.post(
@@ -359,7 +357,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         {
           prompt: aiDataAppPrompt,
           website_id: websiteId,
-          unique_class_name: unique_class_name, // Send the class name to the backend
+          unique_class_name: unique_class_name,
         },
       );
 
@@ -371,7 +369,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         aiPayload: aiPayload,
       };
 
-      // Add the new element to the selected subsection
       const updatedPage = {
         ...activePage,
         sections: activePage.sections.map((sec) => ({
@@ -392,6 +389,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       setIsGeneratingDataApp(false);
     }
   };
+
   const handleGenerateDataView = async () => {
     if (!aiDataViewPrompt.trim() || !selectedSubsectionId || !activePage)
       return;
@@ -400,9 +398,9 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       const unique_class_name = `ai-data-view-${Date.now()}`;
 
       const { data: aiPayload } = await api.post(
-        "/ai/generate-view-only-element", // Call the new endpoint
+        "/ai/generate-view-only-element",
         {
-          prompt: aiDataViewPrompt, // Use the new state
+          prompt: aiDataViewPrompt,
           website_id: websiteId,
           unique_class_name: unique_class_name,
         },
@@ -428,7 +426,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         })),
       };
       onUpdate(updatedPage);
-      setAiDataViewPrompt(""); // Reset the new state
+      setAiDataViewPrompt("");
     } catch (err: any) {
       console.error("AI Data View generation failed:", err);
       const errorMsg =
@@ -487,7 +485,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
     onUpdate(updatedPage);
   };
 
-  // This function creates a 'MENU_ITEM' element with all the necessary data
   const handleAddMenuItemElement = (item: MenuItem) => {
     const menuItemProps = {
       item_id: item.item_id,
@@ -498,7 +495,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       is_shippable: item.is_shippable,
       stripe_product_id: item.stripe_product_id,
       stripe_price_id: item.stripe_price_id,
-      // You can add default styles for the card here
       style: {
         padding: "1rem",
         border: "1px solid #e2e8f0",
@@ -506,11 +502,12 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         backgroundColor: "#ffffff",
         boxShadow:
           "0 1px 3px 0 rgba(0, 0, 0, 0.1), 0 1px 2px 0 rgba(0, 0, 0, 0.06)",
-        maxWidth: "300px", // Set a maximum width for the card
+        maxWidth: "300px",
       },
     };
     handleAddElement("MENU_ITEM", menuItemProps);
   };
+
   const handleAddCategoryElement = (category: Category) => {
     const categoryProps = {
       id: category.id,
@@ -552,13 +549,26 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
               value={aiPrompt}
               onChange={(e) => setAiPrompt(e.target.value)}
             />
-            <button
-              onClick={handleGenerateAi}
-              disabled={loadingAi || !aiPrompt.trim() || !isSubscribed}
-              className="mt-2 w-full bg-blue-600 text-white py-2 rounded disabled:opacity-50"
-            >
-              {loadingAi ? "Generating…" : "Generate AI Element"}
-            </button>
+            {/* ✅ NEW: Model Selection & Generate Button */}
+            <div className="flex gap-2 mt-2">
+              <select
+                value={selectedAiModel}
+                onChange={(e) =>
+                  setSelectedAiModel(e.target.value as "openai" | "claude")
+                }
+                className="w-1/3 border rounded p-2 text-sm bg-white"
+              >
+                <option value="openai">OpenAI</option>
+                <option value="claude">Claude</option>
+              </select>
+              <button
+                onClick={handleGenerateAi}
+                disabled={loadingAi || !aiPrompt.trim() || !isSubscribed}
+                className="w-2/3 bg-blue-600 text-white py-2 rounded disabled:opacity-50 text-sm font-semibold"
+              >
+                {loadingAi ? "Generating…" : "Generate UI"}
+              </button>
+            </div>
             {!isSubscribed && (
               <p className="mt-2 text-sm text-red-600 text-center">
                 Please subscribe to use AI features.
@@ -566,7 +576,8 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             )}
           </div>
           <hr className="my-4 border-gray-300" />
-          {/* --- ✅ NEW: AI GENERATOR (Data Apps) --- */}
+
+          {/* --- AI GENERATOR (Data Apps) --- */}
           <div className="mb-4">
             <label className="text-sm font-semibold text-gray-700">
               Generate a Data Table
@@ -583,7 +594,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
               disabled={
                 isGeneratingDataApp || !aiDataAppPrompt.trim() || !isSubscribed
               }
-              className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+              className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50 font-semibold"
             >
               {isGeneratingDataApp ? "Generating..." : "Generate Data App"}
             </button>
@@ -593,37 +604,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
               </p>
             )}
           </div>
-          {/* ✅ **3. ADD NEW UI for the View-Only generator** */}
-          {/* <div className="mb-4">
-            <label className="text-sm font-semibold text-gray-700">
-              Generate a Read-Only View
-            </label>
-            <textarea
-              rows={3}
-              className="w-full border rounded p-2 mt-1 text-sm"
-              placeholder="e.g., 'Show a public list of our team members...'"
-              value={aiDataViewPrompt}
-              onChange={(e) => setAiDataViewPrompt(e.target.value)}
-            />
-            <button
-              onClick={handleGenerateDataView}
-              disabled={
-                isGeneratingDataView ||
-                !aiDataViewPrompt.trim() ||
-                !isSubscribed
-              }
-              className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
-            >
-              {isGeneratingDataView
-                ? "Generating..."
-                : "Generate Read-Only View"}
-            </button>
-            {!isSubscribed && (
-              <p className="mt-2 text-sm text-red-600 text-center">
-                Please subscribe to use AI features.
-              </p>
-            )}
-          </div> */}
 
           <hr className="my-4 border-gray-300" />
           <p
