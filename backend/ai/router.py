@@ -15273,7 +15273,7 @@ btn.onclick = async () => {
 
 **API Syntax:**
 ```js
-api.get(`/custom-data/rows/${schemaId}?limit=50`)        // always use template literals with ()
+api.get(`/custom-data/rows/${schemaId}?limit=50`) // CRITICAL: append &sitemember_id=${currentUserId} if user-scoped
 api.post('/custom-data/rows/' + schemaId, { data, sitemember_id: null })
 api.put('/custom-data/rows/' + rowId, { data: mergedData, sitemember_id: null })
 api.delete(`/custom-data/rows/${rowId}`)
