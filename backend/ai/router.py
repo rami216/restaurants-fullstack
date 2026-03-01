@@ -3554,129 +3554,129 @@ class GenerateRequestForElement(BaseModel):
     unique_class_name: str
     website_id: UUID | str
 
-# @router.post("/generate-ai-element")
-# async def generate_ai_element(
-#     body: GenerateRequestForElement,
-#     db: AsyncSession = Depends(get_db),
-#     user: User = Depends(get_current_active_user),
-# ):
-#     try:
-#         # Guard: validate website_id exists
-#         if not body.website_id:
-#             raise HTTPException(400, "website_id is required")
+@router.post("/generate-ai-element-openai")
+async def generate_ai_element(
+    body: GenerateRequestForElement,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    try:
+        # Guard: validate website_id exists
+        if not body.website_id:
+            raise HTTPException(400, "website_id is required")
 
-#         # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
-#         schema_result = await db.execute(
-#             select(CustomDataSchema)
-#             .where(CustomDataSchema.website_id == body.website_id)
-#         )
-#         existing_schemas = schema_result.scalars().all()
+        # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
+        schema_result = await db.execute(
+            select(CustomDataSchema)
+            .where(CustomDataSchema.website_id == body.website_id)
+        )
+        existing_schemas = schema_result.scalars().all()
         
-#         # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
-#         schemas_context = json.dumps([
-#             {
-#                 "name": s.name, 
-#                 "schema_id": str(s.schema_id), 
-#                 "fields": s.fields 
-#             } 
-#             for s in existing_schemas
-#         ])
+        # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
+        schemas_context = json.dumps([
+            {
+                "name": s.name, 
+                "schema_id": str(s.schema_id), 
+                "fields": s.fields 
+            } 
+            for s in existing_schemas
+        ])
 
-#         # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
-#             f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
-#         )
+        # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
+        user_content = (
+            f'PROMPT: "{body.prompt}"\n\n'
+            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
+        )
 
-#         resp = openai.chat.completions.create(
-#             model=AI_DEFAULT_MODEL,
-#             response_format={"type": "json_object"},
-#             messages=[
-#                 {"role": "system", "content": NON_TABLE_COMPRESSED_TRY1},
-#                 {"role": "user",   "content": user_content},
-#             ],
-#             temperature=0.2,
-#             max_tokens=4096,
-#         )
+        resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": NON_TABLE_COMPRESSED_TRY1},
+                {"role": "user",   "content": user_content},
+            ],
+            temperature=0.2,
+            max_tokens=4096,
+        )
 
-#         usage = getattr(resp, "usage", None)
-#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
 
-#         content = resp.choices[0].message.content
-#         payload = json.loads(content)
-#         # 🔍 DEBUG: Log the raw AI response
-#         # print("=" * 80)
-#         # print("🤖 RAW AI RESPONSE:")
-#         # print("=" * 80)
-#         # print(json.dumps(payload, indent=2))
-#         # print("=" * 80)
-#         # print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
-#         # print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
-#         # print("=" * 80)
-#         # Strip <script> wrapper if present
-#         if isinstance(payload.get("script"), str):
-#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-#             if m:
-#                 payload["script"] = m.group(1).strip()
+        content = resp.choices[0].message.content
+        payload = json.loads(content)
+        # 🔍 DEBUG: Log the raw AI response
+        # print("=" * 80)
+        # print("🤖 RAW AI RESPONSE:")
+        # print("=" * 80)
+        # print(json.dumps(payload, indent=2))
+        # print("=" * 80)
+        # print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
+        # print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
+        # print("=" * 80)
+        # Strip <script> wrapper if present
+        if isinstance(payload.get("script"), str):
+            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+            if m:
+                payload["script"] = m.group(1).strip()
 
-#         # 🔍 ADD THIS DEBUG
-#         # print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
-#         # print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
-#         # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
-#         # This is needed for the script to dynamically fetch related data
-#         all_schemas_for_script = [
-#             {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
-#             for s in existing_schemas
-#         ]
+        # 🔍 ADD THIS DEBUG
+        # print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
+        # print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
+        # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
+        # This is needed for the script to dynamically fetch related data
+        all_schemas_for_script = [
+            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
+            for s in existing_schemas
+        ]
         
-#         # Ensure properties exists
-#         if "properties" not in payload:
-#             payload["properties"] = {}
+        # Ensure properties exists
+        if "properties" not in payload:
+            payload["properties"] = {}
         
-#         # ✅ ADD THIS LINE RIGHT HERE:
-#         payload["properties"]["website_id"] = str(body.website_id)  # <--- INJECT REAL ID
+        # ✅ ADD THIS LINE RIGHT HERE:
+        payload["properties"]["website_id"] = str(body.website_id)  # <--- INJECT REAL ID
         
-#         # Add all_schemas to properties (the script needs this!)
-#         payload["properties"]["all_schemas"] = all_schemas_for_script
+        # Add all_schemas to properties (the script needs this!)
+        payload["properties"]["all_schemas"] = all_schemas_for_script
         
-#         # If the AI specified a schema_id, ensure it's preserved
-#         if "schema_id" in payload.get("properties", {}):
-#             # Also add schema_fields for backward compatibility
-#             schema_id = payload["properties"]["schema_id"]
-#             matching_schema = next(
-#                 (s for s in existing_schemas if str(s.schema_id) == schema_id), 
-#                 None
-#             )
-#             if matching_schema:
-#                 payload["properties"]["schema_fields"] = matching_schema.fields
+        # If the AI specified a schema_id, ensure it's preserved
+        if "schema_id" in payload.get("properties", {}):
+            # Also add schema_fields for backward compatibility
+            schema_id = payload["properties"]["schema_id"]
+            matching_schema = next(
+                (s for s in existing_schemas if str(s.schema_id) == schema_id), 
+                None
+            )
+            if matching_schema:
+                payload["properties"]["schema_fields"] = matching_schema.fields
 
-#         # Track usage
-#         await track_ai_usage(
-#             db=db,
-#             website_id=body.website_id,
-#             user_id=user.id,
-#             model=model_used,
-#             feature="generate_element",
-#             prompt_tokens=prompt_tokens,
-#             completion_tokens=completion_tokens,
-#             meta={"unique_class_name": body.unique_class_name},
-#         )
+        # Track usage
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="generate_element",
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"unique_class_name": body.unique_class_name},
+        )
 
-#         return payload
+        return payload
 
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         import traceback; traceback.print_exc()
-#         raise HTTPException(500, f"generate-ai-element failed: {e}")
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(500, f"generate-ai-element failed: {e}")
 
 #endregion openaigen
 
 #region genai-claude
-@router.post("/generate-ai-element")
+@router.post("/generate-ai-element-claude")
 async def generate_ai_element(
     body: GenerateRequestForElement,
     db: AsyncSession = Depends(get_db),
