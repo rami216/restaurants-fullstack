@@ -89,6 +89,20 @@ export default function NavBar() {
                   Create Website
                 </button>
               </li>
+              {/* ✅ NEW ARCHITECT LINK */}
+              <li>
+                <Link
+                  href="/architect"
+                  className={cn(
+                    "transition-colors",
+                    pathname === "/architect"
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-gray-900",
+                  )}
+                >
+                  Architect
+                </Link>
+              </li>
               <li>
                 <Link
                   href="/ai-database"
@@ -207,6 +221,20 @@ export default function NavBar() {
                   >
                     Create Website
                   </button>
+                </li>
+                <li>
+                  <Link
+                    href="/architect"
+                    className={cn(
+                      "block transition-colors",
+                      pathname === "/architect"
+                        ? "text-blue-700 font-semibold"
+                        : "text-gray-600",
+                    )}
+                    onClick={() => setIsOpen(false)}
+                  >
+                    Architect
+                  </Link>
                 </li>
                 <li>
                   <Link
