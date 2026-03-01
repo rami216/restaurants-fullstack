@@ -16327,30 +16327,30 @@ List the front-end views, workflows, or bots needed. For EACH view, provide:
 async def generate_architect_blueprint(
     body: ArchitectBlueprintRequest,
     db: AsyncSession = Depends(get_db),
-    user = Depends(get_current_active_user) # Secure the route!
+    user = Depends(get_current_active_user)
 ):
     try:
-        # 2. Build the message array for OpenAI
+        # 1. Build the message array for OpenAI
         openai_messages = [{"role": "system", "content": ARCHITECT_SYSTEM_PROMPT}]
         
-        # Add history (mapping 'ai' to 'assistant' for OpenAI)
-        for msg in body.history[-10:]: # Only take last 10 to save tokens
+        for msg in body.history[-10:]:
             role = "assistant" if msg.role == "ai" else "user"
             openai_messages.append({"role": role, "content": msg.content})
             
-        # Add the latest prompt
         openai_messages.append({"role": "user", "content": body.idea})
 
+        # 2. Call OpenAI
         resp = openai.chat.completions.create(
             model=AI_DEFAULT_MODEL,
-            messages=openai_messages, # <--- Pass the full list now
+            messages=openai_messages,
             temperature=0.7,
             max_tokens=2500,
         )
         
-        generated_blueprint = resp.choices.message.content
+        # 3. Extract the response correctly
+        generated_blueprint = resp.choices[0].message.content
 
-        # Step 2: Track usage exactly like your other endpoints
+        # 4. Track usage
         usage = getattr(resp, "usage", None)
         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
@@ -16361,13 +16361,13 @@ async def generate_architect_blueprint(
             website_id=body.website_id,
             user_id=user.id,
             model=model_used,
-            feature="architect_blueprint", # Dedicated feature name for analytics
+            feature="architect_blueprint",
             prompt_tokens=prompt_tokens,
             completion_tokens=completion_tokens,
             meta={"prompt_len": len(body.idea)}
         )
 
-        # Step 3: Return the Markdown to the frontend
+        # 5. Return the result
         return {"result": generated_blueprint}
 
     except Exception as e:
