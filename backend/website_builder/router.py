@@ -1229,3 +1229,27 @@ async def fetch_external_api(payload: FetchExternalPayload):
             
     except Exception as e:
         raise HTTPException(status_code=400, detail=f"External API fetch failed: {str(e)}")
+    
+#region websiteid
+class WebsiteIdResponse(BaseModel):
+    website_id: str
+
+@router.get("/my-website-id", response_model=WebsiteIdResponse)
+async def get_my_website_id(
+    current_user: User = Depends(get_current_active_user),
+    db: AsyncSession = Depends(get_db)
+):
+    """
+    Ultra-lightweight endpoint to fetch ONLY the website ID for the Architect.
+    """
+    result = await db.execute(
+        select(Website.website_id)
+        .join(RestaurantOwner)
+        .where(RestaurantOwner.user_id == current_user.id)
+    )
+    website_id = result.scalars().first()
+    
+    if not website_id:
+        raise HTTPException(status_code=404, detail="No website found for this user.")
+
+    return {"website_id": str(website_id)}

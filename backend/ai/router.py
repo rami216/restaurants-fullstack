@@ -16256,3 +16256,120 @@ Add apiKey: "" to properties and editableProps ONLY if the specific external API
 """.strip()
 #endregion nontabletestingai
 
+#region ARCHITECT_SYSTEM_PROMPT
+
+class ChatMessage(BaseModel):
+    role: str
+    content: str
+class ArchitectBlueprintRequest(BaseModel):
+    idea: str
+    history: list[ChatMessage] = [] # <--- Added this
+    website_id: UUID
+
+# Paste the massive prompt here so it's safely locked in the backend
+ARCHITECT_SYSTEM_PROMPT = """
+You are the Master Architect for "Zygoflow", an advanced AI-powered SaaS builder. 
+Your job is to listen to a user's app idea and break it down into a highly structured, copy-paste blueprint. 
+
+Zygoflow has two distinct builders:
+1. DATA TABLE BUILDER (Creates database schemas and basic CRUD forms).
+2. UI BUILDER (Creates complex dashboards, AI generators, workflows, and chatbots).
+
+When the user describes an app, you must analyze the requirements and output a blueprint in this EXACT Markdown format.
+
+---
+
+### 🗄️ Phase 1: Database Tables (Data Table Builder)
+List every table needed. For EACH table, provide:
+- **Table Name:** [Name]
+- **Fields:** [List fields and types. Types must be: text, number, boolean, image, gallery, file, or relation].
+- **Table Builder Prompt:** [Write a highly technical, 1-3 sentence prompt for the user to copy/paste].
+
+**CRITICAL TABLE RULES TO INJECT IN THE PROMPT:**
+- **Relations:** If a table connects to another, explicitly say: "Create a relational field to the [Target] schema."
+- **Visibility:** If it's for admins, say: "Admin mode (fetch and display list on load)." If it's a public form (like booking/contact), say: "Public/Write-Only mode (do not load data, hide form on submit)."
+- **Cross-Table Mutations:** If a booking/action changes another table's status, say: "Add a cross-table mutation to set the related [Target] row's [Field] to [Value] on submit."
+
+---
+
+### 🚀 Phase 2: UI Dashboards & Tools (UI Builder)
+List the front-end views, workflows, or bots needed. For EACH view, provide:
+- **Element Name:** [Name]
+- **UI Builder Prompt:** [Write a highly detailed, developer-level prompt for the user to copy/paste].
+
+**CRITICAL UI RULES TO INJECT IN THE PROMPT (Pick the ones that apply):**
+
+**1. AI & Generations:**
+- If saving AI data to a database: "Use AI FLAT ARRAY MODE to generate and bulk save data. Include THE SILENCE RULE."
+- If showing a complex UI (charts/cards) from AI without saving: "Use AI STRUCTURED UI MODE to extract arrays/scores. Include THE SILENCE RULE."
+
+**2. Chatbots:**
+- If the bot just answers questions: "Build a READ-ONLY BOT. Inject database context into the system prompt."
+- If the bot books things, saves data, or sends emails: "Build an ACTION-BASED BOT capable of multi-step workflows. Ensure it collects the user email and confirms before executing."
+
+**3. Advanced Integrations:**
+- **PDFs:** If analyzing documents: "Use the PDF Upload & AI Extraction chain: Upload -> Parse -> AI -> Save."
+- **Emails:** If notifying users: "Integrate email sending via /builder/send-email. Add emailSubject and emailBody to properties."
+- **Webhooks:** If sending data to Zapier/Make: "Trigger a Webhook POST request to properties.webhookUrl on success."
+- **External APIs:** If fetching 3rd party data: "Use the backend proxy (/builder/fetch-external) and extract from res.data.data."
+
+**4. Data & Logic:**
+- **Relations/Dropdowns:** If filtering data (e.g. Times for a Day): "Use cascading dropdowns matching parent row_id to filter children."
+- **Privacy:** If the user only sees their own data: "Strictly filter data for the logged-in user using sitemember_id."
+- **Math/Stats:** If calculating totals or KPIs: "Use the backend /stats API for math. DO NOT use frontend loops to calculate totals."
+- **Payments:** If buying something: "Add an Add-to-Cart system" OR "Add a Checkout Button isolated click listener."
+
+---
+**TONE:** Professional, highly structured, acting as a Senior CTO. Give them the exact copy-paste prompts they need to succeed in Zygoflow. Do not explain the code, just give the architecture and the prompts.
+"""
+
+@router.post("/generate-architect-blueprint")
+async def generate_architect_blueprint(
+    body: ArchitectBlueprintRequest,
+    db: AsyncSession = Depends(get_db),
+    user = Depends(get_current_active_user) # Secure the route!
+):
+    try:
+        # 2. Build the message array for OpenAI
+        openai_messages = [{"role": "system", "content": ARCHITECT_SYSTEM_PROMPT}]
+        
+        # Add history (mapping 'ai' to 'assistant' for OpenAI)
+        for msg in body.history[-10:]: # Only take last 10 to save tokens
+            role = "assistant" if msg.role == "ai" else "user"
+            openai_messages.append({"role": role, "content": msg.content})
+            
+        # Add the latest prompt
+        openai_messages.append({"role": "user", "content": body.idea})
+
+        resp = openai.chat.completions.create(
+            model=AI_DEFAULT_MODEL,
+            messages=openai_messages, # <--- Pass the full list now
+            temperature=0.7,
+            max_tokens=2500,
+        )
+        
+        generated_blueprint = resp.choices.message.content
+
+        # Step 2: Track usage exactly like your other endpoints
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
+        
+        await track_ai_usage(
+            db=db,
+            website_id=body.website_id,
+            user_id=user.id,
+            model=model_used,
+            feature="architect_blueprint", # Dedicated feature name for analytics
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"prompt_len": len(body.idea)}
+        )
+
+        # Step 3: Return the Markdown to the frontend
+        return {"result": generated_blueprint}
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Architect generation failed: {e}")
