@@ -41,7 +41,7 @@ export default function AuthFormElement({
 
   // --- STATE FOR MULTI-STEP REGISTRATION ---
   const [formStep, setFormStep] = React.useState<"details" | "confirm_code">(
-    "details"
+    "details",
   );
   const [emailForConfirmation, setEmailForConfirmation] = React.useState("");
   const [successMessage, setSuccessMessage] = React.useState("");
@@ -96,6 +96,34 @@ export default function AuthFormElement({
     router.push(redirect);
     router.refresh?.();
   };
+  // --- SECRET AUDIT LOGGER ---
+  const logSecurityEvent = async (
+    eventType: string,
+    email: string,
+    status: string,
+    errorMessage: string = "",
+  ) => {
+    const auditLogSchemaId = props?.auditLogSchemaId;
+
+    // If the user didn't select a table in the builder, do nothing!
+    if (!auditLogSchemaId) return;
+
+    try {
+      apiFetch(`/custom-data/rows/${auditLogSchemaId}`, {
+        method: "POST",
+        body: JSON.stringify({
+          data: {
+            event_type: eventType,
+            email: email || "unknown",
+            status: status,
+            error_message: errorMessage,
+          },
+        }),
+      });
+    } catch (e) {
+      console.error("Silent log failed", e);
+    }
+  };
 
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -117,7 +145,7 @@ export default function AuthFormElement({
 
       setEmailForConfirmation(form.email);
       setSuccessMessage(
-        "Registration successful! Please check your email for a 6-digit code."
+        "Registration successful! Please check your email for a 6-digit code.",
       );
       setFormStep("confirm_code");
     } catch (err: any) {
@@ -146,12 +174,20 @@ export default function AuthFormElement({
       }
 
       const data = await res.json();
+      // ✅ LOG SUCCESS
+      logSecurityEvent("login", form.email, "success");
       localStorage.setItem(`siteToken:${site}`, data.access_token);
       localStorage.setItem(`siteMemberId:${site}`, data.member_id);
       localStorage.setItem(`siteMemberEmail:${site}`, data.email);
       onSuccess?.();
       performRedirect();
     } catch (err: any) {
+      logSecurityEvent(
+        "login",
+        form.email,
+        "failed",
+        err.message || "Request failed",
+      );
       setError(err.message || "Request failed");
     } finally {
       setLoading(false);
@@ -281,8 +317,8 @@ export default function AuthFormElement({
                   f.type === "password"
                     ? "current-password"
                     : f.type === "email"
-                    ? "email"
-                    : "on"
+                      ? "email"
+                      : "on"
                 }
               />
             </div>

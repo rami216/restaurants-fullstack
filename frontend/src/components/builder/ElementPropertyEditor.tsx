@@ -115,7 +115,15 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
     };
     run();
   }, [websiteData?.website_id]);
-
+  const [schemas, setSchemas] = useState<any[]>([]);
+  React.useEffect(() => {
+    if (websiteData?.website_id) {
+      api
+        .get(`/custom-data/schemas/website/${websiteData.website_id}`)
+        .then((res) => setSchemas(res.data))
+        .catch((err) => console.error("Failed to load schemas", err));
+    }
+  }, [websiteData?.website_id]);
   const posterInputRef = useRef<HTMLInputElement>(null);
 
   const handleTitleStyleChange = (key: string, value: string) =>
@@ -1651,7 +1659,32 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             </div>
           </div>
         </div>
-
+        {/* Audit Logging Section */}
+        <hr className="my-4" />
+        <div>
+          <h4 className="text-md font-medium text-gray-800 mb-2">
+            Security Audit Logging (Optional)
+          </h4>
+          <p className="text-xs text-gray-500 mb-3">
+            Select a custom database table to silently log successful and failed
+            login/register attempts. (Table must have: event_type, email,
+            status, error_message)
+          </p>
+          <select
+            className="w-full border rounded p-2 text-sm bg-white"
+            value={props.auditLogSchemaId || ""}
+            onChange={(e) =>
+              handlePropertyChange("auditLogSchemaId", e.target.value)
+            }
+          >
+            <option value="">-- Do not log events --</option>
+            {schemas.map((s) => (
+              <option key={s.schema_id} value={s.schema_id}>
+                {s.name}
+              </option>
+            ))}
+          </select>
+        </div>
         {/* Visibility Editor Section */}
         <hr className="my-4" />
         <VisibilityEditor
@@ -1928,7 +1961,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <div className="space-y-3">
               <div>
                 <label className="block text-sm font-medium">Action</label>
-                
+
                 <select
                   className="border rounded p-2 w-full mt-1"
                   value={action}
