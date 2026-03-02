@@ -22,7 +22,7 @@ from auth.auth_handler import (
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "your-google-client-id.apps.googleusercontent.com")
 
-
+GOOGLE_DESKTOP_CLIENT_ID = os.getenv("GOOGLE_DESKTOP_CLIENT_ID", "PASTE_THE_DESKTOP_CLIENT_ID_YOU_JUST_COPIED_HERE")
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 class GoogleToken(BaseModel):
@@ -72,14 +72,17 @@ async def google_login(
     db: AsyncSession = Depends(get_db)
 ):
     """
-    Handles the Google Sign-In process.
+    Handles the Google Sign-In process for BOTH Web and Desktop.
     """
-    print(f"BACKEND IS USING GOOGLE CLIENT ID: {GOOGLE_CLIENT_ID}")
     try:
-        # Verify the ID token with Google's servers
+        # 1. Verify the ID token, but tell Google NOT to auto-check the audience yet (audience=None)
         id_info = id_token.verify_oauth2_token(
-            token_data.credential, requests.Request(), GOOGLE_CLIENT_ID
+            token_data.credential, requests.Request(), audience=None
         )
+
+        # 2. Manually check if the token belongs to either your Web App OR your Desktop App
+        if id_info['aud'] not in [GOOGLE_CLIENT_ID, GOOGLE_DESKTOP_CLIENT_ID]:
+            raise ValueError(f"Unrecognized Client ID: {id_info['aud']}")
 
         email = id_info.get('email')
         if not email:
@@ -107,24 +110,23 @@ async def google_login(
             await db.commit()
             await db.refresh(user)
 
-        # Create access token and set cookie, same as regular login
+        # Create access token and set cookie
         token = create_access_token(user.email)
         response.set_cookie(
             key="access_token",
             value=token,
             httponly=True,
-            secure=False, # Set to True in production
-            samesite="lax",
+            secure=True, 
+            samesite="none",
             max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
         )
         return {"access_token": token, "token_type": "bearer"}
 
-    except ValueError:
-        # Invalid token
+    except ValueError as ve:
+        print(f"Token Verification Failed: {ve}")
         raise HTTPException(status_code=401, detail="Invalid Google token")
     except Exception as e:
         raise HTTPException(status_code=500, detail=f"An error occurred: {e}")
-
 
 
 # @router.post("/login")
