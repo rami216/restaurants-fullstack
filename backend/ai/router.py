@@ -16511,7 +16511,7 @@ Use the provided `headers` variable for all requests.
    payload = {{
        "website_id": "{request.website_id}", 
        "text": extracted_text_variable, 
-       "instruction": "Identify the company, amount, and summary..."
+       "instruction": "WRITE_A_SPECIFIC_INSTRUCTION_HERE_BASED_ON_THE_USER_REQUEST"
    }}
    response = requests.post(url, json=payload, headers=headers).json()
    extracted_value = response.get("result")
