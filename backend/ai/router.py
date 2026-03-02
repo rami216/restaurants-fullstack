@@ -16486,9 +16486,10 @@ LOCAL FILE EXTRACTION CHEAT SHEET:
 - Word: `import docx` -> `doc = docx.Document(file_path); text = "\\n".join([p.text for p in doc.paragraphs])`
 - Excel/CSV: `import pandas as pd` -> `df = pd.read_excel(file_path)` or `pd.read_csv(file_path)`
 
-⚠️ AUTHENTICATION (THE GOLDEN RULE):
-A dictionary named `headers` (containing the Bearer token) is ALREADY provided in the environment.
-DO NOT define, overwrite, or modify the `headers` variable. Use it exactly as is for every `requests` call.
+⚠️ AUTHENTICATION & NETWORKING (THE GOLDEN RULES):
+1. A fully authenticated `session` object is ALREADY provided in the local environment.
+2. NEVER `import requests`. NEVER create a new `requests.Session()`. 
+3. Use the injected `session` variable directly for ALL API calls (e.g., `session.get()`, `session.post()`).
 
 ZYGOFLOW API CONTEXT:
 - Target Table Schema ID: {request.schema_id}
@@ -16504,15 +16505,29 @@ AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
 7. STATS (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats", json={{"field": "YOUR_FIELD_KEY", "operation": "sum"}})
 
 8. 🧠 AI TEXT ANALYSIS (POST):
-   ONLY use this if the user explicitly mentions "AI" (e.g., "ask the AI", "AI summary").
-   url = "https://api.zygoflow.com/ai/analyze-text"
+   ONLY use this if the user explicitly mentions "AI".
+   url = "[https://api.zygoflow.com/ai/analyze-text](https://api.zygoflow.com/ai/analyze-text)"
    payload = {{
        "website_id": "{request.website_id}", 
        "text": extracted_text_variable, 
-       "instruction": "GENERATE_A_SPECIFIC_INSTRUCTION_HERE_BASED_ON_USER_PROMPT"
+       "instruction": "GENERATE_A_SPECIFIC_INSTRUCTION_HERE_BASED_ON_USER_PROMPT. Ask it to return a JSON object."
    }}
-   response = session.post(url, json=payload).json()
-   extracted_value = response.get("result")   
+   # CRITICAL: Use the injected `session` directly.
+   raw_response = session.post(url, json=payload).json()
+   
+   # The endpoint returns {{"result": "JSON_STRING_FROM_AI"}}. You MUST parse the inner string:
+   import json
+   ai_result_string = raw_response.get("result", "{{}}")
+   
+   # Clean markdown blocks if the AI accidentally returned them
+   if ai_result_string.startswith("```json"): ai_result_string = ai_result_string[7:]
+   if ai_result_string.startswith("```"): ai_result_string = ai_result_string[3:]
+   if ai_result_string.endswith("```"): ai_result_string = ai_result_string[:-3]
+   
+   parsed_data = json.loads(ai_result_string.strip())
+   # Now safely map parsed_data to the database fields:
+   # payload_data = {{"YOUR_FIELD_KEY": parsed_data.get("ai_key")}}
+   
 Write the Python script now:
 """
         resp = openai.chat.completions.create(
