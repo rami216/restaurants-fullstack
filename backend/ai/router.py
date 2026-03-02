@@ -16472,72 +16472,52 @@ async def generate_agent_script(
 The app executes your code dynamically using `exec(code)`.
 
 YOUR MISSION:
-Analyze the user's prompt and write a Python script that fulfills it. Decide which API endpoint(s) are required to complete the task.
+Analyze the user's prompt and write a robust, crash-proof Python script that fulfills it. 
 
 ENVIRONMENT & UI RULES:
-1. Return ONLY pure, raw Python code. NO markdown formatting.
-2. DO NOT create a new UI window or `mainloop()`. The app is already running.
-3. If reading files, use native dialogs:
-   `import customtkinter as ctk`
+1. Return ONLY pure, raw Python code. NO markdown formatting, NO backticks (```).
+2. DO NOT create a new UI window or call `mainloop()`. The app is already running.
+3. For file selection, use native dialogs:
    `from tkinter import filedialog`
-   `file_path = filedialog.askopenfilename()`
+   `file_path = filedialog.askopenfilename()` # Or askopenfilenames() for multiple files
 
 LOCAL FILE EXTRACTION CHEAT SHEET:
-If the user asks to read a specific file type, use these standard Python libraries:
-- PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(file_path); text = ''.join(page.extract_text() for page in reader.pages)`
-- Word: `import docx` -> `doc = docx.Document(file_path); text = '\\n'.join([p.text for p in doc.paragraphs])`
-- Excel: `import pandas as pd` -> `df = pd.read_excel(file_path); text = df.to_string()`
-- CSV: `import pandas as pd` -> `df = pd.read_csv(file_path); text = df.to_string()`
+- PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(file_path); text = "".join(p.extract_text() for p in reader.pages)`
+- Word: `import docx` -> `doc = docx.Document(file_path); text = "\\n".join([p.text for p in doc.paragraphs])`
+- Excel/CSV: `import pandas as pd` -> `df = pd.read_excel(file_path)` or `pd.read_csv(file_path)`
 
-ZYGOFLOW API INTEGRATION (MANDATORY):
-Target Table Schema ID: {request.schema_id}
-Target Table Fields (You can ONLY use these keys): {field_names}
+⚠️ AUTHENTICATION (THE GOLDEN RULE):
+A dictionary named `headers` (containing the Bearer token) is ALREADY provided in the environment.
+DO NOT define, overwrite, or modify the `headers` variable. Use it exactly as is for every `requests` call.
+
+ZYGOFLOW API CONTEXT:
+- Target Table Schema ID: {request.schema_id}
+- Target Table Fields (ONLY use these keys): {field_names}
 
 AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
-ALWAYS include `headers = {{"Content-Type": "application/json", "Authorization": "Bearer YOUR_TOKEN_LOGIC_IF_NEEDED"}}`.
+Use the provided `headers` variable for all requests.
 
-1. READ (GET)
-   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20"
-   requests.get(url)
+1. READ (GET): requests.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20", headers=headers)
+2. CREATE (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}", json={{"data": {{"field": "val"}}}}, headers=headers)
+3. UPDATE (PUT): requests.put(f"https://api.zygoflow.com/custom-data/rows/ROW_ID", json={{"data": {{"field": "new"}}}}, headers=headers)
+4. DELETE (DELETE): requests.delete(f"https://api.zygoflow.com/custom-data/rows/ROW_ID", headers=headers)
+5. SEARCH (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/search", json={{"filters": {{"field": "val"}}}}, headers=headers)
+6. BULK UPLOAD (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/bulk", json={{"operations": [ {{"action": "create", "data": {{"field": "val"}}}} ]}}, headers=headers)
+7. STATS (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats", json={{"field": "FIELD", "operation": "sum"}}, headers=headers)
 
-2. CREATE (POST)
-   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}"
-   payload = {{"data": {{"field_name": "value"}}}}
-   requests.post(url, json=payload, headers=headers)
-
-3. UPDATE (PUT)
-   url = f"https://api.zygoflow.com/custom-data/rows/TARGET_ROW_ID"
-   payload = {{"data": {{"field_name": "new_value"}}}}
-   requests.put(url, json=payload, headers=headers)
-
-4. DELETE (DELETE)
-   url = f"https://api.zygoflow.com/custom-data/rows/TARGET_ROW_ID"
-   requests.delete(url)
-
-5. SEARCH (POST)
-   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/search"
-   payload = {{"filters": {{"field_name": "value"}}, "sort_by": "created_at", "sort_order": "desc"}}
-   requests.post(url, json=payload, headers=headers)
-
-6. BULK UPLOAD (POST) - Use this for CSVs or loops!
-   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/bulk"
-   payload = {{"operations": [ {{"action": "create", "data": {{"field_name": "value"}}}} ]}}
-   requests.post(url, json=payload, headers=headers)
-
-7. STATS (POST)
-   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats"
-   payload = {{"field": "TARGET_FIELD", "operation": "sum"}}
-   requests.post(url, json=payload, headers=headers)
-
-8. 🧠 AI TEXT ANALYSIS (POST) - ONLY use this if the user EXPLICITLY asks to use "AI" in their prompt (e.g., "ask the AI", "send to AI", "use AI to extract"). Do NOT use this for standard file reading unless specifically requested.
+8. 🧠 AI TEXT ANALYSIS (POST):
+   ONLY use this if the user explicitly mentions "AI".
    url = "https://api.zygoflow.com/ai/analyze-text"
-   payload = {{"website_id": "{request.website_id}", "text": extracted_text_variable, "instruction": "Find the total invoice amount..."}}
+   payload = {{
+       "website_id": "{request.website_id}", 
+       "text": extracted_text_variable, 
+       "instruction": "Identify the company, amount, and summary..."
+   }}
    response = requests.post(url, json=payload, headers=headers).json()
    extracted_value = response.get("result")
-
-Write the most robust, crash-proof Python script possible to execute the user's request:
+   
+Write the Python script now:
 """
-
         resp = openai.chat.completions.create(
             model="gpt-4o", 
             messages=[
