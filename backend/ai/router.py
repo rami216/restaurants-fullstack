@@ -16397,21 +16397,77 @@ async def generate_architect_blueprint(
 
 # Ensure your OpenAI key is loaded
 
+class AnalyzeTextRequest(BaseModel):
+    website_id: str  # Mandatory for tracking!
+    text: str
+    instruction: str    
+
+
+@router.post("/analyze-text")
+async def analyze_text(
+    request: AnalyzeTextRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    try:
+        # 1. System prompt ensuring the AI acts only as a strict data extractor
+        system_msg = "You are a strict data extraction AI. Extract the requested information from the provided text. Return ONLY the exact extracted value or JSON. Do not include conversational filler, formatting, or markdown."
+        
+        # 2. Call OpenAI (Using the cheap/fast gpt-4o-mini)
+        resp = openai.chat.completions.create(
+            model="gpt-4o-mini", 
+            messages=[
+                {"role": "system", "content": system_msg},
+                {"role": "user", "content": f"Text to analyze:\n{request.text[:20000]}\n\nInstruction: {request.instruction}"}
+            ],
+            temperature=0.1
+        )
+        
+        extracted_data = resp.choices[0].message.content.strip()
+        
+        # 3. Safely Extract Token Usage (Using your exact logic)
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", "gpt-4o-mini")
+        
+        # 4. Track Usage in Zygoflow Database
+        await track_ai_usage(
+            db=db,
+            website_id=request.website_id,
+            user_id=current_user.id,
+            model=model_used,
+            feature="agent_analyze_text", # Unique feature name so you know it was the desktop agent
+            prompt_tokens=prompt_tokens,
+            completion_tokens=completion_tokens,
+            meta={"text_length": len(request.text)}
+        )
+        
+        # 5. Return the result to the Python script
+        return {"result": extracted_data}
+        
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Analyze Text Error: {str(e)}")
+    
+    
 class AgentPromptRequest(BaseModel):
+    website_id: str  # ADDED THIS so the agent knows the website ID!
     schema_id: str
     prompt: str
     fields: List[Dict[str, Any]]
 
 
 @router.post("/generate-agent-script")
-async def generate_agent_script(request: AgentPromptRequest):
+async def generate_agent_script(
+    request: AgentPromptRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
     try:
-        # 1. Format the available fields so the AI knows exact column names
         field_names = [f.get("id", "unknown_field") for f in request.fields]
         
-        # ==========================================
-        # 🤖 THE MASTER AI SYSTEM PROMPT
-        # ==========================================
+        # Notice how I injected {request.website_id} directly into endpoint #8!
         agent_ai_prompt = f"""You are a master Python automation developer writing background scripts for a local desktop client.
 The app executes your code dynamically using `exec(code)`.
 
@@ -16421,17 +16477,24 @@ Analyze the user's prompt and write a Python script that fulfills it. Decide whi
 ENVIRONMENT & UI RULES:
 1. Return ONLY pure, raw Python code. NO markdown formatting.
 2. DO NOT create a new UI window or `mainloop()`. The app is already running.
-3. If reading files (e.g., CSV, images), use native dialogs:
+3. If reading files, use native dialogs:
    `import customtkinter as ctk`
    `from tkinter import filedialog`
    `file_path = filedialog.askopenfilename()`
+
+LOCAL FILE EXTRACTION CHEAT SHEET:
+If the user asks to read a specific file type, use these standard Python libraries:
+- PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(file_path); text = ''.join(page.extract_text() for page in reader.pages)`
+- Word: `import docx` -> `doc = docx.Document(file_path); text = '\\n'.join([p.text for p in doc.paragraphs])`
+- Excel: `import pandas as pd` -> `df = pd.read_excel(file_path); text = df.to_string()`
+- CSV: `import pandas as pd` -> `df = pd.read_csv(file_path); text = df.to_string()`
 
 ZYGOFLOW API INTEGRATION (MANDATORY):
 Target Table Schema ID: {request.schema_id}
 Target Table Fields (You can ONLY use these keys): {field_names}
 
 AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
-Use the `requests` library in Python. ALWAYS include `headers = {{"Content-Type": "application/json"}}`.
+ALWAYS include `headers = {{"Content-Type": "application/json", "Authorization": "Bearer YOUR_TOKEN_LOGIC_IF_NEEDED"}}`.
 
 1. READ (GET)
    url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20"
@@ -16463,26 +16526,43 @@ Use the `requests` library in Python. ALWAYS include `headers = {{"Content-Type"
 
 7. STATS (POST)
    url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats"
-   payload = {{"field": "TARGET_FIELD", "operation": "sum"}} # operations: sum, avg, min, max, count
+   payload = {{"field": "TARGET_FIELD", "operation": "sum"}}
    requests.post(url, json=payload, headers=headers)
 
-Write the most robust, crash-proof Python script possible to execute the following user request:
-"""
-        # ==========================================
+8. 🧠 AI TEXT ANALYSIS (POST) - ONLY use this if the user EXPLICITLY asks to use "AI" in their prompt (e.g., "ask the AI", "send to AI", "use AI to extract"). Do NOT use this for standard file reading unless specifically requested.
+   url = "https://api.zygoflow.com/ai/analyze-text"
+   payload = {{"website_id": "{request.website_id}", "text": extracted_text_variable, "instruction": "Find the total invoice amount..."}}
+   response = requests.post(url, json=payload, headers=headers).json()
+   extracted_value = response.get("result")
 
-        # 2. Call OpenAI to write the code
-        response = openai.chat.completions.create(
-            model="gpt-4o", # Perfect balance of speed and coding ability
+Write the most robust, crash-proof Python script possible to execute the user's request:
+"""
+
+        resp = openai.chat.completions.create(
+            model="gpt-4o", 
             messages=[
                 {"role": "system", "content": agent_ai_prompt},
                 {"role": "user", "content": request.prompt}
             ],
-            temperature=0.2 # Keep it low so the code is strict and doesn't hallucinate
+            temperature=0.2
         )
 
-        generated_code = response.choices[0].message.content.strip()
+        generated_code = resp.choices[0].message.content.strip()
+        
+        # Optional: You can also track token usage for gpt-4o here just like you did above!
+        usage = getattr(resp, "usage", None)
+        if usage:
+            await track_ai_usage(
+                db=db,
+                website_id=request.website_id,
+                user_id=current_user.id,
+                model=getattr(resp, "model", "gpt-4o"),
+                feature="agent_generate_script", 
+                prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
+                completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
+                meta={"prompt": request.prompt[:50]}
+            )
 
-        # 3. Bulletproof the response (Remove markdown if OpenAI ignores the rule)
         if generated_code.startswith("```python"):
             generated_code = generated_code[9:]
         if generated_code.startswith("```"):
