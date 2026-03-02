@@ -16390,3 +16390,108 @@ async def generate_architect_blueprint(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(status_code=500, detail=f"Architect generation failed: {e}")
+    
+#region agentai-desktop
+
+
+
+# Ensure your OpenAI key is loaded
+
+class AgentPromptRequest(BaseModel):
+    schema_id: str
+    prompt: str
+    fields: List[Dict[str, Any]]
+
+
+@router.post("/generate-agent-script")
+async def generate_agent_script(request: AgentPromptRequest):
+    try:
+        # 1. Format the available fields so the AI knows exact column names
+        field_names = [f.get("id", "unknown_field") for f in request.fields]
+        
+        # ==========================================
+        # 🤖 THE MASTER AI SYSTEM PROMPT
+        # ==========================================
+        agent_ai_prompt = f"""You are a master Python automation developer writing background scripts for a local desktop client.
+The app executes your code dynamically using `exec(code)`.
+
+YOUR MISSION:
+Analyze the user's prompt and write a Python script that fulfills it. Decide which API endpoint(s) are required to complete the task.
+
+ENVIRONMENT & UI RULES:
+1. Return ONLY pure, raw Python code. NO markdown formatting.
+2. DO NOT create a new UI window or `mainloop()`. The app is already running.
+3. If reading files (e.g., CSV, images), use native dialogs:
+   `import customtkinter as ctk`
+   `from tkinter import filedialog`
+   `file_path = filedialog.askopenfilename()`
+
+ZYGOFLOW API INTEGRATION (MANDATORY):
+Target Table Schema ID: {request.schema_id}
+Target Table Fields (You can ONLY use these keys): {field_names}
+
+AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
+Use the `requests` library in Python. ALWAYS include `headers = {{"Content-Type": "application/json"}}`.
+
+1. READ (GET)
+   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20"
+   requests.get(url)
+
+2. CREATE (POST)
+   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}"
+   payload = {{"data": {{"field_name": "value"}}}}
+   requests.post(url, json=payload, headers=headers)
+
+3. UPDATE (PUT)
+   url = f"https://api.zygoflow.com/custom-data/rows/TARGET_ROW_ID"
+   payload = {{"data": {{"field_name": "new_value"}}}}
+   requests.put(url, json=payload, headers=headers)
+
+4. DELETE (DELETE)
+   url = f"https://api.zygoflow.com/custom-data/rows/TARGET_ROW_ID"
+   requests.delete(url)
+
+5. SEARCH (POST)
+   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/search"
+   payload = {{"filters": {{"field_name": "value"}}, "sort_by": "created_at", "sort_order": "desc"}}
+   requests.post(url, json=payload, headers=headers)
+
+6. BULK UPLOAD (POST) - Use this for CSVs or loops!
+   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/bulk"
+   payload = {{"operations": [ {{"action": "create", "data": {{"field_name": "value"}}}} ]}}
+   requests.post(url, json=payload, headers=headers)
+
+7. STATS (POST)
+   url = f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats"
+   payload = {{"field": "TARGET_FIELD", "operation": "sum"}} # operations: sum, avg, min, max, count
+   requests.post(url, json=payload, headers=headers)
+
+Write the most robust, crash-proof Python script possible to execute the following user request:
+"""
+        # ==========================================
+
+        # 2. Call OpenAI to write the code
+        response = openai.chat.completions.create(
+            model="gpt-4o", # Perfect balance of speed and coding ability
+            messages=[
+                {"role": "system", "content": agent_ai_prompt},
+                {"role": "user", "content": request.prompt}
+            ],
+            temperature=0.2 # Keep it low so the code is strict and doesn't hallucinate
+        )
+
+        generated_code = response.choices[0].message.content.strip()
+
+        # 3. Bulletproof the response (Remove markdown if OpenAI ignores the rule)
+        if generated_code.startswith("```python"):
+            generated_code = generated_code[9:]
+        if generated_code.startswith("```"):
+            generated_code = generated_code[3:]
+        if generated_code.endswith("```"):
+            generated_code = generated_code[:-3]
+
+        return {"code": generated_code.strip()}
+
+    except Exception as e:
+        print(f"AI Generation Error: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
