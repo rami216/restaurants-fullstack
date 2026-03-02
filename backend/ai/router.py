@@ -16492,30 +16492,27 @@ DO NOT define, overwrite, or modify the `headers` variable. Use it exactly as is
 
 ZYGOFLOW API CONTEXT:
 - Target Table Schema ID: {request.schema_id}
-- Target Table Fields (ONLY use these keys): {field_names}
+- Target Table Fields (You MUST use EXACTLY these keys for your database payloads. Do not invent field names): {field_names}
 
 AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
-Use the provided `headers` variable for all requests.
-
-1. READ (GET): requests.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20", headers=headers)
-2. CREATE (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}", json={{"data": {{"field": "val"}}}}, headers=headers)
-3. UPDATE (PUT): requests.put(f"https://api.zygoflow.com/custom-data/rows/ROW_ID", json={{"data": {{"field": "new"}}}}, headers=headers)
-4. DELETE (DELETE): requests.delete(f"https://api.zygoflow.com/custom-data/rows/ROW_ID", headers=headers)
-5. SEARCH (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/search", json={{"filters": {{"field": "val"}}}}, headers=headers)
-6. BULK UPLOAD (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/bulk", json={{"operations": [ {{"action": "create", "data": {{"field": "val"}}}} ]}}, headers=headers)
-7. STATS (POST): requests.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats", json={{"field": "FIELD", "operation": "sum"}}, headers=headers)
+1. READ (GET): session.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20")
+2. CREATE (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}", json={{"data": {{"YOUR_FIELD_KEY": "val"}}}})
+3. UPDATE (PUT): session.put(f"https://api.zygoflow.com/custom-data/rows/ROW_ID", json={{"data": {{"YOUR_FIELD_KEY": "new"}}}})
+4. DELETE (DELETE): session.delete(f"https://api.zygoflow.com/custom-data/rows/ROW_ID")
+5. SEARCH (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/search", json={{"filters": {{"YOUR_FIELD_KEY": "val"}}}})
+6. BULK UPLOAD (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/bulk", json={{"operations": [ {{"action": "create", "data": {{"YOUR_FIELD_KEY": "val"}}}} ]}})
+7. STATS (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats", json={{"field": "YOUR_FIELD_KEY", "operation": "sum"}})
 
 8. 🧠 AI TEXT ANALYSIS (POST):
-   ONLY use this if the user explicitly mentions "AI".
+   ONLY use this if the user explicitly mentions "AI" (e.g., "ask the AI", "AI summary").
    url = "https://api.zygoflow.com/ai/analyze-text"
    payload = {{
        "website_id": "{request.website_id}", 
        "text": extracted_text_variable, 
-       "instruction": "WRITE_A_SPECIFIC_INSTRUCTION_HERE_BASED_ON_THE_USER_REQUEST"
+       "instruction": "GENERATE_A_SPECIFIC_INSTRUCTION_HERE_BASED_ON_USER_PROMPT"
    }}
-   response = requests.post(url, json=payload, headers=headers).json()
-   extracted_value = response.get("result")
-   
+   response = session.post(url, json=payload).json()
+   extracted_value = response.get("result")   
 Write the Python script now:
 """
         resp = openai.chat.completions.create(
