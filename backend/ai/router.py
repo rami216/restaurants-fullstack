@@ -6549,16 +6549,17 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         1) Select `.api-selector`, `.api-code-display`, and `.copy-api-btn`.
         2) Create an `updateApiDocs()` function that reads the select value and outputs a `fetch()` template to the display.
         3) Use `window.location.origin` as the base URL.
-        4) The templates MUST map exactly to these endpoints:
-            - `get`: GET `\${window.location.origin}/custom-data/rows/\${schemaId}?skip=0&limit=20`
-            - `post`: POST `\${window.location.origin}/custom-data/rows/\${schemaId}` | body: `{ data: { /* fields */ } }`
-            - `put`: PUT `\${window.location.origin}/custom-data/rows/YOUR_ROW_ID` | body: `{ data: { /* fields */ } }`
-            - `delete`: DELETE `\${window.location.origin}/custom-data/rows/YOUR_ROW_ID`
-            - `search`: POST `\${window.location.origin}/custom-data/rows/\${schemaId}/search` | body: `{ filters: {"field": "value"}, sort_by: "created_at", sort_order: "desc" }`
-            - `bulk`: POST `\${window.location.origin}/custom-data/rows/\${schemaId}/bulk` | body: `{ operations: [ { action: "create", data: {} } ] }`
-            - `stats`: POST `\${window.location.origin}/custom-data/rows/\${schemaId}/stats` | body: `{ field: "price", operation: "sum" }`
-        5) Add a 'change' listener to the select to trigger `updateApiDocs()`.
-        6) Add a 'click' listener to the copy button to run `navigator.clipboard.writeText(apiCodeDisplay.textContent)`.
+        4) Create a `dummyData` object dynamically by looping through `properties.schema_fields` (e.g., if fields are name and email, it creates `{ "name": "string", "email": "string" }`).
+        5) The templates MUST output valid Javascript code, map exactly to the endpoints, and MUST include `headers: { 'Content-Type': 'application/json' }` for all POST/PUT requests:
+            - `get`: `fetch('\${window.location.origin}/custom-data/rows/\${schemaId}?skip=0&limit=20')`
+            - `post`: `fetch('\${window.location.origin}/custom-data/rows/\${schemaId}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: \${JSON.stringify(dummyData)} })\n})`
+            - `put`: `fetch('\${window.location.origin}/custom-data/rows/YOUR_ROW_ID', {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: \${JSON.stringify(dummyData)} })\n})`
+            - `delete`: `fetch('\${window.location.origin}/custom-data/rows/YOUR_ROW_ID', { method: 'DELETE' })`
+            - `search`: `fetch('\${window.location.origin}/custom-data/rows/\${schemaId}/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ filters: {"YOUR_FIELD": "value"}, sort_by: "created_at", sort_order: "desc" })\n})`
+            - `bulk`: `fetch('\${window.location.origin}/custom-data/rows/\${schemaId}/bulk', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ operations: [ { action: "create", data: \${JSON.stringify(dummyData)} } ] })\n})`
+            - `stats`: `fetch('\${window.location.origin}/custom-data/rows/\${schemaId}/stats', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ field: "YOUR_FIELD", operation: "sum" })\n})`
+        6) Add a 'change' listener to the select to trigger `updateApiDocs()`.
+        7) Add a 'click' listener to the copy button to run `navigator.clipboard.writeText(apiCodeDisplay.textContent)`.
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A single, valid JSON object.
