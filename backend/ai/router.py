@@ -6545,19 +6545,19 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
         
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
-    -   **API EXPLORER LOGIC (MANDATORY):** The script MUST power the API Integration Docs UI. 
+   -   **API EXPLORER LOGIC (MANDATORY):** The script MUST power the API Integration Docs UI. 
         1) Select `.api-selector`, `.api-code-display`, and `.copy-api-btn`.
         2) Create an `updateApiDocs()` function that reads the select value and outputs a `fetch()` template to the display.
         3) Use `https://api.zygoflow.com` as the base URL.
         4) Create a `dummyData` object dynamically by looping through `properties.schema_fields` (e.g., if fields are name and email, it creates `{ "name": "string", "email": "string" }`).
-        5) The templates MUST output valid Javascript code, map exactly to the endpoints, and MUST include `headers: { 'Content-Type': 'application/json' }` for all POST/PUT requests:
-            - `get`: `fetch('https://api.zygoflow.com/custom-data/rows/\${schemaId}?skip=0&limit=20')`
-            - `post`: `fetch('https://api.zygoflow.com/custom-data/rows/\${schemaId}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: \${JSON.stringify(dummyData)} })\n})`
-            - `put`: `fetch('https://api.zygoflow.com/custom-data/rows/YOUR_ROW_ID', {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: \${JSON.stringify(dummyData)} })\n})`
+        5) The templates MUST output valid Javascript code using backticks (template literals), map exactly to the endpoints, and MUST include `headers: { 'Content-Type': 'application/json' }` for all POST/PUT requests. Ensure variables like ${schemaId} and ${JSON.stringify(dummyData)} are evaluated at runtime:
+            - `get`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}?skip=0&limit=20')`
+            - `post`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: ${JSON.stringify(dummyData)} })\n})`
+            - `put`: `fetch('https://api.zygoflow.com/custom-data/rows/YOUR_ROW_ID', {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: ${JSON.stringify(dummyData)} })\n})`
             - `delete`: `fetch('https://api.zygoflow.com/custom-data/rows/YOUR_ROW_ID', { method: 'DELETE' })`
-            - `search`: `fetch('https://api.zygoflow.com/custom-data/rows/\${schemaId}/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ filters: {"YOUR_FIELD": "value"}, sort_by: "created_at", sort_order: "desc" })\n})`
-            - `bulk`: `fetch('https://api.zygoflow.com/custom-data/rows/\${schemaId}/bulk', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ operations: [ { action: "create", data: \${JSON.stringify(dummyData)} } ] })\n})`
-            - `stats`: `fetch('https://api.zygoflow.com/custom-data/rows/\${schemaId}/stats', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ field: "YOUR_FIELD", operation: "sum" })\n})`
+            - `search`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ filters: {"YOUR_FIELD": "value"}, sort_by: "created_at", sort_order: "desc" })\n})`
+            - `bulk`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}/bulk', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ operations: [ { action: "create", data: ${JSON.stringify(dummyData)} } ] })\n})`
+            - `stats`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}/stats', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ field: "YOUR_FIELD", operation: "sum" })\n})`
         6) Add a 'change' listener to the select to trigger `updateApiDocs()`.
         7) Add a 'click' listener to the copy button to run `navigator.clipboard.writeText(apiCodeDisplay.textContent)`.
 ---
