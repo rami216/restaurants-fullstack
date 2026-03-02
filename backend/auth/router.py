@@ -22,7 +22,7 @@ from auth.auth_handler import (
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "your-google-client-id.apps.googleusercontent.com")
 
-GOOGLE_DESKTOP_CLIENT_ID = os.getenv("GOOGLE_DESKTOP_CLIENT_ID", "PASTE_THE_DESKTOP_CLIENT_ID_YOU_JUST_COPIED_HERE")
+GOOGLE_DESKTOP_CLIENT_ID = os.getenv("GOOGLE_DESKTOP_CLIENT_ID", "PASTE_THE_DESKTOP_CLIENT_ID_YOU_JUST_COPIED_HERE").strip()
 router = APIRouter(prefix="/auth", tags=["auth"])
 
 class GoogleToken(BaseModel):
@@ -79,10 +79,19 @@ async def google_login(
         id_info = id_token.verify_oauth2_token(
             token_data.credential, requests.Request(), audience=None
         )
+        
+        incoming_aud = id_info.get('aud')
+        allowed_ids = [GOOGLE_CLIENT_ID, GOOGLE_DESKTOP_CLIENT_ID]
+        
+        # --- 2. PRINT TO RENDER LOGS FOR DEBUGGING ---
+        print(f"--- GOOGLE LOGIN ATTEMPT ---")
+        print(f"Token Audience (from App): '{incoming_aud}'")
+        print(f"Allowed Web ID (Render):   '{GOOGLE_CLIENT_ID}'")
+        print(f"Allowed Desktop ID (Render):'{GOOGLE_DESKTOP_CLIENT_ID}'")
 
-        # 2. Manually check if the token belongs to either your Web App OR your Desktop App
-        if id_info['aud'] not in [GOOGLE_CLIENT_ID, GOOGLE_DESKTOP_CLIENT_ID]:
-            raise ValueError(f"Unrecognized Client ID: {id_info['aud']}")
+        # Manually check if the token belongs to either your Web App OR your Desktop App
+        if incoming_aud not in allowed_ids:
+            raise ValueError(f"Unrecognized Client ID: {incoming_aud}")
 
         email = id_info.get('email')
         if not email:
