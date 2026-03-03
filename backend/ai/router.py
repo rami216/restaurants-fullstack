@@ -6378,10 +6378,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
     -   An **EMPTY** container for pagination controls: `<div class="pagination-controls mt-6 flex justify-center gap-2"></div>`.
     -   A `<template id="displayTemplate">`.
     -   Files/Images: If type is image, render <img src="{{data.field}}" class="h-10 w-10 object-cover">. If type is gallery, render a small grid: <div class="flex gap-1 overflow-x-auto"><img src="{{data.field_first}}" class="h-10 w-10 object-cover"> <span class="text-xs text-gray-500">+ more</span></div>. If type is file, render an anchor tag for download.
-    -   An "API Integration Docs" section at the bottom of the main container. It MUST contain:
-        - A title: `<h4 class="text-lg font-bold text-gray-800 mt-8 mb-4 border-t pt-6">Developer API</h4>`
-        - A `<select class="api-selector w-full p-2 mb-3 border rounded-lg border-gray-300">` with options for: `get`, `post`, `put`, `delete`, `search`, `bulk`, and `stats`.
-        - A container for the code: `<div class="bg-gray-900 rounded-lg p-4 relative"><button class="copy-api-btn absolute top-2 right-2 text-xs bg-gray-700 text-white px-2 py-1 rounded hover:bg-gray-600">Copy</button><pre class="api-code-display text-green-400 text-xs overflow-x-auto font-mono"></pre></div>`
+   
 5. **`displayTemplate`**: A Mustache/HTML template for ONE data item.
     -   It MUST be a `div` with class: `flex items-center justify-between p-4 bg-white border border-gray-100 rounded-lg hover:shadow-md transition-shadow`.
     -   For regular fields, you **MUST** use `{{data.field_id}}` inside a `div` with class `flex-1`.
@@ -6545,21 +6542,7 @@ Your output MUST be a valid JSON object with SIX keys: "name", "schema", "aiTemp
         -  Clicking the buttons **MUST** update the `currentPage` state and re-fetch the data.
         
     -   It MUST use function expressions (e.g., `const myFunc = () => {}`).
-   -   **API EXPLORER LOGIC (MANDATORY):** The script MUST power the API Integration Docs UI. 
-        1) Select `.api-selector`, `.api-code-display`, and `.copy-api-btn`.
-        2) Create an `updateApiDocs()` function that reads the select value and outputs a `fetch()` template to the display.
-        3) Use `https://api.zygoflow.com` as the base URL.
-        4) Create a `dummyData` object dynamically by looping through `properties.schema_fields` (e.g., if fields are name and email, it creates `{ "name": "string", "email": "string" }`).
-        5) The templates MUST output valid Javascript code using backticks (template literals), map exactly to the endpoints, and MUST include `headers: { 'Content-Type': 'application/json' }` for all POST/PUT requests. Ensure variables like ${schemaId} and ${JSON.stringify(dummyData)} are evaluated at runtime:
-            - `get`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}?skip=0&limit=20')`
-            - `post`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: ${JSON.stringify(dummyData)} })\n})`
-            - `put`: `fetch('https://api.zygoflow.com/custom-data/rows/YOUR_ROW_ID', {\n  method: 'PUT',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ data: ${JSON.stringify(dummyData)} })\n})`
-            - `delete`: `fetch('https://api.zygoflow.com/custom-data/rows/YOUR_ROW_ID', { method: 'DELETE' })`
-            - `search`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}/search', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ filters: {"YOUR_FIELD": "value"}, sort_by: "created_at", sort_order: "desc" })\n})`
-            - `bulk`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}/bulk', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ operations: [ { action: "create", data: ${JSON.stringify(dummyData)} } ] })\n})`
-            - `stats`: `fetch('https://api.zygoflow.com/custom-data/rows/${schemaId}/stats', {\n  method: 'POST',\n  headers: { 'Content-Type': 'application/json' },\n  body: JSON.stringify({ field: "YOUR_FIELD", operation: "sum" })\n})`
-        6) Add a 'change' listener to the select to trigger `updateApiDocs()`.
-        7) Add a 'click' listener to the copy button to run `navigator.clipboard.writeText(apiCodeDisplay.textContent)`.
+   
 ---
 **INPUT:** A user's prompt and a `unique_class_name`.
 **OUTPUT:** A single, valid JSON object.
