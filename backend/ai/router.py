@@ -16492,9 +16492,12 @@ If the user asks to scrape, crawl, or read a website URL, automatically use thes
 `from bs4 import BeautifulSoup`
 `html = requests.get(url).text`
 `text = BeautifulSoup(html, "html.parser").get_text(separator=" ", strip=True)`
-5. 📝 TEXT INPUT RULE: If you need the user to type something (like a URL or a list of URLs), NEVER use the standard `input()` function. ALWAYS use a native tkinter popup:
-   `from tkinter import simpledialog`
-   `user_input = simpledialog.askstring("Input Request", "Please enter the URLs (separated by commas):")`
+5. 📝 TEXT INPUT RULE: If you need the user to type something (like a URL), NEVER use `input()`. Because the app runs on CustomTkinter, you MUST use its native dialog to prevent UI crashes:
+   `import customtkinter as ctk`
+   `dialog = ctk.CTkInputDialog(text="Please enter the URLs (separated by commas):", title="Input Request")`
+   `user_input = dialog.get_input()`
+   `if user_input:`
+   `    # Put the rest of your script inside this if-block so it only runs if they clicked OK`
    
 💾 LOCAL FILE SAVING EXPORT CHEAT SHEET:
 If the user asks to save, generate, or export a file (Word, Excel, etc.), ALWAYS ask where to save it:
