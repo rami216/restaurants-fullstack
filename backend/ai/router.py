@@ -16459,7 +16459,7 @@ Analyze the user's prompt and write a robust, crash-proof Python script that ful
 
 ENVIRONMENT & UI RULES:
 1. Return ONLY pure, raw Python code. NO markdown formatting, NO backticks (```).
-2. 🪟 UI CREATION RULE: The main application is already running. NEVER initialize `ctk.CTk()` and NEVER call `mainloop()`. If the user asks you to build a new window, dashboard, or Chat UI, you MUST create it as a child window using `window = ctk.CTkToplevel()`. To prevent freezing during long AI API calls, call `window.update()` right before the request.
+2. 🪟 UI CREATION RULE: The app is already running. NEVER initialize `ctk.CTk()` and NEVER call `mainloop()`. If building a new window/dashboard/chat, MUST use `window = ctk.CTkToplevel()`. VERY IMPORTANT: If you need to call `window.update()` inside a separate function, you MUST pass `window` to that function as an argument to avoid a `NameError`.
 3. For file selection, use native dialogs:
    `from tkinter import filedialog`
    `file_path = filedialog.askopenfilename()` # Or askopenfilenames() for multiple files
