@@ -16481,10 +16481,17 @@ ENVIRONMENT & UI RULES:
    `from tkinter import filedialog`
    `file_path = filedialog.askopenfilename()` # Or askopenfilenames() for multiple files
 
-LOCAL FILE EXTRACTION CHEAT SHEET:
-- PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(file_path); text = "".join(p.extract_text() for p in reader.pages)`
-- Word: `import docx` -> `doc = docx.Document(file_path); text = "\\n".join([p.text for p in doc.paragraphs])`
-- Excel/CSV: `import pandas as pd` -> `df = pd.read_excel(file_path)` or `pd.read_csv(file_path)`
+📥 LOCAL FILE EXTRACTION CHEAT SHEET:
+If the user asks to read/process files, use the correct library automatically:
+- PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(path); text = "".join(p.extract_text() for p in reader.pages)`
+- Word: `import docx` -> `doc = docx.Document(path); text = "\\n".join([p.text for p in doc.paragraphs])`
+- Excel/CSV: `import pandas as pd` -> `df = pd.read_excel(path)` or `pd.read_csv(path)`
+
+💾 LOCAL FILE SAVING EXPORT CHEAT SHEET:
+If the user asks to save, generate, or export a file (Word, Excel, etc.), ALWAYS ask where to save it:
+`file_path = filedialog.asksaveasfilename(defaultextension=".YOUR_EXT")`
+- Word (.docx): `import docx` -> `doc = docx.Document(); doc.add_paragraph("text"); doc.save(file_path)`
+- Excel (.xlsx): `import pandas as pd` -> `df = pd.DataFrame(data); df.to_excel(file_path, index=False)`
 
 ⚠️ AUTHENTICATION & NETWORKING (THE GOLDEN RULES):
 1. A fully authenticated `session` object is ALREADY provided in the local environment.
@@ -16496,7 +16503,13 @@ ZYGOFLOW API CONTEXT:
 - Target Table Fields (You MUST use EXACTLY these keys for your database payloads. Do not invent field names): {field_names}
 
 AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
-1. READ (GET): session.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20")
+1. READ (GET): 
+   raw_response = session.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20").json() 
+   # DEBUG: Print the raw JSON to the VS Code terminal so the developer can see it
+   import json; print("=== DEBUG RAW JSON ==="); print(json.dumps(raw_response, indent=4))
+   rows = raw_response if isinstance(raw_response, list) else raw_response.get("items", raw_response.get("data", []))
+   # CRITICAL: Custom fields are nested inside the 'data' dictionary of each row!
+   # Example: my_val = row.get("data", {{}}).get("YOUR_FIELD_KEY", "N/A")
 2. CREATE (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}", json={{"data": {{"YOUR_FIELD_KEY": "val"}}}})
 3. UPDATE (PUT): session.put(f"https://api.zygoflow.com/custom-data/rows/ROW_ID", json={{"data": {{"YOUR_FIELD_KEY": "new"}}}})
 4. DELETE (DELETE): session.delete(f"https://api.zygoflow.com/custom-data/rows/ROW_ID")
