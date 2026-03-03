@@ -16486,7 +16486,10 @@ If the user asks to read/process files, use the correct library automatically:
 - PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(path); text = "".join(p.extract_text() for p in reader.pages)`
 - Word: `import docx` -> `doc = docx.Document(path); text = "\\n".join([p.text for p in doc.paragraphs])`
 - Excel/CSV: `import pandas as pd` -> `df = pd.read_excel(path)` or `pd.read_csv(path)`
-
+5. 📝 TEXT INPUT RULE: If you need the user to type something (like a URL or a list of URLs), NEVER use the standard `input()` function. ALWAYS use a native tkinter popup:
+   `from tkinter import simpledialog`
+   `user_input = simpledialog.askstring("Input Request", "Please enter the URLs (separated by commas):")`
+   
 💾 LOCAL FILE SAVING EXPORT CHEAT SHEET:
 If the user asks to save, generate, or export a file (Word, Excel, etc.), ALWAYS ask where to save it:
 `file_path = filedialog.asksaveasfilename(defaultextension=".YOUR_EXT")`
