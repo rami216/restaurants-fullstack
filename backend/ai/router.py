@@ -16480,7 +16480,7 @@ ENVIRONMENT & UI RULES:
 3. For file selection, use native dialogs:
    `from tkinter import filedialog`
    `file_path = filedialog.askopenfilename()` # Or askopenfilenames() for multiple files
-
+4. 🧹 MATH & DATA CLEANING RULE: Database fields might be strings or contain currency symbols (e.g., "74.58", "€ 57.68", "$100"). If the user asks you to calculate a sum or do math on a column, ALWAYS clean the data first! Use `pandas` to strip non-numeric characters and convert the column to floats (e.g., `pd.to_numeric(df['col'].astype(str).str.replace(r'[^\d.]', '', regex=True), errors='coerce')`) BEFORE calculating the sum.
 📥 LOCAL FILE EXTRACTION CHEAT SHEET:
 If the user asks to read/process files, use the correct library automatically:
 - PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(path); text = "".join(p.extract_text() for p in reader.pages)`
