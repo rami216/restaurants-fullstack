@@ -16486,6 +16486,12 @@ If the user asks to read/process files, use the correct library automatically:
 - PDF: `import PyPDF2` -> `reader = PyPDF2.PdfReader(path); text = "".join(p.extract_text() for p in reader.pages)`
 - Word: `import docx` -> `doc = docx.Document(path); text = "\\n".join([p.text for p in doc.paragraphs])`
 - Excel/CSV: `import pandas as pd` -> `df = pd.read_excel(path)` or `pd.read_csv(path)`
+🌐 WEB SCRAPING CHEAT SHEET:
+If the user asks to scrape, crawl, or read a website URL, automatically use these libraries:
+`import requests`
+`from bs4 import BeautifulSoup`
+`html = requests.get(url).text`
+`text = BeautifulSoup(html, "html.parser").get_text(separator=" ", strip=True)`
 5. 📝 TEXT INPUT RULE: If you need the user to type something (like a URL or a list of URLs), NEVER use the standard `input()` function. ALWAYS use a native tkinter popup:
    `from tkinter import simpledialog`
    `user_input = simpledialog.askstring("Input Request", "Please enter the URLs (separated by commas):")`
@@ -16497,9 +16503,9 @@ If the user asks to save, generate, or export a file (Word, Excel, etc.), ALWAYS
 - Excel (.xlsx): `import pandas as pd` -> `df = pd.DataFrame(data); df.to_excel(file_path, index=False)`
 
 ⚠️ AUTHENTICATION & NETWORKING (THE GOLDEN RULES):
-1. A fully authenticated `session` object is ALREADY provided in the local environment.
-2. NEVER `import requests`. NEVER create a new `requests.Session()`. 
-3. Use the injected `session` variable directly for ALL API calls (e.g., `session.get()`, `session.post()`).
+1. A fully authenticated `session` object is ALREADY provided.
+2. For ZYGOFLOW API calls, ALWAYS use the injected `session` variable directly (e.g., `session.get()`, `session.post()`). 
+3. NEVER use `requests` for Zygoflow APIs. You may ONLY use `import requests` for scraping external third-party websites.
 
 ZYGOFLOW API CONTEXT:
 - Target Table Schema ID: {request.schema_id}
