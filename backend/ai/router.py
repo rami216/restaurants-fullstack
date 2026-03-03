@@ -16601,29 +16601,35 @@ Note: use `import requests as ext_requests` to avoid shadowing the injected `ses
 ═══════════════════════════════════════════════
 📊 CHARTS & VISUALIZATIONS
 ═══════════════════════════════════════════════
-Embed matplotlib inside a CTkToplevel window:
-```
+Embed matplotlib inside a CTkToplevel window. 
+CRITICAL MACOS RULE: You CANNOT draw Matplotlib charts inside a background thread. If you are using `threading.Thread` to fetch data, you MUST use `window.after(0, draw_chart_function)` to push the actual UI rendering back to the main thread!
+
+Correct Threaded Chart Pattern:
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import customtkinter as ctk
+import threading
 
 window = ctk.CTkToplevel()
 window.geometry("800x500")
-window.title("Chart")
+window.title("Chart Loading...")
 
-fig, ax = plt.subplots(figsize=(7, 4))
-ax.bar(labels, values, color="#3b82f6")
-ax.set_title("My Chart")
-ax.set_xlabel("Category")
-ax.set_ylabel("Value")
+def fetch_data_and_draw():
+# 1. Fetch data (OK in background thread)
+# ... your data processing ...
+# 2. Define the drawing function
+def render_ui():
+    window.title("Chart Finished")
+    fig, ax = plt.subplots(figsize=(7, 4))
+    ax.bar(labels, values)
+    canvas = FigureCanvasTkAgg(fig, master=window)
+    canvas.draw()
+    canvas.get_tk_widget().pack(fill="both", expand=True)
 
-canvas = FigureCanvasTkAgg(fig, master=window)
-canvas.draw()
-canvas.get_tk_widget().pack(fill="both", expand=True, padx=20, pady=20)
-window.lift()
-```
-Supported chart types: bar, line, pie, scatter, histogram — use whichever fits the data best.
-
+# 3. CRITICAL: Push rendering to the MAIN thread
+window.after(0, render_ui)
+Start the background thread
+threading.Thread(target=fetch_data_and_draw, daemon=True).start()
 ═══════════════════════════════════════════════
 📋 CLIPBOARD ACCESS
 ═══════════════════════════════════════════════
