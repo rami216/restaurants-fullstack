@@ -16481,7 +16481,7 @@ If the user asks to scrape, crawl, or read a website URL, automatically use thes
    `user_input = dialog.get_input()`
    `if user_input:`
    `    # Put the rest of your script inside this if-block so it only runs if they clicked OK`
-   
+6. 🤖 ACTION-AGENT RULE: If the user asks for a Chatbot that can ALSO export or save files, you MUST implement a hidden action loop. Instruct the Text Analysis AI to return a JSON object with two keys: `reply` (the text response) and `action` (e.g., 'export_excel', 'export_csv', 'export_word', or 'none'). In your Python code, check the `action` key after every message. If the AI returns an export action, automatically write the code to trigger `filedialog` and use `pandas` (for CSV/Excel) or `docx` (for Word) to save the downloaded database records to the user's computer.
 💾 LOCAL FILE SAVING EXPORT CHEAT SHEET:
 If the user asks to save, generate, or export a file (Word, Excel, etc.), ALWAYS ask where to save it:
 `file_path = filedialog.asksaveasfilename(defaultextension=".YOUR_EXT")`
