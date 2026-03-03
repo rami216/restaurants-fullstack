@@ -16669,15 +16669,21 @@ window.lift()
 ═══════════════════════════════════════════════
 🧹 DATA CLEANING RULES
 ═══════════════════════════════════════════════
-Database fields may be strings with symbols (e.g. "€57.68", "$1,200"). ALWAYS clean before math:
-```
+Database fields may be strings with symbols (e.g. "€57.68", "$1,200"). ALWAYS clean before math.
+CRITICAL: You MUST load the raw data into a pandas DataFrame FIRST, and then clean the entire column at once using `.str.replace()`. NEVER use `str.replace(..., regex=True)` on a single native Python string inside a loop!
+
+Example:
 import pandas as pd
+
+1. Load raw data into DataFrame first
+df = pd.DataFrame([r.get("data", {{}}) for r in rows])
+
+2. Clean the entire column
 df['amount_clean'] = pd.to_numeric(
-    df['amount'].astype(str).str.replace(r'[^\\d.]', '', regex=True),
-    errors='coerce'
+df['amount'].astype(str).str.replace(r'[^\\d.]', '', regex=True),
+errors='coerce'
 ).fillna(0)
 total = df['amount_clean'].sum()
-```
 
 ═══════════════════════════════════════════════
 ⚠️ ERROR HANDLING PATTERN (ALWAYS USE THIS FOR LOOPS)
