@@ -16599,37 +16599,29 @@ text = BeautifulSoup(html, "html.parser").get_text(separator=" ", strip=True)
 Note: use `import requests as ext_requests` to avoid shadowing the injected `session`.
 
 ═══════════════════════════════════════════════
-📊 CHARTS & VISUALIZATIONS
+📊 CHARTS & VISUALIZATIONS (CRITICAL MACOS RULES)
 ═══════════════════════════════════════════════
-Embed matplotlib inside a CTkToplevel window. 
-CRITICAL MACOS RULE: You CANNOT draw Matplotlib charts inside a background thread. If you are using `threading.Thread` to fetch data, you MUST use `window.after(0, draw_chart_function)` to push the actual UI rendering back to the main thread!
+RULE A - DISPLAYING A CHART IN A WINDOW:
+You CANNOT draw inside a background thread. You MUST use `window.after(0, draw_func)`.
 
-Correct Threaded Chart Pattern:
 import matplotlib.pyplot as plt
 from matplotlib.backends.backend_tkagg import FigureCanvasTkAgg
 import customtkinter as ctk
-import threading
+# ... inside your render_ui function called via window.after(0, render_ui):
+fig, ax = plt.subplots()
+canvas = FigureCanvasTkAgg(fig, master=window)
+canvas.get_tk_widget().pack()
 
-window = ctk.CTkToplevel()
-window.geometry("800x500")
-window.title("Chart Loading...")
+RULE B - SAVING A CHART SILENTLY (HEADLESS):
+If the user asks to SAVE the chart as an image and NOT display it, you MUST use the 'Agg' backend BEFORE importing pyplot.
 
-def fetch_data_and_draw():
-# 1. Fetch data (OK in background thread)
-# ... your data processing ...
-# 2. Define the drawing function
-def render_ui():
-    window.title("Chart Finished")
-    fig, ax = plt.subplots(figsize=(7, 4))
-    ax.bar(labels, values)
-    canvas = FigureCanvasTkAgg(fig, master=window)
-    canvas.draw()
-    canvas.get_tk_widget().pack(fill="both", expand=True)
-
-# 3. CRITICAL: Push rendering to the MAIN thread
-window.after(0, render_ui)
-Start the background thread
-threading.Thread(target=fetch_data_and_draw, daemon=True).start()
+import matplotlib
+matplotlib.use('Agg') # CRITICAL: MUST BE BEFORE pyplot
+import matplotlib.pyplot as plt
+fig, ax = plt.subplots()
+# ... draw chart ...
+plt.savefig("chart.png")
+plt.close(fig)
 ═══════════════════════════════════════════════
 📋 CLIPBOARD ACCESS
 ═══════════════════════════════════════════════
@@ -16787,29 +16779,33 @@ if target:
 🧠 AI TEXT ANALYSIS
 ═══════════════════════════════════════════════
 Use ONLY when the user explicitly wants AI to analyze, extract, or summarize text.
-```
+CRITICAL: Because your Python script needs to reliably parse the AI's response, YOU (the Builder AI) must dynamically write the `instruction` to demand a strict JSON object with specific keys that fit the user's goal.
+
+Example instruction generation:
+instruction = "Analyze the text and write a business summary. Return ONLY a valid JSON object with the key 'report_text'."
+
 url = "https://api.zygoflow.com/ai/analyze-text"
 payload = {{
     "website_id": "{request.website_id}",
     "text": your_text_variable,
-    "instruction": "YOUR SPECIFIC INSTRUCTION. Always end with: Return ONLY a valid JSON object with strictly double-quoted keys and no markdown."
+    "instruction": instruction
 }}
 raw_response = session.post(url, json=payload).json()
 
 # Parse the result safely
 import json, re
 ai_result_string = raw_response.get("result", "{{}}")
-# Strip markdown fences if present
 json_match = re.search(r'```(?:json)?(.*?)```', ai_result_string, re.DOTALL)
 if json_match:
     ai_result_string = json_match.group(1)
 try:
     parsed_data = json.loads(ai_result_string.strip())
+    # Extract the dynamic keys you asked for here
 except Exception as e:
     print("AI JSON PARSE ERROR:", ai_result_string)
-    parsed_data = {{}}
-```
-
+    parsed_data = {{}} # Fallback
+    
+    
 For MULTIPLE items (e.g. processing 5 PDFs), tell the AI explicitly:
 "Return a JSON object with a key called 'items' containing a list of objects, each with keys: {field_names}."
 Then: `items_list = parsed_data.get("items", [parsed_data])`
