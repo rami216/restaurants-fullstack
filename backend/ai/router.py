@@ -16521,21 +16521,19 @@ AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
    payload = {{
        "website_id": "{request.website_id}", 
        "text": extracted_text_variable, 
-       "instruction": "Write a highly specific instruction here. ALWAYS tell it exactly what keys to use and end with: 'Return ONLY a valid JSON object using strictly double quotes for keys.'"
+       "instruction": "Write a highly specific instruction based on the user's prompt. IMPORTANT: Automatically look at the Target Table Fields {field_names}. Instruct the AI to return exactly those keys. If processing multiple items, explicitly tell the AI to return a JSON object with a key called 'items' containing a list of those objects. End with: 'Return ONLY a valid JSON object using strictly double quotes for keys.'"
    }}
    raw_response = session.post(url, json=payload).json()
    
-   # Safely parse the AI result string:
+   # Safely parse the AI result string
    import json, re
    ai_result_string = raw_response.get("result", "{{}}")
-   
-   # Use Regex to perfectly extract the JSON block even if there is extra conversational text
    json_match = re.search(r'```(?:json)?(.*?)```', ai_result_string, re.DOTALL)
-   if json_match:
-       ai_result_string = json_match.group(1)
-       
+   if json_match: ai_result_string = json_match.group(1)
+   
    try:
        parsed_data = json.loads(ai_result_string.strip())
+       # If it returned a list of items, use the BULK UPLOAD endpoint dynamically!
    except Exception as e:
        print("=== AI JSON PARSE ERROR ===")
        print(ai_result_string)
