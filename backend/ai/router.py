@@ -16504,10 +16504,13 @@ ZYGOFLOW API CONTEXT:
 
 AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
 1. READ (GET): 
-   raw_response = session.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20").json() 
-   # DEBUG: Print the raw JSON to the VS Code terminal so the developer can see it
+   raw_response = session.get(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}?skip=0&limit=20").json()
+   
+   # DEBUG: Print the raw JSON
    import json; print("=== DEBUG RAW JSON ==="); print(json.dumps(raw_response, indent=4))
-   rows = raw_response if isinstance(raw_response, list) else raw_response.get("items", raw_response.get("data", []))
+   
+   # CRITICAL FIX: The array is located under the "rows" key!
+   rows = raw_response if isinstance(raw_response, list) else raw_response.get("rows", raw_response.get("items", raw_response.get("data", [])))
    # CRITICAL: Custom fields are nested inside the 'data' dictionary of each row!
    # Example: my_val = row.get("data", {{}}).get("YOUR_FIELD_KEY", "N/A")
 2. CREATE (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}", json={{"data": {{"YOUR_FIELD_KEY": "val"}}}})
