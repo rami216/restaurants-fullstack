@@ -16521,28 +16521,30 @@ AVAILABLE API ENDPOINTS (Base URL: https://api.zygoflow.com):
 7. STATS (POST): session.post(f"https://api.zygoflow.com/custom-data/rows/{request.schema_id}/stats", json={{"field": "YOUR_FIELD_KEY", "operation": "sum"}})
 
 8. 🧠 AI TEXT ANALYSIS (POST):
-   ONLY use this if the user explicitly mentions "AI".
-   url = "[https://api.zygoflow.com/ai/analyze-text](https://api.zygoflow.com/ai/analyze-text)"
+   ONLY use this if the user wants AI to analyze, summarize, or extract data.
+   url = "https://api.zygoflow.com/ai/analyze-text"
    payload = {{
        "website_id": "{request.website_id}", 
        "text": extracted_text_variable, 
-       "instruction": "GENERATE_A_SPECIFIC_INSTRUCTION_HERE_BASED_ON_USER_PROMPT. Ask it to return a JSON object."
+       "instruction": "Write a highly specific instruction here. ALWAYS tell it exactly what keys to use and end with: 'Return ONLY a valid JSON object using strictly double quotes for keys.'"
    }}
-   # CRITICAL: Use the injected `session` directly.
    raw_response = session.post(url, json=payload).json()
    
-   # The endpoint returns {{"result": "JSON_STRING_FROM_AI"}}. You MUST parse the inner string:
-   import json
+   # Safely parse the AI result string:
+   import json, re
    ai_result_string = raw_response.get("result", "{{}}")
    
-   # Clean markdown blocks if the AI accidentally returned them
-   if ai_result_string.startswith("```json"): ai_result_string = ai_result_string[7:]
-   if ai_result_string.startswith("```"): ai_result_string = ai_result_string[3:]
-   if ai_result_string.endswith("```"): ai_result_string = ai_result_string[:-3]
-   
-   parsed_data = json.loads(ai_result_string.strip())
-   # Now safely map parsed_data to the database fields:
-   # payload_data = {{"YOUR_FIELD_KEY": parsed_data.get("ai_key")}}
+   # Use Regex to perfectly extract the JSON block even if there is extra conversational text
+   json_match = re.search(r'```(?:json)?(.*?)```', ai_result_string, re.DOTALL)
+   if json_match:
+       ai_result_string = json_match.group(1)
+       
+   try:
+       parsed_data = json.loads(ai_result_string.strip())
+   except Exception as e:
+       print("=== AI JSON PARSE ERROR ===")
+       print(ai_result_string)
+       parsed_data = {{}}
    
 Write the Python script now:
 """
