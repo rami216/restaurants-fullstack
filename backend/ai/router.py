@@ -16810,8 +16810,20 @@ For MULTIPLE items (e.g. processing 5 PDFs), tell the AI explicitly:
 "Return a JSON object with a key called 'items' containing a list of objects, each with keys: {field_names}."
 Then: `items_list = parsed_data.get("items", [parsed_data])`
 
+
+**DATA SCIENCE / ML EXCEPTION: If the user explicitly asks for a Machine Learning model, Data Science script, or GridSearchCV:
+
+   - IGNORE ALL CustomTkinter and UI rules.
+
+   - DO NOT build a GUI.
+
+   - DO NOT use placeholders like 'csv_path_placeholder' or 'None'. 
+
+   - You MUST hardcode the exact absolute file path provided in the user's prompt directly into pd.read_csv().
+   
 For CHATBOT with actions, use this instruction pattern:
 "User question: {{user_input}}. Answer the question AND return a JSON object with: 'reply' (your text answer) and 'action' (one of: 'export_excel', 'export_csv', 'export_word', 'show_chart', 'none')."
+
 
 ═══════════════════════════════════════════════
 🤖 ACTION-AGENT / CHATBOT PATTERN
