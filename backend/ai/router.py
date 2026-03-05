@@ -16710,11 +16710,11 @@ Example instruction generation:
 instruction = "Analyze the text and write a business summary. Return ONLY a valid JSON object."
 
 url = "https://api.zygoflow.com/ai/analyze-text"
-payload = {
-    "website_id": f"{request.website_id}",
+payload = {{
+    "website_id": "{request.website_id}",
     "text": your_text_variable,
     "instruction": instruction
-}
+}}
 raw_response = session.post(url, json=payload).json()
 
 # Parse the result safely
