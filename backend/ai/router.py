@@ -16545,6 +16545,7 @@ text = "\\n".join([p.text for p in doc.paragraphs])
 ```
 
 Excel / CSV:
+```
 import pandas as pd
 data_df = pd.read_excel(file_path)   # or pd.read_csv(file_path)
 ```
@@ -16567,13 +16568,13 @@ if not file_path:
 Excel:
 ```
 import pandas as pd
-df = pd.DataFrame(data)  # data = list of dicts
-df.to_excel(file_path, index=False)
+export_df = pd.DataFrame(data)  # data = list of dicts
+export_df.to_excel(file_path, index=False)
 ```
 
 CSV:
 ```
-df.to_csv(file_path, index=False)
+export_df.to_csv(file_path, index=False)
 ```
 
 Word (.docx):
