@@ -16524,20 +16524,43 @@ window.update()
 ═══════════════════════════════════════════════
 📁 FILE READING
 ═══════════════════════════════════════════════
-from tkinter import filedialog
-file_path = filedialog.askopenfilename()
+# NEVER use tkinter. ALWAYS use the injected ask_file() tool.
+file_path = ask_file()
 if not file_path:
-pass  # user cancelled
-
+    pass  # user cancelled
 
 ═══════════════════════════════════════════════
 💾 FILE SAVING / EXPORT
 ═══════════════════════════════════════════════
-Always ask where to save:
-from tkinter import filedialog
-file_path = filedialog.asksaveasfilename(defaultextension=".xlsx")
-if not file_path:
-pass  # user cancelled
+Always ask where to save. NEVER use tkinter.
+
+FOR EXCEL:
+file_path = save_file(default_ext=".xlsx")
+if file_path:
+    df.to_excel(file_path, index=False)
+
+FOR WORD DOCUMENTS (.docx):
+from docx import Document
+import json
+doc = Document()
+
+# CRITICAL FORMATTING RULE: If the data is a dictionary (or JSON string), 
+# you MUST loop through it to create headings and paragraphs. 
+# NEVER dump raw curly braces {{}} or [] into the document!
+if isinstance(data, str):
+    try: data = json.loads(data)
+    except: pass
+
+if isinstance(data, dict):
+    for key, value in data.items():
+        doc.add_heading(str(key).replace('_', ' '), level=1)
+        doc.add_paragraph(str(value))
+else:
+    doc.add_paragraph(str(data))
+
+file_path = save_file(default_ext=".docx")
+if file_path:
+    doc.save(file_path)
 
 
 
@@ -16770,8 +16793,7 @@ def run():
         add_message("AI", reply)
         
         if action == "export_excel":
-            from tkinter import filedialog
-            file_path = filedialog.asksaveasfilename(defaultextension=".xlsx")
+            file_path = save_file(default_ext=".xlsx")
             if file_path:
                 import pandas as pd
                 data_df = pd.DataFrame([r.get("data", {{}}) for r in rows])
