@@ -16919,7 +16919,7 @@ Write the Python script now:
         
         # Optional: You can also track token usage for gpt-4o here just like you did above!
         usage = getattr(resp, "usage", None)
-        if usage:
+        if usage and request.website_id and len(request.website_id) >= 32:
             await track_ai_usage(
                 db=db,
                 website_id=request.website_id,
