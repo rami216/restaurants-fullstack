@@ -16814,7 +16814,24 @@ threading.Thread(target=run, daemon=True).start()
 send_btn.configure(command=on_send)
 window.lift()
 
+═══════════════════════════════════════════════
+⚡ EXECUTING AI-GENERATED SCRIPTS FROM MEMORY
+═══════════════════════════════════════════════
+If the user asks to "run", "execute", or "exec" a script that is already in memory as a variable:
+ALWAYS use this exact pattern:
 
+import types
+script = ai_script  # or whatever variable holds the code string
+if not isinstance(script, str):
+    script = str(script)
+script = script.strip()
+if script.startswith("```"):
+    import re
+    script = re.sub(r"```(?:python)?", "", script).replace("```", "").strip()
+exec(script, globals(), locals())
+print("Script executed successfully!")
+
+CRITICAL: ALWAYS clean the script string before exec(). The AI response may contain markdown backticks that will crash exec(). Always strip them first.
 Write the Python script now:
 """
         resp = openai.chat.completions.create(
