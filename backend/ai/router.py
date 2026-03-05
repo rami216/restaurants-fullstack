@@ -16553,19 +16553,8 @@ if isinstance(data, str):
 
 if isinstance(data, dict):
     for key, value in data.items():
-        doc.add_heading(str(key).replace('_', ' ').title(), level=1)
-        if isinstance(value, list):
-            for item in value:
-                if isinstance(item, dict):
-                    for k, v in item.items():
-                        doc.add_paragraph(f"{{k}}: {{v}}", style='List Bullet')
-                else:
-                    doc.add_paragraph(str(item), style='List Bullet')
-        elif isinstance(value, dict):
-            for k, v in value.items():
-                doc.add_paragraph(f"{{str(k).replace('_', ' ').title()}}: {{v}}", style='List Bullet')
-        else:
-            doc.add_paragraph(str(value))
+        doc.add_heading(str(key).replace('_', ' '), level=1)
+        doc.add_paragraph(str(value))
 else:
     doc.add_paragraph(str(data))
 
