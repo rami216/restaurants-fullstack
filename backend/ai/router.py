@@ -16700,7 +16700,6 @@ if target:
 other_schema_id = target["schema_id"]
 other_rows = session.get(f"https://api.zygoflow.com/custom-data/rows/{{other_schema_id}}?limit=100").json().get("rows", [])
 
-
 ═══════════════════════════════════════════════
 🧠 AI TEXT ANALYSIS
 ═══════════════════════════════════════════════
@@ -16708,14 +16707,14 @@ Use ONLY when the user explicitly wants AI to analyze, extract, or summarize tex
 CRITICAL: Because your Python script needs to reliably parse the AI's response, YOU (the Builder AI) must dynamically write the `instruction` to demand a strict JSON object with specific keys that fit the user's goal.
 
 Example instruction generation:
-instruction = "Analyze the text and write a business summary. Return ONLY a valid JSON object with the key 'report_text'."
+instruction = "Analyze the text and write a business summary. Return ONLY a valid JSON object."
 
-url = "[https://api.zygoflow.com/ai/analyze-text](https://api.zygoflow.com/ai/analyze-text)"
-payload = {{
-    "website_id": "{request.website_id}",
+url = "https://api.zygoflow.com/ai/analyze-text"
+payload = {
+    "website_id": f"{request.website_id}",
     "text": your_text_variable,
     "instruction": instruction
-}}
+}
 raw_response = session.post(url, json=payload).json()
 
 # Parse the result safely
@@ -16729,6 +16728,10 @@ try:
 except Exception as e:
     print("AI JSON PARSE ERROR:", ai_result_string)
     parsed_data = {{}} # Fallback
+
+# CRITICAL: Always save the FULL parsed_data dictionary to the variable the user requested!
+# Example: If user asked to save to 'ai_report':
+ai_report = parsed_data
     
 For MULTIPLE items (e.g. processing 5 PDFs), tell the AI explicitly:
 "Return a JSON object with a key called 'items' containing a list of objects, each with keys: {field_names}."
