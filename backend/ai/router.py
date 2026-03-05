@@ -16529,25 +16529,15 @@ file_path = filedialog.askopenfilename()
 if not file_path:
 pass  # user cancelled
 
+
 ═══════════════════════════════════════════════
 💾 FILE SAVING / EXPORT
 ═══════════════════════════════════════════════
-ALWAYS use the injected `save_file(default_ext)` function. NEVER use tkinter.
-
-FOR EXCEL:
-path = save_file(default_ext=".xlsx")
-if path: df.to_excel(path, index=False)
-
-FOR WORD DOCUMENTS (.docx):
-# YOUR JOB: If the input data is a JSON string or dictionary, YOU MUST parse it.
-# YOUR JOB: Intelligently format the parsed data into a professional report using doc.add_heading, doc.add_paragraph, and bullet points. 
-# NEVER dump raw JSON/dict strings into the document.
-from docx import Document
-doc = Document()
-# ... your intelligent formatting logic here ...
-# ... add pictures here ...
-path = save_file(default_ext=".docx")
-if path: doc.save(path)
+Always ask where to save:
+from tkinter import filedialog
+file_path = filedialog.asksaveasfilename(defaultextension=".xlsx")
+if not file_path:
+pass  # user cancelled
 
 
 ═══════════════════════════════════════════════
