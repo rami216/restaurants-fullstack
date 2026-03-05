@@ -16928,7 +16928,7 @@ Write the Python script now:
                 feature="agent_generate_script", 
                 prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
                 completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-                meta={"prompt": request.prompt[:50]}
+                meta={"prompt": request.prompt[:100]}  # increase from 50 to 100 is fine
             )
 
         if generated_code.startswith("```python"):
