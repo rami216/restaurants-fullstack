@@ -16545,9 +16545,8 @@ text = "\\n".join([p.text for p in doc.paragraphs])
 ```
 
 Excel / CSV:
-```
 import pandas as pd
-df = pd.read_excel(file_path)   # or pd.read_csv(file_path)
+data_df = pd.read_excel(file_path)   # or pd.read_csv(file_path)
 ```
 
 Multiple files:
@@ -16674,14 +16673,14 @@ Example:
 import pandas as pd
 
 1. Load raw data into DataFrame first
-df = pd.DataFrame([r.get("data", {{}}) for r in rows])
+data_df = pd.DataFrame([r.get("data", {{}}) for r in rows])
 
 2. Clean the entire column
-df['amount_clean'] = pd.to_numeric(
-df['amount'].astype(str).str.replace(r'[^\\d.]', '', regex=True),
+data_df['amount_clean'] = pd.to_numeric(
+data_df['amount'].astype(str).str.replace(r'[^\\d.]', '', regex=True),
 errors='coerce'
 ).fillna(0)
-total = df['amount_clean'].sum()
+total = data_df['amount_clean'].sum()
 
 ═══════════════════════════════════════════════
 ⚠️ ERROR HANDLING PATTERN (ALWAYS USE THIS FOR LOOPS)
@@ -16885,8 +16884,8 @@ def on_send():
                 file_path = filedialog.asksaveasfilename(defaultextension=".xlsx")
                 if file_path:
                     import pandas as pd
-                    df = pd.DataFrame([r.get("data", {{}}) for r in rows])
-                    df.to_excel(file_path, index=False)
+                    data_df = pd.DataFrame([r.get("data", {{}}) for r in rows])
+                    data_df.to_excel(file_path, index=False)
                     add_message("System", f"✅ Exported to {{file_path}}")
             elif action == "show_chart":
                 # build a chart from rows data
