@@ -16465,7 +16465,7 @@ Analyze the user's prompt and write a robust, crash-proof Python script that ful
 3. NEVER create `ctk.CTk()` and NEVER call `mainloop()`. The app is already running.
 4. NEVER use `requests` for Zygoflow APIs. Use the injected `session` object ONLY.
 5. NEVER redefine `session` or `headers`. They are already injected and authenticated.
-6. ALL API calls MUST be wrapped in try/except. NEVER let one bad row crash the whole script.
+6. For API calls, wrap them in try/except. BUT for Data Science/Pandas tasks, DO NOT use try/except blocks! Let errors raise naturally.
 7. For destructive operations (bulk delete, overwrite all data), ALWAYS show a confirmation dialog first.
 
 ═══════════════════════════════════════════════
@@ -16545,9 +16545,12 @@ text = "\\n".join([p.text for p in doc.paragraphs])
 ```
 
 Excel / CSV:
-```
 import pandas as pd
-data_df = pd.read_excel(file_path)   # or pd.read_csv(file_path)
+if str(file_path).endswith('.csv'):
+df = pd.read_csv(file_path)
+else:
+df = pd.read_excel(file_path) 
+CRITICAL: ALWAYS name the dataframe `df`. NEVER name it `data_df` or `data`.
 ```
 
 Multiple files:
@@ -16812,14 +16815,11 @@ Then: `items_list = parsed_data.get("items", [parsed_data])`
 
 
 **DATA SCIENCE / ML EXCEPTION: If the user explicitly asks for a Machine Learning model, Data Science script, or GridSearchCV:
-
-   - IGNORE ALL CustomTkinter and UI rules.
-
-   - DO NOT build a GUI.
-
-   - DO NOT use placeholders like 'csv_path_placeholder' or 'None'. 
-
-   - You MUST hardcode the exact absolute file path provided in the user's prompt directly into pd.read_csv().
+   - IGNORE ALL CustomTkinter and UI rules. DO NOT build a GUI.
+   - DO NOT wrap your script in try/except blocks.
+   - ALWAYS use `ask_file()` to get the file path.
+   - ALWAYS name your dataframe `df`.
+   - TO PREVENT WARNINGS: When selecting text columns, you MUST use `df.select_dtypes(include=['object', 'str'])` instead of just 'object'.
    
 For CHATBOT with actions, use this instruction pattern:
 "User question: {{user_input}}. Answer the question AND return a JSON object with: 'reply' (your text answer) and 'action' (one of: 'export_excel', 'export_csv', 'export_word', 'show_chart', 'none')."
