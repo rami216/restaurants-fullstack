@@ -16701,18 +16701,13 @@ if target:
 other_schema_id = target["schema_id"]
 other_rows = session.get(f"https://api.zygoflow.com/custom-data/rows/{{other_schema_id}}?limit=100").json().get("rows", [])
 
+
 ═══════════════════════════════════════════════
 🧠 AI TEXT ANALYSIS
 ═══════════════════════════════════════════════
-Use ONLY when the user explicitly wants AI to analyze, extract, summarize text, OR write a Python script.
-CRITICAL: YOU (the Builder AI) must dynamically write the `instruction` to demand a strict JSON object.
+Use when the user wants AI to analyze, summarize, extract, report, or write a Python script.
 
-IF THE USER WANTS A DATA REPORT:
-instruction = "Analyze the text and write a summary. Return ONLY a valid JSON object."
-
-IF THE USER WANTS A SCRIPT / PYTHON CODE:
-instruction = "Write a Python script that [INSERT USER GOAL]. Assume variables are already in memory. DO NOT write code to load files. Return ONLY a valid JSON object with a single key called 'script_code' containing the raw code."
-
+STEP 1 — ALWAYS BUILD THE CALL THE SAME WAY:
 url = "https://api.zygoflow.com/ai/analyze-text"
 payload = {{
     "website_id": "{request.website_id}",
@@ -16721,7 +16716,29 @@ payload = {{
 }}
 raw_response = session.post(url, json=payload).json()
 
-# Parse the result safely
+═══════════════════════════════════════════════
+⚠️ CRITICAL: JSON vs RAW TEXT — KNOW THE DIFFERENCE
+═══════════════════════════════════════════════
+
+TYPE 1 — RAW TEXT (reports, plain analysis, raw Python code):
+Use when your instruction does NOT say "Return ONLY a valid JSON object".
+The AI returns plain text. Grab it directly:
+
+my_variable = raw_response.get("result", "")
+
+NEVER use json.loads() on a plain text response. It will crash.
+
+Examples of RAW TEXT instructions:
+- "Write a Python script that does X. Return only raw executable Python code."
+- "Analyze this text and write a plain text summary."
+- "Write a professional report in plain text."
+
+───────────────────────────────────────────────
+
+TYPE 2 — JSON OBJECT (structured data, multiple fields, actions):
+Use when your instruction explicitly says "Return ONLY a valid JSON object".
+The AI returns structured data. Parse it like this:
+
 import json, re
 ai_result_string = raw_response.get("result", "{{}}")
 json_match = re.search(r'```(?:json)?(.*?)```', ai_result_string, re.DOTALL)
@@ -16731,21 +16748,53 @@ try:
     parsed_data = json.loads(ai_result_string.strip())
 except Exception as e:
     print("AI JSON PARSE ERROR:", ai_result_string)
-    parsed_data = {{}} # Fallback
+    parsed_data = {{}}
 
-# CRITICAL: Always save the parsed data to the EXACT variable name the user requested!
-# Example: If user asked to save a REPORT to 'market_analysis':
-market_analysis = parsed_data 
+my_variable = parsed_data.get("my_key", "")
 
-# Example: If the user asked to save CODE/SCRIPT to 'rami_script':
-rami_script = parsed_data.get("script_code", "")
+Examples of JSON instructions:
+- "Return ONLY a valid JSON object with a single key called 'script_code' containing the raw Python code."
+- "Return ONLY a valid JSON object with keys: name, age, score."
+- "Return ONLY a valid JSON object with a key called 'items' containing a list of objects."
 
-For MULTIPLE items (e.g. processing 5 PDFs), tell the AI explicitly:
-"Return a JSON object with a key called 'items' containing a list of objects, each with keys: {field_names}."
-Then: `items_list = parsed_data.get("items", [parsed_data])`
+───────────────────────────────────────────────
 
-For CHATBOT with actions, use this instruction pattern:
-"User question: {{user_input}}. Answer the question AND return a JSON object with: 'reply' (your text answer) and 'action' (one of: 'export_excel', 'export_csv', 'export_word', 'show_chart', 'none')."
+THE RULE IS SIMPLE:
+✅ Instruction contains "Return ONLY a valid JSON object" → USE json.loads() parsing
+✅ Instruction does NOT contain that phrase → USE raw_response.get("result", "") directly
+
+═══════════════════════════════════════════════
+COMMON INSTRUCTION PATTERNS:
+═══════════════════════════════════════════════
+
+FOR RAW PYTHON CODE:
+instruction = "Write a Python script that [USER GOAL]. Assume all variables are already in memory. Return only raw executable Python code. No markdown. No backticks. No explanation."
+my_script = raw_response.get("result", "")
+
+FOR A PLAIN TEXT REPORT:
+instruction = "Analyze the following data and write a professional plain text report. No markdown. No bullet symbols."
+my_report = raw_response.get("result", "")
+
+FOR STRUCTURED DATA (JSON):
+instruction = "Analyze the text. Return ONLY a valid JSON object with keys: [LIST YOUR KEYS]. No markdown. No backticks."
+parsed_data = json.loads(...)
+my_data = parsed_data.get("my_key", "")
+
+FOR SCRIPT INSIDE JSON (when you need to extract code as a field):
+instruction = "Write a Python script that [USER GOAL]. Return ONLY a valid JSON object with a single key called 'script_code' containing the raw Python code. No markdown. No backticks."
+parsed_data = json.loads(...)
+my_script = parsed_data.get("script_code", "")
+
+FOR CHATBOT WITH ACTIONS:
+instruction = f"User question: {{user_input}}. Answer AND return a valid JSON object with: 'reply' (your answer) and 'action' (one of: export_excel, export_csv, show_chart, none)."
+parsed_data = json.loads(...)
+reply = parsed_data.get("reply", "")
+action = parsed_data.get("action", "none")
+
+FOR MULTIPLE ITEMS (e.g. processing 5 PDFs):
+instruction = "Return ONLY a valid JSON object with a key called 'items' containing a list of objects, each with keys: [YOUR KEYS]."
+parsed_data = json.loads(...)
+items_list = parsed_data.get("items", [])
 
 ═══════════════════════════════════════════════
 🤖 ACTION-AGENT / CHATBOT PATTERN
