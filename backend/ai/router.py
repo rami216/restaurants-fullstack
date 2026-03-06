@@ -16704,11 +16704,14 @@ other_rows = session.get(f"https://api.zygoflow.com/custom-data/rows/{{other_sch
 ═══════════════════════════════════════════════
 🧠 AI TEXT ANALYSIS
 ═══════════════════════════════════════════════
-Use ONLY when the user explicitly wants AI to analyze, extract, or summarize text.
-CRITICAL: Because your Python script needs to reliably parse the AI's response, YOU (the Builder AI) must dynamically write the `instruction` to demand a strict JSON object with specific keys that fit the user's goal.
+Use ONLY when the user explicitly wants AI to analyze, extract, summarize text, OR write a Python script.
+CRITICAL: YOU (the Builder AI) must dynamically write the `instruction` to demand a strict JSON object.
 
-Example instruction generation:
-instruction = "Analyze the text and write a business summary. Return ONLY a valid JSON object."
+IF THE USER WANTS A DATA REPORT:
+instruction = "Analyze the text and write a summary. Return ONLY a valid JSON object."
+
+IF THE USER WANTS A SCRIPT / PYTHON CODE:
+instruction = "Write a Python script that [INSERT USER GOAL]. Assume variables are already in memory. DO NOT write code to load files. Return ONLY a valid JSON object with a single key called 'script_code' containing the raw code."
 
 url = "https://api.zygoflow.com/ai/analyze-text"
 payload = {{
@@ -16730,10 +16733,13 @@ except Exception as e:
     print("AI JSON PARSE ERROR:", ai_result_string)
     parsed_data = {{}} # Fallback
 
-# CRITICAL: Always save the FULL parsed_data dictionary to the variable the user requested!
-# Example: If user asked to save to 'ai_report':
-ai_report = parsed_data
-    
+# CRITICAL: Always save the parsed data to the EXACT variable name the user requested!
+# Example: If user asked to save a REPORT to 'market_analysis':
+market_analysis = parsed_data 
+
+# Example: If the user asked to save CODE/SCRIPT to 'rami_script':
+rami_script = parsed_data.get("script_code", "")
+
 For MULTIPLE items (e.g. processing 5 PDFs), tell the AI explicitly:
 "Return a JSON object with a key called 'items' containing a list of objects, each with keys: {field_names}."
 Then: `items_list = parsed_data.get("items", [parsed_data])`
@@ -16823,18 +16829,19 @@ ALWAYS use this exact pattern to clean and run it safely:
 
 import re, io, contextlib
 
-# 1. Get the script from memory (change 'ai_script' to the actual variable name)
-script = str(ai_script).strip()
+# 1. Get the script from memory (USE THE EXACT VARIABLE NAME THE USER PROVIDED)
+# Example: If the user said "execute rami_script", use rami_script here.
+script_to_run = str(rami_script).strip() 
 
 # 2. Clean markdown formatting if the AI added it
-script = re.sub(r"^```(?:python)?\n?", "", script, flags=re.MULTILINE)
-script = re.sub(r"\n?```$", "", script, flags=re.MULTILINE).strip()
+script_to_run = re.sub(r"^```(?:python)?\n?", "", script_to_run, flags=re.MULTILINE)
+script_to_run = re.sub(r"\n?```$", "", script_to_run, flags=re.MULTILINE).strip()
 
 # 3. Capture output and execute using globals() so it shares the app's memory
 buffer = io.StringIO()
 with contextlib.redirect_stdout(buffer):
     try:
-        exec(script, globals()) 
+        exec(script_to_run, globals()) 
     except Exception as e:
         print(f"Meta-Execution Error: {{e}}")
 
@@ -16844,7 +16851,8 @@ if script_output.strip():
     print("--- Dynamic Script Output ---")
     print(script_output)
 
-CRITICAL: ALWAYS clean the script string before exec(). The AI response often contains markdown backticks that will crash exec().
+CRITICAL: ALWAYS clean the script string before exec() to prevent markdown backticks from crashing the execution.
+
 Write the Python script now:
 """
         resp = openai.chat.completions.create(
