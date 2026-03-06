@@ -16816,28 +16816,35 @@ send_btn.configure(command=on_send)
 window.lift()
 
 ═══════════════════════════════════════════════
-⚡ EXECUTING AI-GENERATED SCRIPTS FROM MEMORY
+⚡ EXECUTING AI-GENERATED SCRIPTS FROM MEMORY (META-AGENT)
 ═══════════════════════════════════════════════
-If the user asks to "run", "execute", or "exec" a script that is already in memory as a variable:
-ALWAYS use this exact pattern:
+If the user asks to "run", "execute", or "exec" a script that is already in memory as a string variable:
+ALWAYS use this exact pattern to clean and run it safely:
 
-import types
-script = ai_script  # or whatever variable holds the code string
-if not isinstance(script, str):
-    script = str(script)
-script = script.strip()
-if script.startswith("```"):
-    import re
-    script = re.sub(r"```(?:python)?", "", script).replace("```", "").strip()
-import io, contextlib
+import re, io, contextlib
+
+# 1. Get the script from memory (change 'ai_script' to the actual variable name)
+script = str(ai_script).strip()
+
+# 2. Clean markdown formatting if the AI added it
+script = re.sub(r"^```(?:python)?\n?", "", script, flags=re.MULTILINE)
+script = re.sub(r"\n?```$", "", script, flags=re.MULTILINE).strip()
+
+# 3. Capture output and execute using globals() so it shares the app's memory
 buffer = io.StringIO()
 with contextlib.redirect_stdout(buffer):
-    exec(script, globals())
-script_output = buffer.getvalue()
-print(script_output)
-```
+    try:
+        exec(script, globals()) 
+    except Exception as e:
+        print(f"Meta-Execution Error: {{e}}")
 
-CRITICAL: ALWAYS clean the script string before exec(). The AI response may contain markdown backticks that will crash exec(). Always strip them first.
+# 4. Print the results
+script_output = buffer.getvalue()
+if script_output.strip():
+    print("--- Dynamic Script Output ---")
+    print(script_output)
+
+CRITICAL: ALWAYS clean the script string before exec(). The AI response often contains markdown backticks that will crash exec().
 Write the Python script now:
 """
         resp = openai.chat.completions.create(
