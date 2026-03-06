@@ -16828,8 +16828,14 @@ script = script.strip()
 if script.startswith("```"):
     import re
     script = re.sub(r"```(?:python)?", "", script).replace("```", "").strip()
-exec(script, globals(), locals())
+import io, contextlib
+buffer = io.StringIO()
+with contextlib.redirect_stdout(buffer):
+    exec(script, globals(), locals())
+script_output = buffer.getvalue()
+print(script_output)
 print("Script executed successfully!")
+```
 
 CRITICAL: ALWAYS clean the script string before exec(). The AI response may contain markdown backticks that will crash exec(). Always strip them first.
 Write the Python script now:
