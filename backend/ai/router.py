@@ -16821,37 +16821,20 @@ threading.Thread(target=run, daemon=True).start()
 send_btn.configure(command=on_send)
 window.lift()
 
-═══════════════════════════════════════════════
-⚡ EXECUTING AI-GENERATED SCRIPTS FROM MEMORY (META-AGENT)
-═══════════════════════════════════════════════
-If the user asks to "run", "execute", or "exec" a script that is already in memory as a string variable:
-ALWAYS use this exact pattern to clean and run it safely:
+⚡ EXECUTING AI-GENERATED SCRIPTS (CRITICAL):
+If the user asks to "run", "execute", or "exec" a script string from memory:
+ALWAYS save it to a .py file on the Desktop first, then run it with subprocess:
 
-import re, io, contextlib
-
-# 1. Get the script from memory (USE THE EXACT VARIABLE NAME THE USER PROVIDED)
-# Example: If the user said "execute rami_script", use rami_script here.
-script_to_run = str(rami_script).strip() 
-
-# 2. Clean markdown formatting if the AI added it
-script_to_run = re.sub(r"^```(?:python)?\n?", "", script_to_run, flags=re.MULTILINE)
-script_to_run = re.sub(r"\n?```$", "", script_to_run, flags=re.MULTILINE).strip()
-
-# 3. Capture output and execute using globals() so it shares the app's memory
-buffer = io.StringIO()
-with contextlib.redirect_stdout(buffer):
-    try:
-        exec(script_to_run, globals()) 
-    except Exception as e:
-        print(f"Meta-Execution Error: {{e}}")
-
-# 4. Print the results
-script_output = buffer.getvalue()
-if script_output.strip():
-    print("--- Dynamic Script Output ---")
-    print(script_output)
-
-CRITICAL: ALWAYS clean the script string before exec() to prevent markdown backticks from crashing the execution.
+import os, sys, subprocess
+script_path = os.path.join(os.path.expanduser('~'), 'Desktop', 'script.py')
+with open(script_path, 'w') as f:
+    f.write(script_to_run)
+result = subprocess.run([sys.executable, script_path], capture_output=True, text=True, timeout=180)
+output = result.stdout
+errors = result.stderr
+if errors:
+    output += "\nERRORS:\n" + errors
+print(output)
 
 Write the Python script now:
 """
