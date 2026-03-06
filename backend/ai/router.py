@@ -16415,16 +16415,17 @@ async def analyze_text(
         model_used = getattr(resp, "model", "gpt-4o-mini")
         
         # 4. Track Usage in Zygoflow Database
-        await track_ai_usage(
-            db=db,
-            website_id=request.website_id,
-            user_id=current_user.id,
-            model=model_used,
-            feature="agent_analyze_text", # Unique feature name so you know it was the desktop agent
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"text_length": len(request.text)}
-        )
+        if request.website_id and len(str(request.website_id)) >= 32:
+            await track_ai_usage(
+                db=db,
+                website_id=request.website_id,
+                user_id=current_user.id,
+                model=model_used,
+                feature="agent_analyze_text", # Unique feature name so you know it was the desktop agent
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                meta={"text_length": len(request.text)}
+            )
         
         # 5. Return the result to the Python script
         return {"result": extracted_data}
