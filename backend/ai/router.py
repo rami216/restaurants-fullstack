@@ -16831,10 +16831,9 @@ if script.startswith("```"):
 import io, contextlib
 buffer = io.StringIO()
 with contextlib.redirect_stdout(buffer):
-    exec(script, globals(), locals())
+    exec(script, globals())
 script_output = buffer.getvalue()
 print(script_output)
-print("Script executed successfully!")
 ```
 
 CRITICAL: ALWAYS clean the script string before exec(). The AI response may contain markdown backticks that will crash exec(). Always strip them first.
