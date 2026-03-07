@@ -17503,8 +17503,10 @@ STAGE 3 — BUILD:
 SHARED MEMORY:
 - All sub-agents in a pipeline share a dict called shared_memory
 - Variables set by one sub-agent are available to the next
-- Example: sub-agent 1 sets `threat_data = [...]`, sub-agent 2 can read `threat_data` directly
+- Example: sub-agent 1 writes `threat_data = [...]`, sub-agent 2 can read `threat_data` directly
 - NEVER redefine a variable that was set by a previous sub-agent
+- NEVER write shared_memory["anything"] — just assign variables directly: my_var = value
+- NEVER reference the variable `shared_memory` in any code — it does not exist
 
 AVAILABLE INJECTED VARIABLES (always in memory):
 - session — authenticated requests.Session() for all API calls
@@ -17512,8 +17514,8 @@ AVAILABLE INJECTED VARIABLES (always in memory):
 - ask_file() — opens file picker, returns file path
 - save_file(default_ext=".csv") — opens save dialog, returns file path
 - ask_user("prompt") — opens input dialog, returns string
-- is_done — set shared_memory["is_done"] = True to stop the orchestrator loop
-- next_agent — set shared_memory["next_agent"] = "Agent Name" to route to a specific agent
+- is_done — to stop the orchestrator loop, just write: is_done = True
+- next_agent — to route to a specific agent, just write: next_agent = "Agent Name"
 
 PIPELINE / ORCHESTRATOR:
 - Multiple agents run in sequence
