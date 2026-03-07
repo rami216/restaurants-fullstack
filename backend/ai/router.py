@@ -17381,4 +17381,75 @@ Write the Python script now:
 
 # ═══════════════════════════════════════════════
 # Write the Python script now:
-# """
+# """ 
+class ChatMessage(BaseModel):
+    role: str  # "user" or "assistant"
+    content: str
+
+class ChatRequest(BaseModel):
+    website_id: str
+    messages: List[ChatMessage]  # full conversation history
+    agent_directory: Optional[str] = ""  # agent names + descriptions
+
+@router.post("/chat")
+async def chat(
+    request: ChatRequest,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_active_user)
+):
+    try:
+        system_msg = (
+            "You are a friendly, helpful AI assistant built into Zygoflow — "
+            "a powerful AI agent platform. You help users accomplish tasks, "
+            "answer questions, and run automated agents on their behalf.\n\n"
+        )
+
+        if request.agent_directory:
+            system_msg += (
+                f"You have access to these agents that you can run for the user:\n"
+                f"{request.agent_directory}\n\n"
+                "If the user's request matches an agent, reply with EXACTLY:\n"
+                "AGENT: <exact agent name>\n"
+                "Otherwise reply conversationally as a helpful assistant.\n"
+                "NEVER mention 'AGENT:' unless you are routing to one."
+            )
+
+        # Build messages array with full history
+        messages = [{"role": "system", "content": system_msg}]
+        for msg in request.messages:
+            messages.append({
+                "role": msg.role,
+                "content": msg.content
+            })
+
+        resp = openai.chat.completions.create(
+            model="gpt-4o",
+            messages=messages,
+            temperature=0.7  # friendlier, more natural
+        )
+
+        reply = resp.choices[0].message.content.strip()
+
+        # Track usage
+        usage = getattr(resp, "usage", None)
+        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
+        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
+        model_used = getattr(resp, "model", "gpt-4o")
+
+        if request.website_id and len(str(request.website_id)) >= 32:
+            await track_ai_usage(
+                db=db,
+                website_id=request.website_id,
+                user_id=current_user.id,
+                model=model_used,
+                feature="agent_chat",
+                prompt_tokens=prompt_tokens,
+                completion_tokens=completion_tokens,
+                meta={"messages_count": len(request.messages)}
+            )
+
+        return {"result": reply}
+
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(status_code=500, detail=f"Chat Error: {str(e)}")
