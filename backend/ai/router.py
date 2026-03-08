@@ -17572,7 +17572,13 @@ else:
 10. NEVER use exec() to run generated scripts — always save to file and run with subprocess.
 11. Always import everything you need at the top of each sub-agent's code block.
     Do not assume any imports carry over from a previous sub-agent.
-
+12. F-STRINGS WITH DICT KEYS (CRITICAL):
+    ALWAYS use double quotes for the outer f-string and single quotes for dict keys inside.
+    CORRECT:   f"Total: ${summary['total']:,.2f}"
+    CORRECT:   f"Vendor: {data['vendor']}"
+    INCORRECT: f'Total: ${summary['total']:,.2f}'
+    INCORRECT: f"Vendor: {data["vendor"]}"
+    THE RULE: outer f-string = double quotes, inner dict keys = single quotes. Always.
 ═══════════════════════════════════════════════
 🌐 AI CALLS — USE THIS PATTERN ONLY
 ═══════════════════════════════════════════════
