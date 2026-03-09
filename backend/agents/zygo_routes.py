@@ -27,6 +27,7 @@ from agents.zygo_schemas import (
     ZygoGoogleResourceCreate, ZygoGoogleResourceOut,
     ZygoRunOut
 )
+from sqlalchemy.orm import selectinload
 
 zygo_router = APIRouter()
 
@@ -112,8 +113,13 @@ async def list_pipelines(
     current_user: ZygoUser = Depends(get_zygo_user_from_token),
     db: AsyncSession = Depends(get_db)
 ):
-    result = await db.execute(select(ZygoPipeline).where(ZygoPipeline.owner_id == current_user.id))
+    result = await db.execute(
+        select(ZygoPipeline)
+        .where(ZygoPipeline.owner_id == current_user.id)
+        .options(selectinload(ZygoPipeline.agents))  # ← ADD THIS
+    )
     return result.scalars().all()
+
 
 @zygo_router.post("/pipelines", response_model=ZygoPipelineOut)
 async def create_pipeline(
