@@ -562,7 +562,65 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         log("✅ Sandbox started")
 
         # Install packages
-        install_result = sbx.commands.run("pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid requests -q")
+        import re as _re
+
+        all_code = " ".join([code for _, code in agents_data])
+
+        package_map = {
+            'googleapiclient': 'google-api-python-client',
+            'google': 'google-auth google-auth-httplib2 google-api-python-client',
+            'bs4': 'beautifulsoup4',
+            'PIL': 'Pillow',
+            'sklearn': 'scikit-learn',
+            'cv2': 'opencv-python',
+            'dotenv': 'python-dotenv',
+            'yaml': 'pyyaml',
+            'jwt': 'PyJWT',
+            'docx': 'python-docx',
+            'pptx': 'python-pptx',
+            'openpyxl': 'openpyxl',
+            'xlrd': 'xlrd',
+            'PyPDF2': 'PyPDF2',
+            'pdfplumber': 'pdfplumber',
+            'fitz': 'pymupdf',
+            'stripe': 'stripe',
+            'twilio': 'twilio',
+            'boto3': 'boto3',
+            'pymongo': 'pymongo',
+            'redis': 'redis',
+            'sendgrid': 'sendgrid',
+        }
+
+        stdlib = {
+            'os', 'sys', 'json', 're', 'time', 'datetime', 'math', 'random',
+            'string', 'io', 'csv', 'pathlib', 'collections', 'itertools',
+            'functools', 'threading', 'subprocess', 'hashlib', 'base64',
+            'uuid', 'copy', 'typing', 'enum', 'abc', 'contextlib', 'logging',
+            'tempfile', 'shutil', 'glob', 'struct', 'socket', 'http', 'urllib',
+            'importlib', 'inspect', 'traceback', 'warnings', 'dataclasses'
+        }
+
+        packages = {
+            'openai', 'anthropic',
+            'google-auth', 'google-auth-httplib2', 'google-api-python-client',
+            'requests'
+        }
+
+        imported = set()
+        for match in _re.findall(r'^(?:import|from)\s+([a-zA-Z0-9_]+)', all_code, _re.MULTILINE):
+            imported.add(match)
+
+        for pkg in imported:
+            if pkg in stdlib:
+                continue
+            if pkg in package_map:
+                for p in package_map[pkg].split():
+                    packages.add(p)
+            else:
+                packages.add(pkg)
+
+        install_cmd = "pip install " + " ".join(packages) + " -q"
+        install_result = sbx.commands.run(install_cmd)
         log(f"✅ Packages installed (exit code: {install_result.exit_code})")
 
         # Bootstrap
