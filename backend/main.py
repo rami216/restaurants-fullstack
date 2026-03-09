@@ -5,6 +5,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
+from agents.zygo_routes import zygo_router
 
 # If you want to keep .env loading locally:
 try:
@@ -163,6 +164,8 @@ app.include_router(checkout_router)
 app.include_router(webhooks_router) # ✅ ADD THIS
 app.include_router(orders_router) # ✅ ADD THIS
 app.include_router(custom_data_router) # ✅ ADD THIS
+app.include_router(zygo_router, prefix="/zygo", tags=["zygoflow"])  # ✅ ZYGOFLOW
+
 
 # ---- Health check
 @app.get("/health")

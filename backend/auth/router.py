@@ -121,6 +121,13 @@ async def google_login(
 
         # Create access token and set cookie
         token = create_access_token(user.email)
+        from agents.zygo_models import ZygoUser as ZygoUserModel
+        zygo_result = await db.execute(
+            select(ZygoUserModel).where(ZygoUserModel.user_id == user.id)
+        )
+        if not zygo_result.scalars().first():
+            db.add(ZygoUserModel(user_id=user.id, email=user.email))
+            await db.commit()
         response.set_cookie(
             key="access_token",
             value=token,
