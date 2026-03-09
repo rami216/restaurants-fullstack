@@ -1,330 +1,654 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useEffect, useCallback } from "react";
 import { useRouter } from "next/navigation";
 import { useAuth } from "@/context/AuthContext";
 
-// ── Icons (inline SVG to avoid extra deps) ──────────────────
-const icons = {
-  zap: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2" />
-    </svg>
-  ),
-  plug: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <path d="M18 6L6 18M7 6v5a5 5 0 005 5h5" />
-      <path d="M10 2v4M14 2v4" />
-    </svg>
-  ),
-  clock: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <circle cx="12" cy="12" r="10" />
-      <polyline points="12 6 12 12 16 14" />
-    </svg>
-  ),
-  google: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <rect x="3" y="3" width="18" height="18" rx="2" />
-      <path d="M9 12h6M12 9v6" />
-    </svg>
-  ),
-  settings: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <circle cx="12" cy="12" r="3" />
-      <path d="M19.4 15a1.65 1.65 0 00.33 1.82l.06.06a2 2 0 010 2.83 2 2 0 01-2.83 0l-.06-.06a1.65 1.65 0 00-1.82-.33 1.65 1.65 0 00-1 1.51V21a2 2 0 01-4 0v-.09A1.65 1.65 0 009 19.4a1.65 1.65 0 00-1.82.33l-.06.06a2 2 0 01-2.83-2.83l.06-.06A1.65 1.65 0 004.68 15a1.65 1.65 0 00-1.51-1H3a2 2 0 010-4h.09A1.65 1.65 0 004.6 9a1.65 1.65 0 00-.33-1.82l-.06-.06a2 2 0 012.83-2.83l.06.06A1.65 1.65 0 009 4.68a1.65 1.65 0 001-1.51V3a2 2 0 014 0v.09a1.65 1.65 0 001 1.51 1.65 1.65 0 001.82-.33l.06-.06a2 2 0 012.83 2.83l-.06.06A1.65 1.65 0 0019.4 9a1.65 1.65 0 001.51 1H21a2 2 0 010 4h-.09a1.65 1.65 0 00-1.51 1z" />
-    </svg>
-  ),
-  logout: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
-    </svg>
-  ),
-  activity: (
-    <svg
-      viewBox="0 0 24 24"
-      fill="none"
-      stroke="currentColor"
-      strokeWidth={2}
-      className="w-4 h-4"
-    >
-      <polyline points="22 12 18 12 15 21 9 3 6 12 2 12" />
-    </svg>
-  ),
-};
+const API = "https://api.zygoflow.com/zygo";
 
-const NAV = [
-  { id: "pipelines", label: "⚡ God Mode", icon: icons.zap },
-  { id: "apis", label: "🔌 Custom APIs", icon: icons.plug },
-  { id: "triggers", label: "⏰ Triggers", icon: icons.clock },
-  { id: "google", label: "🟢 Google", icon: icons.google },
-  { id: "runs", label: "📊 Run Logs", icon: icons.activity },
-  { id: "settings", label: "⚙️ Settings", icon: icons.settings },
-];
+// ── Types ───────────────────────────────────────────────────
+interface Pipeline {
+  id: string;
+  name: string;
+  agent_names: string[];
+  max_rounds: number;
+  auto_mode: boolean;
+  created_at: string;
+}
 
-// ── Placeholder views ────────────────────────────────────────
+interface Trigger {
+  id: string;
+  name: string;
+  trigger_type: string;
+  webhook_public_url?: string;
+  is_enabled: boolean;
+  pipeline_id: string;
+}
 
-function ComingSoon({ title }: { title: string }) {
+interface Run {
+  id: string;
+  pipeline_id: string;
+  status: "pending" | "running" | "success" | "failed";
+  trigger_source: string;
+  started_at: string;
+  logs?: string;
+}
+
+// ── API helpers ─────────────────────────────────────────────
+function useApi(token: string | null) {
+  const headers = {
+    Authorization: `Bearer ${token}`,
+    "Content-Type": "application/json",
+  };
+  const get = (path: string) =>
+    fetch(`${API}${path}`, { headers }).then((r) => r.json());
+  const post = (path: string, body?: object) =>
+    fetch(`${API}${path}`, {
+      method: "POST",
+      headers,
+      body: JSON.stringify(body),
+    }).then((r) => r.json());
+  const del = (path: string) =>
+    fetch(`${API}${path}`, { method: "DELETE", headers }).then((r) => r.json());
+  const patch = (path: string, body: object) =>
+    fetch(`${API}${path}`, {
+      method: "PATCH",
+      headers,
+      body: JSON.stringify(body),
+    }).then((r) => r.json());
+  return { get, post, del, patch };
+}
+
+// ── Status badge ────────────────────────────────────────────
+function StatusBadge({ status }: { status: string }) {
+  const map: Record<string, { color: string; dot: string; label: string }> = {
+    success: {
+      color: "text-[#00ff88] bg-[#00ff88]/10 border-[#00ff88]/20",
+      dot: "bg-[#00ff88]",
+      label: "Success",
+    },
+    running: {
+      color: "text-blue-400 bg-blue-400/10 border-blue-400/20",
+      dot: "bg-blue-400 animate-pulse",
+      label: "Running",
+    },
+    failed: {
+      color: "text-red-400 bg-red-400/10 border-red-400/20",
+      dot: "bg-red-400",
+      label: "Failed",
+    },
+    pending: {
+      color: "text-yellow-400 bg-yellow-400/10 border-yellow-400/20",
+      dot: "bg-yellow-400 animate-pulse",
+      label: "Pending",
+    },
+  };
+  const s = map[status] || map.pending;
   return (
-    <div className="flex flex-col items-center justify-center h-full text-center py-32">
-      <div className="w-16 h-16 rounded-2xl bg-[#00ff88]/10 border border-[#00ff88]/20 flex items-center justify-center mb-6 text-2xl">
-        ⚡
-      </div>
-      <h2 className="text-white font-semibold text-xl mb-2">{title}</h2>
-      <p className="text-gray-500 text-sm max-w-xs">
-        This section is being built. Check back soon!
-      </p>
+    <span
+      className={`inline-flex items-center gap-1.5 px-2.5 py-1 rounded-full border text-xs font-mono ${s.color}`}
+    >
+      <span className={`w-1.5 h-1.5 rounded-full ${s.dot}`} />
+      {s.label}
+    </span>
+  );
+}
+
+// ── Copy button ─────────────────────────────────────────────
+function CopyBtn({ text }: { text: string }) {
+  const [copied, setCopied] = useState(false);
+  const copy = () => {
+    navigator.clipboard.writeText(text);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 1500);
+  };
+  return (
+    <button
+      onClick={copy}
+      className="text-xs text-gray-500 hover:text-[#00ff88] transition-colors font-mono px-2 py-1 rounded hover:bg-[#00ff88]/10 shrink-0"
+    >
+      {copied ? "✓ copied" : "📋 copy"}
+    </button>
+  );
+}
+
+// ── Empty state ─────────────────────────────────────────────
+function Empty({
+  emoji,
+  title,
+  desc,
+}: {
+  emoji: string;
+  title: string;
+  desc: string;
+}) {
+  return (
+    <div className="border border-dashed border-white/10 rounded-2xl p-16 text-center">
+      <div className="text-5xl mb-4">{emoji}</div>
+      <p className="text-white font-medium mb-2">{title}</p>
+      <p className="text-gray-500 text-sm max-w-xs mx-auto">{desc}</p>
     </div>
   );
 }
 
-function PipelinesView() {
-  const [agents, setAgents] = useState([
-    {
-      id: 1,
-      name: "Data Fetcher",
-      prompt: "Fetch data from the API and save to sheet",
-      model: "openai",
-    },
-    {
-      id: 2,
-      name: "Email Sender",
-      prompt: "Send summary email with the results",
-      model: "openai",
-    },
-  ]);
-  const [pipelineName, setPipelineName] = useState("My Pipeline");
+// ── Spinner ─────────────────────────────────────────────────
+function Spinner() {
+  return (
+    <div className="flex items-center justify-center h-64">
+      <div className="w-6 h-6 border-2 border-[#00ff88] border-t-transparent rounded-full animate-spin" />
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// ☁️ PIPELINES VIEW — main view, shows deployed pipelines
+// ══════════════════════════════════════════════════════════════
+function PipelinesView({
+  api,
+  runs,
+}: {
+  api: ReturnType<typeof useApi>;
+  runs: Run[];
+}) {
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [deleting, setDeleting] = useState<string | null>(null);
+
+  const load = useCallback(async () => {
+    setLoading(true);
+    const [p, t] = await Promise.all([
+      api.get("/pipelines"),
+      api.get("/triggers"),
+    ]);
+    setPipelines(Array.isArray(p) ? p : []);
+    setTriggers(Array.isArray(t) ? t : []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const deletePipeline = async (id: string) => {
+    if (!confirm("Delete this pipeline and its webhook?")) return;
+    setDeleting(id);
+    await api.del(`/pipelines/${id}`);
+    await load();
+    setDeleting(null);
+  };
+
+  const toggleTrigger = async (trigger: Trigger) => {
+    await api.patch(`/triggers/${trigger.id}`, {
+      is_enabled: !trigger.is_enabled,
+    });
+    await load();
+  };
+
+  if (loading) return <Spinner />;
 
   return (
-    <div className="p-8 max-w-4xl">
+    <div className="p-8">
       <div className="flex items-center justify-between mb-8">
         <div>
-          <h2 className="text-white font-semibold text-xl">
-            ⚡ God Mode Pipeline Builder
+          <h2 className="text-white font-semibold text-xl mb-1">
+            ☁️ Deployed Pipelines
           </h2>
-          <p className="text-gray-500 text-sm mt-1">
-            Build multi-step AI agent pipelines
+          <p className="text-gray-500 text-sm">
+            {pipelines.length > 0
+              ? `${pipelines.length} pipeline${pipelines.length !== 1 ? "s" : ""} running in the cloud`
+              : "No pipelines deployed yet"}
           </p>
         </div>
-        <button className="bg-[#00ff88] text-black text-sm font-bold px-4 py-2 rounded-lg hover:bg-[#00ff88]/90 transition-colors">
-          + New Pipeline
-        </button>
+        {pipelines.length > 0 && (
+          <div className="text-xs text-gray-600 font-mono bg-white/[0.03] border border-white/[0.06] px-3 py-2 rounded-lg">
+            Desktop app → ☁️ Deploy to Cloud
+          </div>
+        )}
       </div>
 
-      {/* Pipeline name */}
-      <div className="mb-6">
-        <label className="text-gray-400 text-xs font-mono mb-2 block">
-          PIPELINE NAME
-        </label>
-        <input
-          value={pipelineName}
-          onChange={(e) => setPipelineName(e.target.value)}
-          className="bg-[#111118] border border-white/[0.08] rounded-lg px-4 py-2.5 text-white text-sm w-full max-w-xs focus:outline-none focus:border-[#00ff88]/40"
+      {pipelines.length === 0 ? (
+        <Empty
+          emoji="🖥️"
+          title="No pipelines deployed yet"
+          desc="Open the Zygoflow desktop app, build your pipeline, then click ☁️ Deploy to Cloud"
         />
-      </div>
+      ) : (
+        <div className="space-y-4">
+          {pipelines.map((p) => {
+            const pTrigger = triggers.find(
+              (t) => t.pipeline_id === p.id && t.trigger_type === "webhook",
+            );
+            const pRuns = runs.filter((r) => r.pipeline_id === p.id);
+            const lastRun = pRuns.sort(
+              (a, b) =>
+                new Date(b.started_at).getTime() -
+                new Date(a.started_at).getTime(),
+            )[0];
 
-      {/* Agent nodes */}
-      <div className="space-y-3 mb-6">
-        {agents.map((agent, i) => (
-          <div
-            key={agent.id}
-            className="bg-[#111118] border border-white/[0.06] rounded-xl p-5"
-          >
-            <div className="flex items-center justify-between mb-3">
-              <div className="flex items-center gap-3">
-                <div className="w-7 h-7 rounded-lg bg-[#00ff88]/10 border border-[#00ff88]/20 flex items-center justify-center text-[#00ff88] text-xs font-mono font-bold">
-                  {i + 1}
+            return (
+              <div
+                key={p.id}
+                className="bg-[#111118] border border-white/[0.06] rounded-xl overflow-hidden"
+              >
+                {/* Header */}
+                <div className="px-6 py-4 flex items-center justify-between border-b border-white/[0.04]">
+                  <div className="flex items-center gap-3">
+                    <div className="w-2 h-2 rounded-full bg-[#00ff88]" />
+                    <h3 className="text-white font-medium">{p.name}</h3>
+                    <span className="text-gray-600 text-xs font-mono">
+                      {p.auto_mode
+                        ? "∞ auto"
+                        : `${p.max_rounds} round${p.max_rounds !== 1 ? "s" : ""}`}
+                    </span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    {lastRun && <StatusBadge status={lastRun.status} />}
+                    <button
+                      onClick={() => deletePipeline(p.id)}
+                      disabled={deleting === p.id}
+                      className="text-gray-600 hover:text-red-400 transition-colors text-xs font-mono px-2 py-1 hover:bg-red-400/10 rounded"
+                    >
+                      {deleting === p.id ? "..." : "🗑 delete"}
+                    </button>
+                  </div>
                 </div>
-                <input
-                  defaultValue={agent.name}
-                  className="bg-transparent text-white text-sm font-medium focus:outline-none border-b border-transparent hover:border-white/20 focus:border-[#00ff88]/40 transition-colors pb-0.5"
-                />
+
+                {/* Agent sequence */}
+                <div className="px-6 py-3 flex items-center gap-2 flex-wrap border-b border-white/[0.04]">
+                  <span className="text-gray-600 text-xs font-mono">
+                    agents:
+                  </span>
+                  {(p.agent_names || []).map((name, i) => (
+                    <span key={i} className="flex items-center gap-1.5">
+                      <span className="bg-[#0a0a0f] border border-white/[0.06] text-gray-400 text-xs font-mono px-2 py-0.5 rounded">
+                        {i + 1}. {name}
+                      </span>
+                      {i < p.agent_names.length - 1 && (
+                        <span className="text-gray-700 text-xs">→</span>
+                      )}
+                    </span>
+                  ))}
+                </div>
+
+                {/* Webhook URL */}
+                {pTrigger?.webhook_public_url && (
+                  <div className="px-6 py-3 flex items-center justify-between gap-4 border-b border-white/[0.04]">
+                    <div className="flex items-center gap-2 min-w-0 flex-1">
+                      <span className="text-gray-600 text-xs font-mono shrink-0">
+                        POST
+                      </span>
+                      <span className="text-[#00ff88] text-xs font-mono truncate">
+                        {pTrigger.webhook_public_url}
+                      </span>
+                      <CopyBtn text={pTrigger.webhook_public_url} />
+                    </div>
+                    <button
+                      onClick={() => toggleTrigger(pTrigger)}
+                      className={`text-xs font-mono px-3 py-1 rounded-full border transition-colors shrink-0 ${
+                        pTrigger.is_enabled
+                          ? "border-[#00ff88]/30 text-[#00ff88] bg-[#00ff88]/10 hover:bg-[#00ff88]/20"
+                          : "border-gray-700 text-gray-500 hover:text-gray-300"
+                      }`}
+                    >
+                      {pTrigger.is_enabled ? "● active" : "○ paused"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Footer stats */}
+                <div className="px-6 py-3 flex items-center gap-6 text-gray-600 text-xs font-mono">
+                  <span>
+                    {pRuns.length} run{pRuns.length !== 1 ? "s" : ""}
+                  </span>
+                  {lastRun && (
+                    <span>
+                      last: {new Date(lastRun.started_at).toLocaleDateString()}{" "}
+                      {new Date(lastRun.started_at).toLocaleTimeString()}
+                    </span>
+                  )}
+                  <span>
+                    deployed: {new Date(p.created_at).toLocaleDateString()}
+                  </span>
+                </div>
               </div>
-              <div className="flex items-center gap-2">
-                <select
-                  defaultValue={agent.model}
-                  className="bg-[#0a0a0f] border border-white/[0.08] rounded-lg px-3 py-1.5 text-xs text-gray-300 focus:outline-none"
-                >
-                  <option value="openai">🟢 GPT-4o</option>
-                  <option value="claude">🟣 Claude</option>
-                </select>
-                <button
-                  onClick={() =>
-                    setAgents(agents.filter((a) => a.id !== agent.id))
-                  }
-                  className="text-gray-600 hover:text-red-400 transition-colors text-lg leading-none"
-                >
-                  ×
-                </button>
-              </div>
-            </div>
-            <textarea
-              defaultValue={agent.prompt}
-              rows={2}
-              placeholder="Describe what this agent should do..."
-              className="w-full bg-[#0a0a0f] border border-white/[0.06] rounded-lg px-3 py-2.5 text-sm text-gray-300 placeholder-gray-600 focus:outline-none focus:border-[#00ff88]/30 resize-none"
-            />
-            <div className="flex gap-2 mt-3">
-              <button className="text-xs bg-[#00ff88]/10 text-[#00ff88] border border-[#00ff88]/20 px-3 py-1.5 rounded-lg hover:bg-[#00ff88]/20 transition-colors font-mono">
-                🤖 Generate Code
-              </button>
-              <button className="text-xs bg-white/[0.04] text-gray-400 border border-white/[0.06] px-3 py-1.5 rounded-lg hover:bg-white/[0.08] transition-colors font-mono">
-                ▶ Run
-              </button>
-            </div>
-          </div>
-        ))}
-      </div>
-
-      {/* Add agent */}
-      <button
-        onClick={() =>
-          setAgents([
-            ...agents,
-            {
-              id: Date.now(),
-              name: `Agent ${agents.length + 1}`,
-              prompt: "",
-              model: "openai",
-            },
-          ])
-        }
-        className="w-full border border-dashed border-white/10 rounded-xl py-4 text-gray-500 text-sm hover:border-[#00ff88]/30 hover:text-[#00ff88] transition-colors"
-      >
-        + Add Sub-Agent
-      </button>
-
-      {/* Run pipeline */}
-      <div className="flex gap-3 mt-8">
-        <button className="bg-[#00ff88] text-black font-bold px-6 py-2.5 rounded-lg hover:bg-[#00ff88]/90 transition-colors text-sm">
-          ▶ Run Pipeline
-        </button>
-        <button className="bg-white/[0.04] text-gray-300 border border-white/[0.06] px-6 py-2.5 rounded-lg hover:bg-white/[0.08] transition-colors text-sm">
-          💾 Save
-        </button>
-      </div>
-    </div>
-  );
-}
-
-function SettingsView() {
-  return (
-    <div className="p-8 max-w-lg">
-      <h2 className="text-white font-semibold text-xl mb-2">⚙️ Settings</h2>
-      <p className="text-gray-500 text-sm mb-8">Configure your API keys</p>
-
-      <div className="space-y-5">
-        {[
-          { label: "OpenAI API Key", placeholder: "sk-...", type: "password" },
-          {
-            label: "Claude API Key",
-            placeholder: "sk-ant-...",
-            type: "password",
-          },
-          {
-            label: "ngrok Auth Token",
-            placeholder: "Your ngrok token",
-            type: "password",
-          },
-        ].map(({ label, placeholder, type }) => (
-          <div key={label}>
-            <label className="text-gray-400 text-xs font-mono mb-2 block">
-              {label.toUpperCase()}
-            </label>
-            <input
-              type={type}
-              placeholder={placeholder}
-              className="w-full bg-[#111118] border border-white/[0.08] rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none focus:border-[#00ff88]/40 placeholder-gray-600"
-            />
-          </div>
-        ))}
-
-        <div>
-          <label className="text-gray-400 text-xs font-mono mb-2 block">
-            ACTIVE MODEL
-          </label>
-          <select className="w-full bg-[#111118] border border-white/[0.08] rounded-lg px-4 py-2.5 text-white text-sm focus:outline-none">
-            <option value="openai">🟢 GPT-4o</option>
-            <option value="claude">🟣 Claude</option>
-          </select>
+            );
+          })}
         </div>
+      )}
+    </div>
+  );
+}
 
-        <button className="w-full bg-[#00ff88] text-black font-bold py-2.5 rounded-lg hover:bg-[#00ff88]/90 transition-colors text-sm mt-2">
-          Save Settings
-        </button>
+// ══════════════════════════════════════════════════════════════
+// 🔗 WEBHOOKS VIEW
+// ══════════════════════════════════════════════════════════════
+function WebhooksView({ api }: { api: ReturnType<typeof useApi> }) {
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const t = await api.get("/triggers");
+    setTriggers(Array.isArray(t) ? t : []);
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggle = async (t: Trigger) => {
+    await api.patch(`/triggers/${t.id}`, { is_enabled: !t.is_enabled });
+    await load();
+  };
+
+  const del = async (id: string) => {
+    await api.del(`/triggers/${id}`);
+    await load();
+  };
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div className="p-8">
+      <h2 className="text-white font-semibold text-xl mb-1">🔗 Webhook URLs</h2>
+      <p className="text-gray-500 text-sm mb-8">
+        Permanent URLs — paste into Stripe, Typeform, GitHub, or any service
+      </p>
+
+      {triggers.length === 0 ? (
+        <Empty
+          emoji="🔗"
+          title="No webhooks yet"
+          desc="Webhooks are auto-created when you deploy a pipeline from the desktop app"
+        />
+      ) : (
+        <div className="space-y-3">
+          {triggers.map((t) => (
+            <div
+              key={t.id}
+              className="bg-[#111118] border border-white/[0.06] rounded-xl p-5"
+            >
+              <div className="flex items-center justify-between mb-3">
+                <div className="flex items-center gap-3">
+                  <span className="text-white font-medium text-sm">
+                    {t.name}
+                  </span>
+                  <span className="text-gray-600 text-xs font-mono border border-white/[0.06] px-2 py-0.5 rounded">
+                    {t.trigger_type}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggle(t)}
+                    className={`text-xs font-mono px-3 py-1 rounded-full border transition-colors ${
+                      t.is_enabled
+                        ? "border-[#00ff88]/30 text-[#00ff88] bg-[#00ff88]/10 hover:bg-[#00ff88]/20"
+                        : "border-gray-700 text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    {t.is_enabled ? "● active" : "○ paused"}
+                  </button>
+                  <button
+                    onClick={() => del(t.id)}
+                    className="text-gray-600 hover:text-red-400 transition-colors text-xs font-mono px-2 py-1 hover:bg-red-400/10 rounded"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+
+              {t.webhook_public_url && (
+                <div className="flex items-center gap-2 bg-[#0a0a0f] border border-white/[0.04] rounded-lg px-3 py-2.5">
+                  <span className="text-gray-500 text-xs font-mono shrink-0">
+                    POST
+                  </span>
+                  <span className="text-[#00ff88] text-xs font-mono flex-1 truncate">
+                    {t.webhook_public_url}
+                  </span>
+                  <CopyBtn text={t.webhook_public_url} />
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 📊 RUN LOGS VIEW
+// ══════════════════════════════════════════════════════════════
+function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
+  const [selected, setSelected] = useState<string | null>(null);
+
+  if (loading) return <Spinner />;
+
+  return (
+    <div className="p-8">
+      <h2 className="text-white font-semibold text-xl mb-1">📊 Run Logs</h2>
+      <p className="text-gray-500 text-sm mb-8">
+        Every pipeline execution — {runs.length} total
+      </p>
+
+      {runs.length === 0 ? (
+        <Empty
+          emoji="📋"
+          title="No runs yet"
+          desc="Trigger a pipeline via webhook to see execution logs here"
+        />
+      ) : (
+        <div className="space-y-2">
+          {runs.map((r) => (
+            <div
+              key={r.id}
+              onClick={() => setSelected(selected === r.id ? null : r.id)}
+              className="bg-[#111118] border border-white/[0.06] rounded-xl px-5 py-4 cursor-pointer hover:border-white/[0.12] transition-colors"
+            >
+              <div className="flex items-center justify-between">
+                <div className="flex items-center gap-3">
+                  <StatusBadge status={r.status} />
+                  <span className="text-gray-500 text-xs font-mono">
+                    {r.trigger_source}
+                  </span>
+                  <span className="text-gray-700 text-xs font-mono">
+                    {r.id.slice(0, 8)}…
+                  </span>
+                </div>
+                <span className="text-gray-600 text-xs font-mono">
+                  {new Date(r.started_at).toLocaleDateString()}{" "}
+                  {new Date(r.started_at).toLocaleTimeString()}
+                </span>
+              </div>
+
+              {/* Expandable logs */}
+              {selected === r.id && (
+                <div className="mt-4">
+                  {r.logs ? (
+                    <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-lg p-4 overflow-auto max-h-72">
+                      <pre className="text-[#00ff88] text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                        {r.logs}
+                      </pre>
+                    </div>
+                  ) : (
+                    <p className="text-gray-600 text-xs font-mono">
+                      No logs available for this run
+                    </p>
+                  )}
+                </div>
+              )}
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// ⚙️ SETTINGS VIEW — shows API token to copy into desktop app
+// ══════════════════════════════════════════════════════════════
+function SettingsView() {
+  const [token, setToken] = useState<string | null>(null);
+  const [copied, setCopied] = useState(false);
+
+  useEffect(() => {
+    const stored = localStorage.getItem("zygo_api_token");
+    if (stored) setToken(stored);
+  }, []);
+
+  const copy = () => {
+    if (!token) return;
+    navigator.clipboard.writeText(token);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="p-8 max-w-xl">
+      <h2 className="text-white font-semibold text-xl mb-1">⚙️ Settings</h2>
+      <p className="text-gray-500 text-sm mb-8">
+        Connect your desktop app to the cloud
+      </p>
+
+      {/* API Token card */}
+      <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
+        <h3 className="text-white font-medium mb-1">🔑 Your API Token</h3>
+        <p className="text-gray-500 text-sm mb-4">
+          Copy this into your desktop app → ⚙️ Settings → Zygoflow API Token
+        </p>
+
+        {token ? (
+          <div className="flex items-center gap-2">
+            <div className="flex-1 bg-[#0a0a0f] border border-white/[0.04] rounded-lg px-4 py-2.5 font-mono text-xs text-[#00ff88] truncate">
+              {token}
+            </div>
+            <button
+              onClick={copy}
+              className="bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88] text-xs font-mono px-4 py-2.5 rounded-lg hover:bg-[#00ff88]/20 transition-colors shrink-0"
+            >
+              {copied ? "✓ copied!" : "📋 copy"}
+            </button>
+          </div>
+        ) : (
+          <p className="text-gray-500 text-sm font-mono">
+            Token not found — try logging out and back in.
+          </p>
+        )}
+      </div>
+
+      {/* Steps */}
+      <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
+        <h3 className="text-white font-medium mb-4">
+          🚀 How to connect desktop app
+        </h3>
+        <ol className="space-y-3">
+          {[
+            "Copy your API token above",
+            "Open the Zygoflow desktop app",
+            "Go to ⚙️ Settings → Zygoflow Cloud section",
+            "Paste token → click 🔗 Test Connection",
+            "Add your E2B API key from e2b.dev/dashboard",
+            "Build your pipeline → click ☁️ Deploy to Cloud",
+            "Your permanent webhook URL appears on the pipeline card",
+          ].map((step, i) => (
+            <li key={i} className="flex items-start gap-3">
+              <span className="w-5 h-5 rounded-full bg-[#00ff88]/10 border border-[#00ff88]/20 text-[#00ff88] text-xs font-mono flex items-center justify-center shrink-0 mt-0.5">
+                {i + 1}
+              </span>
+              <span className="text-gray-400 text-sm">{step}</span>
+            </li>
+          ))}
+        </ol>
+      </div>
+
+      {/* E2B note */}
+      <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-xl p-5">
+        <p className="text-gray-600 text-xs font-mono leading-relaxed">
+          💡 <strong className="text-gray-400">E2B</strong> is the cloud sandbox
+          that runs your Python pipelines securely. Each user uses their own E2B
+          API key and pays for their own usage (~$0.000225/sec). Get yours at{" "}
+          <a
+            href="https://e2b.dev/dashboard"
+            target="_blank"
+            className="text-[#00ff88] hover:underline"
+          >
+            e2b.dev/dashboard
+          </a>
+        </p>
       </div>
     </div>
   );
 }
 
-// ── Main Dashboard ───────────────────────────────────────────
+// ══════════════════════════════════════════════════════════════
+// MAIN DASHBOARD
+// ══════════════════════════════════════════════════════════════
+const NAV = [
+  { id: "pipelines", label: "☁️ Pipelines" },
+  { id: "webhooks", label: "🔗 Webhooks" },
+  { id: "runs", label: "📊 Run Logs" },
+  { id: "settings", label: "⚙️ Settings" },
+];
 
 export default function AgentsDashboard() {
   const [active, setActive] = useState("pipelines");
+  const [runs, setRuns] = useState<Run[]>([]);
+  const [runsLoading, setRunsLoading] = useState(true);
   const { user, logout } = useAuth();
   const router = useRouter();
+
+  const token =
+    typeof window !== "undefined"
+      ? localStorage.getItem("zygo_api_token")
+      : null;
+  const api = useApi(token);
+
+  const loadRuns = useCallback(async () => {
+    setRunsLoading(true);
+    const r = await api.get("/runs");
+    setRuns(Array.isArray(r) ? r : []);
+    setRunsLoading(false);
+  }, [token]);
+
+  useEffect(() => {
+    loadRuns();
+  }, [loadRuns]);
+
+  // Auto-refresh every 10s
+  useEffect(() => {
+    const interval = setInterval(loadRuns, 10000);
+    return () => clearInterval(interval);
+  }, [loadRuns]);
 
   const handleLogout = async () => {
     await logout();
     router.push("/agents/login");
   };
 
+  const successCount = runs.filter((r) => r.status === "success").length;
+  const failedCount = runs.filter((r) => r.status === "failed").length;
+  const runningCount = runs.filter((r) => r.status === "running").length;
+
   const renderView = () => {
     switch (active) {
       case "pipelines":
-        return <PipelinesView />;
+        return <PipelinesView api={api} runs={runs} />;
+      case "webhooks":
+        return <WebhooksView api={api} />;
+      case "runs":
+        return <RunLogsView runs={runs} loading={runsLoading} />;
       case "settings":
         return <SettingsView />;
-      default:
-        return (
-          <ComingSoon
-            title={NAV.find((n) => n.id === active)?.label || active}
-          />
-        );
     }
   };
 
   return (
     <div className="min-h-screen bg-[#0a0a0f] flex font-sans">
-      {/* Background grid */}
+      {/* Grid bg */}
       <div
-        className="fixed inset-0 opacity-[0.02] pointer-events-none"
+        className="fixed inset-0 opacity-[0.015] pointer-events-none"
         style={{
           backgroundImage:
             "linear-gradient(#00ff88 1px, transparent 1px), linear-gradient(90deg, #00ff88 1px, transparent 1px)",
@@ -349,6 +673,30 @@ export default function AgentsDashboard() {
           </div>
         </div>
 
+        {/* Live stats */}
+        <div className="px-4 py-3 border-b border-white/[0.05] grid grid-cols-3 gap-2 text-center">
+          <div>
+            <div className="text-[#00ff88] font-mono text-sm font-bold">
+              {successCount}
+            </div>
+            <div className="text-gray-600 text-[10px] font-mono">ok</div>
+          </div>
+          <div>
+            <div className="text-red-400 font-mono text-sm font-bold">
+              {failedCount}
+            </div>
+            <div className="text-gray-600 text-[10px] font-mono">failed</div>
+          </div>
+          <div>
+            <div
+              className={`font-mono text-sm font-bold ${runningCount > 0 ? "text-blue-400" : "text-gray-600"}`}
+            >
+              {runningCount}
+            </div>
+            <div className="text-gray-600 text-[10px] font-mono">live</div>
+          </div>
+        </div>
+
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5">
           {NAV.map(({ id, label }) => (
@@ -366,18 +714,26 @@ export default function AgentsDashboard() {
           ))}
         </nav>
 
-        {/* User */}
+        {/* User + logout */}
         <div className="p-3 border-t border-white/[0.05]">
           <div className="px-3 py-2 mb-1">
             <div className="text-gray-400 text-xs truncate">
-              {user?.email || "user@example.com"}
+              {user?.email || "—"}
             </div>
           </div>
           <button
             onClick={handleLogout}
             className="w-full flex items-center gap-2 px-3 py-2 rounded-lg text-gray-600 hover:text-red-400 hover:bg-red-400/5 transition-colors text-sm"
           >
-            {icons.logout}
+            <svg
+              viewBox="0 0 24 24"
+              fill="none"
+              stroke="currentColor"
+              strokeWidth={2}
+              className="w-4 h-4"
+            >
+              <path d="M9 21H5a2 2 0 01-2-2V5a2 2 0 012-2h4M16 17l5-5-5-5M21 12H9" />
+            </svg>
             Logout
           </button>
         </div>
