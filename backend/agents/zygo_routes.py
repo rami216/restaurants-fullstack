@@ -623,6 +623,8 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                 errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
                 if output: log(f"📤 {output[:500]}")
                 if errors: log(f"⚠️ {errors[:300]}")
+                if hasattr(result, 'error') and result.error:  # ← ADD HERE
+                    log(f"❌ Execution error: {result.error}")
                 check = sbx.run_code("print(str(globals().get('is_done', False)))")
                 if check.logs.stdout and "True" in check.logs.stdout[0]:
                     is_done = True
