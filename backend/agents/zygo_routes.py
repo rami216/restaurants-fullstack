@@ -517,7 +517,7 @@ async def receive_webhook(slug: str, request: Request, background_tasks: Backgro
 def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                                google_sa, custom_apis, pipeline_max_rounds,
                                pipeline_auto_mode, agents_data, trigger_payload, database_url):
-    from e2b_code_interpreter import Sandbox
+    from e2b_code_interpreter import CodeInterpreter as Sandbox
     import json, asyncio
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
