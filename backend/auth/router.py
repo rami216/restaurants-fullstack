@@ -11,7 +11,7 @@ from google.oauth2 import id_token
 from google.auth.transport import requests
 import os
 from pydantic import BaseModel
-
+import secrets
 from auth.auth_handler import (
     authenticate_user,
     get_password_hash,
@@ -125,8 +125,15 @@ async def google_login(
         zygo_result = await db.execute(
             select(ZygoUserModel).where(ZygoUserModel.user_id == user.id)
         )
+        # if not zygo_result.scalars().first():
+        #     db.add(ZygoUserModel(user_id=user.id, email=user.email))
+        #     await db.commit()
         if not zygo_result.scalars().first():
-            db.add(ZygoUserModel(user_id=user.id, email=user.email))
+            db.add(ZygoUserModel(
+                user_id=user.id,
+                email=user.email,
+                api_token=secrets.token_urlsafe(32)  # ADD THIS
+            ))
             await db.commit()
         response.set_cookie(
             key="access_token",

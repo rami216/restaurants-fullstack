@@ -51,6 +51,7 @@ class ZygoUser(Base):
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
     user_id = Column(Integer, unique=True, nullable=False) # foreign key to auth.users
+    api_token = Column(String, unique=True, nullable=True)
     email = Column(String, unique=True, nullable=False)
     openai_api_key = Column(String, nullable=True)
     claude_api_key = Column(String, nullable=True)
