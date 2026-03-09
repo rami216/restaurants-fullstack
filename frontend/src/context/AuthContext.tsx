@@ -17,7 +17,7 @@ type AuthContextType = {
   register: (
     username: string,
     email: string,
-    password: string
+    password: string,
   ) => Promise<void>;
   logout: () => Promise<void>;
   checkAuth: () => Promise<void>;
@@ -59,9 +59,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   // --- NEW FUNCTION TO HANDLE GOOGLE LOGIN ---
   const googleLogin = async (credential: string) => {
     try {
-      // Send the credential token received from Google to our backend
-      await api.post("/auth/google-login", { credential });
-      // After backend confirms, update the auth state
+      const res = await api.post("/auth/google-login", { credential });
+
+      // Save zygo token to localStorage
+      if (res.data?.zygo_api_token) {
+        localStorage.setItem("zygo_api_token", res.data.zygo_api_token);
+      }
+
       await checkAuth();
     } catch (error: any) {
       throw new Error(error.response?.data?.detail || "Google Sign-In failed");
@@ -71,7 +75,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const register = async (
     username: string,
     email: string,
-    password: string
+    password: string,
   ) => {
     try {
       await api.post("/auth/register", {
