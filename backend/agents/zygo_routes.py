@@ -12,6 +12,7 @@ from typing import List, Optional
 from uuid import UUID
 import secrets
 import asyncio
+from fastapi import BackgroundTasks
 
 from database import get_db
 from agents.zygo_models import (
@@ -442,7 +443,7 @@ async def deploy_pipeline(
 # ── Incoming Webhooks (public, no auth) ────────────────────
 
 @zygo_router.post("/webhook/{slug}")
-async def receive_webhook(slug: str, request: Request, db: AsyncSession = Depends(get_db)):
+async def receive_webhook(slug: str, request: Request, background_tasks: BackgroundTasks, db: AsyncSession = Depends(get_db)):
     """Public endpoint — Stripe, Typeform, GitHub etc POST here."""
     path = f"/zygo/webhook/{slug}"
     result = await db.execute(
@@ -489,181 +490,143 @@ async def receive_webhook(slug: str, request: Request, db: AsyncSession = Depend
     await db.refresh(run)
 
     # Fire E2B execution in background
-    import asyncio
-    asyncio.create_task(
-        run_pipeline_on_e2b(
-            run_id=str(run.id),
-            owner=owner,
-            pipeline=pipeline,
-            agents=agents,
-            trigger_payload=payload,
-            db=db
-        )
+    # Fire E2B execution in background
+    background_tasks.add_task(
+        run_pipeline_on_e2b_sync,
+        run_id=str(run.id),
+        owner_id=str(owner.id),
+        e2b_key=owner.e2b_api_key,
+        openai_key=owner.openai_api_key or "",
+        claude_key=owner.claude_api_key or "",
+        google_sa=owner.google_service_account,
+        custom_apis=owner.custom_apis_data,
+        pipeline_max_rounds=pipeline.max_rounds or 1,
+        pipeline_auto_mode=pipeline.auto_mode or False,
+        agents_data=[(a.name, a.generated_code or "") for a in agents],
+        trigger_payload=payload,
+        database_url=os.environ.get("DATABASE_URL", "")
     )
 
     return {"status": "ok", "run_id": str(run.id)}
 
+    
+
 
 # ── E2B Execution Engine ────────────────────────────────────
 
-async def run_pipeline_on_e2b(run_id, owner, pipeline, agents, trigger_payload, db):
-    """
-    Executes the full pipeline inside an E2B sandbox.
-    Mirrors _execute_headless from the desktop app.
-    """
+def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
+                               google_sa, custom_apis, pipeline_max_rounds,
+                               pipeline_auto_mode, agents_data, trigger_payload, database_url):
     from e2b_code_interpreter import Sandbox
-    import json
+    import json, asyncio
+    from sqlalchemy import create_engine
+    from sqlalchemy.orm import sessionmaker
+    from agents.zygo_models import ZygoRun, ZygoRunStatusEnum
 
     logs = []
-
     def log(msg):
         logs.append(msg)
         print(f"[E2B:{run_id}] {msg}")
 
+    def update_run(status, log_text):
+        try:
+            sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
+            engine = create_engine(sync_url)
+            Session = sessionmaker(bind=engine)
+            session = Session()
+            run = session.query(ZygoRun).filter(ZygoRun.id == run_id).first()
+            if run:
+                run.status = status
+                run.logs = log_text
+                session.commit()
+            session.close()
+            engine.dispose()
+        except Exception as e:
+            print(f"DB update error: {e}")
+
     try:
-        e2b_key = owner.e2b_api_key
         if not e2b_key:
-            raise Exception("No E2B API key found for this user")
+            raise Exception("No E2B API key")
 
         os.environ["E2B_API_KEY"] = e2b_key
         sbx = Sandbox()
+        log("✅ Sandbox started")
 
-        # ── Inject shared memory bootstrap ──────────────────────
-        # Sets up trigger_payload, API keys, custom API functions, Google functions
+        # Install packages
+        sbx.run_code("pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid requests -q")
+        log("✅ Packages installed")
+
+        # Bootstrap
         bootstrap_lines = [
             "import json, os",
             f"trigger_payload = {json.dumps(trigger_payload)}",
-            "",
-            "# OpenAI / Claude keys",
-            f"openai_api_key = {repr(owner.openai_api_key or '')}",
-            f"claude_api_key = {repr(owner.claude_api_key or '')}",
-            "",
+            f"openai_api_key = {repr(openai_key)}",
+            f"claude_api_key = {repr(claude_key)}",
         ]
 
-        # Inject custom API keys and functions
-        if owner.custom_apis_data:
-            bootstrap_lines.append("# Custom API functions")
-            for api in owner.custom_apis_data:
-                key_var = api.get("key_variable", "")
-                key_val = api.get("api_key", "")
-                func_code = api.get("function_code", "")
-                if key_var and key_val:
-                    bootstrap_lines.append(f"{key_var} = {repr(key_val)}")
-                if func_code:
-                    bootstrap_lines.append(func_code)
-                    bootstrap_lines.append("")
+        if custom_apis:
+            for api in custom_apis:
+                if api.get("key_variable") and api.get("api_key"):
+                    bootstrap_lines.append(f"{api['key_variable']} = {repr(api['api_key'])}")
+                if api.get("function_code"):
+                    bootstrap_lines.append(api["function_code"])
 
-        # Inject Google service account + functions
-        if owner.google_service_account:
-            sa_json = json.dumps(owner.google_service_account)
+        if google_sa:
+            sa_json = json.dumps(google_sa)
             bootstrap_lines += [
-                "# Google service account",
-                "import json as _json, tempfile as _tmp",
+                "import tempfile as _tmp",
                 f"_sa_data = {repr(sa_json)}",
                 "_sa_file = _tmp.NamedTemporaryFile(mode='w', suffix='.json', delete=False)",
-                "_sa_file.write(_sa_data)",
-                "_sa_file.close()",
+                "_sa_file.write(_sa_data); _sa_file.close()",
                 "_sa_path = _sa_file.name",
-                "",
                 "def _get_google_creds(scopes):",
                 "    from google.oauth2 import service_account",
                 "    return service_account.Credentials.from_service_account_file(_sa_path, scopes=scopes)",
-                "",
                 "def read_sheet(spreadsheet_id, sheet_name, cell_range='A1:Z1000'):",
                 "    from googleapiclient.discovery import build",
                 "    creds = _get_google_creds(['https://www.googleapis.com/auth/spreadsheets.readonly'])",
                 "    service = build('sheets', 'v4', credentials=creds)",
-                "    result = service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!{cell_range}').execute()",
-                "    return result.get('values', [])",
-                "",
+                "    return service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!{cell_range}').execute().get('values', [])",
                 "def append_sheet(spreadsheet_id, sheet_name, values):",
                 "    from googleapiclient.discovery import build",
                 "    creds = _get_google_creds(['https://www.googleapis.com/auth/spreadsheets'])",
                 "    service = build('sheets', 'v4', credentials=creds)",
                 "    service.spreadsheets().values().append(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!A1', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body={'values': values}).execute()",
-                "",
                 "def write_sheet(spreadsheet_id, sheet_name, cell_range, values):",
                 "    from googleapiclient.discovery import build",
                 "    creds = _get_google_creds(['https://www.googleapis.com/auth/spreadsheets'])",
                 "    service = build('sheets', 'v4', credentials=creds)",
                 "    service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!{cell_range}', valueInputOption='USER_ENTERED', body={'values': values}).execute()",
-                "",
-                "def read_doc(document_id):",
-                "    from googleapiclient.discovery import build",
-                "    creds = _get_google_creds(['https://www.googleapis.com/auth/documents.readonly'])",
-                "    service = build('docs', 'v1', credentials=creds)",
-                "    doc = service.documents().get(documentId=document_id).execute()",
-                "    text = ''",
-                "    for element in doc.get('body', {}).get('content', []):",
-                "        for pe in element.get('paragraph', {}).get('elements', []):",
-                "            text += pe.get('textRun', {}).get('content', '')",
-                "    return text",
-                "",
             ]
 
-        # Install required packages in sandbox
-        bootstrap_code = "\n".join(bootstrap_lines)
-        await asyncio.to_thread(sbx.run_code, "pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid -q")
-        await asyncio.to_thread(sbx.run_code, bootstrap_code)
+        sbx.run_code("\n".join(bootstrap_lines))
+        log("✅ Bootstrap injected")
 
-        log("✅ Sandbox ready, bootstrap injected")
-
-        # ── Run each agent sequentially ─────────────────────────
-        max_rounds = pipeline.max_rounds or 1
-        auto_mode = pipeline.auto_mode or False
+        # Run agents
         round_num = 0
-
         while True:
             round_num += 1
-            log(f"🔄 Round {round_num}")
             is_done = False
-
-            for agent in agents:
-                log(f"▶ Running agent: {agent.name}")
-                result = await asyncio.to_thread(sbx.run_code, agent.generated_code or "")
-                stdout = result.logs.stdout or []
-                stderr = result.logs.stderr or []
-                output = "\n".join(stdout)
-                errors = "\n".join(stderr)
-
-                if output:
-                    log(f"📤 {agent.name} output: {output[:500]}")
-                if errors:
-                    log(f"⚠️ {agent.name} stderr: {errors[:300]}")
-
-                # Check if agent set is_done = True
-                check = await asyncio.to_thread(sbx.run_code, "print(str(globals().get('is_done', False)))")
+            for name, code in agents_data:
+                log(f"▶ Running: {name}")
+                result = sbx.run_code(code)
+                output = "\n".join(result.logs.stdout or [])
+                errors = "\n".join(result.logs.stderr or [])
+                if output: log(f"📤 {output[:500]}")
+                if errors: log(f"⚠️ {errors[:300]}")
+                check = sbx.run_code("print(str(globals().get('is_done', False)))")
                 if check.logs.stdout and "True" in check.logs.stdout[0]:
-                    log(f"✅ is_done=True detected, stopping pipeline")
                     is_done = True
                     break
-
-            if is_done:
+            if is_done or round_num >= pipeline_max_rounds:
                 break
-            if auto_mode:
-                continue  # keep looping until is_done
-            if round_num >= max_rounds:
+            if not pipeline_auto_mode:
                 break
 
-        await asyncio.to_thread(sbx.kill)
-        log("✅ Pipeline completed")
-
-        # Update run record to success
-        run_result = await db.execute(select(ZygoRun).where(ZygoRun.id == run_id))
-        run = run_result.scalars().first()
-        if run:
-            run.status = ZygoRunStatusEnum.success
-            run.logs = "\n".join(logs)
-            await db.commit()
+        sbx.kill()
+        log("✅ Done")
+        update_run(ZygoRunStatusEnum.success, "\n".join(logs))
 
     except Exception as e:
-        log(f"❌ E2B error: {e}")
-        try:
-            run_result = await db.execute(select(ZygoRun).where(ZygoRun.id == run_id))
-            run = run_result.scalars().first()
-            if run:
-                run.status = ZygoRunStatusEnum.failed
-                run.logs = "\n".join(logs) + f"\n❌ {e}"
-                await db.commit()
-        except Exception:
-            pass
+        log(f"❌ {e}")
+        update_run(ZygoRunStatusEnum.failed, "\n".join(logs))
