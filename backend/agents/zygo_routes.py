@@ -562,8 +562,13 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         log("✅ Sandbox started")
 
         # Install packages
-        sbx.run_code("pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid requests -q")
-        log("✅ Packages installed")
+        install_result = sbx.run_code("pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid requests -q && echo 'INSTALL_DONE'")
+        install_out = "\n".join(getattr(install_result.logs, 'stdout', None) or [])
+        install_err = "\n".join(getattr(install_result.logs, 'stderr', None) or [])
+        if 'INSTALL_DONE' in install_out:
+            log("✅ Packages installed")
+        else:
+            log(f"⚠️ Install may have failed: {install_err[:300]}")
 
         # Bootstrap
         bootstrap_lines = [
