@@ -524,7 +524,8 @@ async def run_pipeline_on_e2b(run_id, owner, pipeline, agents, trigger_payload, 
         if not e2b_key:
             raise Exception("No E2B API key found for this user")
 
-        sbx = Sandbox(api_key=e2b_key, timeout=3600)  # 1 hour max
+        os.environ["E2B_API_KEY"] = e2b_key
+        sbx = Sandbox(timeout=3600)
 
         # ── Inject shared memory bootstrap ──────────────────────
         # Sets up trigger_payload, API keys, custom API functions, Google functions
