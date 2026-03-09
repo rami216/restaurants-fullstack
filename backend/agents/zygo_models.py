@@ -67,7 +67,9 @@ class ZygoUser(Base):
     custom_apis = relationship("ZygoCustomAPI", back_populates="owner", cascade="all, delete-orphan")
     google_resources = relationship("ZygoGoogleResource", back_populates="owner", cascade="all, delete-orphan")
     runs = relationship("ZygoRun", back_populates="owner", cascade="all, delete-orphan")
-
+    e2b_api_key = Column(String, nullable=True)
+    custom_apis_data = Column(JSON, nullable=True)
+    google_resources_data = Column(JSON, nullable=True)
 
 # ── zygo_pipelines ─────────────────────────────────────────────────────────
 
@@ -222,6 +224,7 @@ class ZygoRun(Base):
     error = Column(Text, nullable=True)                 # error message if failed
     started_at = Column(DateTime(timezone=True), server_default=func.now())
     finished_at = Column(DateTime(timezone=True), nullable=True)
+    logs = Column(Text, nullable=True)
 
     # Relationships
     owner = relationship("ZygoUser", back_populates="runs")
