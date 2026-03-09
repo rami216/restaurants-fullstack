@@ -625,11 +625,17 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
 
         # Bootstrap
         bootstrap_lines = [
-            "import json, os",
-            f"trigger_payload = {json.dumps(trigger_payload)}",
-            f"openai_api_key = {repr(openai_key)}",
-            f"claude_api_key = {repr(claude_key)}",
-        ]
+        "import json, os",
+        f"trigger_payload = {json.dumps(trigger_payload)}",
+        f"openai_api_key = {repr(openai_key)}",
+        f"claude_api_key = {repr(claude_key)}",
+        f"if openai_api_key:",
+        f"    from openai import OpenAI",
+        f"    openai_client = OpenAI(api_key=openai_api_key)",
+        f"if claude_api_key:",
+        f"    from anthropic import Anthropic",
+        f"    claude_client = Anthropic(api_key=claude_api_key)",
+        ]       
 
         if custom_apis:
             for api in custom_apis:
