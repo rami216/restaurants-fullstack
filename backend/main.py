@@ -37,7 +37,7 @@ from website_builder.stripe_checkout_router import router as checkout_router
 from webhooks.router import router as webhooks_router # ✅ ADD THIS
 from website_builder.orders_router import router as orders_router # ✅ ADD THIS
 from website_builder.custom_data_router import router as custom_data_router # ✅ ADD THIS
-
+import agents.zygo_models  # noqa — registers zygo tables with Base
 origins_env = os.getenv("FRONTEND_ORIGIN", "")
 ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 

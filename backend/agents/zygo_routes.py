@@ -9,7 +9,10 @@ from typing import List
 from uuid import UUID
 import uuid
 
-from database import get_db  # your existing get_db dependency
+import sys, os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+from database import get_db
+
 from agents.zygo_models import (
     ZygoUser, ZygoPipeline, ZygoAgent,
     ZygoTrigger, ZygoCustomAPI, ZygoGoogleResource, ZygoRun,
