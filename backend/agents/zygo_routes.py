@@ -517,7 +517,7 @@ async def receive_webhook(slug: str, request: Request, background_tasks: Backgro
 def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                                google_sa, custom_apis, pipeline_max_rounds,
                                pipeline_auto_mode, agents_data, trigger_payload, database_url):
-    from e2b_code_interpreter import CodeInterpreter as Sandbox
+    from e2b_code_interpreter import Sandbox
     import json, asyncio
     from sqlalchemy import create_engine
     from sqlalchemy.orm import sessionmaker
@@ -527,16 +527,7 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
     def log(msg):
         logs.append(msg)
         print(f"[E2B:{run_id}] {msg}", flush=True)
-    # Force update run to failed with debug info if anything goes wrong
-    log(f"🚀 Starting E2B sync function")
-    log(f"🔑 E2B key present: {bool(e2b_key)}")
-    log(f"🔑 E2B key starts with: {e2b_key[:8] if e2b_key else 'NONE'}")
-    log(f"📊 DB URL present: {bool(database_url)}")
-    log(f"📊 DB URL starts with: {database_url[:30] if database_url else 'NONE'}")
-    log(f"🤖 Agents count: {len(agents_data)}")
-    update_run(ZygoRunStatusEnum.running, "\n".join(logs))
-    
-    def update_run(status, log_text):
+    def update_run(status, log_text):   # ← define BEFORE calling it
         try:
             sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
             engine = create_engine(sync_url)
@@ -551,6 +542,16 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             engine.dispose()
         except Exception as e:
             print(f"DB update error: {e}")
+    # Force update run to failed with debug info if anything goes wrong
+    log(f"🚀 Starting E2B sync function")
+    log(f"🔑 E2B key present: {bool(e2b_key)}")
+    log(f"🔑 E2B key starts with: {e2b_key[:8] if e2b_key else 'NONE'}")
+    log(f"📊 DB URL present: {bool(database_url)}")
+    log(f"📊 DB URL starts with: {database_url[:30] if database_url else 'NONE'}")
+    log(f"🤖 Agents count: {len(agents_data)}")
+    update_run(ZygoRunStatusEnum.running, "\n".join(logs))
+    
+    
 
     try:
         if not e2b_key:
@@ -618,8 +619,8 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             for name, code in agents_data:
                 log(f"▶ Running: {name}")
                 result = sbx.run_code(code)
-                output = "\n".join(result.logs.stdout or [])
-                errors = "\n".join(result.logs.stderr or [])
+                output = "\n".join(getattr(result.logs, 'stdout', None) or [])
+                errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
                 if output: log(f"📤 {output[:500]}")
                 if errors: log(f"⚠️ {errors[:300]}")
                 check = sbx.run_code("print(str(globals().get('is_done', False)))")
