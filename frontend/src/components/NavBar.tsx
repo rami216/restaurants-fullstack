@@ -64,19 +64,34 @@ export default function NavBar() {
           })}
 
           {!user && (
-            <li>
-              <Link
-                href="/login"
-                className={cn(
-                  "transition-colors",
-                  pathname === "/login"
-                    ? "text-blue-700 font-semibold"
-                    : "text-gray-600 hover:text-gray-900",
-                )}
-              >
-                Login
-              </Link>
-            </li>
+            <>
+              <li>
+                <Link
+                  href="/login"
+                  className={cn(
+                    "transition-colors",
+                    pathname === "/login"
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-gray-900",
+                  )}
+                >
+                  Login
+                </Link>
+              </li>
+              <li>
+                <Link
+                  href="/agents/login"
+                  className={cn(
+                    "transition-colors",
+                    pathname === "/agents/login"
+                      ? "text-blue-700 font-semibold"
+                      : "text-gray-600 hover:text-gray-900",
+                  )}
+                >
+                  Agents
+                </Link>
+              </li>
+            </>
           )}
 
           {user && (
@@ -221,6 +236,19 @@ export default function NavBar() {
                   >
                     Create Website
                   </button>
+                </li>
+                <li>
+                  <Link
+                    href="/agents"
+                    className={cn(
+                      "transition-colors",
+                      pathname === "/agents"
+                        ? "text-blue-700 font-semibold"
+                        : "text-gray-600 hover:text-gray-900",
+                    )}
+                  >
+                    Agents
+                  </Link>
                 </li>
                 <li>
                   <Link
