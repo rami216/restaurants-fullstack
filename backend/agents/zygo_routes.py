@@ -526,8 +526,16 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
     logs = []
     def log(msg):
         logs.append(msg)
-        print(f"[E2B:{run_id}] {msg}")
-
+        print(f"[E2B:{run_id}] {msg}", flush=True)
+    # Force update run to failed with debug info if anything goes wrong
+    log(f"🚀 Starting E2B sync function")
+    log(f"🔑 E2B key present: {bool(e2b_key)}")
+    log(f"🔑 E2B key starts with: {e2b_key[:8] if e2b_key else 'NONE'}")
+    log(f"📊 DB URL present: {bool(database_url)}")
+    log(f"📊 DB URL starts with: {database_url[:30] if database_url else 'NONE'}")
+    log(f"🤖 Agents count: {len(agents_data)}")
+    update_run(ZygoRunStatusEnum.running, "\n".join(logs))
+    
     def update_run(status, log_text):
         try:
             sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
