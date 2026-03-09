@@ -11,6 +11,7 @@ from sqlalchemy.future import select
 from typing import List, Optional
 from uuid import UUID
 import secrets
+import asyncio
 
 from database import get_db
 from agents.zygo_models import (
@@ -602,8 +603,9 @@ async def run_pipeline_on_e2b(run_id, owner, pipeline, agents, trigger_payload, 
 
         # Install required packages in sandbox
         bootstrap_code = "\n".join(bootstrap_lines)
-        sbx.run_code("pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid -q")
-        sbx.run_code(bootstrap_code)
+        await asyncio.to_thread(sbx.run_code, "pip install openai anthropic google-auth google-auth-httplib2 google-api-python-client sendgrid -q")
+        await asyncio.to_thread(sbx.run_code, bootstrap_code)
+
         log("✅ Sandbox ready, bootstrap injected")
 
         # ── Run each agent sequentially ─────────────────────────
@@ -618,7 +620,7 @@ async def run_pipeline_on_e2b(run_id, owner, pipeline, agents, trigger_payload, 
 
             for agent in agents:
                 log(f"▶ Running agent: {agent.name}")
-                result = sbx.run_code(agent.generated_code or "")
+                result = await asyncio.to_thread(sbx.run_code, agent.generated_code or "")
                 stdout = result.logs.stdout or []
                 stderr = result.logs.stderr or []
                 output = "\n".join(stdout)
@@ -630,7 +632,7 @@ async def run_pipeline_on_e2b(run_id, owner, pipeline, agents, trigger_payload, 
                     log(f"⚠️ {agent.name} stderr: {errors[:300]}")
 
                 # Check if agent set is_done = True
-                check = sbx.run_code("print(str(locals().get('is_done', False) or globals().get('is_done', False)))")
+                check = await asyncio.to_thread(sbx.run_code, "print(str(globals().get('is_done', False)))")
                 if check.logs.stdout and "True" in check.logs.stdout[0]:
                     log(f"✅ is_done=True detected, stopping pipeline")
                     is_done = True
@@ -643,7 +645,7 @@ async def run_pipeline_on_e2b(run_id, owner, pipeline, agents, trigger_payload, 
             if round_num >= max_rounds:
                 break
 
-        sbx.kill()
+        await asyncio.to_thread(sbx.kill)
         log("✅ Pipeline completed")
 
         # Update run record to success
