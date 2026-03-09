@@ -125,16 +125,17 @@ async def google_login(
         zygo_result = await db.execute(
             select(ZygoUserModel).where(ZygoUserModel.user_id == user.id)
         )
-        # if not zygo_result.scalars().first():
-        #     db.add(ZygoUserModel(user_id=user.id, email=user.email))
-        #     await db.commit()
-        if not zygo_result.scalars().first():
-            db.add(ZygoUserModel(
+        zygo_user = zygo_result.scalars().first()
+        if not zygo_user:
+            zygo_user = ZygoUserModel(
                 user_id=user.id,
                 email=user.email,
-                api_token=secrets.token_urlsafe(32)  # ADD THIS
-            ))
+                api_token=secrets.token_urlsafe(32)
+            )
+            db.add(zygo_user)
             await db.commit()
+            await db.refresh(zygo_user)
+        
         response.set_cookie(
             key="access_token",
             value=token,
@@ -143,7 +144,11 @@ async def google_login(
             samesite="none",
             max_age=60 * ACCESS_TOKEN_EXPIRE_MINUTES,
         )
-        return {"access_token": token, "token_type": "bearer"}
+        return {
+            "access_token": token,
+            "token_type": "bearer",
+            "zygo_api_token": zygo_user.api_token  # ← ADD THIS
+        }
 
     except ValueError as ve:
         print(f"Token Verification Failed: {ve}")

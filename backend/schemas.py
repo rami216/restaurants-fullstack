@@ -23,6 +23,7 @@ class UserResponse(UserBase):
 class Token(BaseModel):
     access_token: str
     token_type: str
+    zygo_api_token: Optional[str] = None
 
 class TokenData(BaseModel):
     username: str | None = None
