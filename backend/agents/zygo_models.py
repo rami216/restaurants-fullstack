@@ -5,7 +5,7 @@ All tables prefixed with zygo_ to avoid conflicts with existing tables.
 
 from sqlalchemy import (
     Column, String, Text, Boolean, DateTime, ForeignKey,
-    JSON, Integer, Enum as SAEnum
+    JSON, Integer, Enum as SAEnum,Integer
 )
 from sqlalchemy.dialects.postgresql import UUID
 from sqlalchemy.orm import relationship
@@ -50,7 +50,7 @@ class ZygoUser(Base):
     __tablename__ = "zygo_users"
 
     id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
-    user_id = Column(UUID(as_uuid=True), unique=True, nullable=False)  # foreign key to auth.users
+    user_id = Column(Integer, unique=True, nullable=False) # foreign key to auth.users
     email = Column(String, unique=True, nullable=False)
     openai_api_key = Column(String, nullable=True)
     claude_api_key = Column(String, nullable=True)
