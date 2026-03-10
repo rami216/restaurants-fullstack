@@ -57,7 +57,7 @@ async def check_scheduled_triggers():
     async with async_session_maker() as db:
         result = await db.execute(
             select(ZygoTrigger).where(
-                ZygoTrigger.trigger_type == ZygoTriggerTypeEnum.scheduled,
+                ZygoTrigger.trigger_type.in_([ZygoTriggerTypeEnum.interval, ZygoTriggerTypeEnum.daily]),
                 ZygoTrigger.is_enabled == True
             )
         )
