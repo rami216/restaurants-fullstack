@@ -245,7 +245,8 @@ function PipelinesView({
               (t) => t.trigger_type === "webhook",
             );
             const scheduledTrigger = pTriggers.find(
-              (t) => t.trigger_type === "scheduled",
+              (t) =>
+                t.trigger_type === "interval" || t.trigger_type === "daily",
             );
             const pRuns = runs.filter((r) => r.pipeline_id === p.id);
             const lastRun = pRuns.sort(
@@ -490,7 +491,8 @@ function SchedulesView({ api }: { api: ReturnType<typeof useApi> }) {
     const t = await api.get("/triggers");
     setTriggers(
       (Array.isArray(t) ? t : []).filter(
-        (t: Trigger) => t.trigger_type === "scheduled",
+        (t: Trigger) =>
+          t.trigger_type === "interval" || t.trigger_type === "daily",
       ),
     );
     setLoading(false);
