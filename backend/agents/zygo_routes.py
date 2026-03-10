@@ -672,7 +672,7 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                 "    service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!{cell_range}', valueInputOption='USER_ENTERED', body={'values': values}).execute()",
             ]
 
-        sbx.run_code("\n".join(bootstrap_lines))
+        bootstrap_code = "\n".join(bootstrap_lines)
         log("✅ Bootstrap injected")
 
         # Run agents
@@ -682,7 +682,7 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             is_done = False
             for name, code in agents_data:
                 log(f"▶ Running: {name}")
-                result = sbx.run_code(code)
+                result = sbx.run_code(bootstrap_code + "\n\n" + code)
                 output = "\n".join(getattr(result.logs, 'stdout', None) or [])
                 errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
                 if output: log(f"📤 {output[:500]}")
