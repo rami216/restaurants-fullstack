@@ -92,6 +92,9 @@ async def check_scheduled_triggers():
             db.add(run)
             await db.commit()
             await db.refresh(run)
+            
+            trigger.last_fired_at = now
+            await db.commit()
 
             import threading
             threading.Thread(target=run_pipeline_on_e2b_sync, kwargs=dict(
