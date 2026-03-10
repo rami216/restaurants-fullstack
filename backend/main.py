@@ -124,9 +124,12 @@ def should_fire(trigger, now):
             return True
         if trigger.interval_unit == "days" and delta.days >= trigger.interval_value:
             return True
+        
     if trigger.daily_time:
-        # run once per day at specific time
-        if now.strftime("%H:%M") == trigger.daily_time and (not trigger.last_fired_at or trigger.last_fired_at.date() < now.date()):
+        trigger_hour, trigger_min = map(int, trigger.daily_time.split(":"))
+        trigger_minutes = trigger_hour * 60 + trigger_min
+        now_minutes = now.hour * 60 + now.minute
+        if now_minutes >= trigger_minutes and (not trigger.last_fired_at or trigger.last_fired_at.date() < now.date()):
             return True
     return False
 
