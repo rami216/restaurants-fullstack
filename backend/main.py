@@ -38,10 +38,109 @@ from webhooks.router import router as webhooks_router # ✅ ADD THIS
 from website_builder.orders_router import router as orders_router # ✅ ADD THIS
 from website_builder.custom_data_router import router as custom_data_router # ✅ ADD THIS
 import agents.zygo_models  # noqa — registers zygo tables with Base
+
+#region triggers
+from apscheduler.schedulers.asyncio import AsyncIOScheduler
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.future import select
+from agents.zygo_models import ZygoTrigger, ZygoTriggerTypeEnum, ZygoPipeline, ZygoAgent, ZygoUser, ZygoRun, ZygoRunStatusEnum
+from database import async_session_maker
+import uuid
+from datetime import datetime, timezone
+from fastapi import BackgroundTasks
+from agents.zygo_routes import run_pipeline_on_e2b_sync
+
+
+scheduler = AsyncIOScheduler()
+
+async def check_scheduled_triggers():
+    async with async_session_maker() as db:
+        result = await db.execute(
+            select(ZygoTrigger).where(
+                ZygoTrigger.trigger_type == ZygoTriggerTypeEnum.scheduled,
+                ZygoTrigger.is_enabled == True
+            )
+        )
+        triggers = result.scalars().all()
+        now = datetime.now(timezone.utc)
+
+        for trigger in triggers:
+            if not should_fire(trigger, now):
+                continue
+
+            owner_result = await db.execute(select(ZygoUser).where(ZygoUser.id == trigger.owner_id))
+            owner = owner_result.scalars().first()
+
+            pipeline_result = await db.execute(select(ZygoPipeline).where(ZygoPipeline.id == trigger.pipeline_id))
+            pipeline = pipeline_result.scalars().first()
+
+            agents_result = await db.execute(
+                select(ZygoAgent)
+                .where(ZygoAgent.pipeline_id == trigger.pipeline_id)
+                .order_by(ZygoAgent.order_index)
+            )
+            agents = agents_result.scalars().all()
+
+            run = ZygoRun(
+                owner_id=trigger.owner_id,
+                pipeline_id=trigger.pipeline_id,
+                trigger_id=trigger.id,
+                status=ZygoRunStatusEnum.running,
+                trigger_source="scheduled",
+                trigger_payload={}
+            )
+            db.add(run)
+            await db.commit()
+            await db.refresh(run)
+
+            import threading
+            threading.Thread(target=run_pipeline_on_e2b_sync, kwargs=dict(
+                run_id=str(run.id),
+                owner_id=str(owner.id),
+                e2b_key=owner.e2b_api_key,
+                openai_key=owner.openai_api_key or "",
+                claude_key=owner.claude_api_key or "",
+                google_sa=owner.google_service_account,
+                custom_apis=owner.custom_apis_data,
+                pipeline_max_rounds=pipeline.max_rounds or 1,
+                pipeline_auto_mode=pipeline.auto_mode or False,
+                agents_data=[(a.name, a.generated_code or "") for a in agents],
+                trigger_payload={},
+                database_url=os.environ.get("DATABASE_URL", "")
+            ), daemon=True).start()
+
+def should_fire(trigger, now):
+    if trigger.interval_value and trigger.interval_unit:
+        # every X minutes/hours/days
+        if not trigger.last_fired_at:
+            return True
+        delta = now - trigger.last_fired_at
+        if trigger.interval_unit == "minutes" and delta.seconds >= trigger.interval_value * 60:
+            return True
+        if trigger.interval_unit == "hours" and delta.seconds >= trigger.interval_value * 3600:
+            return True
+        if trigger.interval_unit == "days" and delta.days >= trigger.interval_value:
+            return True
+    if trigger.daily_time:
+        # run once per day at specific time
+        if now.strftime("%H:%M") == trigger.daily_time and (not trigger.last_fired_at or trigger.last_fired_at.date() < now.date()):
+            return True
+    return False
+
+
+
+
+
 origins_env = os.getenv("FRONTEND_ORIGIN", "")
 ALLOWED_ORIGINS = [o.strip() for o in origins_env.split(",") if o.strip()]
 
 app = FastAPI()
+
+@app.on_event("startup")
+async def on_startup():
+    await init_db()
+    scheduler.add_job(check_scheduled_triggers, "interval", minutes=1)
+    scheduler.start()
 
 PUBLIC_RULES = [
     # Specific public routes first

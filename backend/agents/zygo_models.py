@@ -156,7 +156,7 @@ class ZygoTrigger(Base):
     # Relationships
     owner = relationship("ZygoUser", back_populates="triggers")
     pipeline = relationship("ZygoPipeline", back_populates="triggers")
-
+    last_fired_at = Column(DateTime(timezone=True), nullable=True)
 
 # ── zygo_custom_apis ───────────────────────────────────────────────────────
 
