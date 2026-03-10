@@ -435,7 +435,7 @@ async def deploy_pipeline(
         old_sched = await db.execute(
             select(ZygoTrigger).where(
                 ZygoTrigger.pipeline_id == pipeline.id,
-                ZygoTrigger.trigger_type.in_([ZygoTriggerTypeEnum.interval, ZygoTriggerTypeEnum.daily])
+                ZygoTrigger.trigger_type.in_(["interval", "daily"])
             )
         )
         for old in old_sched.scalars().all():
