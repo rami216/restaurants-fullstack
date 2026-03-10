@@ -250,6 +250,19 @@ async def delete_trigger(trigger_id: UUID, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
+@zygo_router.patch("/triggers/{trigger_id}")
+async def update_trigger(trigger_id: UUID, request: Request, db: AsyncSession = Depends(get_db)):
+    result = await db.execute(select(ZygoTrigger).where(ZygoTrigger.id == trigger_id))
+    trigger = result.scalars().first()
+    if not trigger:
+        raise HTTPException(status_code=404, detail="Trigger not found")
+    data = await request.json()
+    if "is_enabled" in data:
+        trigger.is_enabled = data["is_enabled"]
+    await db.commit()
+    await db.refresh(trigger)
+    return {"ok": True, "is_enabled": trigger.is_enabled}
+
 # ── Custom APIs ────────────────────────────────────────────
 
 @zygo_router.get("/apis", response_model=List[ZygoCustomAPIOut])
