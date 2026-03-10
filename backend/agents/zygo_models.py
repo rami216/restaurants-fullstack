@@ -132,7 +132,7 @@ class ZygoTrigger(Base):
     owner_id = Column(UUID(as_uuid=True), ForeignKey("zygo_users.id", ondelete="CASCADE"), nullable=False)
     pipeline_id = Column(UUID(as_uuid=True), ForeignKey("zygo_pipelines.id", ondelete="SET NULL"), nullable=True)
     name = Column(String, nullable=False)
-    trigger_type = Column(SAEnum(ZygoTriggerTypeEnum), nullable=False)
+    trigger_type = Column(SAEnum(ZygoTriggerTypeEnum, native_enum=False), nullable=False)
     is_enabled = Column(Boolean, default=True)
 
     # Interval config
