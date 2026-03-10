@@ -26,4 +26,6 @@ async def init_db():
         await conn.run_sync(Base.metadata.create_all)
 
 
+async_session_maker = AsyncSessionLocal
+
 

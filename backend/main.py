@@ -271,6 +271,4 @@ app.include_router(zygo_router, prefix="/zygo", tags=["zygoflow"])  # ✅ ZYGOFL
 def health():
     return {"ok": True}
 
-@app.on_event("startup")
-async def on_startup():
-    await init_db()
+
