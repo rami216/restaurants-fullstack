@@ -626,7 +626,7 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         # Bootstrap
         bootstrap_lines = [
         "import json, os",
-        f"trigger_payload = {json.dumps(trigger_payload)}",
+        f"import json as _json; trigger_payload = _json.loads({repr(json.dumps(trigger_payload))})",
         f"openai_api_key = {repr(openai_key)}",
         f"claude_api_key = {repr(claude_key)}",
         f"if openai_api_key:",
