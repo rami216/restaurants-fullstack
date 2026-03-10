@@ -23,6 +23,10 @@ interface Trigger {
   webhook_public_url?: string;
   is_enabled: boolean;
   pipeline_id: string;
+  interval_value?: number;
+  interval_unit?: string;
+  daily_time?: string;
+  last_fired_at?: string;
 }
 
 interface Run {
@@ -140,8 +144,28 @@ function Spinner() {
   );
 }
 
+// ── Time ago ─────────────────────────────────────────────────
+function timeAgo(dateStr: string) {
+  const diff = Date.now() - new Date(dateStr).getTime();
+  const mins = Math.floor(diff / 60000);
+  const hours = Math.floor(mins / 60);
+  const days = Math.floor(hours / 24);
+  if (days > 0) return `${days}d ago`;
+  if (hours > 0) return `${hours}h ago`;
+  if (mins > 0) return `${mins}m ago`;
+  return "just now";
+}
+
+// ── Schedule label ───────────────────────────────────────────
+function scheduleLabel(trigger: Trigger) {
+  if (trigger.daily_time) return `daily at ${trigger.daily_time}`;
+  if (trigger.interval_value && trigger.interval_unit)
+    return `every ${trigger.interval_value} ${trigger.interval_unit}`;
+  return "scheduled";
+}
+
 // ══════════════════════════════════════════════════════════════
-// ☁️ PIPELINES VIEW — main view, shows deployed pipelines
+// ☁️ PIPELINES VIEW
 // ══════════════════════════════════════════════════════════════
 function PipelinesView({
   api,
@@ -216,8 +240,12 @@ function PipelinesView({
       ) : (
         <div className="space-y-4">
           {pipelines.map((p) => {
-            const pTrigger = triggers.find(
-              (t) => t.pipeline_id === p.id && t.trigger_type === "webhook",
+            const pTriggers = triggers.filter((t) => t.pipeline_id === p.id);
+            const webhookTrigger = pTriggers.find(
+              (t) => t.trigger_type === "webhook",
+            );
+            const scheduledTrigger = pTriggers.find(
+              (t) => t.trigger_type === "scheduled",
             );
             const pRuns = runs.filter((r) => r.pipeline_id === p.id);
             const lastRun = pRuns.sort(
@@ -271,27 +299,56 @@ function PipelinesView({
                   ))}
                 </div>
 
-                {/* Webhook URL */}
-                {pTrigger?.webhook_public_url && (
+                {/* Webhook trigger row */}
+                {webhookTrigger?.webhook_public_url && (
                   <div className="px-6 py-3 flex items-center justify-between gap-4 border-b border-white/[0.04]">
                     <div className="flex items-center gap-2 min-w-0 flex-1">
                       <span className="text-gray-600 text-xs font-mono shrink-0">
-                        POST
+                        🔗 POST
                       </span>
                       <span className="text-[#00ff88] text-xs font-mono truncate">
-                        {pTrigger.webhook_public_url}
+                        {webhookTrigger.webhook_public_url}
                       </span>
-                      <CopyBtn text={pTrigger.webhook_public_url} />
+                      <CopyBtn text={webhookTrigger.webhook_public_url} />
                     </div>
                     <button
-                      onClick={() => toggleTrigger(pTrigger)}
+                      onClick={() => toggleTrigger(webhookTrigger)}
                       className={`text-xs font-mono px-3 py-1 rounded-full border transition-colors shrink-0 ${
-                        pTrigger.is_enabled
+                        webhookTrigger.is_enabled
                           ? "border-[#00ff88]/30 text-[#00ff88] bg-[#00ff88]/10 hover:bg-[#00ff88]/20"
                           : "border-gray-700 text-gray-500 hover:text-gray-300"
                       }`}
                     >
-                      {pTrigger.is_enabled ? "● active" : "○ paused"}
+                      {webhookTrigger.is_enabled ? "● active" : "○ paused"}
+                    </button>
+                  </div>
+                )}
+
+                {/* Scheduled trigger row */}
+                {scheduledTrigger && (
+                  <div className="px-6 py-3 flex items-center justify-between gap-4 border-b border-white/[0.04]">
+                    <div className="flex items-center gap-2">
+                      <span className="text-gray-600 text-xs font-mono shrink-0">
+                        ⏰
+                      </span>
+                      <span className="text-purple-400 text-xs font-mono">
+                        {scheduleLabel(scheduledTrigger)}
+                      </span>
+                      {scheduledTrigger.last_fired_at && (
+                        <span className="text-gray-600 text-xs font-mono">
+                          · last: {timeAgo(scheduledTrigger.last_fired_at)}
+                        </span>
+                      )}
+                    </div>
+                    <button
+                      onClick={() => toggleTrigger(scheduledTrigger)}
+                      className={`text-xs font-mono px-3 py-1 rounded-full border transition-colors shrink-0 ${
+                        scheduledTrigger.is_enabled
+                          ? "border-purple-400/30 text-purple-400 bg-purple-400/10 hover:bg-purple-400/20"
+                          : "border-gray-700 text-gray-500 hover:text-gray-300"
+                      }`}
+                    >
+                      {scheduledTrigger.is_enabled ? "● active" : "○ paused"}
                     </button>
                   </div>
                 )}
@@ -329,7 +386,11 @@ function WebhooksView({ api }: { api: ReturnType<typeof useApi> }) {
 
   const load = useCallback(async () => {
     const t = await api.get("/triggers");
-    setTriggers(Array.isArray(t) ? t : []);
+    setTriggers(
+      (Array.isArray(t) ? t : []).filter(
+        (t: Trigger) => t.trigger_type === "webhook",
+      ),
+    );
     setLoading(false);
   }, []);
 
@@ -353,7 +414,8 @@ function WebhooksView({ api }: { api: ReturnType<typeof useApi> }) {
     <div className="p-8">
       <h2 className="text-white font-semibold text-xl mb-1">🔗 Webhook URLs</h2>
       <p className="text-gray-500 text-sm mb-8">
-        Permanent URLs — paste into Stripe, Typeform, GitHub, or any service
+        Permanent URLs — paste into Stripe, Typeform, GitHub, Telegram, or any
+        service
       </p>
 
       {triggers.length === 0 ? (
@@ -375,7 +437,7 @@ function WebhooksView({ api }: { api: ReturnType<typeof useApi> }) {
                     {t.name}
                   </span>
                   <span className="text-gray-600 text-xs font-mono border border-white/[0.06] px-2 py-0.5 rounded">
-                    {t.trigger_type}
+                    webhook
                   </span>
                 </div>
                 <div className="flex items-center gap-2">
@@ -418,29 +480,172 @@ function WebhooksView({ api }: { api: ReturnType<typeof useApi> }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// 📊 RUN LOGS VIEW
+// ⏰ SCHEDULES VIEW
 // ══════════════════════════════════════════════════════════════
-function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
-  const [selected, setSelected] = useState<string | null>(null);
+function SchedulesView({ api }: { api: ReturnType<typeof useApi> }) {
+  const [triggers, setTriggers] = useState<Trigger[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  const load = useCallback(async () => {
+    const t = await api.get("/triggers");
+    setTriggers(
+      (Array.isArray(t) ? t : []).filter(
+        (t: Trigger) => t.trigger_type === "scheduled",
+      ),
+    );
+    setLoading(false);
+  }, []);
+
+  useEffect(() => {
+    load();
+  }, [load]);
+
+  const toggle = async (t: Trigger) => {
+    await api.patch(`/triggers/${t.id}`, { is_enabled: !t.is_enabled });
+    await load();
+  };
+
+  const del = async (id: string) => {
+    await api.del(`/triggers/${id}`);
+    await load();
+  };
 
   if (loading) return <Spinner />;
 
   return (
     <div className="p-8">
-      <h2 className="text-white font-semibold text-xl mb-1">📊 Run Logs</h2>
+      <h2 className="text-white font-semibold text-xl mb-1">
+        ⏰ Scheduled Triggers
+      </h2>
       <p className="text-gray-500 text-sm mb-8">
-        Every pipeline execution — {runs.length} total
+        Pipelines that run automatically on a timer
       </p>
 
-      {runs.length === 0 ? (
+      {triggers.length === 0 ? (
+        <Empty
+          emoji="⏰"
+          title="No scheduled triggers yet"
+          desc="Set an interval or daily time when deploying a pipeline from the desktop app"
+        />
+      ) : (
+        <div className="space-y-3">
+          {triggers.map((t) => (
+            <div
+              key={t.id}
+              className="bg-[#111118] border border-white/[0.06] rounded-xl p-5"
+            >
+              <div className="flex items-center justify-between mb-4">
+                <div className="flex items-center gap-3">
+                  <div
+                    className={`w-2 h-2 rounded-full ${t.is_enabled ? "bg-purple-400" : "bg-gray-600"}`}
+                  />
+                  <span className="text-white font-medium text-sm">
+                    {t.name}
+                  </span>
+                </div>
+                <div className="flex items-center gap-2">
+                  <button
+                    onClick={() => toggle(t)}
+                    className={`text-xs font-mono px-3 py-1 rounded-full border transition-colors ${
+                      t.is_enabled
+                        ? "border-purple-400/30 text-purple-400 bg-purple-400/10 hover:bg-purple-400/20"
+                        : "border-gray-700 text-gray-500 hover:text-gray-300"
+                    }`}
+                  >
+                    {t.is_enabled ? "● active" : "○ paused"}
+                  </button>
+                  <button
+                    onClick={() => del(t.id)}
+                    className="text-gray-600 hover:text-red-400 transition-colors text-xs font-mono px-2 py-1 hover:bg-red-400/10 rounded"
+                  >
+                    🗑
+                  </button>
+                </div>
+              </div>
+
+              <div className="grid grid-cols-3 gap-4">
+                <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-lg px-4 py-3">
+                  <div className="text-gray-600 text-[10px] font-mono uppercase mb-1">
+                    schedule
+                  </div>
+                  <div className="text-purple-400 text-xs font-mono">
+                    {scheduleLabel(t)}
+                  </div>
+                </div>
+                <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-lg px-4 py-3">
+                  <div className="text-gray-600 text-[10px] font-mono uppercase mb-1">
+                    last fired
+                  </div>
+                  <div className="text-gray-400 text-xs font-mono">
+                    {t.last_fired_at ? timeAgo(t.last_fired_at) : "never"}
+                  </div>
+                </div>
+                <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-lg px-4 py-3">
+                  <div className="text-gray-600 text-[10px] font-mono uppercase mb-1">
+                    status
+                  </div>
+                  <div
+                    className={`text-xs font-mono ${t.is_enabled ? "text-[#00ff88]" : "text-gray-600"}`}
+                  >
+                    {t.is_enabled ? "● running" : "○ paused"}
+                  </div>
+                </div>
+              </div>
+            </div>
+          ))}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 📊 RUN LOGS VIEW
+// ══════════════════════════════════════════════════════════════
+function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
+  const [selected, setSelected] = useState<string | null>(null);
+  const [filter, setFilter] = useState<string>("all");
+
+  if (loading) return <Spinner />;
+
+  const filtered =
+    filter === "all" ? runs : runs.filter((r) => r.status === filter);
+
+  return (
+    <div className="p-8">
+      <div className="flex items-center justify-between mb-6">
+        <div>
+          <h2 className="text-white font-semibold text-xl mb-1">📊 Run Logs</h2>
+          <p className="text-gray-500 text-sm">
+            Every pipeline execution — {runs.length} total
+          </p>
+        </div>
+        <div className="flex items-center gap-2">
+          {["all", "success", "failed", "running"].map((s) => (
+            <button
+              key={s}
+              onClick={() => setFilter(s)}
+              className={`text-xs font-mono px-3 py-1.5 rounded-full border transition-colors ${
+                filter === s
+                  ? "border-[#00ff88]/30 text-[#00ff88] bg-[#00ff88]/10"
+                  : "border-white/[0.06] text-gray-600 hover:text-gray-400"
+              }`}
+            >
+              {s}
+            </button>
+          ))}
+        </div>
+      </div>
+
+      {filtered.length === 0 ? (
         <Empty
           emoji="📋"
           title="No runs yet"
-          desc="Trigger a pipeline via webhook to see execution logs here"
+          desc="Trigger a pipeline via webhook or schedule to see execution logs here"
         />
       ) : (
         <div className="space-y-2">
-          {runs.map((r) => (
+          {filtered.map((r) => (
             <div
               key={r.id}
               onClick={() => setSelected(selected === r.id ? null : r.id)}
@@ -456,13 +661,17 @@ function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
                     {r.id.slice(0, 8)}…
                   </span>
                 </div>
-                <span className="text-gray-600 text-xs font-mono">
-                  {new Date(r.started_at).toLocaleDateString()}{" "}
-                  {new Date(r.started_at).toLocaleTimeString()}
-                </span>
+                <div className="flex items-center gap-3">
+                  <span className="text-gray-600 text-xs font-mono">
+                    {timeAgo(r.started_at)}
+                  </span>
+                  <span className="text-gray-700 text-xs font-mono">
+                    {new Date(r.started_at).toLocaleDateString()}{" "}
+                    {new Date(r.started_at).toLocaleTimeString()}
+                  </span>
+                </div>
               </div>
 
-              {/* Expandable logs */}
               {selected === r.id && (
                 <div className="mt-4">
                   {r.logs ? (
@@ -487,7 +696,7 @@ function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
 }
 
 // ══════════════════════════════════════════════════════════════
-// ⚙️ SETTINGS VIEW — shows API token to copy into desktop app
+// ⚙️ SETTINGS VIEW
 // ══════════════════════════════════════════════════════════════
 function SettingsView() {
   const [token, setToken] = useState<string | null>(null);
@@ -512,13 +721,11 @@ function SettingsView() {
         Connect your desktop app to the cloud
       </p>
 
-      {/* API Token card */}
       <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
         <h3 className="text-white font-medium mb-1">🔑 Your API Token</h3>
         <p className="text-gray-500 text-sm mb-4">
           Copy this into your desktop app → ⚙️ Settings → Zygoflow API Token
         </p>
-
         {token ? (
           <div className="flex items-center gap-2">
             <div className="flex-1 bg-[#0a0a0f] border border-white/[0.04] rounded-lg px-4 py-2.5 font-mono text-xs text-[#00ff88] truncate">
@@ -538,7 +745,6 @@ function SettingsView() {
         )}
       </div>
 
-      {/* Steps */}
       <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
         <h3 className="text-white font-medium mb-4">
           🚀 How to connect desktop app
@@ -563,7 +769,6 @@ function SettingsView() {
         </ol>
       </div>
 
-      {/* E2B note */}
       <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-xl p-5">
         <p className="text-gray-600 text-xs font-mono leading-relaxed">
           💡 <strong className="text-gray-400">E2B</strong> is the cloud sandbox
@@ -588,6 +793,7 @@ function SettingsView() {
 const NAV = [
   { id: "pipelines", label: "☁️ Pipelines" },
   { id: "webhooks", label: "🔗 Webhooks" },
+  { id: "schedules", label: "⏰ Schedules" },
   { id: "runs", label: "📊 Run Logs" },
   { id: "settings", label: "⚙️ Settings" },
 ];
@@ -616,7 +822,6 @@ export default function AgentsDashboard() {
     loadRuns();
   }, [loadRuns]);
 
-  // Auto-refresh every 10s
   useEffect(() => {
     const interval = setInterval(loadRuns, 10000);
     return () => clearInterval(interval);
@@ -637,6 +842,8 @@ export default function AgentsDashboard() {
         return <PipelinesView api={api} runs={runs} />;
       case "webhooks":
         return <WebhooksView api={api} />;
+      case "schedules":
+        return <SchedulesView api={api} />;
       case "runs":
         return <RunLogsView runs={runs} loading={runsLoading} />;
       case "settings":
