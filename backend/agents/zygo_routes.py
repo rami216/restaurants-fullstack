@@ -428,7 +428,30 @@ async def deploy_pipeline(
             display=f"POST {webhook_path}",
             is_enabled=True
         ))
+    # ── Save scheduled trigger if provided ─────────────────────  ← ADD FROM HERE
+    trigger_data = data.get("trigger")
+    if trigger_data and trigger_data.get("type") in ("interval", "daily"):
+        # Delete old scheduled trigger for this pipeline if exists
+        old_sched = await db.execute(
+            select(ZygoTrigger).where(
+                ZygoTrigger.pipeline_id == pipeline.id,
+                ZygoTrigger.trigger_type == ZygoTriggerTypeEnum.scheduled
+            )
+        )
+        for old in old_sched.scalars().all():
+            await db.delete(old)
 
+        db.add(ZygoTrigger(
+            owner_id=current_user.id,
+            pipeline_id=pipeline.id,
+            name=trigger_data.get("name", f"{pipeline_name}-schedule"),
+            trigger_type=ZygoTriggerTypeEnum.scheduled,
+            is_enabled=True,
+            interval_value=trigger_data.get("interval_value"),
+            interval_unit=trigger_data.get("interval_unit"),
+            daily_time=trigger_data.get("daily_time"),
+            display=f"Every {trigger_data.get('interval_value')} {trigger_data.get('interval_unit')}" if trigger_data.get("type") == "interval" else f"Daily at {trigger_data.get('daily_time')}",
+        ))      
     await db.commit()
 
     return {
