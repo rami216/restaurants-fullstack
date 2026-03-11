@@ -936,3 +936,30 @@ async def create_zygo_checkout(
         return {"checkout_url": checkout.url}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@zygo_router.post("/unsubscribe")
+async def cancel_zygo_subscription(
+    current_user: ZygoUser = Depends(get_zygo_user_from_token),
+    db: AsyncSession = Depends(get_db)
+):
+    import stripe
+    from agents.zygo_models import ZygoSubscription
+
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+
+    result = await db.execute(select(ZygoSubscription).where(ZygoSubscription.user_id == current_user.id))
+    sub = result.scalars().first()
+
+    if not sub or sub.plan != "pro":
+        raise HTTPException(status_code=400, detail="No active subscription to cancel")
+
+    try:
+        # Cancel at period end — user keeps Pro until billing cycle ends
+        stripe.Subscription.modify(
+            sub.stripe_subscription_id,
+            cancel_at_period_end=True
+        )
+        return {"ok": True, "message": "Subscription will cancel at end of billing period"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
