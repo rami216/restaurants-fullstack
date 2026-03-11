@@ -950,7 +950,7 @@ async def cancel_zygo_subscription(
 
     result = await db.execute(select(ZygoSubscription).where(ZygoSubscription.user_id == current_user.id))
     sub = result.scalars().first()
-
+#ss
     if not sub or sub.plan != "pro":
         raise HTTPException(status_code=400, detail="No active subscription to cancel")
 
