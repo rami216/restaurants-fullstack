@@ -774,9 +774,33 @@ function SettingsView({
         </div>
 
         {isPro ? (
-          <p className="text-gray-400 text-sm">
-            You&apos;re on the Pro plan — unlimited runs, all triggers active.
-          </p>
+          <>
+            <p className="text-gray-400 text-sm mb-4">
+              You&apos;re on the Pro plan — unlimited runs, all triggers active.
+            </p>
+
+            <button
+              onClick={async () => {
+                if (
+                  !confirm(
+                    "Cancel your Pro subscription? You'll keep access until the end of your billing period.",
+                  )
+                )
+                  return;
+
+                const data = await api.post("/unsubscribe");
+
+                if (data.ok)
+                  alert(
+                    "Subscription cancelled. You'll keep Pro until end of billing period.",
+                  );
+                else alert(data.detail || "Error cancelling subscription");
+              }}
+              className="w-full border border-red-500/30 text-red-400 hover:bg-red-400/10 text-sm font-mono py-2 px-4 rounded-lg transition-colors"
+            >
+              Cancel Subscription
+            </button>
+          </>
         ) : (
           <>
             <div className="flex justify-between text-xs font-mono text-gray-500 mb-2">
