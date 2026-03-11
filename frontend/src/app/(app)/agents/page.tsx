@@ -38,6 +38,14 @@ interface Run {
   logs?: string;
 }
 
+interface Subscription {
+  status: string;
+  plan: string;
+  runs_used: number;
+  runs_limit: number;
+  stripe_customer_id?: string;
+}
+
 // ── API helpers ─────────────────────────────────────────────
 function useApi(token: string | null) {
   const headers = {
@@ -700,9 +708,16 @@ function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
 // ══════════════════════════════════════════════════════════════
 // ⚙️ SETTINGS VIEW
 // ══════════════════════════════════════════════════════════════
-function SettingsView() {
+function SettingsView({
+  api,
+  subscription,
+}: {
+  api: ReturnType<typeof useApi>;
+  subscription: Subscription | null;
+}) {
   const [token, setToken] = useState<string | null>(null);
   const [copied, setCopied] = useState(false);
+  const [upgrading, setUpgrading] = useState(false);
 
   useEffect(() => {
     const stored = localStorage.getItem("zygo_api_token");
@@ -716,6 +731,26 @@ function SettingsView() {
     setTimeout(() => setCopied(false), 2000);
   };
 
+  const handleUpgrade = async () => {
+    setUpgrading(true);
+    try {
+      const data = await api.post("/subscribe");
+      if (data.checkout_url) {
+        window.location.href = data.checkout_url;
+      }
+    } catch (e) {
+      alert("Error creating checkout session");
+    }
+    setUpgrading(false);
+  };
+
+  const runsUsed = subscription?.runs_used ?? 0;
+  const runsLimit = subscription?.runs_limit ?? 50;
+  const isPro = subscription?.plan === "pro";
+  const percentUsed = isPro ? 0 : Math.min((runsUsed / runsLimit) * 100, 100);
+  const isNearLimit = percentUsed >= 80;
+  const isAtLimit = percentUsed >= 100;
+
   return (
     <div className="p-8 max-w-xl">
       <h2 className="text-white font-semibold text-xl mb-1">⚙️ Settings</h2>
@@ -723,6 +758,70 @@ function SettingsView() {
         Connect your desktop app to the cloud
       </p>
 
+      {/* ── Plan & Usage Card ── */}
+      <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
+        <div className="flex items-center justify-between mb-4">
+          <h3 className="text-white font-medium">🚀 Your Plan</h3>
+          <span
+            className={`text-xs font-mono px-2 py-1 rounded-full border ${
+              isPro
+                ? "border-[#00ff88]/30 text-[#00ff88] bg-[#00ff88]/10"
+                : "border-gray-700 text-gray-400"
+            }`}
+          >
+            {isPro ? "● Pro" : "○ Free"}
+          </span>
+        </div>
+
+        {isPro ? (
+          <p className="text-gray-400 text-sm">
+            You&apos;re on the Pro plan — unlimited runs, all triggers active.
+          </p>
+        ) : (
+          <>
+            <div className="flex justify-between text-xs font-mono text-gray-500 mb-2">
+              <span>{runsUsed} runs used</span>
+              <span>{runsLimit} runs limit</span>
+            </div>
+            <div className="w-full bg-white/[0.05] rounded-full h-2 mb-3">
+              <div
+                className={`h-2 rounded-full transition-all duration-500 ${
+                  isAtLimit
+                    ? "bg-red-500"
+                    : isNearLimit
+                      ? "bg-yellow-400"
+                      : "bg-[#00ff88]"
+                }`}
+                style={{ width: `${percentUsed}%` }}
+              />
+            </div>
+            {isAtLimit && (
+              <p className="text-red-400 text-xs font-mono mb-3">
+                ⚠️ Run limit reached — all triggers paused. Upgrade to resume.
+              </p>
+            )}
+            {isNearLimit && !isAtLimit && (
+              <p className="text-yellow-400 text-xs font-mono mb-3">
+                ⚡ You&apos;re almost at your limit — upgrade soon.
+              </p>
+            )}
+          </>
+        )}
+
+        {!isPro && (
+          <button
+            onClick={handleUpgrade}
+            disabled={upgrading}
+            className="mt-4 w-full bg-[#00ff88] hover:bg-[#00ff88]/90 text-black font-bold text-sm py-2.5 px-4 rounded-lg transition-colors disabled:opacity-60"
+          >
+            {upgrading
+              ? "Redirecting..."
+              : "⚡ Upgrade to Pro — Unlimited Runs"}
+          </button>
+        )}
+      </div>
+
+      {/* ── API Token Card ── */}
       <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
         <h3 className="text-white font-medium mb-1">🔑 Your API Token</h3>
         <p className="text-gray-500 text-sm mb-4">
@@ -747,6 +846,7 @@ function SettingsView() {
         )}
       </div>
 
+      {/* ── How to connect ── */}
       <div className="bg-[#111118] border border-white/[0.06] rounded-xl p-6 mb-5">
         <h3 className="text-white font-medium mb-4">
           🚀 How to connect desktop app
@@ -804,6 +904,7 @@ export default function AgentsDashboard() {
   const [active, setActive] = useState("pipelines");
   const [runs, setRuns] = useState<Run[]>([]);
   const [runsLoading, setRunsLoading] = useState(true);
+  const [subscription, setSubscription] = useState<Subscription | null>(null);
   const { user, logout } = useAuth();
   const router = useRouter();
 
@@ -820,14 +921,23 @@ export default function AgentsDashboard() {
     setRunsLoading(false);
   }, [token]);
 
-  useEffect(() => {
-    loadRuns();
-  }, [loadRuns]);
+  const loadSubscription = useCallback(async () => {
+    const s = await api.get("/subscription");
+    if (s && s.runs_limit !== undefined) setSubscription(s);
+  }, [token]);
 
   useEffect(() => {
-    const interval = setInterval(loadRuns, 10000);
+    loadRuns();
+    loadSubscription();
+  }, [loadRuns, loadSubscription]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      loadRuns();
+      loadSubscription();
+    }, 10000);
     return () => clearInterval(interval);
-  }, [loadRuns]);
+  }, [loadRuns, loadSubscription]);
 
   const handleLogout = async () => {
     await logout();
@@ -837,6 +947,13 @@ export default function AgentsDashboard() {
   const successCount = runs.filter((r) => r.status === "success").length;
   const failedCount = runs.filter((r) => r.status === "failed").length;
   const runningCount = runs.filter((r) => r.status === "running").length;
+
+  const isPro = subscription?.plan === "pro";
+  const runsUsed = subscription?.runs_used ?? 0;
+  const runsLimit = subscription?.runs_limit ?? 50;
+  const usagePercent = isPro ? 0 : Math.min((runsUsed / runsLimit) * 100, 100);
+  const isAtLimit = !isPro && usagePercent >= 100;
+  const isNearLimit = !isPro && usagePercent >= 80;
 
   const renderView = () => {
     switch (active) {
@@ -849,7 +966,7 @@ export default function AgentsDashboard() {
       case "runs":
         return <RunLogsView runs={runs} loading={runsLoading} />;
       case "settings":
-        return <SettingsView />;
+        return <SettingsView api={api} subscription={subscription} />;
     }
   };
 
@@ -905,6 +1022,57 @@ export default function AgentsDashboard() {
             <div className="text-gray-600 text-[10px] font-mono">live</div>
           </div>
         </div>
+
+        {/* Usage bar — only shown for free users */}
+        {subscription && !isPro && (
+          <div className="px-4 py-3 border-b border-white/[0.05]">
+            <div className="flex justify-between text-[10px] font-mono mb-1.5">
+              <span
+                className={
+                  isAtLimit
+                    ? "text-red-400"
+                    : isNearLimit
+                      ? "text-yellow-400"
+                      : "text-gray-600"
+                }
+              >
+                {isAtLimit ? "⚠️ limit reached" : "runs"}
+              </span>
+              <span className="text-gray-600">
+                {runsUsed}/{runsLimit}
+              </span>
+            </div>
+            <div className="w-full bg-white/[0.05] rounded-full h-1">
+              <div
+                className={`h-1 rounded-full transition-all duration-500 ${
+                  isAtLimit
+                    ? "bg-red-500"
+                    : isNearLimit
+                      ? "bg-yellow-400"
+                      : "bg-[#00ff88]"
+                }`}
+                style={{ width: `${usagePercent}%` }}
+              />
+            </div>
+            {isAtLimit && (
+              <button
+                onClick={() => setActive("settings")}
+                className="mt-2 w-full text-[10px] font-mono text-black bg-[#00ff88] hover:bg-[#00ff88]/90 py-1 rounded transition-colors"
+              >
+                ⚡ Upgrade
+              </button>
+            )}
+          </div>
+        )}
+
+        {/* Pro badge in sidebar */}
+        {subscription && isPro && (
+          <div className="px-4 py-3 border-b border-white/[0.05]">
+            <div className="text-[10px] font-mono text-[#00ff88] bg-[#00ff88]/10 border border-[#00ff88]/20 rounded px-2 py-1 text-center">
+              ● Pro — unlimited runs
+            </div>
+          </div>
+        )}
 
         {/* Nav */}
         <nav className="flex-1 p-3 space-y-0.5">
