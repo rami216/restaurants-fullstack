@@ -12,7 +12,8 @@ from models import User, RestaurantOwner
 from auth.auth_handler import get_current_active_user
 from schemas import CheckoutSessionResponse, BillingPortalResponse, TopUpRequest
 from website_builder.models import Website
-
+from agents.zygo_models import ZygoSubscription, ZygoTrigger,ZygoUser
+from agents.zygo_routes import get_zygo_user_from_token
 STRIPE_SECRET_KEY = os.getenv("STRIPE_SECRET_KEY")
 STRIPE_WEBHOOK_SECRET = os.getenv("STRIPE_WEBHOOK_SECRET")
 RECURRING_PRICE_ID = os.getenv("RECURRING_PRICE_ID")
@@ -101,51 +102,6 @@ async def create_billing_portal_session(
         raise HTTPException(status_code=500, detail=str(e))
 
 
-# @router.post("/webhook")
-# async def stripe_webhook(
-#     request: Request,
-#     stripe_signature: str = Header(None),
-#     db: AsyncSession = Depends(get_db)
-# ):
-#     body = await request.body()
-#     try:
-#         event = stripe.Webhook.construct_event(
-#             payload=body, sig_header=stripe_signature, secret=STRIPE_WEBHOOK_SECRET
-#         )
-#     except Exception as e:
-#         print(f"Webhook Error: {e}")
-#         raise HTTPException(status_code=400, detail=str(e))
-
-#     session = event['data']['object']
-#     if event['type'] == 'checkout.session.completed':
-#         user_id = session.get('metadata', {}).get('user_id')
-#         if not user_id: return {"status": "User ID not in metadata"}
-
-#         result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.user_id == int(user_id)))
-#         owner = result.scalars().first()
-#         if not owner: return {"status": "Owner not found"}
-        
-#         payment_type = session.get('metadata', {}).get('type')
-#         if payment_type == 'subscription':
-#             owner.stripe_customer_id = session.get('customer')
-#             owner.stripe_subscription_id = session.get('subscription')
-#             owner.subscription_status = 'active'
-#         elif payment_type == 'top-up':
-#             amount_added = session.get('metadata', {}).get('amount')
-#             if amount_added:
-#                 owner.credit_balance += Decimal(amount_added)
-#         await db.commit()
-
-#     elif event['type'] in ['customer.subscription.updated', 'customer.subscription.deleted']:
-#         subscription = event['data']['object']
-#         stripe_subscription_id = subscription.get('id')
-#         result = await db.execute(select(RestaurantOwner).where(RestaurantOwner.stripe_subscription_id == stripe_subscription_id))
-#         owner = result.scalars().first()
-#         if owner:
-#             owner.subscription_status = subscription.get('status')
-#             await db.commit()
-    
-#     return {"status": "success"}
 @router.post("/webhook")
 async def stripe_webhook(
     request: Request,
@@ -246,3 +202,149 @@ async def stripe_webhook(
 
     print(f"--- 🚨 ZYGOFLOW WEBHOOK DEBUG END 🚨 ---\n")
     return {"status": "success"}
+
+
+#region zygoagents
+@router.post("/stripe-webhook")
+async def zygo_stripe_webhook(
+    request: Request,
+    stripe_signature: str = Header(None),
+    db: AsyncSession = Depends(get_db)
+):
+    import stripe
+    from agents.zygo_models import ZygoSubscription, ZygoTrigger
+
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+    webhook_secret = os.environ.get("ZYGO_STRIPE_WEBHOOK_SECRET")
+    zygo_price_id = os.environ.get("ZYGO_PRICE_ID")  # your Zygo plan price ID
+
+    body = await request.body()
+    try:
+        event = stripe.Webhook.construct_event(
+            payload=body, sig_header=stripe_signature, secret=webhook_secret
+        )
+    except Exception as e:
+        raise HTTPException(status_code=400, detail=str(e))
+
+    session = event["data"]["object"]
+    print(f"\n--- 🤖 ZYGO STRIPE WEBHOOK: {event['type']} ---")
+
+    # ── User subscribes for the first time ─────────────────
+    if event["type"] == "checkout.session.completed":
+        md = session.get("metadata", {})
+        zygo_user_id = md.get("zygo_user_id")
+        if not zygo_user_id:
+            print("❌ No zygo_user_id in metadata")
+            return {"status": "ok"}
+
+        result = await db.execute(select(ZygoSubscription).where(ZygoSubscription.user_id == zygo_user_id))
+        sub = result.scalars().first()
+        if not sub:
+            sub = ZygoSubscription(user_id=zygo_user_id)
+            db.add(sub)
+
+        sub.stripe_customer_id = session.get("customer")
+        sub.stripe_subscription_id = session.get("subscription")
+        sub.status = "active"
+        sub.plan = "pro"
+        sub.runs_used = 0
+        sub.runs_limit = 999999  # unlimited for pro
+
+        # Re-enable all their triggers
+        triggers_result = await db.execute(
+            select(ZygoTrigger).where(ZygoTrigger.owner_id == zygo_user_id)
+        )
+        for trigger in triggers_result.scalars().all():
+            trigger.is_enabled = True
+
+        await db.commit()
+        print(f"✅ Zygo user {zygo_user_id} upgraded to Pro")
+
+    # ── Monthly renewal ─────────────────────────────────────
+    elif event["type"] == "invoice.payment_succeeded":
+        stripe_subscription_id = session.get("subscription")
+        if not stripe_subscription_id:
+            return {"status": "ok"}
+
+        result = await db.execute(
+            select(ZygoSubscription).where(ZygoSubscription.stripe_subscription_id == stripe_subscription_id)
+        )
+        sub = result.scalars().first()
+        if sub:
+            sub.status = "active"
+            sub.runs_used = 0  # reset monthly
+            sub.runs_limit = 999999
+
+            # Re-enable all their triggers
+            triggers_result = await db.execute(
+                select(ZygoTrigger).where(ZygoTrigger.owner_id == sub.user_id)
+            )
+            for trigger in triggers_result.scalars().all():
+                trigger.is_enabled = True
+
+            await db.commit()
+            print(f"✅ Zygo subscription renewed for {sub.user_id}")
+
+    # ── Subscription cancelled ──────────────────────────────
+    elif event["type"] == "customer.subscription.deleted":
+        stripe_subscription_id = session.get("id")
+        result = await db.execute(
+            select(ZygoSubscription).where(ZygoSubscription.stripe_subscription_id == stripe_subscription_id)
+        )
+        sub = result.scalars().first()
+        if sub:
+            sub.status = "free"
+            sub.plan = "free"
+            sub.runs_limit = 50
+
+            # Pause all their triggers
+            triggers_result = await db.execute(
+                select(ZygoTrigger).where(ZygoTrigger.owner_id == sub.user_id)
+            )
+            for trigger in triggers_result.scalars().all():
+                trigger.is_enabled = False
+
+            await db.commit()
+            print(f"⚠️ Zygo subscription cancelled for {sub.user_id}")
+
+    print(f"--- 🤖 ZYGO STRIPE WEBHOOK END ---\n")
+    return {"status": "ok"}
+
+
+# ── Create Zygo Checkout Session ───────────────────────────
+
+@router.post("/subscribe")
+async def create_zygo_checkout(
+    current_user: ZygoUser = Depends(get_zygo_user_from_token),
+    db: AsyncSession = Depends(get_db)
+):
+    import stripe
+    from agents.zygo_models import ZygoSubscription
+
+    stripe.api_key = os.environ.get("STRIPE_SECRET_KEY")
+    zygo_price_id = os.environ.get("ZYGO_PRICE_ID")
+
+    result = await db.execute(select(ZygoSubscription).where(ZygoSubscription.user_id == current_user.id))
+    sub = result.scalars().first()
+    if not sub:
+        sub = ZygoSubscription(user_id=current_user.id)
+        db.add(sub)
+        await db.commit()
+        await db.refresh(sub)
+
+    try:
+        checkout = stripe.checkout.Session.create(
+            payment_method_types=["card"],
+            line_items=[{"price": zygo_price_id, "quantity": 1}],
+            mode="subscription",
+            success_url="https://zygoflow.com/agents?subscribed=true",
+            cancel_url="https://zygoflow.com/agents",
+            customer_email=current_user.email,
+            metadata={
+                "zygo_user_id": str(current_user.id),
+                "type": "zygo_subscription"
+            }
+        )
+        return {"checkout_url": checkout.url}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))

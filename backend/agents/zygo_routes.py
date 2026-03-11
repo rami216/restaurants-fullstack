@@ -212,6 +212,51 @@ async def delete_agent(agent_id: UUID, db: AsyncSession = Depends(get_db)):
     return {"ok": True}
 
 
+@zygo_router.get("/subscription")
+async def get_subscription(
+    current_user: ZygoUser = Depends(get_zygo_user_from_token),
+    db: AsyncSession = Depends(get_db)
+):
+    from agents.zygo_models import ZygoSubscription
+    result = await db.execute(select(ZygoSubscription).where(ZygoSubscription.user_id == current_user.id))
+    sub = result.scalars().first()
+    if not sub:
+        sub = ZygoSubscription(user_id=current_user.id)
+        db.add(sub)
+        await db.commit()
+        await db.refresh(sub)
+    return {
+        "status": sub.status,
+        "plan": sub.plan,
+        "runs_used": sub.runs_used,
+        "runs_limit": sub.runs_limit,
+        "stripe_customer_id": sub.stripe_customer_id,
+    }
+
+async def check_and_increment_runs(owner_id, db: AsyncSession) -> bool:
+    """Returns True if allowed to run, False if limit reached."""
+    from agents.zygo_models import ZygoSubscription, ZygoTrigger
+    result = await db.execute(select(ZygoSubscription).where(ZygoSubscription.user_id == owner_id))
+    sub = result.scalars().first()
+    if not sub:
+        sub = ZygoSubscription(user_id=owner_id)
+        db.add(sub)
+        await db.commit()
+        await db.refresh(sub)
+
+    if sub.runs_used >= sub.runs_limit:
+        # Pause all their triggers
+        triggers_result = await db.execute(
+            select(ZygoTrigger).where(ZygoTrigger.owner_id == owner_id)
+        )
+        for trigger in triggers_result.scalars().all():
+            trigger.is_enabled = False
+        await db.commit()
+        return False
+
+    sub.runs_used += 1
+    await db.commit()
+    return True
 # ── Triggers ───────────────────────────────────────────────
 
 @zygo_router.get("/triggers", response_model=List[ZygoTriggerOut])
@@ -512,7 +557,10 @@ async def receive_webhook(slug: str, request: Request, background_tasks: Backgro
         .order_by(ZygoAgent.order_index)
     )
     agents = agents_result.scalars().all()
-
+    # Check subscription limits
+    allowed = await check_and_increment_runs(trigger.owner_id, db)
+    if not allowed:
+        raise HTTPException(status_code=402, detail="Run limit reached. Please upgrade your plan.")
     # Create run record
     run = ZygoRun(
         owner_id=trigger.owner_id,

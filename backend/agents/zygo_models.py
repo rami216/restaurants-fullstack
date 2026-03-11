@@ -229,3 +229,21 @@ class ZygoRun(Base):
     # Relationships
     owner = relationship("ZygoUser", back_populates="runs")
     pipeline = relationship("ZygoPipeline", back_populates="runs")
+
+
+class ZygoSubscription(Base):
+    __tablename__ = "zygo_subscriptions"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, default=uuid.uuid4)
+    user_id = Column(UUID(as_uuid=True), ForeignKey("zygo_users.id", ondelete="CASCADE"), nullable=False, unique=True)
+    stripe_customer_id = Column(String, nullable=True)
+    stripe_subscription_id = Column(String, nullable=True)
+    status = Column(String, default="free")  # free, active, paused
+    runs_used = Column(Integer, default=0)
+    runs_limit = Column(Integer, default=50)  # 50 free runs
+    plan = Column(String, default="free")     # free, pro
+    current_period_end = Column(DateTime(timezone=True), nullable=True)
+    created_at = Column(DateTime(timezone=True), server_default=func.now())
+    updated_at = Column(DateTime(timezone=True), onupdate=func.now())
+
+    owner = relationship("ZygoUser", backref="zygo_subscription")

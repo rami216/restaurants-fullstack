@@ -6,7 +6,7 @@ from fastapi.staticfiles import StaticFiles
 from starlette.middleware.base import BaseHTTPMiddleware
 from starlette.responses import Response
 from agents.zygo_routes import zygo_router
-
+from agents.zygo_models import ZygoSubscription
 # If you want to keep .env loading locally:
 try:
     from dotenv import load_dotenv  # requires python-dotenv in requirements
@@ -67,6 +67,11 @@ async def check_scheduled_triggers():
         for trigger in triggers:
             if not should_fire(trigger, now):
                 continue
+            # Check subscription limits
+            from agents.zygo_routes import check_and_increment_runs
+            allowed = await check_and_increment_runs(trigger.owner_id, db)
+            if not allowed:
+                continue  # skip this trigger, already paused
 
             owner_result = await db.execute(select(ZygoUser).where(ZygoUser.id == trigger.owner_id))
             owner = owner_result.scalars().first()
@@ -111,6 +116,7 @@ async def check_scheduled_triggers():
                 trigger_payload={},
                 database_url=os.environ.get("DATABASE_URL", "")
             ), daemon=True).start()
+
 
 def should_fire(trigger, now):
     if trigger.interval_value and trigger.interval_unit:
