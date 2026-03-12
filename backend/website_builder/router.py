@@ -326,7 +326,7 @@ async def update_element_by_slot_key(
         .join(Website)
         .where(
             Website.website_id == website_id,
-            Element.properties["slot_key"].astext == slot_key
+            Element.properties["slot_key"].as_string() == slot_key
         )
     )
     element = result.scalars().first()
