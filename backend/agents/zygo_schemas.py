@@ -44,6 +44,8 @@ class ZygoUserUpdate(BaseModel):
     ngrok_token: Optional[str] = None
     google_service_account: Optional[Dict] = None
     active_model: Optional[ZygoModelEnum] = None
+    website_id: Optional[str] = None
+    website_tables_data: Optional[Dict] = None
 
 class ZygoUserOut(BaseModel):
     id: UUID
@@ -51,6 +53,8 @@ class ZygoUserOut(BaseModel):
     email: str
     active_model: ZygoModelEnum
     created_at: datetime
+    website_id: Optional[str] = None
+    website_tables_data: Optional[Dict] = None
 
     class Config:
         from_attributes = True
