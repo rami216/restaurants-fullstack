@@ -425,6 +425,11 @@ async def deploy_pipeline(
         current_user.custom_apis_data = data["custom_apis"]
     if data.get("google_resources"):
         current_user.google_resources_data = data["google_resources"]
+    # ✅ NEW: Save the website context sent from the desktop app
+    if data.get("website_id"):
+        current_user.website_id = data["website_id"]
+    if "website_tables" in data:
+        current_user.website_tables_data = data["website_tables"]
 
     # ── Check if pipeline already exists → update, else create ─
     result = await db.execute(
@@ -589,7 +594,12 @@ async def receive_webhook(slug: str, request: Request, background_tasks: Backgro
         pipeline_auto_mode=pipeline.auto_mode or False,
         agents_data=[(a.name, a.generated_code or "") for a in agents],
         trigger_payload=payload,
-        database_url=os.environ.get("DATABASE_URL", "")
+        database_url=os.environ.get("DATABASE_URL", ""),
+        # ✅ NEW: Pass the website context to E2B! 
+        # (We use owner.api_token because the backend already knows their Zygoflow token!)
+        website_id=owner.website_id,
+        zygo_token=owner.api_token, 
+        website_tables=owner.website_tables_data or {}
     )
 
     return {"status": "ok", "run_id": str(run.id)}
@@ -601,7 +611,7 @@ async def receive_webhook(slug: str, request: Request, background_tasks: Backgro
 
 def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                                google_sa, custom_apis, pipeline_max_rounds,
-                               pipeline_auto_mode, agents_data, trigger_payload, database_url):
+                               pipeline_auto_mode, agents_data, trigger_payload, database_url,website_id, zygo_token, website_tables):
     from e2b_code_interpreter import Sandbox
     import json, asyncio
     from sqlalchemy import create_engine
@@ -720,6 +730,9 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         f"if claude_api_key:",
         f"    from anthropic import Anthropic",
         f"    claude_client = Anthropic(api_key=claude_api_key)",
+        f"website_id = {repr(website_id)}",
+        f"zygo_token = {repr(zygo_token)}",
+        f"website_tables = _json.loads({repr(json.dumps(website_tables))})",
         ]       
 
         if custom_apis:
@@ -963,3 +976,45 @@ async def cancel_zygo_subscription(
         return {"ok": True, "message": "Subscription will cancel at end of billing period"}
     except Exception as e:
         raise HTTPException(status_code=500, detail=str(e))
+    
+    
+#region website-agent-bridge
+
+# ── Website Bridge ─────────────────────────────────────────
+
+@zygo_router.get("/my-website")
+async def get_my_website(
+    current_user: ZygoUser = Depends(get_zygo_user_from_token),
+    db: AsyncSession = Depends(get_db)
+):
+    from website_builder.models import Website
+    from models import RestaurantOwner
+
+    # 1. Find RestaurantOwner via user_id
+    ro_result = await db.execute(
+        select(RestaurantOwner).where(RestaurantOwner.user_id == current_user.user_id)
+    )
+    restaurant_owner = ro_result.scalars().first()
+    if not restaurant_owner:
+        raise HTTPException(status_code=404, detail="No restaurant found for this user.")
+
+    # 2. Check subscription
+    if restaurant_owner.subscription_status != "active":
+        raise HTTPException(
+            status_code=403,
+            detail="Active subscription required to use the website bridge."
+        )
+
+    # 3. Find Website via restaurant_id
+    website_result = await db.execute(
+        select(Website).where(Website.restaurant_id == restaurant_owner.restaurant_id)
+    )
+    website = website_result.scalars().first()
+    if not website:
+        raise HTTPException(status_code=404, detail="No website found for this user.")
+
+    return {
+        "website_id": str(website.website_id),
+        "subdomain": website.subdomain,
+        "subscription_active": restaurant_owner.subscription_status == "active"
+    }

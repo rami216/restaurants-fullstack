@@ -303,7 +303,45 @@ async def update_element(
     return db_element
 
 
+#region updatefromagents
 
+
+# --- Agent Bridge: Update element by slot_key ---
+class SlotKeyUpdate(BaseModel):
+    properties: dict
+
+@router.patch("/websites/{website_id}/elements/by-slot/{slot_key}")
+async def update_element_by_slot_key(
+    website_id: UUID,
+    slot_key: str,
+    payload: SlotKeyUpdate,
+    db: AsyncSession = Depends(get_db),
+):
+    # Find the element by slot_key inside properties JSON
+    result = await db.execute(
+        select(Element)
+        .join(Subsection)
+        .join(Section)
+        .join(Page)
+        .join(Website)
+        .where(
+            Website.website_id == website_id,
+            Element.properties["slot_key"].astext == slot_key
+        )
+    )
+    element = result.scalars().first()
+    if not element:
+        raise HTTPException(status_code=404, detail=f"No element with slot_key '{slot_key}' found.")
+
+    # Merge new properties into existing ones
+    updated_props = {**(element.properties or {}), **payload.properties}
+    element.properties = updated_props
+    flag_modified(element, "properties")
+
+    await db.commit()
+    return {"ok": True, "element_id": str(element.element_id), "slot_key": slot_key}
+
+#endregion updatefromagents
 @router.delete("/elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_element(element_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
     db_element = await db.get(Element, element_id)

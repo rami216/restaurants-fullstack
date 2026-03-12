@@ -70,6 +70,8 @@ class ZygoUser(Base):
     e2b_api_key = Column(String, nullable=True)
     custom_apis_data = Column(JSON, nullable=True)
     google_resources_data = Column(JSON, nullable=True)
+    website_id = Column(String, nullable=True)
+    website_tables_data = Column(JSON, nullable=True)
 
 # ── zygo_pipelines ─────────────────────────────────────────────────────────
 
