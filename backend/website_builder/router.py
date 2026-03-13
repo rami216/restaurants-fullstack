@@ -341,6 +341,29 @@ async def update_element_by_slot_key(
     await db.commit()
     return {"ok": True, "element_id": str(element.element_id), "slot_key": slot_key}
 
+@router.get("/websites/{website_id}/elements/by-slot/{slot_key}")
+async def get_element_by_slot_key(
+    website_id: UUID,
+    slot_key: str,
+    db: AsyncSession = Depends(get_db),
+):
+    # Securely find the element by slot_key
+    result = await db.execute(
+        select(Element)
+        .join(Subsection)
+        .join(Section)
+        .join(Page)
+        .join(Website)
+        .where(
+            Website.website_id == website_id,
+            Element.properties["slot_key"].as_string() == slot_key
+        )
+    )
+    element = result.scalars().first()
+    if not element:
+        raise HTTPException(status_code=404, detail=f"No element with slot_key '{slot_key}' found.")
+
+    return {"element_id": str(element.element_id), "slot_key": slot_key, "properties": element.properties}
 #endregion updatefromagents
 @router.delete("/elements/{element_id}", status_code=status.HTTP_204_NO_CONTENT)
 async def delete_element(element_id: UUID, db: AsyncSession = Depends(get_db), current_user: User = Depends(get_current_active_user)):
