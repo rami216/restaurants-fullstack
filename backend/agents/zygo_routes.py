@@ -733,6 +733,7 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         f"    claude_client = Anthropic(api_key=claude_api_key)",
         f"website_id = {repr(website_id)}",
         f"zygo_token = {repr(zygo_token)}",
+        f"ZYGO_HEADERS = {{'Authorization': f'Bearer {{zygo_token}}'}}", # ✅ THIS IS THE MAGIC LINE
         f"website_tables = _json.loads({repr(json.dumps(website_tables))})",
         ]       
 
