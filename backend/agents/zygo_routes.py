@@ -809,6 +809,7 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             if errors: log(f"⚠️ {errors[:300]}")
             if hasattr(result, 'error') and result.error:
                 log(f"❌ Execution error: {result.error}")
+                break  # <--- THIS STOPS THE INFINITE LOOP!
 
             # Check is_done
             check_done = sbx.run_code("print(str(globals().get('is_done', False)))")
