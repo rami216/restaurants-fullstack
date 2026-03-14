@@ -777,16 +777,16 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
 
         # Run agents
         # Run agents dynamically
+        # Run agents dynamically
         agents_dict = {name: code for name, code in agents_data}
         agent_names = [name for name, _ in agents_data]
 
-        
-        
         if pipeline_auto_mode:
             pipeline_max_rounds = 999999
-            
+
         current_agent_name = agent_names[0]
         round_num = 0
+
         while True:
             round_num += 1
             if round_num > pipeline_max_rounds:
@@ -797,8 +797,8 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                 break
 
             log(f"▶ Running: {current_agent_name}")
+            update_run(ZygoRunStatusEnum.running, "\n".join(logs))  # ← UPDATE AFTER EACH AGENT STARTS
 
-            # Clear next_agent before running so old routing doesn't stick
             sbx.run_code("if 'next_agent' in globals(): del globals()['next_agent']")
 
             result = sbx.run_code(bootstrap_code + "\n\n" + code)
@@ -809,15 +809,16 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             if errors: log(f"⚠️ {errors[:300]}")
             if hasattr(result, 'error') and result.error:
                 log(f"❌ Execution error: {result.error}")
-                break  # <--- THIS STOPS THE INFINITE LOOP!
+                update_run(ZygoRunStatusEnum.failed, "\n".join(logs))  # ← MARK FAILED
+                break
 
-            # Check is_done
+            update_run(ZygoRunStatusEnum.running, "\n".join(logs))  # ← UPDATE AFTER EACH AGENT FINISHES
+
             check_done = sbx.run_code("print(str(globals().get('is_done', False)))")
             if check_done.logs.stdout and "True" in check_done.logs.stdout[0]:
                 log("✅ Pipeline complete (is_done=True)")
                 break
 
-            # Check next_agent routing
             check_routing = sbx.run_code("print(str(globals().get('next_agent', 'None')))")
             next_agent = check_routing.logs.stdout[0].strip() if check_routing.logs.stdout else "None"
 
@@ -829,6 +830,11 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
 
             if not pipeline_auto_mode:
                 break
+
+        sbx.kill()
+        log("✅ Done")
+        update_run(ZygoRunStatusEnum.success, "\n".join(logs))  # ← FINAL SUCCESS
+
 
     except Exception as e:
         log(f"❌ {e}")
