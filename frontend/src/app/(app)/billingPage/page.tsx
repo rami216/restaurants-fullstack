@@ -99,6 +99,67 @@ export default function BillingPage() {
       alert("Error creating payment session.");
     }
   };
+  function AgentTokenSection({ websiteId }: { websiteId: string }) {
+    const [token, setToken] = React.useState<string | null>(null);
+    const [loading, setLoading] = React.useState(false);
+    const [copied, setCopied] = React.useState(false);
+
+    React.useEffect(() => {
+      api
+        .get(`/agent-bridge/websites/${websiteId}/token-status`)
+        .then((res) => {
+          if (res.data.token) setToken(res.data.token);
+        })
+        .catch(() => {});
+    }, [websiteId]);
+
+    const handleGenerate = async () => {
+      setLoading(true);
+      try {
+        const res = await api.post(
+          `/agent-bridge/websites/${websiteId}/generate-token`,
+        );
+        setToken(res.data.token);
+      } catch {
+        alert("Failed to generate token.");
+      } finally {
+        setLoading(false);
+      }
+    };
+
+    const handleCopy = () => {
+      if (!token) return;
+      navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    };
+
+    return (
+      <div>
+        {token ? (
+          <div className="flex items-center gap-3">
+            <code className="flex-1 bg-gray-100 p-3 rounded text-sm font-mono break-all">
+              {token}
+            </code>
+            <button
+              onClick={handleCopy}
+              className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-medium whitespace-nowrap"
+            >
+              {copied ? "Copied!" : "Copy"}
+            </button>
+          </div>
+        ) : (
+          <button
+            onClick={handleGenerate}
+            disabled={loading}
+            className="bg-indigo-600 hover:bg-indigo-700 text-white px-4 py-2 rounded font-medium disabled:opacity-50"
+          >
+            {loading ? "Generating..." : "Generate Token"}
+          </button>
+        )}
+      </div>
+    );
+  }
 
   if (isLoading) {
     return (

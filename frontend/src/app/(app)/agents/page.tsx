@@ -612,9 +612,222 @@ function SchedulesView({ api }: { api: ReturnType<typeof useApi> }) {
 // ══════════════════════════════════════════════════════════════
 // 📊 RUN LOGS VIEW
 // ══════════════════════════════════════════════════════════════
+// ── Parse logs helper ─────────────────────────────────────
+function parseAgentStates(logs: string, agentNames: string[]) {
+  const lines = (logs || "").split("\n");
+  const ran = new Set<string>();
+  const outputs: Record<string, string[]> = {};
+  let lastAgent = "";
+  let failedAgent = "";
+
+  for (const line of lines) {
+    const m = line.match(/▶ Running: (.+)/);
+    if (m) {
+      lastAgent = m[1].trim();
+      ran.add(lastAgent);
+    } else if (lastAgent) {
+      outputs[lastAgent] = outputs[lastAgent] || [];
+      outputs[lastAgent].push(line);
+      if (line.includes("❌")) failedAgent = lastAgent;
+    }
+  }
+
+  const isRunning = !logs.includes("is_done=True") && !logs.includes("❌");
+  const currentAgent = isRunning ? [...ran].at(-1) : null;
+
+  return agentNames.map((name) => ({
+    name,
+    status:
+      failedAgent === name
+        ? "failed"
+        : name === currentAgent
+          ? "running"
+          : ran.has(name)
+            ? "done"
+            : "pending",
+    output: (outputs[name] || []).slice(-2),
+  }));
+}
+
+// ── Agent pipeline visualization ──────────────────────────
+function PipelineVisual({
+  logs,
+  agentNames,
+}: {
+  logs: string;
+  agentNames: string[];
+}) {
+  const agents = parseAgentStates(logs, agentNames);
+
+  const dotColor: Record<string, string> = {
+    running: "#1D9E75",
+    done: "#1D9E75",
+    failed: "#E24B4A",
+    pending: "#888",
+  };
+
+  const borderStyle: Record<string, string> = {
+    running: "1.5px solid #1D9E75",
+    done: "1px solid #1D9E75",
+    failed: "1px solid #E24B4A",
+    pending: "0.5px solid rgba(255,255,255,0.08)",
+  };
+
+  const label: Record<string, string> = {
+    running: "running...",
+    done: "done",
+    failed: "failed",
+    pending: "waiting",
+  };
+
+  const labelColor: Record<string, string> = {
+    running: "#1D9E75",
+    done: "#1D9E75",
+    failed: "#E24B4A",
+    pending: "#555",
+  };
+
+  return (
+    <div className="mt-4">
+      <div className="flex items-start gap-0 overflow-x-auto pb-2">
+        {agents.map((agent, i) => (
+          <div key={agent.name} className="flex items-center">
+            {/* Agent card */}
+            <div
+              style={{
+                border: borderStyle[agent.status],
+                animation:
+                  agent.status === "running"
+                    ? "pulseBorder 1.5s infinite"
+                    : undefined,
+                minWidth: 130,
+                borderRadius: 10,
+                padding: "12px 14px",
+                background: "var(--color-background-secondary)",
+                transition: "all 0.4s ease",
+              }}
+            >
+              <div className="flex items-center gap-1.5 mb-1">
+                <span
+                  style={{
+                    width: 7,
+                    height: 7,
+                    borderRadius: "50%",
+                    background: dotColor[agent.status],
+                    display: "inline-block",
+                    animation:
+                      agent.status === "running"
+                        ? "pulseBorder 1s infinite"
+                        : undefined,
+                  }}
+                />
+                <span className="text-xs font-medium text-white truncate max-w-[100px]">
+                  {agent.name}
+                </span>
+              </div>
+              <div
+                className="font-mono"
+                style={{ fontSize: 10, color: labelColor[agent.status] }}
+              >
+                {label[agent.status]}
+              </div>
+              {agent.output.length > 0 && (
+                <div className="mt-2 pt-2 border-t border-white/[0.06]">
+                  {agent.output.map((line, j) => (
+                    <div
+                      key={j}
+                      className="font-mono truncate"
+                      style={{
+                        fontSize: 10,
+                        color: "#555",
+                        maxWidth: 120,
+                      }}
+                    >
+                      {line.replace("📤 ", "").replace("✅ ", "")}
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+
+            {/* Connector arrow */}
+            {i < agents.length - 1 && (
+              <div className="flex items-center px-1 shrink-0">
+                <svg width="28" height="20" viewBox="0 0 28 20">
+                  <line
+                    x1="0"
+                    y1="10"
+                    x2="20"
+                    y2="10"
+                    stroke={
+                      agent.status === "done" || agent.status === "running"
+                        ? "#1D9E75"
+                        : "#333"
+                    }
+                    strokeWidth={
+                      agent.status === "done" || agent.status === "running"
+                        ? 1.5
+                        : 0.5
+                    }
+                    strokeDasharray={
+                      agent.status === "done" || agent.status === "running"
+                        ? "3 2"
+                        : "none"
+                    }
+                    style={
+                      agent.status === "running"
+                        ? { animation: "flowLine 0.8s linear infinite" }
+                        : undefined
+                    }
+                  />
+                  <polygon
+                    points="20,6 28,10 20,14"
+                    fill={
+                      agent.status === "done" || agent.status === "running"
+                        ? "#1D9E75"
+                        : "#333"
+                    }
+                  />
+                </svg>
+              </div>
+            )}
+          </div>
+        ))}
+      </div>
+
+      {/* CSS animations */}
+      <style>{`
+        @keyframes pulseBorder {
+          0%, 100% { box-shadow: 0 0 0 2px rgba(29,158,117,0.15); }
+          50% { box-shadow: 0 0 0 4px rgba(29,158,117,0.25); }
+        }
+        @keyframes flowLine {
+          0% { stroke-dashoffset: 10; }
+          100% { stroke-dashoffset: 0; }
+        }
+      `}</style>
+    </div>
+  );
+}
+
+// ══════════════════════════════════════════════════════════════
+// 📊 RUN LOGS VIEW  ← REPLACE YOUR ENTIRE EXISTING ONE WITH THIS
+// ══════════════════════════════════════════════════════════════
 function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
   const [selected, setSelected] = useState<string | null>(null);
   const [filter, setFilter] = useState<string>("all");
+  const [pipelines, setPipelines] = useState<Pipeline[]>([]);
+
+  // We need pipeline agent_names to show the visual
+  useEffect(() => {
+    const token = localStorage.getItem("zygo_api_token");
+    if (!token) return;
+    fetch(`https://api.zygoflow.com/zygo/pipelines`, {
+      headers: { Authorization: `Bearer ${token}` },
+    })
+      .then((r) => r.json())
+      .then((p) => setPipelines(Array.isArray(p) ? p : []));
+  }, []);
 
   if (loading) return <Spinner />;
 
@@ -655,50 +868,69 @@ function RunLogsView({ runs, loading }: { runs: Run[]; loading: boolean }) {
         />
       ) : (
         <div className="space-y-2">
-          {filtered.map((r) => (
-            <div
-              key={r.id}
-              onClick={() => setSelected(selected === r.id ? null : r.id)}
-              className="bg-[#111118] border border-white/[0.06] rounded-xl px-5 py-4 cursor-pointer hover:border-white/[0.12] transition-colors"
-            >
-              <div className="flex items-center justify-between">
-                <div className="flex items-center gap-3">
-                  <StatusBadge status={r.status} />
-                  <span className="text-gray-500 text-xs font-mono">
-                    {r.trigger_source}
-                  </span>
-                  <span className="text-gray-700 text-xs font-mono">
-                    {r.id.slice(0, 8)}…
-                  </span>
-                </div>
-                <div className="flex items-center gap-3">
-                  <span className="text-gray-600 text-xs font-mono">
-                    {timeAgo(r.started_at)}
-                  </span>
-                  <span className="text-gray-700 text-xs font-mono">
-                    {new Date(r.started_at).toLocaleDateString()}{" "}
-                    {new Date(r.started_at).toLocaleTimeString()}
-                  </span>
-                </div>
-              </div>
+          {filtered.map((r) => {
+            const pipeline = pipelines.find((p) => p.id === r.pipeline_id);
+            const agentNames = pipeline?.agent_names || [];
 
-              {selected === r.id && (
-                <div className="mt-4">
-                  {r.logs ? (
-                    <div className="bg-[#0a0a0f] border border-white/[0.04] rounded-lg p-4 overflow-auto max-h-72">
-                      <pre className="text-[#00ff88] text-xs font-mono whitespace-pre-wrap leading-relaxed">
-                        {r.logs}
-                      </pre>
-                    </div>
-                  ) : (
-                    <p className="text-gray-600 text-xs font-mono">
-                      No logs available for this run
-                    </p>
-                  )}
+            return (
+              <div
+                key={r.id}
+                onClick={() => setSelected(selected === r.id ? null : r.id)}
+                className="bg-[#111118] border border-white/[0.06] rounded-xl px-5 py-4 cursor-pointer hover:border-white/[0.12] transition-colors"
+              >
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-3">
+                    <StatusBadge status={r.status} />
+                    <span className="text-gray-500 text-xs font-mono">
+                      {r.trigger_source}
+                    </span>
+                    <span className="text-gray-700 text-xs font-mono">
+                      {r.id.slice(0, 8)}…
+                    </span>
+                    {pipeline && (
+                      <span className="text-gray-600 text-xs font-mono">
+                        {pipeline.name}
+                      </span>
+                    )}
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="text-gray-600 text-xs font-mono">
+                      {timeAgo(r.started_at)}
+                    </span>
+                    <span className="text-gray-700 text-xs font-mono">
+                      {new Date(r.started_at).toLocaleDateString()}{" "}
+                      {new Date(r.started_at).toLocaleTimeString()}
+                    </span>
+                  </div>
                 </div>
-              )}
-            </div>
-          ))}
+
+                {selected === r.id && (
+                  <div className="mt-4">
+                    {/* Pipeline visual */}
+                    {agentNames.length > 0 && r.logs && (
+                      <PipelineVisual logs={r.logs} agentNames={agentNames} />
+                    )}
+
+                    {/* Raw logs */}
+                    {r.logs ? (
+                      <div className="mt-4 bg-[#0a0a0f] border border-white/[0.04] rounded-lg p-4 overflow-auto max-h-48">
+                        <div className="text-gray-600 text-[10px] font-mono uppercase mb-2">
+                          raw logs
+                        </div>
+                        <pre className="text-[#00ff88] text-xs font-mono whitespace-pre-wrap leading-relaxed">
+                          {r.logs}
+                        </pre>
+                      </div>
+                    ) : (
+                      <p className="text-gray-600 text-xs font-mono mt-4">
+                        No logs available for this run
+                      </p>
+                    )}
+                  </div>
+                )}
+              </div>
+            );
+          })}
         </div>
       )}
     </div>
