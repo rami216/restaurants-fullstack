@@ -780,9 +780,13 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         agents_dict = {name: code for name, code in agents_data}
         agent_names = [name for name, _ in agents_data]
 
+        
+        
+        if pipeline_auto_mode:
+            pipeline_max_rounds = 999999
+            
         current_agent_name = agent_names[0]
         round_num = 0
-
         while True:
             round_num += 1
             if round_num > pipeline_max_rounds:
