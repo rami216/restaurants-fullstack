@@ -1,5 +1,5 @@
 """
-Zygoflow Agent Platform — FastAPI Routes
+Zygoflow Agent Platform — FastAPI Routes(zygo_routes.py)
 """
 
 import sys, os
@@ -776,31 +776,54 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
         log("✅ Bootstrap injected")
 
         # Run agents
+        # Run agents dynamically
+        agents_dict = {name: code for name, code in agents_data}
+        agent_names = [name for name, _ in agents_data]
+
+        current_agent_name = agent_names[0]
         round_num = 0
+
         while True:
             round_num += 1
-            is_done = False
-            for name, code in agents_data:
-                log(f"▶ Running: {name}")
-                result = sbx.run_code(bootstrap_code + "\n\n" + code)
-                output = "\n".join(getattr(result.logs, 'stdout', None) or [])
-                errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
-                if output: log(f"📤 {output[:500]}")
-                if errors: log(f"⚠️ {errors[:300]}")
-                if hasattr(result, 'error') and result.error:  # ← ADD HERE
-                    log(f"❌ Execution error: {result.error}")
-                check = sbx.run_code("print(str(globals().get('is_done', False)))")
-                if check.logs.stdout and "True" in check.logs.stdout[0]:
-                    is_done = True
-                    break
-            if is_done or round_num >= pipeline_max_rounds:
-                break
-            if not pipeline_auto_mode:
+            if round_num > pipeline_max_rounds:
                 break
 
-        sbx.kill()
-        log("✅ Done")
-        update_run(ZygoRunStatusEnum.success, "\n".join(logs))
+            code = agents_dict.get(current_agent_name)
+            if not code:
+                break
+
+            log(f"▶ Running: {current_agent_name}")
+
+            # Clear next_agent before running so old routing doesn't stick
+            sbx.run_code("if 'next_agent' in globals(): del globals()['next_agent']")
+
+            result = sbx.run_code(bootstrap_code + "\n\n" + code)
+
+            output = "\n".join(getattr(result.logs, 'stdout', None) or [])
+            errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
+            if output: log(f"📤 {output[:500]}")
+            if errors: log(f"⚠️ {errors[:300]}")
+            if hasattr(result, 'error') and result.error:
+                log(f"❌ Execution error: {result.error}")
+
+            # Check is_done
+            check_done = sbx.run_code("print(str(globals().get('is_done', False)))")
+            if check_done.logs.stdout and "True" in check_done.logs.stdout[0]:
+                log("✅ Pipeline complete (is_done=True)")
+                break
+
+            # Check next_agent routing
+            check_routing = sbx.run_code("print(str(globals().get('next_agent', 'None')))")
+            next_agent = check_routing.logs.stdout[0].strip() if check_routing.logs.stdout else "None"
+
+            if next_agent != "None" and next_agent in agents_dict:
+                current_agent_name = next_agent
+            else:
+                idx = agent_names.index(current_agent_name)
+                current_agent_name = agent_names[(idx + 1) % len(agent_names)]
+
+            if not pipeline_auto_mode:
+                break
 
     except Exception as e:
         log(f"❌ {e}")
