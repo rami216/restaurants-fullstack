@@ -243,6 +243,7 @@ import {
   Terminal,
   Mail,
   CreditCard,
+  CloudLightning,
 } from "lucide-react";
 
 // ─────────────────────────────────────────────
@@ -251,60 +252,60 @@ import {
 const builderFeatures = [
   {
     icon: <Feather className="w-8 h-8 mb-4 text-pink-500" />,
-    title: "AI Elements & Pages",
+    title: "AI Website Generation",
     description:
       "Describe any component or full page. Watch our AI bring it to life in seconds — galleries, contact forms, hero sections, anything.",
   },
   {
     icon: <Database className="w-8 h-8 mb-4 text-green-500" />,
-    title: "Database-Powered Apps",
+    title: "Integrated Databases",
     description:
-      "Generate full CRUD applications instantly. Build directories, listings, or member portals with zero backend code.",
+      "Generate full CRUD applications instantly. Build directories, listings, or user portals with zero backend configuration.",
   },
   {
     icon: <ShoppingCart className="w-8 h-8 mb-4 text-red-500" />,
-    title: "One-Click E-commerce",
+    title: "Instant E-commerce",
     description:
-      "Instantly turn any item into a sellable product. AI configures everything you need to start making sales immediately.",
+      "Turn any item into a sellable product. AI configures everything you need to start accepting Stripe payments immediately.",
   },
   {
     icon: <Bot className="w-8 h-8 mb-4 text-blue-500" />,
-    title: "Automated Chatbots",
+    title: "Custom AI Chatbots",
     description:
-      "AI builds a chatbot from your content automatically — ready to answer questions and assist visitors 24/7.",
+      "Embed intelligent chatbots directly into your new site, trained on your data to assist visitors 24/7.",
   },
 ];
 
 // ─────────────────────────────────────────────
-// AGENT STEPS
+// THE ZYGOFLOW ECOSYSTEM (STEPS)
 // ─────────────────────────────────────────────
-const agentSteps = [
+const ecosystemSteps = [
   {
     number: "01",
-    icon: <Download className="w-6 h-6" />,
-    title: "Download the Desktop App",
+    icon: <Globe className="w-6 h-6" />,
+    title: "Build the Web App",
     description:
-      "Install Zygoflow Agents on your Mac or PC. Connect your OpenAI key, Stripe, Telegram, Google Sheets — all in one place. Completely free.",
+      "Use our web-based AI builder to generate your frontend, connect your database, and set up your products in minutes.",
     color: "from-pink-500 to-red-500",
-    tag: "Free Download",
+    tag: "Web Builder",
   },
   {
     number: "02",
     icon: <Terminal className="w-6 h-6" />,
-    title: "Build Your Pipeline",
+    title: "Test Agents Locally",
     description:
-      "Write plain English instructions for each agent. Click Generate & Run. Watch it execute live on your desktop. No code. No configuration.",
+      "Download the Zygoflow Desktop App (Mac/PC) to visually build and test your AI workflows on your own machine for free.",
     color: "from-orange-500 to-pink-500",
-    tag: "Visual Builder",
+    tag: "Desktop App",
   },
   {
     number: "03",
-    icon: <Globe className="w-6 h-6" />,
-    title: "Deploy to the Cloud",
+    icon: <CloudLightning className="w-6 h-6" />,
+    title: "Deploy to ZygoCloud",
     description:
-      "One click. Your pipeline goes live with a permanent webhook URL. Stripe, Telegram, scheduled triggers — all fire 24/7 automatically.",
+      "One click pushes your local pipelines to the cloud. They now run 24/7, listening for Stripe webhooks and scheduled triggers.",
     color: "from-purple-500 to-pink-500",
-    tag: "One Click Deploy",
+    tag: "Cloud Hosting",
   },
 ];
 
@@ -315,32 +316,32 @@ const agentCaps = [
   {
     icon: <Webhook className="w-5 h-5 text-pink-500" />,
     title: "Webhook Triggers",
-    desc: "Stripe, Telegram, Typeform, GitHub — any service fires your pipeline instantly.",
+    desc: "Stripe payments, Telegram messages, or custom API calls fire your pipeline instantly.",
   },
   {
     icon: <Clock className="w-5 h-5 text-purple-500" />,
     title: "Scheduled Triggers",
-    desc: "Run pipelines every hour, daily at 9am, or any interval. Fully automated.",
+    desc: "Run cloud pipelines every hour, daily at 9am, or at any custom interval.",
   },
   {
     icon: <Zap className="w-5 h-5 text-yellow-500" />,
-    title: "Dynamic Routing",
-    desc: "Agents route to each other based on AI decisions. Order? FAQ? Support? Auto-detected.",
+    title: "Dynamic AI Routing",
+    desc: "Agents pass data to each other based on AI decisions. Order? FAQ? Support? Auto-routed.",
   },
   {
     icon: <CreditCard className="w-5 h-5 text-green-500" />,
-    title: "Stripe Payments",
-    desc: "Create payment links, listen for webhooks, trigger delivery — full automation.",
+    title: "Stripe Automation",
+    desc: "Create payment links on the fly, listen for successful checkouts, and trigger delivery.",
   },
   {
     icon: <Mail className="w-5 h-5 text-blue-500" />,
     title: "Email & Notifications",
-    desc: "Send receipts, alerts, and reports via SendGrid automatically.",
+    desc: "Send personalized receipts, alerts, and reports via your connected email providers.",
   },
   {
     icon: <Database className="w-5 h-5 text-red-500" />,
-    title: "Google Sheets & Docs",
-    desc: "Read/write data, update CRMs, log orders, generate reports — hands-free.",
+    title: "Data Syncing",
+    desc: "Read and write data directly to your Zygoflow database, Google Sheets, or external CRMs.",
   },
 ];
 
@@ -375,14 +376,15 @@ const pipelineAgents = [
 ];
 
 const logMessages = [
+  "▶ Webhook Received: Telegram Message",
   "▶ Running: Receptionist — classifying intent...",
   "📤 Intent: order → routing to Order Taker",
-  "▶ Running: Order Taker — reading menu...",
-  "📤 Reply sent. Waiting for email confirmation.",
-  "▶ Running: Stripe Bot — creating payment link...",
-  "💳 Payment link created: $24.99",
-  "▶ Running: Notifier — sending confirmation...",
-  "✅ Pipeline complete. Revenue: $24.99",
+  "▶ Running: Order Taker — reading menu database...",
+  "📤 Reply sent. Waiting for confirmation.",
+  "▶ Running: Stripe Bot — generating checkout...",
+  "💳 Payment link generated: $24.99",
+  "▶ Running: Notifier — sending email receipt...",
+  "✅ Pipeline complete. Data saved to DB.",
 ];
 
 function LivePipelineDemo() {
@@ -417,13 +419,12 @@ function LivePipelineDemo() {
 
   return (
     <div className="bg-gray-900 rounded-2xl overflow-hidden border border-gray-700 shadow-2xl">
-      {/* Terminal header */}
       <div className="flex items-center gap-2 px-4 py-3 bg-gray-800 border-b border-gray-700">
         <div className="w-3 h-3 rounded-full bg-red-500" />
         <div className="w-3 h-3 rounded-full bg-yellow-500" />
         <div className="w-3 h-3 rounded-full bg-green-500" />
         <span className="ml-2 text-gray-400 text-xs font-mono">
-          zygoflow — restaurant-bot pipeline
+          zygo-cloud — automated-sales-pipeline
         </span>
         <span className="ml-auto flex items-center gap-1.5 text-green-400 text-xs font-mono">
           <motion.span
@@ -431,11 +432,10 @@ function LivePipelineDemo() {
             transition={{ duration: 1.2, repeat: Infinity }}
             className="w-1.5 h-1.5 rounded-full bg-green-400 inline-block"
           />
-          live
+          deployed
         </span>
       </div>
 
-      {/* Agent flow */}
       <div className="p-5 border-b border-gray-800">
         <div className="flex flex-wrap gap-2">
           {pipelineAgents.map((agent, i) => (
@@ -475,7 +475,6 @@ function LivePipelineDemo() {
         </div>
       </div>
 
-      {/* Logs */}
       <div className="p-5 font-mono text-xs space-y-1.5 min-h-[140px]">
         {visibleLogs.map((log, i) => (
           <motion.div
@@ -511,18 +510,15 @@ function LivePipelineDemo() {
 // USE CASE TICKER
 // ─────────────────────────────────────────────
 const useCases = [
-  "🍕 Restaurant Bot",
-  "📚 Homework AI",
-  "🏠 Airbnb Host",
-  "💼 Job Applier",
-  "📦 Order Fulfillment",
-  "💇 Booking System",
-  "📊 Sales Reports",
-  "🤖 Lead Qualifier",
-  "📧 Email Campaigns",
-  "🔔 Alert System",
-  "💳 Payment Flows",
-  "📱 Telegram Bot",
+  "🍕 Restaurant Sites & Bots",
+  "📚 Course Platforms",
+  "💼 SaaS Landing Pages",
+  "📦 Inventory Dashboards",
+  "💇 Booking Portals",
+  "📊 Automated Reports",
+  "🤖 Telegram AI Agents",
+  "📧 Support Desks",
+  "💳 E-commerce Stores",
 ];
 
 function UseCaseTicker() {
@@ -558,7 +554,6 @@ export default function MainPage() {
       {/* HERO */}
       {/* ══════════════════════════════════════════ */}
       <main className="relative min-h-[calc(90vh-64px)] flex flex-col items-center justify-center text-center bg-gradient-to-br from-pink-500 via-red-500 to-orange-500 text-white px-4 overflow-hidden">
-        {/* Grid */}
         <div
           className="absolute inset-0 opacity-10 pointer-events-none"
           style={{
@@ -567,7 +562,6 @@ export default function MainPage() {
             backgroundSize: "50px 50px",
           }}
         />
-        {/* Orbs */}
         <motion.div
           animate={{ scale: [1, 1.2, 1], opacity: [0.2, 0.4, 0.2] }}
           transition={{ duration: 6, repeat: Infinity }}
@@ -587,7 +581,7 @@ export default function MainPage() {
             className="inline-flex items-center gap-2 bg-white/20 backdrop-blur-sm border border-white/30 rounded-full px-4 py-1.5 text-sm font-semibold mb-6"
           >
             <Sparkles className="w-4 h-4" />
-            AI Website Builder + Autonomous Agents
+            The All-In-One Platform for AI Startups
           </motion.div>
 
           <motion.h1
@@ -596,9 +590,9 @@ export default function MainPage() {
             transition={{ duration: 0.8, delay: 0.1 }}
             className="text-5xl md:text-7xl font-extrabold mb-4 leading-tight"
           >
-            Your Idea,
+            Build the Website.
             <br />
-            Instantly Real
+            Automate the Work.
           </motion.h1>
 
           <motion.div
@@ -610,10 +604,10 @@ export default function MainPage() {
             <Typewriter
               options={{
                 strings: [
-                  "Build AI websites from a single prompt.",
-                  "Deploy autonomous agents in minutes.",
-                  "Accept payments while you sleep.",
-                  "Run your entire business on autopilot.",
+                  "Generate full websites with databases instantly.",
+                  "Build AI agents locally on your desktop.",
+                  "Deploy pipelines to the cloud for 24/7 webhooks.",
+                  "Accept Stripe payments on autopilot.",
                 ],
                 autoStart: true,
                 loop: true,
@@ -629,18 +623,16 @@ export default function MainPage() {
             transition={{ delay: 0.7, duration: 0.5 }}
             className="flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            <SpecialButton />
+            <SpecialButton text="Start Building Free" />
             <a
-              href="#agents"
+              href="#ecosystem"
               className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200"
             >
-              <Download className="w-4 h-4" />
-              Download Desktop App
+              See How It Works
             </a>
           </motion.div>
         </div>
 
-        {/* Wave */}
         <div className="absolute bottom-0 left-0 right-0">
           <svg
             viewBox="0 0 1440 80"
@@ -662,10 +654,10 @@ export default function MainPage() {
         <div className="container mx-auto px-4">
           <div className="grid grid-cols-2 md:grid-cols-4 gap-8 text-center">
             {[
-              { value: "10x", label: "Faster than coding" },
-              { value: "100%", label: "No backend needed" },
-              { value: "24/7", label: "Agents run nonstop" },
-              { value: "0", label: "Humans required" },
+              { value: "UI & DB", label: "Generated Instantly" },
+              { value: "Local", label: "Agent Testing" },
+              { value: "24/7", label: "Cloud Deployment" },
+              { value: "Stripe", label: "Built-In Monetization" },
             ].map((stat, i) => (
               <motion.div
                 key={i}
@@ -696,14 +688,14 @@ export default function MainPage() {
             className="text-center mb-6"
           >
             <span className="inline-flex items-center gap-2 bg-pink-100 text-pink-600 text-sm font-semibold px-4 py-1.5 rounded-full mb-4">
-              <Globe className="w-4 h-4" /> AI Website Builder
+              <Globe className="w-4 h-4" /> Part 1: The Platform
             </span>
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-800 mb-4">
-              What Will You Build?
+              AI-Powered Web Apps
             </h2>
             <p className="text-gray-500 max-w-xl mx-auto text-lg">
-              Describe it. Our AI builds it. Full database, e-commerce, chatbots
-              — generated instantly.
+              Generate frontends, provision databases, and spin up e-commerce
+              portals right from your browser.
             </p>
           </motion.div>
 
@@ -732,9 +724,9 @@ export default function MainPage() {
       </section>
 
       {/* ══════════════════════════════════════════ */}
-      {/* AGENTS */}
+      {/* AGENTS & ECOSYSTEM (HOW IT WORKS) */}
       {/* ══════════════════════════════════════════ */}
-      <section id="agents" className="py-20 bg-white">
+      <section id="ecosystem" className="py-20 bg-white">
         <div className="container mx-auto px-4">
           <motion.div
             initial={{ opacity: 0, y: 20 }}
@@ -743,21 +735,21 @@ export default function MainPage() {
             className="text-center mb-16"
           >
             <span className="inline-flex items-center gap-2 bg-purple-100 text-purple-600 text-sm font-semibold px-4 py-1.5 rounded-full mb-4">
-              <Bot className="w-4 h-4" /> Zygoflow Agents
+              <Bot className="w-4 h-4" /> Part 2: The Agents
             </span>
             <h2 className="text-4xl md:text-5xl font-extrabold text-gray-800 mb-4">
-              Your Business on Autopilot
+              Run Locally. Deploy Globally.
             </h2>
             <p className="text-gray-500 max-w-2xl mx-auto text-lg">
-              Build AI pipelines that take orders, process payments, send
-              emails, and respond to customers — completely automatically, with
-              zero human involvement.
+              Your website is only half the battle. Use the Zygoflow ecosystem
+              to build autonomous agents that process orders, update your
+              databases, and handle support.
             </p>
           </motion.div>
 
-          {/* 3 Steps */}
+          {/* 3 Ecosystem Steps */}
           <div className="grid md:grid-cols-3 gap-8 mb-16">
-            {agentSteps.map((step, i) => (
+            {ecosystemSteps.map((step, i) => (
               <motion.div
                 key={step.number}
                 initial={{ opacity: 0, y: 30 }}
@@ -766,7 +758,7 @@ export default function MainPage() {
                 transition={{ delay: i * 0.2, duration: 0.6 }}
                 className="relative"
               >
-                {i < agentSteps.length - 1 && (
+                {i < ecosystemSteps.length - 1 && (
                   <div className="hidden md:block absolute top-8 left-full w-8 h-px bg-gray-200 z-10" />
                 )}
                 <div className="bg-gray-50 rounded-2xl p-7 h-full border border-gray-100 hover:border-pink-200 hover:shadow-lg transition-all duration-300">
@@ -797,7 +789,7 @@ export default function MainPage() {
           </div>
 
           {/* Live Demo + Capabilities */}
-          <div className="grid lg:grid-cols-2 gap-10 items-start">
+          <div className="grid lg:grid-cols-2 gap-10 items-start mt-24">
             <motion.div
               initial={{ opacity: 0, x: -30 }}
               whileInView={{ opacity: 1, x: 0 }}
@@ -805,31 +797,13 @@ export default function MainPage() {
               transition={{ duration: 0.8 }}
             >
               <h3 className="text-2xl font-bold text-gray-800 mb-2">
-                Watch a pipeline run live
+                Watch a cloud pipeline run live
               </h3>
               <p className="text-gray-500 mb-6 text-sm">
-                Real restaurant bot — customer messages Telegram, pays via
-                Stripe, gets confirmation. Zero humans involved.
+                A webhook triggers the pipeline. Agents read your database,
+                generate a Stripe link, and email the customer automatically.
               </p>
               <LivePipelineDemo />
-              <div className="mt-5 flex flex-wrap gap-2">
-                {[
-                  "Telegram",
-                  "Stripe",
-                  "SendGrid",
-                  "Google Sheets",
-                  "OpenAI",
-                  "Webhooks",
-                  "Scheduled",
-                ].map((tag) => (
-                  <span
-                    key={tag}
-                    className="px-3 py-1.5 bg-gray-100 text-gray-600 text-xs font-medium rounded-full border border-gray-200"
-                  >
-                    {tag}
-                  </span>
-                ))}
-              </div>
             </motion.div>
 
             <motion.div
@@ -839,7 +813,7 @@ export default function MainPage() {
               transition={{ duration: 0.8 }}
             >
               <h3 className="text-2xl font-bold text-gray-800 mb-6">
-                Everything your agents can do
+                What happens in the cloud?
               </h3>
               <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 {agentCaps.map((cap, i) => (
@@ -864,69 +838,6 @@ export default function MainPage() {
                 ))}
               </div>
             </motion.div>
-          </div>
-        </div>
-      </section>
-
-      {/* ══════════════════════════════════════════ */}
-      {/* HOW IT WORKS */}
-      {/* ══════════════════════════════════════════ */}
-      <section className="py-20 bg-gray-50">
-        <div className="container mx-auto text-center px-4">
-          <motion.div
-            initial={{ opacity: 0, y: 20 }}
-            whileInView={{ opacity: 1, y: 0 }}
-            viewport={{ once: true }}
-            className="mb-16"
-          >
-            <h2 className="text-4xl md:text-5xl font-extrabold text-gray-800 mb-4">
-              A Simple, Powerful Workflow
-            </h2>
-            <p className="text-gray-500 max-w-xl mx-auto text-lg">
-              From idea to fully automated business in three steps.
-            </p>
-          </motion.div>
-
-          <div className="grid md:grid-cols-3 gap-12 items-start max-w-5xl mx-auto">
-            {[
-              {
-                n: "01",
-                grad: "from-purple-500 to-pink-500",
-                title: "Describe",
-                body: "Start with a simple prompt. Describe a component, a full page, or an entire AI agent pipeline in plain English.",
-              },
-              {
-                n: "02",
-                grad: "from-pink-500 to-red-500",
-                title: "Generate & Refine",
-                body: "Our AI builds it instantly. Don't like something? Just ask for a change and refine it to perfection.",
-              },
-              {
-                n: "03",
-                grad: "from-red-500 to-orange-500",
-                title: "Launch & Automate",
-                body: "Deploy your site and agents with one click. Orders, payments, emails — all handled automatically 24/7.",
-              },
-            ].map((step, i) => (
-              <motion.div
-                key={step.n}
-                initial={{ opacity: 0, scale: 0.9 }}
-                whileInView={{ opacity: 1, scale: 1 }}
-                viewport={{ once: true }}
-                transition={{ delay: i * 0.2, duration: 0.6 }}
-                className="text-center"
-              >
-                <div
-                  className={`text-7xl font-black text-transparent bg-clip-text bg-gradient-to-r ${step.grad} mb-4`}
-                >
-                  {step.n}
-                </div>
-                <h3 className="text-2xl font-bold mb-3 text-gray-800">
-                  {step.title}
-                </h3>
-                <p className="text-gray-600">{step.body}</p>
-              </motion.div>
-            ))}
           </div>
         </div>
       </section>
@@ -962,23 +873,19 @@ export default function MainPage() {
               Start Building.
             </h2>
             <p className="text-white/80 text-xl mb-10 max-w-lg mx-auto">
-              Your website. Your agents. Your business running itself. Build it
-              once — let Zygoflow run it forever.
+              Your website. Your agents. Your database. Build it once — let
+              Zygoflow run it forever.
             </p>
             <div className="flex flex-col sm:flex-row items-center justify-center gap-4">
-              <SpecialButton />
+              <SpecialButton text="Launch Web App" />
               <a
-                href="#agents"
+                href="#download"
                 className="flex items-center gap-2 bg-white/20 hover:bg-white/30 backdrop-blur-sm border border-white/30 text-white font-semibold px-6 py-3 rounded-full transition-all duration-200"
               >
-                <Download className="w-4 h-4" />
-                Download Desktop App — Free
+                <Terminal className="w-4 h-4" />
+                Optional: Get Desktop Agents
               </a>
             </div>
-            <p className="text-white/50 text-sm mt-6">
-              No credit card required · No code needed · Takes less than 2
-              minutes
-            </p>
           </motion.div>
         </div>
       </section>
