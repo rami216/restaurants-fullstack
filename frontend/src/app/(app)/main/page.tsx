@@ -309,7 +309,7 @@ const MainPage = () => {
         setHasRestaurant(true);
         setRestaurantId(res.data.restaurant_id);
         try {
-          const wRes = await api.get("/builder/my-website");
+          const wRes = await api.get("/builder/my-website-id");
           setWebsiteId(wRes.data.website_id);
         } catch {}
         await checkBrand(res.data.restaurant_id);
