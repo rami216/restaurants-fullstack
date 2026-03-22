@@ -179,6 +179,14 @@ class WebsiteResponse(WebsiteBase):
     payment_method: str
     openai_api_key: Optional[str] = None # <-- ADD THIS HERE
     member_ai_spend_limit_usd: Optional[float] = 0.10
+    preferred_ai_provider: Optional[str] = "platform"
+    user_openai_model: Optional[str] = "gpt-4o"
+    user_claude_model: Optional[str] = "claude-sonnet-4-6"
+    user_gemini_model: Optional[str] = "gemini-2.0-flash"
+    # Keys — never expose actual values, just whether they exist
+    has_openai_key: Optional[bool] = False
+    has_claude_key: Optional[bool] = False
+    has_gemini_key: Optional[bool] = False
     class Config:
         from_attributes = True
 
@@ -289,9 +297,38 @@ class EmailSendRequest(BaseModel):
 class WebsiteSettingsResponse(BaseModel):
     website_id: UUID
     subdomain: str | None
-    payment_method: str  # <--- This is the only thing we really care about right now
-    openai_api_key: Optional[str] = None # <-- ADD THIS HERE
+    payment_method: str
+    openai_api_key: Optional[str] = None
     member_ai_spend_limit_usd: Optional[float] = 0.10
-    
+    preferred_ai_provider: Optional[str] = "openai"
+    user_openai_model: Optional[str] = "gpt-4o"
+    user_claude_model: Optional[str] = "claude-sonnet-4-6"
+    user_gemini_model: Optional[str] = "gemini-2.0-flash"
+    has_openai_key: bool = False
+    has_claude_key: bool = False
+    has_gemini_key: bool = False
+
+    class Config:
+        from_attributes = True
+        
+        
+class UserAISettingsUpdate(BaseModel):
+    user_openai_key: Optional[str] = None
+    user_claude_key: Optional[str] = None
+    user_gemini_key: Optional[str] = None
+    user_openai_model: Optional[str] = None
+    user_claude_model: Optional[str] = None
+    user_gemini_model: Optional[str] = None
+    preferred_ai_provider: Optional[str] = None
+
+class UserAISettingsResponse(BaseModel):
+    preferred_ai_provider: Optional[str] = "openai"
+    user_openai_model: Optional[str] = "gpt-4o"
+    user_claude_model: Optional[str] = "claude-sonnet-4-6"
+    user_gemini_model: Optional[str] = "gemini-2.0-flash"
+    has_openai_key: bool = False
+    has_claude_key: bool = False
+    has_gemini_key: bool = False
+
     class Config:
         from_attributes = True

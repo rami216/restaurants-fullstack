@@ -1314,3 +1314,55 @@ async def get_my_website_id(
         raise HTTPException(status_code=404, detail="No website found for this user.")
 
     return {"website_id": str(website_id)}
+
+#region customapis
+class UserAISettingsUpdate(BaseModel):
+    user_openai_key: str | None = None
+    user_claude_key: str | None = None
+    user_gemini_key: str | None = None
+    user_openai_model: str | None = None
+    user_claude_model: str | None = None
+    user_gemini_model: str | None = None
+    preferred_ai_provider: str | None = "platform"
+
+@router.patch("/websites/{website_id}/ai-settings")
+async def update_ai_settings(
+    website_id: UUID,
+    body: UserAISettingsUpdate,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    result = await db.execute(select(Website).where(Website.website_id == website_id))
+    website = result.scalars().first()
+    if not website:
+        raise HTTPException(404, "Website not found")
+    
+    if body.user_openai_key is not None:
+        website.user_openai_key = body.user_openai_key
+    if body.user_claude_key is not None:
+        website.user_claude_key = body.user_claude_key
+    if body.user_gemini_key is not None:
+        website.user_gemini_key = body.user_gemini_key
+    if body.preferred_ai_provider is not None:
+        website.preferred_ai_provider = body.preferred_ai_provider
+    
+    await db.commit()
+    return {"ok": True}
+
+@router.get("/websites/{website_id}/ai-settings")
+async def get_ai_settings(
+    website_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    result = await db.execute(select(Website).where(Website.website_id == website_id))
+    website = result.scalars().first()
+    if not website:
+        raise HTTPException(404, "Website not found")
+    
+    return {
+        "preferred_ai_provider": website.preferred_ai_provider or "platform",
+        "has_openai_key": bool(website.user_openai_key),
+        "has_claude_key": bool(website.user_claude_key),
+        "has_gemini_key": bool(website.user_gemini_key),
+    }

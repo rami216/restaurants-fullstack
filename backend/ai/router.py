@@ -17,11 +17,106 @@ from database import get_db
 from models import User
 from models import CustomDataSchema
 from website_builder.custom_data_router import SchemaField
-
+from ..ai.utils import get_ai_client
+from website_builder.models import Website
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 anthropic_client = anthropic.Anthropic(api_key=os.getenv("CLAUDE_API_KEY"))
+
+#region helpers
+async def get_website(website_id, db: AsyncSession) -> Website:
+    result = await db.execute(select(Website).where(Website.website_id == website_id))
+    website = result.scalars().first()
+    if not website:
+        raise HTTPException(404, "Website not found")
+    return website
+ 
+ 
+def call_ai_json(client, model: str, provider: str, system_prompt: str,
+                 user_content: str, temperature: float = 0.2,
+                 max_tokens: int = 4096) -> dict:
+    if provider == "claude":
+        resp = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}],
+        )
+        content = resp.content[0].text.strip()
+        content = re.sub(r"^```json?\s*", "", content)
+        content = re.sub(r"\s*```$", "", content)
+        m = re.search(r"\{[\s\S]*\}", content)
+        if not m:
+            raise HTTPException(500, "Claude returned no valid JSON")
+        return json.loads(m.group(0))
+    else:
+        resp = client.chat.completions.create(
+            model=model,
+            response_format={"type": "json_object"},
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return json.loads(resp.choices[0].message.content)
+ 
+ 
+def call_ai_text(client, model: str, provider: str, system_prompt: str,
+                 user_content: str, temperature: float = 0.2,
+                 max_tokens: int = 4096) -> str:
+    if provider == "claude":
+        resp = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_content}],
+        )
+        return resp.content[0].text.strip()
+    else:
+        resp = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_content},
+            ],
+            temperature=temperature,
+            max_tokens=max_tokens,
+        )
+        return resp.choices[0].message.content.strip()
+ 
+ 
+def clean_script(payload: dict) -> dict:
+    if isinstance(payload.get("script"), str):
+        m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
+        if m:
+            payload["script"] = m.group(1).strip()
+    return payload
+ 
+ 
+def inject_schemas(payload: dict, existing_schemas, website_id) -> dict:
+    all_schemas = [
+        {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields}
+        for s in existing_schemas
+    ]
+    if "properties" not in payload:
+        payload["properties"] = {}
+    payload["properties"]["website_id"] = str(website_id)
+    payload["properties"]["all_schemas"] = all_schemas
+    if "schema_id" in payload.get("properties", {}):
+        sid = payload["properties"]["schema_id"]
+        match = next((s for s in existing_schemas if str(s.schema_id) == sid), None)
+        if match:
+            payload["properties"]["schema_fields"] = match.fields
+    return payload
+
+
+#endregion helpers
+
 
 SECTION_SYSTEM_PROMPT = """
 You are an expert layout designer creating the content for a website section. Your task is to generate a valid JSON object representing the 'subsections' and 'elements' based on a user's prompt.
@@ -3543,7 +3638,7 @@ Your output MUST be a valid JSON object with FOUR keys: "aiTemplate", "propertie
 
 
 
-#region genai-openai
+#region generate-ai-element
 class GenerateRequest(BaseModel):
     prompt: str
     website_id: UUID | str
@@ -3554,117 +3649,31 @@ class GenerateRequestForElement(BaseModel):
     unique_class_name: str
     website_id: UUID | str
 
-@router.post("/generate-ai-element-openai")
+@router.post("/generate-ai-element")
 async def generate_ai_element(
     body: GenerateRequestForElement,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ):
     try:
-        # Guard: validate website_id exists
-        if not body.website_id:
-            raise HTTPException(400, "website_id is required")
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
 
-        # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
         schema_result = await db.execute(
-            select(CustomDataSchema)
-            .where(CustomDataSchema.website_id == body.website_id)
+            select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
         )
         existing_schemas = schema_result.scalars().all()
-        
-        # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
-        schemas_context = json.dumps([
-            {
-                "name": s.name, 
-                "schema_id": str(s.schema_id), 
-                "fields": s.fields 
-            } 
-            for s in existing_schemas
-        ])
 
-        # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
-            f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps([{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas])}'
         )
 
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": NON_TABLE_COMPRESSED_TRY1},
-                {"role": "user",   "content": user_content},
-            ],
-            temperature=0.2,
-            max_tokens=4096,
-        )
-
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
-
-        content = resp.choices[0].message.content
-        payload = json.loads(content)
-        # 🔍 DEBUG: Log the raw AI response
-        # print("=" * 80)
-        # print("🤖 RAW AI RESPONSE:")
-        # print("=" * 80)
-        # print(json.dumps(payload, indent=2))
-        # print("=" * 80)
-        # print(f"📝 SCRIPT VALUE: {repr(payload.get('script'))}")
-        # print(f"📏 SCRIPT LENGTH: {len(payload.get('script', ''))}")
-        # print("=" * 80)
-        # Strip <script> wrapper if present
-        if isinstance(payload.get("script"), str):
-            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if m:
-                payload["script"] = m.group(1).strip()
-
-        # 🔍 ADD THIS DEBUG
-        # print("🔍 AFTER REGEX - Script still exists?", "script" in payload)
-        # print("🔍 AFTER REGEX - Script length:", len(payload.get("script", "")))
-        # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT (CRITICAL!) ---
-        # This is needed for the script to dynamically fetch related data
-        all_schemas_for_script = [
-            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} 
-            for s in existing_schemas
-        ]
         
-        # Ensure properties exists
-        if "properties" not in payload:
-            payload["properties"] = {}
-        
-        # ✅ ADD THIS LINE RIGHT HERE:
-        payload["properties"]["website_id"] = str(body.website_id)  # <--- INJECT REAL ID
-        
-        # Add all_schemas to properties (the script needs this!)
-        payload["properties"]["all_schemas"] = all_schemas_for_script
-        
-        # If the AI specified a schema_id, ensure it's preserved
-        if "schema_id" in payload.get("properties", {}):
-            # Also add schema_fields for backward compatibility
-            schema_id = payload["properties"]["schema_id"]
-            matching_schema = next(
-                (s for s in existing_schemas if str(s.schema_id) == schema_id), 
-                None
-            )
-            if matching_schema:
-                payload["properties"]["schema_fields"] = matching_schema.fields
-
-        # Track usage
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="generate_element",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"unique_class_name": body.unique_class_name},
-        )
-
+        payload = call_ai_json(client, model, provider, NON_TABLE_COMPRESSED_TRY1, user_content)
+        payload = clean_script(payload)
+        payload = inject_schemas(payload, existing_schemas, body.website_id)
         return payload
 
     except HTTPException:
@@ -3673,292 +3682,10 @@ async def generate_ai_element(
         import traceback; traceback.print_exc()
         raise HTTPException(500, f"generate-ai-element failed: {e}")
 
-#endregion openaigen
-
-#region genai-claude
-@router.post("/generate-ai-element-claude")
-async def generate_ai_element(
-    body: GenerateRequestForElement,
-    db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_user),
-):
-    try:
-        # Guard: validate website_id exists
-        if not body.website_id:
-            raise HTTPException(400, "website_id is required")
-
-        # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
-        schema_result = await db.execute(
-            select(CustomDataSchema)
-            .where(CustomDataSchema.website_id == body.website_id)
-        )
-        existing_schemas = schema_result.scalars().all()
-        
-        schemas_context = json.dumps([
-            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields}
-            for s in existing_schemas
-        ])
-
-        # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
-        user_content = (
-            f'PROMPT: "{body.prompt}"\n\n'
-            f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
-            f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
-        )
-
-        resp = anthropic_client.messages.create(
-            model="claude-sonnet-4-6",
-            max_tokens=8192,
-            temperature=0.2,
-            system=NON_TABLE_COMPRESSED_TRY1,
-            messages=[
-                {"role": "user", "content": user_content},
-            ],
-        )
-
-        # --- DEBUG ---
-        print("STOP REASON:", resp.stop_reason)
-        print("CLAUDE RESPONSE LENGTH:", len(resp.content[0].text) if resp.content else 0)
-        print("CLAUDE RESPONSE PREVIEW:", repr(resp.content[0].text[:300]) if resp.content else "EMPTY")
-
-        prompt_tokens = resp.usage.input_tokens
-        completion_tokens = resp.usage.output_tokens
-        model_used = resp.model
-
-        # --- EXTRACT & VALIDATE CONTENT ---
-        if not resp.content or not resp.content[0].text.strip():
-            raise HTTPException(500, "Claude returned an empty response")
-
-        content = resp.content[0].text.strip()
-
-        # Strip markdown fences if Claude wrapped the JSON
-        if content.startswith("```"):
-            content = re.sub(r"^```json?\s*", "", content)
-            content = re.sub(r"\s*```$", "", content)
-            content = content.strip()
-
-        # Extract outermost JSON object safely
-        json_match = re.search(r"\{[\s\S]*\}", content)
-        if not json_match:
-            print("FULL CLAUDE RESPONSE:", repr(content))
-            raise HTTPException(500, "Claude response contained no valid JSON object")
-
-        payload = json.loads(json_match.group(0))
-
-        # Strip <script> wrapper if present
-        if isinstance(payload.get("script"), str):
-            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if m:
-                payload["script"] = m.group(1).strip()
-
-        # --- STEP 3: INJECT ALL_SCHEMAS CONTEXT ---
-        all_schemas_for_script = [
-            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields}
-            for s in existing_schemas
-        ]
-
-        if "properties" not in payload:
-            payload["properties"] = {}
-
-        payload["properties"]["website_id"] = str(body.website_id)
-        payload["properties"]["all_schemas"] = all_schemas_for_script
-
-        if "schema_id" in payload.get("properties", {}):
-            schema_id = payload["properties"]["schema_id"]
-            matching_schema = next(
-                (s for s in existing_schemas if str(s.schema_id) == schema_id),
-                None
-            )
-            if matching_schema:
-                payload["properties"]["schema_fields"] = matching_schema.fields
-
-        # --- TRACK USAGE ---
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="generate_element",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"unique_class_name": body.unique_class_name},
-        )
-
-        return payload
-
-    except HTTPException:
-        raise
-    except Exception as e:
-        import traceback; traceback.print_exc()
-        raise HTTPException(500, f"generate-ai-element failed: {e}")
-#endregion
+#endregion generate-ai-element
 
 
-# @router.post("/generate-ai-element")
-# async def generate_ai_element(
-#     body: GenerateRequestForElement,
-#     db: AsyncSession = Depends(get_db),
-#     user: User = Depends(get_current_active_user),
-# ):
-#     try:
-#         # Guard: validate website_id exists
-#         if not body.website_id:
-#             raise HTTPException(400, "website_id is required")
 
-#         # --- STEP 1: FETCH EXISTING SCHEMAS (Context for the AI) ---
-#         # We need this so the AI knows the IDs of "Leads", "Products", etc.
-#         # This matches the logic used in 'generate_data_app_element'
-#         schema_result = await db.execute(
-#             select(CustomDataSchema)
-#             .where(CustomDataSchema.website_id == body.website_id)
-#         )
-#         existing_schemas = schema_result.scalars().all()
-        
-#         # Format for AI: Keep it minimal to save tokens (Name, ID, Fields)
-#         schemas_context = json.dumps([
-#             {
-#                 "name": s.name, 
-#                 "schema_id": str(s.schema_id), 
-#                 "fields": s.fields 
-#             } 
-#             for s in existing_schemas
-#         ])
-
-#         # --- STEP 2: CONSTRUCT PROMPT WITH CONTEXT ---
-#         # We append the schema list so Rule 5 in the prompt works correctly
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
-#             f'EXISTING_SCHEMAS_ON_WEBSITE: {schemas_context}'
-#         )
-
-#         resp = openai.chat.completions.create(
-#             model=AI_DEFAULT_MODEL,                  # e.g. "gpt-4o"
-#             response_format={"type": "json_object"},
-#             messages=[
-#                 {"role": "system", "content": ELEMENT_GENERATOR_PROMPT_FULL_NO_SCHEMA},
-#                 {"role": "user",   "content": user_content},
-#             ],
-#             temperature=0.2,
-#             max_tokens=4096,
-#         )
-
-#         # v1 SDK: usage is an object; model is on resp.model
-#         usage = getattr(resp, "usage", None)
-#         prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-#         completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-#         model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
-
-#         content = resp.choices[0].message.content
-#         payload = json.loads(content)
-
-#         # strip <script> wrapper if present
-#         if isinstance(payload.get("script"), str):
-#             m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-#             if m:
-#                 payload["script"] = m.group(1).strip()
-
-#         # Track usage (expects UUID + int user_id)
-#         await track_ai_usage(
-#             db=db,
-#             website_id=body.website_id,             # keep as UUID
-#             user_id=user.id,                         # your users.id is INTEGER
-#             model=model_used,
-#             feature="generate_element",
-#             prompt_tokens=prompt_tokens,
-#             completion_tokens=completion_tokens,
-#             meta={"unique_class_name": body.unique_class_name},
-#         )
-
-#         return payload
-
-#     except HTTPException:
-#         raise
-#     except Exception as e:
-#         # print full traceback to your server console so you see the real error
-#         import traceback; traceback.print_exc()
-#         raise HTTPException(500, f"generate-ai-element failed: {e}")
-#region gpt5 
-# client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"), timeout=60)  # set timeout on the client
-# MODEL = "gpt-5-nano"
-# def _strip_script_wrapper(payload: dict) -> dict:
-#     """If payload['script'] contains a <script>...</script> wrapper, remove it and keep only the inner JS."""
-#     if "script" in payload and isinstance(payload.get("script"), str):
-#         match = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-#         if match:
-#             payload["script"] = match.group(1).strip()
-#     return payload
-
-# def _extract_json_loose(s: str) -> dict:
-#     """
-#     Fallback extractor when the model returns plain text:
-#     - strips ```json fences
-#     - pulls the LAST {...} block
-#     - json.loads it
-#     """
-#     s = (s or "").strip()
-#     if not s:
-#         raise ValueError("Model returned empty text.")
-#     if s.startswith("```"):
-#         s = re.sub(r"^```(?:json)?\s*", "", s)
-#         s = re.sub(r"\s*```$", "", s)
-#     if not s.lstrip().startswith("{"):
-#         m = re.search(r"\{[\s\S]*\}\s*$", s)
-#         if not m:
-#             raise ValueError("No JSON object found in model output.")
-#         s = m.group(0)
-#     return json.loads(s)
-
-# def _assemble_text(resp) -> str:
-#     """Prefer assembling from parts, then fall back to resp.output_text."""
-#     parts = []
-#     for item in (getattr(resp, "output", None) or []):
-#         for c in (getattr(item, "content", None) or []):
-#             if getattr(c, "type", "") == "output_text":
-#                 t = getattr(c, "text", "") or ""
-#                 if t.strip():
-#                     parts.append(t)
-#     text = ("".join(parts) or (getattr(resp, "output_text", None) or "")).strip()
-#     return text
-
-# @router.post("/generate-ai-element")
-# async def generate_ai_element(body: GenerateRequestForElement):
-#     try:
-#         user_content = (
-#             f'PROMPT: "{body.prompt}"\n\n'
-#             f'UNIQUE_CLASS_NAME: .{body.unique_class_name}'
-#         )
-
-#         # GPT-5 reasoning-style call: no temperature, no max tokens
-#         resp = client.responses.create(
-#             model=MODEL,
-#             instructions=ELEMENT_GENERATOR_PROMPT_FROM_GPT5 +
-#                 "\n\nReturn ONLY a single valid JSON object. No explanations or markdown.",
-#             input=user_content,
-#             max_output_tokens=16000
-            
-#         )
-
-#         text = _assemble_text(resp)
-#         if not text:
-#             # Dump once for debugging, then bail with a clear error
-#             try:
-#                 print("[GPT5 RAW RESPONSE]", resp.model_dump_json(indent=2)[:8000], flush=True)
-#             except Exception:
-#                 print("[GPT5 RAW RESPONSE - no dump]", str(resp)[:1000], flush=True)
-#             raise ValueError("Empty response text from model.")
-
-#         payload = _extract_json_loose(text)
-#         payload = _strip_script_wrapper(payload)
-#         return payload
-
-#     except Exception as e:
-#         import traceback
-#         traceback.print_exc()
-#         raise HTTPException(status_code=500, detail=f"Page generation failed: {e}")
-      
-#endregion gpt5
-  #region refining element
 
 
 class RefineStateRequest(BaseModel):
@@ -4965,91 +4692,39 @@ Before returning the JSON, verify:
   
   # website_builder/stripe_checkout_router.py
 
-@router.post("/refine-element", response_model=Dict[str, Any])
+@router.post("/refine-element")
 async def refine_element(
     body: RefineStateRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ):
     try:
-        if not body.website_id:
-            raise HTTPException(status_code=400, detail="website_id is required")
-
-        # 1. Build the User Prompt
-        # We NO LONGER pass the entire list of website schemas.
-        # We only pass the current state so the AI focuses on refining WHAT IS THERE.
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
         user_content = (
             f'USER_PROMPT: "{body.prompt}"\n\n'
-            f"CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```"
+            f'CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```'
         )
-
-        # 2. Call AI with the UI/Logic-Focused Prompt
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": REFINE_MASTER_PROMPT_2}, # Using your new prompt
-                {"role": "user",   "content": user_content},
-            ],
-            temperature=0.2, # Low temperature for code precision
-        )
-
-        # 3. Parse Response
-        payload = json.loads(resp.choices[0].message.content)
-
-        # --- 🛑 FORCE FIX: SANITIZE MUSTACHE TEMPLATES 🛑 ---
-        # The AI sometimes ignores instructions and adds {{#if}} logic which crashes Mustache.
-        # We detect this here and strip the invalid tags to prevent the frontend from breaking.
+ 
         
+        payload = call_ai_json(client, model, provider, REFINE_MASTER_PROMPT_2, user_content)
+ 
         ai_template = payload.get("aiTemplate", "")
-        
-        # Check for common Handlebars/Mustache logic helpers that are not supported
-        if "{{#if" in ai_template or "{{#eq" in ai_template or "{{#unless" in ai_template:
-            print("⚠️ DETECTED INVALID MUSTACHE LOGIC. AUTO-FIXING...")
-            
-            # Strip the invalid logic tags from HTML.
-            # This leaves the content inside (e.g. the class name) but removes the logic wrapper.
-            # While this disables the conditional visual, it ENSURES the data loads.
-            
-            # Remove {{#if ...}} and {{#eq ...}}
-            ai_template = re.sub(r'\{\{#if.*?\}\}', '', ai_template)
-            ai_template = re.sub(r'\{\{#eq.*?\}\}', '', ai_template)
-            ai_template = re.sub(r'\{\{#unless.*?\}\}', '', ai_template)
-            
-            # Remove closing tags {{/if}}, {{/eq}}, {{/unless}}
-            ai_template = re.sub(r'\{\{/if\}\}', '', ai_template)
-            ai_template = re.sub(r'\{\{/eq\}\}', '', ai_template)
-            ai_template = re.sub(r'\{\{/unless\}\}', '', ai_template)
-            
-            # Update the payload with the safe HTML
+        if any(tag in ai_template for tag in ["{{#if", "{{#eq", "{{#unless"]):
+            for tag in [r'\{\{#if.*?\}\}', r'\{\{#eq.*?\}\}', r'\{\{#unless.*?\}\}',
+                        r'\{\{/if\}\}', r'\{\{/eq\}\}', r'\{\{/unless\}\}']:
+                ai_template = re.sub(tag, '', ai_template)
             payload["aiTemplate"] = ai_template
-            
-        # --- END FORCE FIX ---
-
-        # 4. Clean Script Tags (Security/Stability)
-        if isinstance(payload.get("script"), str):
-            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if m:
-                payload["script"] = m.group(1).strip()
-
-        # 5. Track Usage
-        usage = getattr(resp, "usage", None)
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=getattr(resp, "model", AI_DEFAULT_MODEL),
-            feature="refine_element",
-            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-            meta={"state_keys": list((body.currentState or {}).keys())[:10]},
-        )
-
-        return payload
-
+ 
+        return clean_script(payload)
+ 
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Refine failed: {e}")
+        raise HTTPException(500, f"Refine failed: {e}")
+
   #endregion
   
   
@@ -5083,54 +4758,24 @@ async def refine_ai_section(
     user: User = Depends(get_current_active_user),
 ):
     try:
-        if not body.website_id:
-            raise HTTPException(status_code=400, detail="website_id is required")
-
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
-            f"CURRENT SECTION JSON:\n{json.dumps(body.section_json, indent=2)}"
+            f'CURRENT SECTION JSON:\n{json.dumps(body.section_json, indent=2)}'
         )
-
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": REFINE_SECTION_SYSTEM_PROMPT},
-                {"role": "user",   "content": user_content},
-            ],
-            temperature=0.5,
-            max_tokens=4096,
-        )
-
-        # ---- parse model output
-        payload = json.loads(resp.choices[0].message.content)
-
-        # ---- usage tracking (OBJECT, not dict)
-        usage = getattr(resp, "usage", None)
-        prompt_tokens     = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used        = getattr(resp, "model", AI_DEFAULT_MODEL)
-
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="refine_section",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"section_keys": list((body.section_json or {}).keys())[:10]},
-        )
-
-        return payload
-
-    except (json.JSONDecodeError,) as e:
-        raise HTTPException(status_code=500, detail=f"refine-ai-section JSON parse failed: {e}")
+ 
+        
+        return call_ai_json(client, model, provider, REFINE_SECTION_SYSTEM_PROMPT, user_content, temperature=0.5)
+ 
     except HTTPException:
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"refine-ai-section failed: {e}")
+        raise HTTPException(500, f"refine-ai-section failed: {e}")
+ 
+
 
 # --- END: REFINE SECTION FEATURE ---
 
@@ -5196,47 +4841,19 @@ async def generate_ai_page(
     user: User = Depends(get_current_active_user),
 ):
     try:
-        if not body.website_id:
-            raise HTTPException(status_code=400, detail="website_id is required")
-
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": page_generator_test_2},
-                {"role": "user",   "content": body.prompt},
-            ],
-            temperature=0.4,
-            max_tokens=4096,
-        )
-
-        payload = json.loads(resp.choices[0].message.content)
-
-        usage = getattr(resp, "usage", None)
-        prompt_tokens     = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used        = getattr(resp, "model", AI_DEFAULT_MODEL)
-
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="generate_page",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"prompt_len": len(body.prompt or "")},
-        )
-
-        return payload
-
-    except (json.JSONDecodeError,) as e:
-        raise HTTPException(status_code=500, detail=f"generate-ai-page JSON parse failed: {e}")
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
+        
+        return call_ai_json(client, model, provider, page_generator_test_2, body.prompt, temperature=0.4)
+ 
     except HTTPException:
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"generate-ai-page failed: {e}")
+        raise HTTPException(500, f"generate-ai-page failed: {e}")
+ 
+
 
 # --- END: NEW PAGE GENERATION FEATURE ---
 
@@ -5304,45 +4921,19 @@ async def generate_ai_section(
     user: User = Depends(get_current_active_user),
 ):
     try:
-        if not body.website_id:
-            raise HTTPException(status_code=400, detail="website_id is required")
-
-        # Call OpenAI with the Section-Specific Prompt
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": SECTION_GENERATOR_PROMPT},
-                {"role": "user",   "content": body.prompt},
-            ],
-            temperature=0.5, # Slightly higher temp for creativity in design
-            max_tokens=2048,
-        )
-
-        payload = json.loads(resp.choices[0].message.content)
-
-        # Usage tracking
-        usage = getattr(resp, "usage", None)
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=getattr(resp, "model", AI_DEFAULT_MODEL),
-            feature="generate_section", # distinct feature tag
-            prompt_tokens=int(getattr(usage, "prompt_tokens", 0) or 0),
-            completion_tokens=int(getattr(usage, "completion_tokens", 0) or 0),
-            meta={"prompt_len": len(body.prompt or "")},
-        )
-
-        return payload
-
-    except (json.JSONDecodeError,) as e:
-        raise HTTPException(status_code=500, detail=f"JSON parse failed: {e}")
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
+        
+        return call_ai_json(client, model, provider, SECTION_GENERATOR_PROMPT, body.prompt, temperature=0.5, max_tokens=2048)
+ 
     except HTTPException:
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"generate-ai-section failed: {e}")
+        raise HTTPException(500, f"generate-ai-section failed: {e}")
+ 
+
 SECTION_GENERATOR_PROMPT = """
 You are a Lead UI/UX Designer and Frontend Architect. Your task is to generate the JSON for a **single, high-fidelity website section** based on a user's prompt.
 
@@ -7026,131 +6617,92 @@ class AIResponseSchema(BaseModel):
 async def generate_data_app_element(
     body: GenerateDataAppRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_user)
+    user: User = Depends(get_current_active_user),
 ):
     try:
-        # Step 1: Fetch existing schemas for the AI's context
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
         schema_result = await db.execute(
-            select(CustomDataSchema)
-            .where(CustomDataSchema.website_id == body.website_id)
+            select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
         )
         existing_schemas = schema_result.scalars().all()
-        schemas_for_prompt = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas]
-
+ 
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
-            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps([{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas])}'
         )
-
-        # Step 2: Call OpenAI with the full context
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": NEW_2_DATA_APP_GENERATOR_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.5,
-            max_tokens=4096,
-        )
+ 
         
-        payload = json.loads(resp.choices[0].message.content)
-
-        # Step 3: Process the AI's instructions to create one or more schemas
+        payload = call_ai_json(client, model, provider, NEW_2_DATA_APP_GENERATOR_PROMPT, user_content, temperature=0.5)
+ 
         schemas_to_create = payload.get("schemas_to_create", [])
         element_to_generate = payload.get("element_to_generate")
-
+ 
         if not element_to_generate or not schemas_to_create:
-            # Fallback for old prompt format for safety
             if "schema" in payload:
-                 schemas_to_create = [payload]
-                 element_to_generate = payload
+                schemas_to_create = [payload]
+                element_to_generate = payload
             else:
-                raise HTTPException(status_code=500, detail="AI response was missing required structure.")
-
+                raise HTTPException(500, "AI response missing required structure.")
+ 
         created_schemas_map = {}
         final_schema_id = None
         final_schema_data = None
-
+ 
         for schema_data in schemas_to_create:
-            # Handle both old and new schema formats
             schema_fields = schema_data.get("schema_fields") or schema_data.get("schema", [])
             for field in schema_fields:
                 if field.get("type") == "relation":
                     placeholder = field.get("related_schema_id")
                     if placeholder in created_schemas_map:
                         field["related_schema_id"] = created_schemas_map[placeholder]
-            
+ 
             sanitized_fields = []
             for field in schema_fields:
-                field_dict = field
-                if 'related_schema_id' in field_dict and isinstance(field_dict.get('related_schema_id'), UUID):
-                    field_dict['related_schema_id'] = str(field_dict['related_schema_id'])
-                sanitized_fields.append(field_dict)
-
+                fd = dict(field)
+                if "related_schema_id" in fd and isinstance(fd.get("related_schema_id"), UUID):
+                    fd["related_schema_id"] = str(fd["related_schema_id"])
+                sanitized_fields.append(fd)
+ 
             new_schema = CustomDataSchema(
                 website_id=body.website_id,
                 name=schema_data["name"],
-                fields=sanitized_fields
+                fields=sanitized_fields,
             )
             db.add(new_schema)
             await db.commit()
             await db.refresh(new_schema)
-            
-            placeholder_key = f"PLACEHOLDER_FOR_{schema_data['name']}"
-            created_schemas_map[placeholder_key] = str(new_schema.schema_id)
+ 
+            created_schemas_map[f"PLACEHOLDER_FOR_{schema_data['name']}"] = str(new_schema.schema_id)
             final_schema_id = new_schema.schema_id
             final_schema_data = schema_data
-        
-        # Step 4: Prepare the final properties, including the 'all_schemas' context
+ 
         all_schemas_result = await db.execute(
-            select(CustomDataSchema)
-            .where(CustomDataSchema.website_id == body.website_id)
+            select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
         )
         all_schemas = all_schemas_result.scalars().all()
-        all_schemas_for_script = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas]
-
-        final_properties = element_to_generate["properties"]
-        final_properties["schema_id"] = str(final_schema_id)
-        final_properties["originalType"] = "DATA_TABLE"
-        
-        final_schema_fields = final_schema_data.get("schema_fields") or final_schema_data.get("schema", [])
-        final_properties["schema_fields"] = final_schema_fields
-        final_properties["all_schemas"] = all_schemas_for_script
-
-        final_payload = {
+ 
+        final_props = element_to_generate["properties"]
+        final_props["schema_id"] = str(final_schema_id)
+        final_props["originalType"] = "DATA_TABLE"
+        final_props["schema_fields"] = final_schema_data.get("schema_fields") or final_schema_data.get("schema", [])
+        final_props["all_schemas"] = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas]
+        final_props["website_id"] = str(body.website_id)
+ 
+        return {
             "aiTemplate": f'<div class="{body.unique_class_name}">{element_to_generate["aiTemplate"]}</div>',
-            "properties": final_properties,
+            "properties": final_props,
             "editableProps": element_to_generate.get("editableProps", []),
             "script": element_to_generate["script"],
         }
-       
-        
-        
-        # Step 5: Track usage
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
-        
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="generate_data_app",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"prompt_len": len(body.prompt)}
-        )
-
-        return final_payload
-
+ 
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"AI Data App generation failed: {e}")
-
+        raise HTTPException(500, f"AI Data App generation failed: {e}")
 
 
 
@@ -7240,97 +6792,59 @@ class AIViewOnlyResponseSchema(BaseModel):
 async def generate_view_only_element(
     body: GenerateViewOnlyRequest,
     db: AsyncSession = Depends(get_db),
-    user: User = Depends(get_current_active_user)
+    user: User = Depends(get_current_active_user),
 ):
     try:
-        # Step 1: Find the schema name and the schema itself from the database.
-        # This part requires a preliminary AI call to extract the name.
-        name_finder_prompt = f"From the following prompt, extract the exact name of the data source the user wants to display. For example, if the prompt is 'show a list of our Team Members', you must extract 'Team Members'. Respond with JSON with a single key 'name_to_find'.\n\nPROMPT: \"{body.prompt}\""
-        
-        name_resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[{"role": "system", "content": "You are a helpful assistant that extracts information."}, {"role": "user", "content": name_finder_prompt}],
-            temperature=0.0
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
+        name_payload = call_ai_json(
+            client, model, provider,
+            "You are a helpful assistant that extracts information.",
+            f'From this prompt, extract the data source name. Respond with JSON key "name_to_find".\n\nPROMPT: "{body.prompt}"',
+            temperature=0.0,
         )
-        name_payload = json.loads(name_resp.choices[0].message.content)
         name_to_find = name_payload.get("name_to_find")
-
         if not name_to_find:
-            raise HTTPException(status_code=400, detail="Could not determine the data source name from your prompt.")
-
+            raise HTTPException(400, "Could not determine data source name from prompt.")
+ 
         result = await db.execute(
             select(CustomDataSchema)
             .where(CustomDataSchema.website_id == body.website_id)
             .where(CustomDataSchema.name == name_to_find)
         )
         existing_schema = result.scalars().first()
-
         if not existing_schema:
-            raise HTTPException(status_code=404, detail=f"Data source '{name_to_find}' not found.")
-            
-        # ✅ **THE FIX YOU REQUESTED**
-        # Step 2: Create the user_content for the main AI call, now including the schema.
+            raise HTTPException(404, f"Data source '{name_to_find}' not found.")
+ 
         user_content = (
             f'PROMPT: "{body.prompt}"\n\n'
             f'UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n'
             f'SCHEMA_OF_DATA_TO_DISPLAY: {json.dumps(existing_schema.fields)}'
         )
-
-        # Step 3: Call the main generator with the complete information.
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": VIEW_ONLY_GENERATOR_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.5,
-            max_tokens=4096,
-        )
+ 
         
-        payload = json.loads(resp.choices[0].message.content)
-
-        if isinstance(payload.get("script"), str):
-            m = re.search(r"<script.*?>([\s\S]*?)</script>", payload["script"])
-            if m:
-                payload["script"] = m.group(1).strip()
-        
-        ai_response = AIViewOnlyResponseSchema(**payload)
-
-        # Step 4: Assemble the final payload.
-        final_properties = ai_response.properties
-        final_properties["schema_id"] = str(existing_schema.schema_id)
-        final_properties["originalType"] = "DATA_VIEW"
-
-        final_payload = {
-            "aiTemplate": f'<div class="{body.unique_class_name}">{ai_response.ai_template}</div>',
-            "properties": final_properties,
-            "editableProps": ai_response.editable_props,
-            "script": ai_response.script,
+        payload = call_ai_json(client, model, provider, VIEW_ONLY_GENERATOR_PROMPT, user_content, temperature=0.5)
+        payload = clean_script(payload)
+ 
+        final_props = payload.get("properties", {})
+        final_props["schema_id"] = str(existing_schema.schema_id)
+        final_props["originalType"] = "DATA_VIEW"
+        final_props["website_id"] = str(body.website_id)
+ 
+        return {
+            "aiTemplate": f'<div class="{body.unique_class_name}">{payload["aiTemplate"]}</div>',
+            "properties": final_props,
+            "editableProps": payload.get("editableProps", []),
+            "script": payload.get("script", ""),
         }
-        
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
-        
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="generate_data_app_view_only",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"prompt_len": len(body.prompt)}
-        )
-        
-        return final_payload
-
+ 
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"AI View-Only generation failed: {e}")
+        raise HTTPException(500, f"AI View-Only generation failed: {e}")
+ 
 
 
 
@@ -7354,66 +6868,36 @@ Your output MUST be a single, complete, valid JSON object representing the fully
 4.  **Return the Complete Object**: Your final output must be the entire, valid JSON object for the component, including `aiTemplate`, `properties`, `editableProps`, and `script`.
 """.strip()
 
-@router.post("/refine-data-app-element", response_model=Dict[str, Any])
+@router.post("/refine-data-app-element")
 async def refine_data_app_element(
     body: RefineStateRequest,
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ):
     try:
-        if not body.website_id:
-            raise HTTPException(status_code=400, detail="website_id is required")
-
-        # --- STEP 1: FETCH EXISTING SCHEMAS FOR CONTEXT ---
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
         schema_result = await db.execute(
-            select(CustomDataSchema)
-            .where(CustomDataSchema.website_id == body.website_id)
+            select(CustomDataSchema).where(CustomDataSchema.website_id == body.website_id)
         )
         existing_schemas = schema_result.scalars().all()
-        schemas_for_prompt = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas]
-
-        # --- STEP 2: BUILD THE CONTEXT-AWARE USER PROMPT ---
+ 
         user_content = (
             f'USER_PROMPT: "{body.prompt}"\n\n'
             f'CURRENT_COMPONENT_STATE:\n```json\n{json.dumps(body.currentState, indent=2)}\n```\n\n'
-            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(schemas_for_prompt)}'
+            f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps([{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in existing_schemas])}'
         )
-
-        # --- STEP 3: CALL OPENAI ---
-        resp = openai.chat.completions.create(
-            model=AI_DEFAULT_MODEL,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": REFINE_DATA_APP_PROMPT},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=0.2,
-        )
-
-        payload = json.loads(resp.choices[0].message.content)
+ 
         
-        # --- (Usage tracking remains the same) ---
-        usage = getattr(resp, "usage", None)
-        prompt_tokens = int(getattr(usage, "prompt_tokens", 0) or 0)
-        completion_tokens = int(getattr(usage, "completion_tokens", 0) or 0)
-        model_used = getattr(resp, "model", AI_DEFAULT_MODEL)
-        
-        await track_ai_usage(
-            db=db,
-            website_id=body.website_id,
-            user_id=user.id,
-            model=model_used,
-            feature="refine_data_app",
-            prompt_tokens=prompt_tokens,
-            completion_tokens=completion_tokens,
-            meta={"state_keys": list((body.currentState or {}).keys())[:10]},
-        )
-
-        return payload
-
+        return call_ai_json(client, model, provider, REFINE_DATA_APP_PROMPT, user_content)
+ 
+    except HTTPException:
+        raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(status_code=500, detail=f"Data App refinement failed: {e}")
+        raise HTTPException(500, f"Data App refinement failed: {e}")
+ 
 
 
 #region nontabletestingai

@@ -43,6 +43,13 @@ class Website(Base):
     email_config = relationship("WebsiteEmailConfig", uselist=False, back_populates="website", cascade="all, delete-orphan")
     openai_api_key = Column(String, nullable=True)
     member_ai_spend_limit_usd = Column(Numeric, nullable=True, default=0.10)
+    user_openai_key   = Column(String, nullable=True)
+    user_claude_key   = Column(String, nullable=True)
+    user_gemini_key   = Column(String, nullable=True)
+    user_openai_model = Column(String, nullable=True, default="gpt-4o")
+    user_claude_model = Column(String, nullable=True, default="claude-sonnet-4-6")
+    user_gemini_model = Column(String, nullable=True, default="gemini-2.0-flash")
+    preferred_ai_provider = Column(String, nullable=True, default="platform")
     
 class AIUsageLog(Base):
     __tablename__ = "ai_usage_logs"
