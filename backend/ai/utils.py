@@ -1,7 +1,7 @@
 # ai/utils.py
 import openai as openai_lib
 import anthropic
-from ..website_builder.models import Website
+from website_builder.models import Website
 from fastapi import HTTPException
 
 def get_ai_client(website, provider_override=None):
