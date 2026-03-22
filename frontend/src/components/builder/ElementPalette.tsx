@@ -277,9 +277,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   const [aiPrompt, setAiPrompt] = useState("");
   const [loadingAi, setLoadingAi] = useState(false);
   // ✅ NEW: Model Selection State
-  const [selectedAiModel, setSelectedAiModel] = useState<"openai" | "claude">(
-    "openai",
-  );
 
   // --- Data App Generator State ---
   const [aiDataAppPrompt, setAiDataAppPrompt] = useState("");
@@ -296,13 +293,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       const newElementId = `ai_${Date.now()}`;
       const uniqueClassName = `ai-element-${newElementId.substring(3, 10)}`;
 
-      // ✅ Dynamically choose the correct backend endpoint
-      const endpoint =
-        selectedAiModel === "openai"
-          ? "/ai/generate-ai-element-openai"
-          : "/ai/generate-ai-element-claude";
-
-      const { data } = await api.post(endpoint, {
+      const { data } = await api.post("/ai/generate-ai-element", {
         prompt: aiPrompt,
         unique_class_name: uniqueClassName,
         website_id: websiteId,
@@ -312,10 +303,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         element_id: newElementId,
         element_type: "AI",
         position: 999,
-        properties: {
-          ...data.properties,
-          bgColor: "transparent",
-        },
+        properties: { ...data.properties, bgColor: "transparent" },
         aiPayload: {
           ...data,
           script: data.script,
@@ -339,8 +327,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
       setAiPrompt("");
     } catch (err: any) {
       console.error(err);
-      const errorMsg = err.response?.data?.detail || "AI generation failed";
-      alert(errorMsg);
+      alert(err.response?.data?.detail || "AI generation failed");
     } finally {
       setLoadingAi(false);
     }
@@ -551,16 +538,6 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             />
             {/* ✅ NEW: Model Selection & Generate Button */}
             <div className="flex gap-2 mt-2">
-              <select
-                value={selectedAiModel}
-                onChange={(e) =>
-                  setSelectedAiModel(e.target.value as "openai" | "claude")
-                }
-                className="w-1/3 border rounded p-2 text-sm bg-white"
-              >
-                <option value="openai">OpenAI</option>
-                <option value="claude">Claude</option>
-              </select>
               <button
                 onClick={handleGenerateAi}
                 disabled={loadingAi || !aiPrompt.trim() || !isSubscribed}

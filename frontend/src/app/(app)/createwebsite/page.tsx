@@ -1108,41 +1108,6 @@ function BuilderManager() {
                 <h1 className="text-xl font-bold">Website Builder</h1>
 
                 {/* Credits badge logic */}
-                <div className="flex items-center gap-3 bg-white/10 rounded-md px-3 py-2">
-                  {(() => {
-                    const limitUsd = Number(
-                      websiteData.ai_spend_limit_usd ?? 0,
-                    );
-                    const spentUsd = Number(websiteData.monthly_spend_usd ?? 0);
-                    const totalCredits = Math.round(limitUsd * 1000);
-                    const usedCredits = Math.min(
-                      totalCredits,
-                      Math.round(spentUsd * 1000),
-                    );
-                    const remaining = Math.max(0, totalCredits - usedCredits);
-                    const pct =
-                      totalCredits > 0
-                        ? Math.round((usedCredits / totalCredits) * 100)
-                        : 0;
-
-                    return (
-                      <div className="flex items-center gap-3">
-                        <div className="text-sm font-medium">
-                          Credits:{" "}
-                          <span className="font-semibold">{remaining}</span> /{" "}
-                          {totalCredits}
-                        </div>
-                        <div className="w-40 h-2 bg-white/20 rounded">
-                          <div
-                            className="h-2 bg-green-400 rounded"
-                            style={{ width: `${pct}%` }}
-                            title={`${pct}% used`}
-                          />
-                        </div>
-                      </div>
-                    );
-                  })()}
-                </div>
               </div>
 
               {/* Actions */}

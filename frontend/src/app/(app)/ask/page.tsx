@@ -30,7 +30,7 @@ export default function AskPage() {
             onInit={(tw) =>
               tw
                 .typeString(
-                  "Feel free to reach out, and our dedicated team will respond to your inquiries promptly."
+                  "Feel free to reach out, and our dedicated team will respond to your inquiries promptly.",
                 )
                 .start()
             }
@@ -92,7 +92,7 @@ export default function AskPage() {
                   placeholder="Your business name"
                 />
               </div>
-
+            
               <div>
                 <label className="block mb-1 text-white font-medium">
                   Message
