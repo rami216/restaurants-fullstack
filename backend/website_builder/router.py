@@ -1294,26 +1294,39 @@ async def fetch_external_api(payload: FetchExternalPayload):
 #region websiteid
 class WebsiteIdResponse(BaseModel):
     website_id: str
+    preferred_ai_provider: Optional[str] = "openai"
+    user_openai_model: Optional[str] = "gpt-4o"
+    user_claude_model: Optional[str] = "claude-sonnet-4-6"
+    user_gemini_model: Optional[str] = "gemini-2.0-flash"
+    has_openai_key: bool = False
+    has_claude_key: bool = False
+    has_gemini_key: bool = False
 
 @router.get("/my-website-id", response_model=WebsiteIdResponse)
 async def get_my_website_id(
     current_user: User = Depends(get_current_active_user),
     db: AsyncSession = Depends(get_db)
 ):
-    """
-    Ultra-lightweight endpoint to fetch ONLY the website ID for the Architect.
-    """
     result = await db.execute(
-        select(Website.website_id)
+        select(Website)
         .join(RestaurantOwner)
         .where(RestaurantOwner.user_id == current_user.id)
     )
-    website_id = result.scalars().first()
+    website = result.scalars().first()
     
-    if not website_id:
+    if not website:
         raise HTTPException(status_code=404, detail="No website found for this user.")
 
-    return {"website_id": str(website_id)}
+    return {
+        "website_id": str(website.website_id),
+        "preferred_ai_provider": website.preferred_ai_provider or "openai",
+        "user_openai_model": website.user_openai_model or "gpt-4o",
+        "user_claude_model": website.user_claude_model or "claude-sonnet-4-6",
+        "user_gemini_model": website.user_gemini_model or "gemini-2.0-flash",
+        "has_openai_key": bool(website.user_openai_key),
+        "has_claude_key": bool(website.user_claude_key),
+        "has_gemini_key": bool(website.user_gemini_key),
+    }
 
 #region customapis
 class UserAISettingsUpdate(BaseModel):
