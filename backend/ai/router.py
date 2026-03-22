@@ -17,7 +17,7 @@ from database import get_db
 from models import User
 from models import CustomDataSchema
 from website_builder.custom_data_router import SchemaField
-from ..ai.utils import get_ai_client
+from .utils import get_ai_client
 from website_builder.models import Website
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
