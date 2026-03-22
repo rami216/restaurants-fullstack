@@ -194,14 +194,14 @@ function AISettingsPanel({ websiteId }: { websiteId: string }) {
                   placeholder={f.keyPlaceholder}
                   value={(form as any)[f.keyField]}
                   onChange={(e) => set(f.keyField, e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs mb-1.5 focus:outline-none focus:border-pink-400 bg-white"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs mb-1.5 focus:outline-none focus:border-pink-400 bg-white text-gray-900"
                 />
                 <input
                   type="text"
                   placeholder={f.modelPlaceholder}
                   value={(form as any)[f.modelField]}
                   onChange={(e) => set(f.modelField, e.target.value)}
-                  className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-pink-400 font-mono bg-white"
+                  className="w-full border border-gray-200 rounded-lg px-3 py-1.5 text-xs focus:outline-none focus:border-pink-400 font-mono bg-white text-gray-900"
                 />
               </div>
             ))}
