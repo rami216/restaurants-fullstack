@@ -3,20 +3,31 @@
 
 import { useEffect, useMemo, useState } from "react";
 import api from "@/lib/axios";
+import {
+  Globe,
+  RefreshCw,
+  Trash2,
+  Save,
+  CheckCircle2,
+  Clock,
+  AlertCircle,
+  Copy as CopyIcon,
+  Check,
+} from "lucide-react";
 
 /** API shapes */
 type Site = {
   website_id: string;
   subdomain: string;
   primary_custom_domain?: string | null;
-  primary_custom_domain_status?: string | null; // e.g. "active", "pending_validation"
-  primary_custom_domain_id?: string | null; // keep as string in client code
+  primary_custom_domain_status?: string | null;
+  primary_custom_domain_id?: string | null;
 };
 
 type DnsInstructions = {
-  record_type: string; // e.g. "TXT"
-  record_name: string; // e.g. "_cf-custom-hostname.www.example.com"
-  record_value: string; // e.g. the long TXT token
+  record_type: string;
+  record_name: string;
+  record_value: string;
   message: string;
 };
 
@@ -28,7 +39,6 @@ const normalizeDomain = (d: string) =>
     .replace(/^https?:\/\//, "")
     .replace(/\/+$/, "");
 
-/** Robustly map backend payloads into a consistent DNS instruction shape */
 const toDns = (raw: any): DnsInstructions => {
   const record_type = raw?.record_type ?? raw?.type ?? "TXT";
   const record_name =
@@ -59,14 +69,13 @@ export default function CustomDomainPage() {
   const [verifying, setVerifying] = useState(false);
   const [dnsInstructions, setDnsInstructions] =
     useState<DnsInstructions | null>(null);
+  const [copiedMap, setCopiedMap] = useState<Record<string, boolean>>({});
 
-  /** Fetch current site info */
   const fetchSite = async () => {
     try {
       const { data } = await api.get<Site>("/builder/website");
       setSite(data);
       setDomain(data.primary_custom_domain || "");
-      // Keep dnsInstructions if already shown; user may still need to copy them
     } catch (error) {
       console.error("Failed to fetch site data:", error);
     }
@@ -77,19 +86,14 @@ export default function CustomDomainPage() {
     fetchSite().finally(() => setLoading(false));
   }, []);
 
-  /** Derived values for UI */
   const rootDomain = useMemo(() => {
     const d = normalizeDomain(domain || site?.primary_custom_domain || "");
     return d.replace(/^www\./, "");
   }, [domain, site?.primary_custom_domain]);
 
   const isActive = site?.primary_custom_domain_status === "active";
-
   const apexRedirectTarget = `https://www.${rootDomain || "yourdomain.com"}`;
 
-  /** Extract only the label users must paste into Host/Name:
-   *  "_cf-custom-hostname.www.example.com" → "_cf-custom-hostname.www"
-   */
   const hostLabelToCopy = useMemo(() => {
     const name = dnsInstructions?.record_name;
     if (!name) return "_cf-custom-hostname.www";
@@ -99,16 +103,17 @@ export default function CustomDomainPage() {
     return dn.endsWith(suffix) ? dn.slice(0, -suffix.length) : dn;
   }, [dnsInstructions?.record_name, rootDomain]);
 
-  /** Clipboard */
-  const copy = async (text: string) => {
+  const copyToClipboard = async (text: string, id: string) => {
     try {
       await navigator.clipboard.writeText(text);
-    } catch {
-      /* no-op */
-    }
+      setCopiedMap({ ...copiedMap, [id]: true });
+      setTimeout(
+        () => setCopiedMap((prev) => ({ ...prev, [id]: false })),
+        2000,
+      );
+    } catch {}
   };
 
-  /** Save requested domain and show TXT instructions from server */
   const saveDomain = async () => {
     if (!domain.trim() || !site?.website_id) return;
     setSaving(true);
@@ -117,24 +122,22 @@ export default function CustomDomainPage() {
         website_id: site.website_id,
         domain: normalizeDomain(domain),
       });
-      // Some backends wrap result under { result: {...} }, handle both
       setDnsInstructions(toDns((data as any)?.result ?? data));
     } catch (error: any) {
       alert(
-        `Error: ${error?.response?.data?.detail || "Could not add domain."}`
+        `Error: ${error?.response?.data?.detail || "Could not add domain."}`,
       );
     } finally {
       setSaving(false);
     }
   };
 
-  /** Ask backend to re-check status with provider, then refresh site */
   const refreshStatus = async () => {
     if (!site?.primary_custom_domain_id) return;
     setVerifying(true);
     try {
       await api.post(
-        `/custom-domains/${site.primary_custom_domain_id}/refresh`
+        `/custom-domains/${site.primary_custom_domain_id}/refresh`,
       );
       await fetchSite();
     } catch (error) {
@@ -144,245 +147,357 @@ export default function CustomDomainPage() {
     }
   };
 
-  /** Status chip */
-  const renderStatus = () => {
+  // ✅ THE REMOVE FUNCTION IS HERE!
+  const handleRemoveDomain = async () => {
+    if (!site?.primary_custom_domain_id) return;
+    if (
+      !confirm(
+        `Are you sure you want to remove ${site.primary_custom_domain}? You will need to re-verify if you add it back later.`,
+      )
+    )
+      return;
+
+    setSaving(true);
+    try {
+      await api.delete(`/custom-domains/${site.primary_custom_domain_id}`);
+      setDomain("");
+      setDnsInstructions(null);
+      await fetchSite();
+      alert("Domain removed successfully.");
+    } catch (err: any) {
+      console.error(err);
+      alert(err.response?.data?.detail || "Failed to remove domain.");
+    } finally {
+      setSaving(false);
+    }
+  };
+
+  const renderStatusBadge = () => {
     if (!site?.primary_custom_domain) return null;
     const status = site.primary_custom_domain_status;
-    let color = "text-gray-600";
-    let text = status || "Unknown";
 
     if (status === "active") {
-      color = "text-green-600";
-      text = "Active";
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-green-100 text-green-800 border border-green-200">
+          <CheckCircle2 size={14} /> Active & Connected
+        </span>
+      );
     } else if (status === "pending_validation" || status === "initializing") {
-      color = "text-orange-600";
-      text = "Pending Verification";
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-amber-100 text-amber-800 border border-amber-200">
+          <Clock size={14} /> Pending Verification
+        </span>
+      );
     } else if (status?.includes("fail")) {
-      color = "text-red-600";
-      text = "Failed";
+      return (
+        <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200">
+          <AlertCircle size={14} /> Verification Failed
+        </span>
+      );
     }
-
     return (
-      <div className="text-sm mt-2">
-        Current: <b>{site.primary_custom_domain}</b>{" "}
-        <span className={color}>({text})</span>
-      </div>
+      <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-gray-100 text-gray-800 border border-gray-200">
+        <Clock size={14} /> Status Unknown
+      </span>
     );
   };
 
-  if (loading) return <div className="p-6">Loading…</div>;
+  if (loading) {
+    return (
+      <div className="flex h-[calc(100vh-100px)] items-center justify-center">
+        <div className="w-10 h-10 border-4 border-indigo-200 border-t-indigo-600 rounded-full animate-spin"></div>
+      </div>
+    );
+  }
 
-  const showActionBadge =
-    !isActive && (dnsInstructions ? "Action Required" : "Pending Setup");
   const recordType = dnsInstructions?.record_type || "TXT";
   const txtValue = dnsInstructions?.record_value;
 
   return (
-    <div className="max-w-2xl mx-auto p-6 space-y-6">
-      <h1 className="text-2xl font-bold">Custom Domain</h1>
-
-      {/* Domain input / status */}
-      <div className="rounded-lg border p-4 space-y-3 bg-white">
-        <label className="block text-sm font-medium">Your domain</label>
-        <input
-          className="w-full border rounded px-3 py-2"
-          placeholder="www.yourdomain.com"
-          value={domain}
-          onChange={(e) => setDomain(e.target.value)}
-        />
-        <div className="flex gap-2">
-          <button
-            onClick={saveDomain}
-            disabled={saving || !domain.trim()}
-            className="px-3 py-1.5 rounded bg-black text-white text-sm disabled:opacity-60"
-          >
-            {saving ? "Saving…" : "Save Domain"}
-          </button>
-          <button
-            onClick={refreshStatus}
-            disabled={verifying || !site?.primary_custom_domain_id}
-            className="px-3 py-1.5 rounded bg-indigo-600 text-white text-sm disabled:opacity-60"
-          >
-            {verifying ? "Checking…" : "Refresh Status"}
-          </button>
+    <div className="max-w-3xl mx-auto p-6 sm:p-10 space-y-8">
+      {/* Header */}
+      <div className="flex items-center gap-4 border-b pb-6">
+        <div className="p-3 bg-indigo-50 rounded-xl">
+          <Globe className="text-indigo-600 w-8 h-8" />
         </div>
-        {renderStatus()}
-      </div>
-
-      {/* STEP 1 — Verify Domain Ownership (TXT) */}
-      <div className="rounded-lg border p-4 space-y-4 bg-blue-50">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold text-blue-900">
-            Step 1 — Verify Domain Ownership (TXT)
-          </h2>
-          <span
-            className={`text-xs px-2 py-0.5 rounded ${
-              isActive
-                ? "bg-green-100 text-green-800"
-                : "bg-blue-100 text-blue-800"
-            }`}
-          >
-            {isActive ? "Completed" : showActionBadge}
-          </span>
-        </div>
-
-        {dnsInstructions ? (
-          <p className="text-sm text-blue-800">{dnsInstructions.message}</p>
-        ) : (
-          <p className="text-sm text-blue-800">
-            Enter your domain above and click <b>Save Domain</b> to generate the
-            TXT record you need to add.
+        <div>
+          <h1 className="text-2xl font-extrabold text-gray-900">
+            Custom Domain Setup
+          </h1>
+          <p className="text-sm text-gray-500 mt-1">
+            Connect your own domain to your website in two easy steps.
           </p>
-        )}
+        </div>
+      </div>
 
-        <div className="grid grid-cols-1 gap-3">
-          <div className="bg-white rounded border p-3">
-            <div className="text-xs text-gray-500 mb-1">Type</div>
-            <div className="font-mono text-sm">{recordType}</div>
-          </div>
-
-          <div className="bg-white rounded border p-3">
-            <div className="text-xs text-gray-500 mb-1">
-              Name / Host (copy only this part)
-            </div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-sm break-all">
-                {hostLabelToCopy}
+      {/* Main Settings Card */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="p-6 sm:p-8">
+          {site?.primary_custom_domain && (
+            <div className="mb-6 flex flex-col sm:flex-row sm:items-center justify-between gap-4 p-4 bg-gray-50 rounded-lg border border-gray-100">
+              <div>
+                <p className="text-xs font-bold text-gray-500 uppercase tracking-wider mb-1">
+                  Current Domain
+                </p>
+                <p className="text-lg font-semibold text-gray-900">
+                  {site.primary_custom_domain}
+                </p>
               </div>
-              <button
-                onClick={() => copy(hostLabelToCopy)}
-                className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
-              >
-                Copy
-              </button>
+              <div>{renderStatusBadge()}</div>
             </div>
-            <p className="mt-2 text-xs text-gray-600">
-              Paste exactly the label above (e.g. <b>_cf-custom-hostname.www</b>
-              ) into the <i>Host/Name</i> field. <b>Do not include</b> your
-              domain (e.g.{" "}
-              <span className="font-mono text-[11px]">.yourdomain.com</span>).
-            </p>
-          </div>
+          )}
 
-          <div className="bg-white rounded border p-3">
-            <div className="text-xs text-gray-500 mb-1">Value / Target</div>
-            <div className="flex items-center justify-between gap-3">
-              <div className="font-mono text-sm break-all">
-                {txtValue ||
-                  (dnsInstructions ? "(missing from server response)" : "—")}
-              </div>
-              <button
-                onClick={() => txtValue && copy(txtValue)}
-                disabled={!txtValue}
-                className="text-xs px-2 py-1 rounded bg-gray-900 text-white disabled:opacity-50"
-              >
-                Copy
-              </button>
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-semibold text-gray-700 mb-1">
+                Domain Name
+              </label>
+              <input
+                className="w-full border border-gray-300 rounded-lg px-4 py-3 focus:outline-none focus:ring-2 focus:ring-indigo-500 transition-shadow"
+                placeholder="e.g. www.yourdomain.com"
+                value={domain}
+                onChange={(e) => setDomain(e.target.value)}
+                disabled={!!site?.primary_custom_domain_id && !dnsInstructions}
+              />
+              <p className="text-xs text-gray-500 mt-2">
+                Enter the exact domain you want users to visit. We recommend
+                using <b>www</b>.
+              </p>
+            </div>
+
+            <div className="flex flex-wrap gap-3 pt-2">
+              {(!site?.primary_custom_domain_id || dnsInstructions) && (
+                <button
+                  onClick={saveDomain}
+                  disabled={saving || !domain.trim()}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-indigo-600 hover:bg-indigo-700 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  <Save size={16} /> {saving ? "Saving…" : "Save Domain"}
+                </button>
+              )}
+
+              {site?.primary_custom_domain_id && (
+                <button
+                  onClick={refreshStatus}
+                  disabled={verifying}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-gray-900 hover:bg-gray-800 text-white text-sm font-semibold transition-colors disabled:opacity-50"
+                >
+                  <RefreshCw
+                    size={16}
+                    className={verifying ? "animate-spin" : ""}
+                  />
+                  {verifying ? "Checking…" : "Refresh Status"}
+                </button>
+              )}
+
+              {/* ✅ THE REMOVE BUTTON */}
+              {site?.primary_custom_domain_id && (
+                <button
+                  onClick={handleRemoveDomain}
+                  disabled={saving || verifying}
+                  className="flex items-center gap-2 px-5 py-2.5 rounded-lg bg-red-50 text-red-700 hover:bg-red-100 hover:text-red-800 text-sm font-semibold transition-colors ml-auto disabled:opacity-50"
+                >
+                  <Trash2 size={16} /> Remove Domain
+                </button>
+              )}
             </div>
           </div>
         </div>
-
-        <p className="text-xs text-gray-700">
-          After adding this TXT record, wait a few minutes, then click{" "}
-          <b>Refresh Status</b>. Once Active, proceed to Step 2.
-        </p>
       </div>
 
-      {/* STEP 2 — Go Live (after TXT is verified) */}
-      <div className="rounded-lg border p-4 space-y-4 bg-white">
-        <div className="flex items-center justify-between">
-          <h2 className="font-semibold">
-            Step 2 — Go Live (after TXT is verified)
+      {/* STEP 1 */}
+      <div className="bg-white rounded-xl shadow-sm border border-blue-200 overflow-hidden">
+        <div className="bg-blue-50 p-4 border-b border-blue-100 flex justify-between items-center">
+          <h2 className="font-bold text-blue-900 flex items-center gap-2">
+            <span className="bg-blue-600 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">
+              1
+            </span>
+            Verify Domain Ownership (TXT)
           </h2>
           <span
-            className={`text-xs px-2 py-0.5 rounded ${
-              isActive
-                ? "bg-green-100 text-green-800"
-                : "bg-gray-100 text-gray-700"
-            }`}
+            className={`text-xs px-3 py-1 rounded-full font-semibold ${isActive ? "bg-green-100 text-green-800" : "bg-amber-100 text-amber-800"}`}
           >
-            {isActive ? "Ready" : "Pending"}
+            {isActive ? "Completed" : "Action Required"}
           </span>
         </div>
 
-        <ol className="list-decimal pl-5 space-y-3 text-sm">
-          <li>
-            <b>Delete</b> the TXT record{" "}
-            <span className="font-mono text-[12px]">
-              _cf-custom-hostname.www
-            </span>{" "}
-            you added in Step 1.
-          </li>
-
-          <li>
-            Add a <b>CNAME</b> record to point your subdomain to our platform:
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <div className="rounded border p-3">
-                <div className="text-xs text-gray-500 mb-1">Name / Host</div>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm">www</div>
-                  <button
-                    onClick={() => copy("www")}
-                    className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-              <div className="rounded border p-3">
-                <div className="text-xs text-gray-500 mb-1">Value / Target</div>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm">www.zygoflow.com</div>
-                  <button
-                    onClick={() => copy("www.zygoflow.com")}
-                    className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
-          </li>
-
-          <li>
-            Add a <b>URL Redirect / Forward</b> so the root domain redirects to
-            the www version:
-            <div className="mt-2 grid gap-2 sm:grid-cols-2">
-              <div className="rounded border p-3">
-                <div className="text-xs text-gray-500 mb-1">From (Host)</div>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm">@</div>
-                  <button
-                    onClick={() => copy("@")}
-                    className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-              <div className="rounded border p-3">
-                <div className="text-xs text-gray-500 mb-1">
-                  To (Destination URL)
-                </div>
-                <div className="flex items-center justify-between gap-3">
-                  <div className="font-mono text-sm break-all">
-                    {apexRedirectTarget}
-                  </div>
-                  <button
-                    onClick={() => copy(apexRedirectTarget)}
-                    className="text-xs px-2 py-1 rounded bg-gray-900 text-white"
-                  >
-                    Copy
-                  </button>
-                </div>
-              </div>
-            </div>
-            <p className="mt-2 text-xs text-gray-600">
-              Some registrars call this “URL redirect” or “Forwarding.” Choose a
-              permanent (301) redirect if offered.
+        <div className="p-6 space-y-4">
+          {dnsInstructions ? (
+            <p className="text-sm text-gray-700">{dnsInstructions.message}</p>
+          ) : (
+            <p className="text-sm text-gray-700">
+              Enter your domain above and click <b>Save Domain</b> to generate
+              your TXT record.
             </p>
-          </li>
-        </ol>
+          )}
+
+          <div className="grid grid-cols-1 gap-4">
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                Type
+              </div>
+              <div className="font-mono text-sm text-gray-800">
+                {recordType}
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                Name / Host (copy only this part)
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-mono text-sm text-gray-800 break-all">
+                  {hostLabelToCopy}
+                </div>
+                <button
+                  onClick={() => copyToClipboard(hostLabelToCopy, "host")}
+                  className="text-xs px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-semibold flex items-center gap-1 transition-colors"
+                >
+                  {copiedMap["host"] ? (
+                    <Check size={14} className="text-green-600" />
+                  ) : (
+                    <CopyIcon size={14} />
+                  )}{" "}
+                  {copiedMap["host"] ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+
+            <div className="bg-gray-50 rounded-lg border border-gray-200 p-4">
+              <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                Value / Target
+              </div>
+              <div className="flex items-center justify-between gap-3">
+                <div className="font-mono text-sm text-gray-800 break-all">
+                  {txtValue || "—"}
+                </div>
+                <button
+                  onClick={() => txtValue && copyToClipboard(txtValue, "value")}
+                  disabled={!txtValue}
+                  className="text-xs px-3 py-1.5 rounded-md bg-white border border-gray-300 hover:bg-gray-100 text-gray-700 font-semibold flex items-center gap-1 transition-colors disabled:opacity-50"
+                >
+                  {copiedMap["value"] ? (
+                    <Check size={14} className="text-green-600" />
+                  ) : (
+                    <CopyIcon size={14} />
+                  )}{" "}
+                  {copiedMap["value"] ? "Copied!" : "Copy"}
+                </button>
+              </div>
+            </div>
+          </div>
+          <p className="text-xs text-gray-500 flex items-center gap-1.5 mt-2">
+            <Clock size={14} /> After adding this, wait a few minutes, then
+            click <b>Refresh Status</b>.
+          </p>
+        </div>
+      </div>
+
+      {/* STEP 2 */}
+      <div className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden">
+        <div className="bg-gray-50 p-4 border-b border-gray-200 flex justify-between items-center">
+          <h2 className="font-bold text-gray-900 flex items-center gap-2">
+            <span className="bg-gray-800 text-white w-6 h-6 rounded-full flex items-center justify-center text-xs">
+              2
+            </span>
+            Go Live (CNAME & Redirect)
+          </h2>
+          <span
+            className={`text-xs px-3 py-1 rounded-full font-semibold ${isActive ? "bg-green-100 text-green-800" : "bg-gray-200 text-gray-600"}`}
+          >
+            {isActive ? "Ready" : "Pending TXT"}
+          </span>
+        </div>
+
+        <div className="p-6">
+          <ol className="list-decimal pl-5 space-y-6 text-sm text-gray-700">
+            <li>
+              <b>Delete</b> the TXT record{" "}
+              <span className="font-mono text-xs bg-gray-100 px-1.5 py-0.5 rounded border border-gray-200">
+                _cf-custom-hostname.www
+              </span>{" "}
+              you added in Step 1.
+            </li>
+
+            <li>
+              Add a <b>CNAME</b> record to point your subdomain to our platform:
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                    Name / Host
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-mono text-sm">www</div>
+                    <button
+                      onClick={() => copyToClipboard("www", "cname-host")}
+                      className="text-xs px-2.5 py-1 rounded bg-white border border-gray-300 hover:bg-gray-100 transition-colors"
+                    >
+                      {copiedMap["cname-host"] ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                    Value / Target
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-mono text-sm">www.zygoflow.com</div>
+                    <button
+                      onClick={() =>
+                        copyToClipboard("www.zygoflow.com", "cname-val")
+                      }
+                      className="text-xs px-2.5 py-1 rounded bg-white border border-gray-300 hover:bg-gray-100 transition-colors"
+                    >
+                      {copiedMap["cname-val"] ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+            </li>
+
+            <li>
+              Add a <b>URL Redirect / Forward</b> so the root domain redirects
+              to the www version:
+              <div className="mt-3 grid gap-3 sm:grid-cols-2">
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                    From (Host)
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-mono text-sm">@</div>
+                    <button
+                      onClick={() => copyToClipboard("@", "redir-host")}
+                      className="text-xs px-2.5 py-1 rounded bg-white border border-gray-300 hover:bg-gray-100 transition-colors"
+                    >
+                      {copiedMap["redir-host"] ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+                <div className="rounded-lg border border-gray-200 bg-gray-50 p-3">
+                  <div className="text-xs font-bold text-gray-500 uppercase tracking-wide mb-1">
+                    To (Destination URL)
+                  </div>
+                  <div className="flex items-center justify-between gap-3">
+                    <div className="font-mono text-sm break-all">
+                      {apexRedirectTarget}
+                    </div>
+                    <button
+                      onClick={() =>
+                        copyToClipboard(apexRedirectTarget, "redir-val")
+                      }
+                      className="text-xs px-2.5 py-1 rounded bg-white border border-gray-300 hover:bg-gray-100 transition-colors"
+                    >
+                      {copiedMap["redir-val"] ? "Copied!" : "Copy"}
+                    </button>
+                  </div>
+                </div>
+              </div>
+              <p className="mt-2 text-xs text-gray-500">
+                Choose a permanent (301) redirect if your registrar asks.
+              </p>
+            </li>
+          </ol>
+        </div>
       </div>
     </div>
   );
