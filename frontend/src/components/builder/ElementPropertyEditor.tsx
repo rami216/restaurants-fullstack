@@ -126,6 +126,42 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         .catch((err) => console.error("Failed to load schemas", err));
     }
   }, [websiteData?.website_id]);
+
+  // 🚀 START: POST-PURCHASE AUTOMATION LOGIC
+  const handleSaveAutomation = async (
+    productId: string,
+    schemaId: string,
+    column: string,
+    value: string,
+  ) => {
+    if (!productId || !schemaId || !column || !value) {
+      return alert(
+        "Please select a table and fill out the column/value fields.",
+      );
+    }
+
+    setIsSyncing(true);
+    try {
+      await api.post(
+        `/users-stripe-account/builder/websites/${websiteData.website_id}/products/${productId}/automations`,
+        {
+          target_schema_id: schemaId,
+          action_type: "insert_row",
+          payload_template: {
+            [column.trim()]: isNaN(Number(value)) ? value : Number(value),
+            sitemember_id: "{{member_id}}", // 👈 The magic webhook placeholder!
+          },
+        },
+      );
+      alert("✅ Automation successfully attached to this product!");
+    } catch (error) {
+      console.error("Failed to save automation", error);
+      alert("Failed to save automation. Check console.");
+    } finally {
+      setIsSyncing(false);
+    }
+  };
+  // 🚀 END: POST-PURCHASE AUTOMATION LOGIC
   const posterInputRef = useRef<HTMLInputElement>(null);
 
   const handleTitleStyleChange = (key: string, value: string) =>
@@ -2026,32 +2062,133 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
               )}
 
               {/* ✅ SHOW FOR BOTH PURCHASE AND SUBSCRIBE */}
+              {/* ✅ SHOW FOR BOTH PURCHASE AND SUBSCRIBE */}
               {(action === "purchase" || action === "subscribe") && (
-                <div className="mt-2">
-                  <label className="block text-sm font-medium mb-1">
-                    Product
-                  </label>
-                  <select
-                    className="border rounded p-2 w-full"
-                    value={productId}
-                    onChange={(e) =>
-                      handlePropertyChange("interactivity", {
-                        action: action, // Keeps it as purchase OR subscribe
-                        product_id: e.target.value,
-                      })
-                    }
-                  >
-                    <option value="">Select a product…</option>
-                    {products.map((p) => (
-                      <option key={p.product_id} value={p.product_id}>
-                        {p.name}
-                      </option>
-                    ))}
-                  </select>
-                  <p className="text-xs text-gray-500 mt-1">
-                    This element will start a Stripe checkout for the selected
-                    product.
-                  </p>
+                <div className="space-y-4 mt-2">
+                  <div>
+                    <label className="block text-sm font-medium mb-1">
+                      Product
+                    </label>
+                    <select
+                      className="border rounded p-2 w-full"
+                      value={productId}
+                      onChange={(e) =>
+                        handlePropertyChange("interactivity", {
+                          ...selectedItem.properties.interactivity,
+                          action: action,
+                          product_id: e.target.value,
+                        })
+                      }
+                    >
+                      <option value="">Select a product…</option>
+                      {products.map((p) => (
+                        <option key={p.product_id} value={p.product_id}>
+                          {p.name}
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+
+                  {/* 🚀 START: POST-PURCHASE AUTOMATION UI 🚀 */}
+                  {productId && (
+                    <div className="p-4 border border-indigo-200 bg-indigo-50 rounded-lg shadow-inner">
+                      <h5 className="text-sm font-bold text-indigo-900 mb-1 flex items-center gap-2">
+                        ⚡ Post-Purchase Automation
+                      </h5>
+                      <p className="text-xs text-indigo-700 mb-4 leading-relaxed">
+                        When a user buys this product, automatically insert data
+                        into a Custom Data Table (e.g. giving them credits).
+                      </p>
+
+                      <label className="block text-xs font-bold text-gray-700 mb-1 uppercase tracking-wider">
+                        Target Table
+                      </label>
+                      <select
+                        className="border border-indigo-200 rounded p-2 w-full text-sm mb-3 bg-white"
+                        value={
+                          selectedItem.properties.interactivity
+                            ?.automation_schema_id || ""
+                        }
+                        onChange={(e) =>
+                          handlePropertyChange("interactivity", {
+                            ...selectedItem.properties.interactivity,
+                            automation_schema_id: e.target.value,
+                          })
+                        }
+                      >
+                        <option value="">-- Do nothing --</option>
+                        {schemas.map((s) => (
+                          <option key={s.schema_id} value={s.schema_id}>
+                            {s.name}
+                          </option>
+                        ))}
+                      </select>
+
+                      {selectedItem.properties.interactivity
+                        ?.automation_schema_id && (
+                        <div className="space-y-3 animate-in fade-in slide-in-from-top-2">
+                          <label className="block text-xs font-bold text-gray-700 uppercase tracking-wider">
+                            Data to Insert
+                          </label>
+                          <div className="grid grid-cols-2 gap-2">
+                            <input
+                              className="border border-indigo-200 rounded p-2 text-sm w-full bg-white"
+                              placeholder="Column (e.g. credits)"
+                              value={
+                                selectedItem.properties.interactivity
+                                  ?.automation_column || ""
+                              }
+                              onChange={(e) =>
+                                handlePropertyChange("interactivity", {
+                                  ...selectedItem.properties.interactivity,
+                                  automation_column: e.target.value,
+                                })
+                              }
+                            />
+                            <input
+                              className="border border-indigo-200 rounded p-2 text-sm w-full bg-white"
+                              placeholder="Value (e.g. 500)"
+                              value={
+                                selectedItem.properties.interactivity
+                                  ?.automation_value || ""
+                              }
+                              onChange={(e) =>
+                                handlePropertyChange("interactivity", {
+                                  ...selectedItem.properties.interactivity,
+                                  automation_value: e.target.value,
+                                })
+                              }
+                            />
+                          </div>
+                          <div className="bg-white p-2.5 rounded border border-indigo-100">
+                            <p className="text-[10px] text-gray-600 flex items-start gap-1.5 leading-tight">
+                              <span className="text-indigo-500">ℹ️</span>
+                              This row will be securely and automatically linked
+                              to the buyer's account via the Stripe webhook.
+                            </p>
+                          </div>
+                          <button
+                            onClick={() =>
+                              handleSaveAutomation(
+                                productId,
+                                selectedItem.properties.interactivity
+                                  .automation_schema_id,
+                                selectedItem.properties.interactivity
+                                  .automation_column,
+                                selectedItem.properties.interactivity
+                                  .automation_value,
+                              )
+                            }
+                            disabled={isSyncing}
+                            className="w-full bg-indigo-600 hover:bg-indigo-700 text-white font-bold py-2 px-4 rounded transition-colors text-sm disabled:opacity-50"
+                          >
+                            {isSyncing ? "Saving..." : "Save Automation Rule"}
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  )}
+                  {/* 🚀 END: POST-PURCHASE AUTOMATION UI 🚀 */}
                 </div>
               )}
             </div>

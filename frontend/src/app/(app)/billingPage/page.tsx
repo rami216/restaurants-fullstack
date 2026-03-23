@@ -1,6 +1,6 @@
 "use client";
 
-import React, { useState, useEffect } from "react";
+import React, { useState } from "react";
 import { loadStripe } from "@stripe/stripe-js";
 import api from "@/lib/axios";
 import { useSubscription } from "@/context/SubscriptionContext";
@@ -32,27 +32,6 @@ export default function BillingPage() {
   } = useSubscription();
 
   const [topUpAmount, setTopUpAmount] = useState("10"); // Default to $10
-
-  // ✅ NEW: State for AI Builder Data (fetched separately)
-  const [builderData, setBuilderData] = useState<{
-    monthly_spend_usd?: number;
-    monthly_spend_limit_usd?: number;
-  } | null>(null);
-
-  // ✅ NEW: Fetch AI Builder usage data on mount
-  useEffect(() => {
-    const fetchBuilderData = async () => {
-      try {
-        const res = await api.get("/builder/website");
-        if (res.status === 200) {
-          setBuilderData(res.data);
-        }
-      } catch (error) {
-        console.error("Failed to fetch builder usage data:", error);
-      }
-    };
-    fetchBuilderData();
-  }, []);
 
   // --- PAYMENT HANDLERS ---
 
@@ -99,6 +78,7 @@ export default function BillingPage() {
       alert("Error creating payment session.");
     }
   };
+
   function AgentTokenSection({ websiteId }: { websiteId: string }) {
     const [token, setToken] = React.useState<string | null>(null);
     const [loading, setLoading] = React.useState(false);
@@ -244,49 +224,7 @@ export default function BillingPage() {
           </div>
         </div> */}
 
-        {/* 3. ✅ NEW: AI Builder Monthly Budget Card */}
-        <div className="bg-white p-6 rounded-lg shadow-md flex flex-col">
-          <h2 className="text-xl font-semibold mb-4">AI Builder Budget</h2>
-          <div className="flex-grow">
-            {(() => {
-              const spent = Number(builderData?.monthly_spend_usd || 0);
-              const limit = Number(builderData?.monthly_spend_limit_usd || 8); // Default $8 if null
-              const remaining = Math.max(0, limit - spent);
-              const percentUsed = limit > 0 ? (spent / limit) * 100 : 0;
-
-              return (
-                <>
-                  <div className="flex justify-between text-sm text-gray-600 mb-1">
-                    <span>Used: ${spent.toFixed(4)}</span>
-                    <span>Limit: ${limit.toFixed(2)}</span>
-                  </div>
-
-                  <div className="w-full bg-gray-200 rounded-full h-4 mb-3">
-                    <div
-                      className={`h-4 rounded-full transition-all duration-500 ${
-                        percentUsed > 90 ? "bg-red-500" : "bg-teal-500"
-                      }`}
-                      style={{ width: `${Math.min(percentUsed, 100)}%` }}
-                    />
-                  </div>
-
-                  <p className="text-gray-700 mb-2">
-                    You have{" "}
-                    <span className="font-bold text-teal-600">
-                      ${remaining.toFixed(2)}
-                    </span>{" "}
-                    remaining this month for the Website Builder prompts.
-                  </p>
-                  <p className="text-xs text-gray-400">
-                    This budget resets automatically on the 1st of every month.
-                  </p>
-                </>
-              );
-            })()}
-          </div>
-        </div>
-
-        {/* 4. Storage Usage Card */}
+        {/* 3. Storage Usage Card */}
         <div className="bg-white p-6 rounded-lg shadow-md">
           <h2 className="text-xl font-semibold mb-4">Storage Usage</h2>
           <div className="space-y-2">

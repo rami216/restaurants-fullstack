@@ -769,17 +769,6 @@ const MainPage = () => {
                     </button>
                   </div>
                 </div>
-
-                {/* {hasMenuItems && hasSchedules && creditBalance > 0 && (
-                  <a
-                    href={`https://restaurants-automation.onrender.com/?restaurant_id=${restaurantId}&restaurant_name=${encodeURIComponent(brandName)}`}
-                    target="_blank"
-                    rel="noopener noreferrer"
-                    className="mt-3 block text-center text-sm text-white/80 hover:text-white underline transition-colors"
-                  >
-                    View Automation Link →
-                  </a>
-                )} */}
               </div>
             ) : (
               <div className="w-full bg-white/10 border border-white/20 rounded-2xl p-4 mb-4 text-center">
