@@ -19,6 +19,7 @@ from auth.auth_handler import (
     get_current_active_user,
     ACCESS_TOKEN_EXPIRE_MINUTES,   
 )
+RESEND_API_KEY = os.getenv("RESEND_API_KEY")
 
 GOOGLE_CLIENT_ID = os.getenv("GOOGLE_CLIENT_ID", "your-google-client-id.apps.googleusercontent.com")
 
@@ -52,15 +53,51 @@ async def register(
     db.add(user)
     await db.commit()
     await db.refresh(user)
-    
+
     import httpx
     async with httpx.AsyncClient() as client:
         await client.post(
-            "https://n8n.ramiai.xyz/webhook/confirm-email",
+
+            "https://api.resend.com/emails",
+
+            headers={
+
+                "Authorization": f"Bearer {RESEND_API_KEY}",
+
+                "Content-Type": "application/json",
+
+            },
+
             json={
-                "email": user_in.email,
-                "code": code,
-            }
+
+                "from": "Zygoflow <noreply@zygoflow.com>",
+
+                "to": [user_in.email],
+
+                "subject": "Confirm your Zygoflow account",
+
+                "html": f"""
+
+                    <div style="font-family: Arial, sans-serif; max-width: 480px; margin: 0 auto; padding: 32px;">
+
+                        <h2 style="color: #e11d48;">Welcome to Zygoflow! 🎉</h2>
+
+                        <p style="color: #374151;">Your confirmation code is:</p>
+
+                        <div style="background: #f9fafb; border: 2px solid #e11d48; border-radius: 12px; padding: 24px; text-align: center; margin: 24px 0;">
+
+                            <span style="font-size: 36px; font-weight: bold; letter-spacing: 8px; color: #e11d48;">{code}</span>
+
+                        </div>
+
+                        <p style="color: #6b7280; font-size: 14px;">This code expires in 15 minutes. If you didn't create an account, ignore this email.</p>
+
+                    </div>
+
+                """,
+
+            },
+
         )
     return user
 
