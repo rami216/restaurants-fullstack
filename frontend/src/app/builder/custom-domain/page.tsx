@@ -1,4 +1,4 @@
-// src/components/builder/custom-domain/page.tsx
+// src/app/builder/custom-domain/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";

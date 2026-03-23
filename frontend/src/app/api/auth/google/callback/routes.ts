@@ -1,0 +1,98 @@
+import { NextRequest, NextResponse } from "next/server";
+
+const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "";
+const GOOGLE_SITE_CLIENT_ID = process.env.GOOGLE_SITE_CLIENT_ID!;
+const GOOGLE_SITE_CLIENT_SECRET = process.env.GOOGLE_SITE_CLIENT_SECRET!;
+const REDIRECT_URI = "https://www.zygoflow.com/api/auth/google/callback";
+
+export async function GET(req: NextRequest) {
+  const { searchParams } = new URL(req.url);
+  const code = searchParams.get("code");
+  const stateRaw = searchParams.get("state");
+
+  if (!code || !stateRaw) {
+    return NextResponse.redirect(
+      "https://www.zygoflow.com?error=missing_params",
+    );
+  }
+
+  let state: { subdomain: string; return_to: string };
+  try {
+    state = JSON.parse(stateRaw);
+  } catch {
+    return NextResponse.redirect(
+      "https://www.zygoflow.com?error=invalid_state",
+    );
+  }
+
+  const { subdomain, return_to } = state;
+
+  try {
+    // 1. Exchange code for tokens
+    const tokenRes = await fetch("https://oauth2.googleapis.com/token", {
+      method: "POST",
+      headers: { "Content-Type": "application/x-www-form-urlencoded" },
+      body: new URLSearchParams({
+        code,
+        client_id: GOOGLE_SITE_CLIENT_ID,
+        client_secret: GOOGLE_SITE_CLIENT_SECRET,
+        redirect_uri: REDIRECT_URI,
+        grant_type: "authorization_code",
+      }),
+    });
+
+    const tokenData = await tokenRes.json();
+    if (!tokenData.access_token) throw new Error("No access token");
+
+    // 2. Get user info from Google
+    const userRes = await fetch(
+      "https://www.googleapis.com/oauth2/v2/userinfo",
+      {
+        headers: { Authorization: `Bearer ${tokenData.access_token}` },
+      },
+    );
+    const googleUser = await userRes.json();
+
+    // 3. Call your backend to create/find site member
+    const backendRes = await fetch(
+      `${API_BASE}/site-auth/${subdomain}/google-callback`,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          google_id: googleUser.id,
+          email: googleUser.email,
+          name: googleUser.name,
+        }),
+      },
+    );
+
+    if (!backendRes.ok) throw new Error("Backend auth failed");
+    const authData = await backendRes.json();
+
+    // 4. Redirect back to the site with token
+    // Determine where to redirect
+    const isCustomDomain =
+      return_to && !return_to.includes("zygoflow.com") && return_to !== "";
+
+    let redirectUrl: string;
+
+    if (isCustomDomain) {
+      // Custom domain: redirect to their domain
+      const base = return_to.startsWith("http")
+        ? return_to
+        : `https://${return_to}`;
+      redirectUrl = `${base}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}`;
+    } else {
+      // Subdomain: redirect to zygoflow.com/subdomain
+      redirectUrl = `https://www.zygoflow.com/${subdomain}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}`;
+    }
+
+    return NextResponse.redirect(redirectUrl);
+  } catch (err) {
+    console.error("Google callback error:", err);
+    return NextResponse.redirect(
+      `https://www.zygoflow.com/${subdomain}?error=auth_failed`,
+    );
+  }
+}

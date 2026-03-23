@@ -24,6 +24,45 @@ type Field = {
   type?: "text" | "email" | "password";
 };
 
+// ── Google SVG Icon ────────────────────────────────────────────
+const GoogleIcon = () => (
+  <svg
+    width="18"
+    height="18"
+    viewBox="0 0 18 18"
+    xmlns="http://www.w3.org/2000/svg"
+  >
+    <path
+      fill="#4285F4"
+      d="M17.64 9.2c0-.637-.057-1.251-.164-1.84H9v3.481h4.844c-.209 1.125-.843 2.078-1.796 2.717v2.258h2.908C16.658 14.013 17.64 11.706 17.64 9.2z"
+    />
+    <path
+      fill="#34A853"
+      d="M9 18c2.43 0 4.467-.806 5.956-2.184l-2.908-2.258c-.806.54-1.837.86-3.048.86-2.344 0-4.328-1.584-5.036-3.711H.957v2.332A8.997 8.997 0 0 0 9 18z"
+    />
+    <path
+      fill="#FBBC05"
+      d="M3.964 10.707A5.41 5.41 0 0 1 3.682 9c0-.593.102-1.17.282-1.707V4.961H.957A8.996 8.996 0 0 0 0 9c0 1.452.348 2.827.957 4.039l3.007-2.332z"
+    />
+    <path
+      fill="#EA4335"
+      d="M9 3.58c1.321 0 2.508.454 3.44 1.345l2.582-2.58C13.463.891 11.426 0 9 0A8.997 8.997 0 0 0 .957 4.961L3.964 6.293C4.672 4.166 6.656 3.58 9 3.58z"
+    />
+  </svg>
+);
+
+// ── Divider ────────────────────────────────────────────────────
+const Divider = () => (
+  <div className="relative flex items-center my-2">
+    <div className="flex-grow border-t border-gray-200" />
+    <span className="mx-3 text-xs text-gray-400 whitespace-nowrap">
+      or continue with email
+    </span>
+    <div className="flex-grow border-t border-gray-200" />
+  </div>
+);
+
+// ══════════════════════════════════════════════════════════════
 export default function AuthFormElement({
   kind,
   props,
@@ -39,17 +78,18 @@ export default function AuthFormElement({
 }) {
   const router = useRouter();
 
-  // --- STATE FOR MULTI-STEP REGISTRATION ---
+  // ── state ──────────────────────────────────────────────────
   const [formStep, setFormStep] = React.useState<"details" | "confirm_code">(
     "details",
   );
   const [emailForConfirmation, setEmailForConfirmation] = React.useState("");
   const [successMessage, setSuccessMessage] = React.useState("");
-
   const [form, setForm] = React.useState<Record<string, string>>({});
   const [loading, setLoading] = React.useState(false);
+  const [googleLoading, setGoogleLoading] = React.useState(false);
   const [error, setError] = React.useState<string | null>(null);
 
+  // ── site identifier ────────────────────────────────────────
   const site = React.useMemo(() => {
     if (subdomain && subdomain.trim()) return subdomain.trim();
     if (typeof window !== "undefined") {
@@ -59,8 +99,8 @@ export default function AuthFormElement({
     return "";
   }, [subdomain]);
 
+  // ── styles from props ──────────────────────────────────────
   const fields: Field[] = Array.isArray(props?.fields) ? props.fields : [];
-
   const containerStyle: React.CSSProperties = props?.style || {};
   const labelStyle: React.CSSProperties = props?.labelStyle || {};
   const inputStyle: React.CSSProperties = props?.inputStyle || {};
@@ -77,6 +117,7 @@ export default function AuthFormElement({
   const handleChange = (name: string, value: string) =>
     setForm((f) => ({ ...f, [name]: value }));
 
+  // ── redirect after success ─────────────────────────────────
   const performRedirect = () => {
     const isMainHost =
       typeof window !== "undefined" &&
@@ -96,7 +137,8 @@ export default function AuthFormElement({
     router.push(redirect);
     router.refresh?.();
   };
-  // --- SECRET AUDIT LOGGER ---
+
+  // ── audit logger ───────────────────────────────────────────
   const logSecurityEvent = async (
     eventType: string,
     email: string,
@@ -104,10 +146,7 @@ export default function AuthFormElement({
     errorMessage: string = "",
   ) => {
     const auditLogSchemaId = props?.auditLogSchemaId;
-
-    // If the user didn't select a table in the builder, do nothing!
     if (!auditLogSchemaId) return;
-
     try {
       apiFetch(`/custom-data/rows/${auditLogSchemaId}`, {
         method: "POST",
@@ -115,7 +154,7 @@ export default function AuthFormElement({
           data: {
             event_type: eventType,
             email: email || "unknown",
-            status: status,
+            status,
             error_message: errorMessage,
           },
         }),
@@ -125,24 +164,46 @@ export default function AuthFormElement({
     }
   };
 
+  // ── Google login ───────────────────────────────────────────
+  const handleGoogleLogin = async () => {
+    if (editMode || !site) return;
+    setGoogleLoading(true);
+    setError(null);
+    try {
+      const currentHost =
+        typeof window !== "undefined" ? window.location.hostname : "";
+      const res = await apiFetch(
+        `/site-auth/${site}/google-login-url?return_to=${encodeURIComponent(currentHost)}`,
+      );
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        throw new Error("No redirect URL returned");
+      }
+    } catch {
+      setError("Failed to start Google login. Please try again.");
+    } finally {
+      setGoogleLoading(false);
+    }
+  };
+
+  // ── register submit ────────────────────────────────────────
   const handleRegisterSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editMode) return;
     setLoading(true);
     setError(null);
-
     try {
       if (!site) throw new Error("Missing site identifier for auth.");
       const res = await apiFetch(`/site-auth/${site}/register`, {
         method: "POST",
         body: JSON.stringify(form),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => null);
         throw new Error(err?.detail || "Registration failed");
       }
-
       setEmailForConfirmation(form.email);
       setSuccessMessage(
         "Registration successful! Please check your email for a 6-digit code.",
@@ -155,6 +216,7 @@ export default function AuthFormElement({
     }
   };
 
+  // ── login submit ───────────────────────────────────────────
   const handleLoginSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editMode) return;
@@ -162,19 +224,15 @@ export default function AuthFormElement({
     setError(null);
     try {
       if (!site) throw new Error("Missing site identifier for auth.");
-
       const res = await apiFetch(`/site-auth/${site}/login`, {
         method: "POST",
         body: JSON.stringify(form),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => null);
         throw new Error(err?.detail || "Login failed");
       }
-
       const data = await res.json();
-      // ✅ LOG SUCCESS
       logSecurityEvent("login", form.email, "success");
       localStorage.setItem(`siteToken:${site}`, data.access_token);
       localStorage.setItem(`siteMemberId:${site}`, data.member_id);
@@ -194,24 +252,22 @@ export default function AuthFormElement({
     }
   };
 
+  // ── confirm code submit ────────────────────────────────────
   const handleConfirmCodeSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     if (editMode) return;
     setLoading(true);
     setError(null);
-
     try {
       if (!site) throw new Error("Missing site identifier for auth.");
       const res = await apiFetch(`/site-auth/${site}/confirm-code`, {
         method: "POST",
         body: JSON.stringify({ email: emailForConfirmation, code: form.code }),
       });
-
       if (!res.ok) {
         const err = await res.json().catch(() => null);
         throw new Error(err?.detail || "Code confirmation failed");
       }
-
       const data = await res.json();
       localStorage.setItem(`siteToken:${site}`, data.access_token);
       localStorage.setItem(`siteMemberId:${site}`, data.member_id);
@@ -225,11 +281,12 @@ export default function AuthFormElement({
     }
   };
 
+  // ── confirm code step ──────────────────────────────────────
   if (kind === "register" && formStep === "confirm_code") {
     return (
       <div
         style={containerStyle}
-        className={`bg-white p-8 rounded shadow max-w-md w-full mx-auto space-y-4`}
+        className="bg-white p-8 rounded shadow max-w-md w-full mx-auto space-y-4"
       >
         <h3 className="text-2xl font-bold text-center text-gray-800">
           Check Your Email
@@ -240,7 +297,6 @@ export default function AuthFormElement({
         {error && (
           <div className="text-red-600 text-center text-sm">{error}</div>
         )}
-
         <form onSubmit={handleConfirmCodeSubmit} className="grid gap-3">
           <div>
             <label
@@ -275,11 +331,11 @@ export default function AuthFormElement({
     );
   }
 
+  // ── main form ──────────────────────────────────────────────
   return (
-    <form
-      onSubmit={kind === "register" ? handleRegisterSubmit : handleLoginSubmit}
+    <div
       style={containerStyle}
-      className={`bg-white p-8 rounded shadow max-w-md w-full mx-auto space-y-4`}
+      className="bg-white p-8 rounded shadow max-w-md w-full mx-auto space-y-4"
     >
       {props?.title && (
         <h3 className="text-2xl font-bold text-center text-gray-800">
@@ -289,7 +345,33 @@ export default function AuthFormElement({
 
       {error && <div className="text-red-600 text-center text-sm">{error}</div>}
 
-      <div className="grid gap-3">
+      {/* ── Google Button ── */}
+      <button
+        type="button"
+        onClick={handleGoogleLogin}
+        disabled={googleLoading || editMode}
+        className="w-full flex items-center justify-center gap-3 border border-gray-300 rounded-lg px-4 py-2.5 hover:bg-gray-50 transition-colors disabled:opacity-50 bg-white"
+      >
+        <GoogleIcon />
+        <span className="text-sm font-medium text-gray-700">
+          {googleLoading
+            ? "Redirecting..."
+            : kind === "login"
+              ? "Sign in with Google"
+              : "Sign up with Google"}
+        </span>
+      </button>
+
+      {/* ── Divider ── */}
+      <Divider />
+
+      {/* ── Email/Password Form ── */}
+      <form
+        onSubmit={
+          kind === "register" ? handleRegisterSubmit : handleLoginSubmit
+        }
+        className="grid gap-3"
+      >
         {fields.map((f) => {
           const inputId = f.id || f.name;
           return (
@@ -324,20 +406,20 @@ export default function AuthFormElement({
             </div>
           );
         })}
-      </div>
 
-      <button
-        type={editMode ? "button" : "submit"}
-        disabled={loading}
-        style={buttonStyle}
-        className="w-full bg-pink-500 text-white font-bold py-2 rounded hover:bg-pink-600 transition-colors disabled:opacity-50"
-      >
-        {loading
-          ? kind === "login"
-            ? "Logging in..."
-            : "Registering..."
-          : buttonText}
-      </button>
-    </form>
+        <button
+          type={editMode ? "button" : "submit"}
+          disabled={loading}
+          style={buttonStyle}
+          className="w-full bg-pink-500 text-white font-bold py-2 rounded hover:bg-pink-600 transition-colors disabled:opacity-50"
+        >
+          {loading
+            ? kind === "login"
+              ? "Logging in..."
+              : "Registering..."
+            : buttonText}
+        </button>
+      </form>
+    </div>
   );
 }
