@@ -13,6 +13,7 @@ from .models import CustomDomain, Website
 from . import schemas
 from database import get_db
 from auth.auth_handler import get_current_active_user
+from models import RestaurantOwner
 
 # --- Cloudflare Credentials from Environment Variables ---
 CLOUDFLARE_API_TOKEN = os.getenv("CLOUDFLARE_API_TOKEN")
@@ -173,10 +174,22 @@ async def delete_custom_domain(
     user=Depends(get_current_active_user),
 ):
     """Deletes a custom domain from Cloudflare and your database."""
-    cd = await db.get(CustomDomain, custom_domain_id)
+    
+    # 1. SECURITY CHECK: Ensure this domain belongs to the logged-in user!
+    cd = await db.scalar(
+        select(CustomDomain)
+        .join(Website, Website.website_id == CustomDomain.website_id)
+        .join(RestaurantOwner, RestaurantOwner.restaurant_id == Website.restaurant_id)
+        .where(
+            CustomDomain.id == custom_domain_id,
+            RestaurantOwner.user_id == user.id
+        )
+    )
+    
     if not cd:
-        return
+        raise HTTPException(status_code=404, detail="Domain not found or unauthorized.")
 
+    # 2. Remove from Cloudflare
     if cd.last_error:
         try:
             cf_data = json.loads(cd.last_error)
@@ -189,9 +202,17 @@ async def delete_custom_domain(
                         f"https://api.cloudflare.com/client/v4/zones/{CLOUDFLARE_ZONE_ID}/custom_hostnames/{cf_hostname_id}",
                         headers=headers,
                     )
-        except Exception:
-            pass
+        except Exception as e:
+            print(f"Failed to delete CF hostname: {e}")
 
+    # 3. Clean up the Website reference
+    website = await db.get(Website, cd.website_id)
+    if website:
+        website.primary_custom_domain = None
+        website.primary_custom_domain_status = None
+
+    # 4. Delete from Database
     await db.delete(cd)
     await db.commit()
+    
     return
