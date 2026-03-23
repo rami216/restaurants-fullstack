@@ -42,7 +42,9 @@ class RowUpdate(BaseModel):
 
 class RowResponse(BaseModel):
     row_id: UUID
+    sitemember_id: Optional[UUID] = None # 👈 ADD THIS LINE
     data: Dict[str, Any] # This will now contain resolved nested data
+    
     class Config: from_attributes = True
     
 class PaginatedRowResponse(BaseModel):
