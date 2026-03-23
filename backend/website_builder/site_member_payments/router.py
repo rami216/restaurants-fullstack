@@ -309,10 +309,8 @@ async def webhook(
                 # Commit the purchase first to ensure data integrity
                 await db.commit()
                 # 🚀 --- START: POST-PURCHASE AUTOMATION ENGINE --- 🚀
-                from sqlalchemy.sql import text # make sure this is imported at top
-                
-                # We need to import ProductAutomation at the top of your router file:
-                # from website_builder.site_commerce_models import ProductAutomation
+                from sqlalchemy.sql import text 
+                from website_builder.site_commerce_models import ProductAutomation
                 
                 automations = await db.scalars(
                     select(ProductAutomation).where(
@@ -323,31 +321,37 @@ async def webhook(
                 
                 for auto in automations.all():
                     if auto.action_type == "insert_row":
-                        # 1. Convert template to string to safely replace the dynamic variable
+                        
+                        # 1. Grab the template from the database
+                        # Note: The template looks like {"credits": 5, "sitemember_id": "{{member_id}}"}
                         raw_template = json.dumps(auto.payload_template)
-                        
-                        # 2. Swap out the placeholder with the actual buyer's member_id!
                         filled_template = raw_template.replace("{{member_id}}", str(member_id))
-                        
-                        # 3. Parse it back to a dictionary
                         final_data = json.loads(filled_template)
                         
-                        # 4. Insert the row directly into the custom data table
-                        # Note: Replace 'custom_data_rows' with your actual table name if different!
+                        # 2. Extract the sitemember_id and remove it from the JSON data!
+                        # We don't want it cluttering up the user's custom columns.
+                        extracted_member_id = final_data.pop("sitemember_id", None)
+                        
+                        # Fallback: if they didn't map it, we still force the real member_id
+                        actual_member_uuid = extracted_member_id if extracted_member_id and extracted_member_id != "{{member_id}}" else str(member_id)
+
+                        # 3. Insert into the actual columns!
                         await db.execute(
                             text("""
-                                INSERT INTO custom_data_rows (schema_id, data)
-                                VALUES (:schema_id, :data)
+                                INSERT INTO custom_data_rows (schema_id, sitemember_id, data)
+                                VALUES (:schema_id, :sitemember_id, :data)
                             """),
                             {
                                 "schema_id": str(auto.target_schema_id), 
-                                "data": json.dumps(final_data)
+                                "sitemember_id": actual_member_uuid, # 👈 Explicitly saves to the column!
+                                "data": json.dumps(final_data)       # 👈 Saves {"credits": 5} cleanly
                             }
                         )
                         print(f"🤖 Automation Executed: Inserted row into schema {auto.target_schema_id} for member {member_id}")
                 
                 # Commit the automation inserts
                 await db.commit()
+                # 🚀 --- END: POST-PURCHASE AUTOMATION ENGINE --- 🚀
                 # --- STEP B: MONTH 1 AI RESET GATEKEEPER ---
                 # Only attempt reset if this is a subscription type
                 if md.get("type") == "site_member_subscription":
