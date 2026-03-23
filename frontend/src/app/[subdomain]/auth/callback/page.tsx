@@ -1,4 +1,4 @@
-//app/[subdomain]/auth/callback/page.tsx
+// src/app/[subdomain]/auth/callback/page.tsx
 "use client";
 import { useEffect } from "react";
 import { useSearchParams, useRouter } from "next/navigation";
@@ -13,22 +13,32 @@ function CallbackInner() {
     const memberId = searchParams.get("member_id");
     const email = searchParams.get("email");
 
-    // Get subdomain from the URL path
-    const pathParts = window.location.pathname.split("/").filter(Boolean);
-    const subdomain = pathParts[0];
+    // ✅ Extract the exact subdomain we passed from the backend URL
+    const exactSubdomain = searchParams.get("subdomain");
 
-    if (token && memberId && email) {
-      localStorage.setItem(`siteToken:${subdomain}`, token);
-      localStorage.setItem(`siteMemberId:${subdomain}`, memberId);
+    // Only save if we have everything, including the explicit subdomain
+    if (token && memberId && email && exactSubdomain) {
+      localStorage.setItem(`siteToken:${exactSubdomain}`, token);
+      localStorage.setItem(`siteMemberId:${exactSubdomain}`, memberId);
       localStorage.setItem(
-        `siteMemberEmail:${subdomain}`,
+        `siteMemberEmail:${exactSubdomain}`,
         decodeURIComponent(email),
       );
     }
 
-    // Redirect to home
-    router.push(`/${subdomain}`);
-  }, []);
+    // ✅ Smart Redirect: Handle both custom domains and main Zygoflow preview links
+    const isMainHost =
+      window.location.hostname === "zygoflow.com" ||
+      window.location.hostname === "www.zygoflow.com";
+
+    if (isMainHost && exactSubdomain) {
+      // Send back to the preview subdomain path
+      router.push(`/${exactSubdomain}`);
+    } else {
+      // Custom domain, send straight to root homepage
+      router.push(`/`);
+    }
+  }, [router, searchParams]);
 
   return (
     <div className="min-h-screen flex items-center justify-center">

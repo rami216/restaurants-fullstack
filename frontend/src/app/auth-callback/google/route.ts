@@ -1,4 +1,4 @@
-// app/api/auth/google/callback/route.ts
+// src/app/auth-callback/google/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "";
@@ -85,7 +85,7 @@ async function handleGoogleCallback(req: NextRequest) {
     if (!backendRes.ok) throw new Error("Backend auth failed");
     const authData = await backendRes.json();
 
-    // 4. Redirect back to the site with token
+    // 4. Redirect back to the site with token AND the exact subdomain parameter
     const isCustomDomain =
       return_to && !return_to.includes("zygoflow.com") && return_to !== "";
 
@@ -95,9 +95,9 @@ async function handleGoogleCallback(req: NextRequest) {
       const base = return_to.startsWith("http")
         ? return_to
         : `https://${return_to}`;
-      redirectUrl = `${base}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}`;
+      redirectUrl = `${base}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}&subdomain=${subdomain}`;
     } else {
-      redirectUrl = `https://www.zygoflow.com/${subdomain}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}`;
+      redirectUrl = `https://www.zygoflow.com/${subdomain}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}&subdomain=${subdomain}`;
     }
 
     return NextResponse.redirect(redirectUrl);
