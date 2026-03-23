@@ -650,7 +650,7 @@ const MainPage = () => {
             </div>
             <h1 className="text-3xl font-extrabold mb-3">Welcome!</h1>
             <p className="text-white/80 mb-6">
-              Let's get your restaurant set up to start building.
+              Let's get your account set up to start building.
             </p>
             <button
               onClick={createRestaurant}
@@ -783,14 +783,20 @@ const MainPage = () => {
               </div>
             ) : (
               <div className="w-full bg-white/10 border border-white/20 rounded-2xl p-4 mb-4 text-center">
-                <p className="text-white/80 text-sm mb-3">
-                  No locations yet. Add one to get started.
+                <p className="text-white/80 text-sm mb-2">
+                  No data tables yet. This is optional — you can add data tables
+                  later to manage your content(watch tutorial to understand it).
+                </p>
+                <p className="text-white/60 text-xs mb-3">
+                  Data tables let you store and display dynamic content on your
+                  website (e.g. services,products,extras,options,anything you
+                  want and can be edited with ai later!).
                 </p>
                 <button
                   onClick={() => setShowLocationForm(true)}
-                  className="bg-white text-pink-600 font-bold px-6 py-2 rounded-xl hover:bg-pink-50 text-sm transition-all"
+                  className="bg-white/20 border border-white/30 text-white font-semibold px-6 py-2 rounded-xl hover:bg-white/30 text-sm transition-all"
                 >
-                  Add Location
+                  + Add Data Source (Optional)
                 </button>
               </div>
             )}
@@ -829,7 +835,7 @@ const MainPage = () => {
             <aside className="w-52 flex-shrink-0">
               <div className="bg-white rounded-2xl border border-gray-200 p-4 sticky top-6">
                 <h2 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3">
-                  Data Tables
+                  Content Tables
                 </h2>
                 <div className="space-y-1">
                   {tableNames.map((name) => (

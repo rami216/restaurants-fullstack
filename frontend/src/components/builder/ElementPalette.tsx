@@ -23,6 +23,7 @@ interface ElementPaletteProps {
   onLocationChange: (locationId: string) => void;
   categories: Category[];
   websiteId: string;
+  hasAiKey: boolean;
 }
 
 const GOOGLE_MAP_KEY = process.env.NEXT_PUBLIC_GOOGLE_MAP_KEY;
@@ -268,6 +269,7 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   onLocationChange,
   categories,
   websiteId,
+  hasAiKey,
 }) => {
   const { subscriptionStatus } = useSubscription();
   const isSubscribed = subscriptionStatus === "active";
@@ -540,7 +542,9 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             <div className="flex gap-2 mt-2">
               <button
                 onClick={handleGenerateAi}
-                disabled={loadingAi || !aiPrompt.trim() || !isSubscribed}
+                disabled={
+                  loadingAi || !aiPrompt.trim() || !isSubscribed || !hasAiKey
+                }
                 className="w-2/3 bg-blue-600 text-white py-2 rounded disabled:opacity-50 text-sm font-semibold"
               >
                 {loadingAi ? "Generating…" : "Generate UI"}
@@ -549,6 +553,11 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             {!isSubscribed && (
               <p className="mt-2 text-sm text-red-600 text-center">
                 Please subscribe to use AI features.
+              </p>
+            )}
+            {isSubscribed && !hasAiKey && (
+              <p className="mt-2 text-sm text-orange-500 text-center">
+                ⚠️ Add an API key in Settings → AI Provider to use AI features.
               </p>
             )}
           </div>
@@ -569,7 +578,10 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             <button
               onClick={handleGenerateDataApp}
               disabled={
-                isGeneratingDataApp || !aiDataAppPrompt.trim() || !isSubscribed
+                isGeneratingDataApp ||
+                !aiDataAppPrompt.trim() ||
+                !isSubscribed ||
+                !hasAiKey
               }
               className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50 font-semibold"
             >
@@ -578,6 +590,11 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
             {!isSubscribed && (
               <p className="mt-2 text-sm text-red-600 text-center">
                 Please subscribe to use AI features.
+              </p>
+            )}
+            {isSubscribed && !hasAiKey && (
+              <p className="mt-2 text-sm text-orange-500 text-center">
+                ⚠️ Add an API key in Settings → AI Provider to use AI features.
               </p>
             )}
           </div>

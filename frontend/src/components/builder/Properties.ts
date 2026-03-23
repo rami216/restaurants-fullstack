@@ -118,6 +118,13 @@ export interface WebsiteData {
   primary_custom_domain?: string | null;
   primary_custom_domain_status?: string | null; // <-- New
   primary_custom_domain_id?: UUID | null;
+  has_openai_key?: boolean;
+  has_claude_key?: boolean;
+  has_gemini_key?: boolean;
+  preferred_ai_provider?: string;
+  user_openai_model?: string;
+  user_claude_model?: string;
+  user_gemini_model?: string;
 }
 
 export type Selection = {

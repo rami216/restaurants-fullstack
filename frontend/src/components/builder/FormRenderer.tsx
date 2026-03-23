@@ -40,7 +40,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({ element }) => {
     // 1) Strip out any <script>…</script> from the HTML/CSS
     let htmlOnly = aiPayload.aiTemplate.replace(
       /<script[\s\S]*?<\/script>/g,
-      ""
+      "",
     );
 
     // 2) (Your Handlebars conversion logic is good, keep it)

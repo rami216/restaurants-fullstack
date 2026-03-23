@@ -101,8 +101,8 @@ export default function AuthForm({ type }: AuthFormProps) {
             ? "Logging in..."
             : "Registering..."
           : type === "login"
-          ? "Login"
-          : "Register"}
+            ? "Login"
+            : "Register"}
       </button>
     </form>
   );

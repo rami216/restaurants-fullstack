@@ -58,6 +58,7 @@ interface PropertyEditorProps {
   onRefineElement: (prompt: string) => void; // <-- ADD THIS
   onRefineDataAppElement: (prompt: string) => Promise<void>; // <-- ADD THIS
   onCreateStandalonePage: (title: string) => void; // <-- ADD THIS
+  hasAiKey: boolean;
 }
 
 const PropertyEditor: React.FC<PropertyEditorProps> = ({
@@ -80,6 +81,7 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
   onRefineElement,
   onRefineDataAppElement, // <-- Add this
   onCreateStandalonePage,
+  hasAiKey,
 }) => {
   const [isSyncing, setIsSyncing] = React.useState(false);
   const { subscriptionStatus } = useSubscription(); // <-- 2. USE THE HOOK
@@ -890,7 +892,10 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             <button
               onClick={handleGenerateSectionClick}
               disabled={
-                isGeneratingSection || !sectionAiPrompt.trim() || !isSubscribed
+                isGeneratingSection ||
+                !sectionAiPrompt.trim() ||
+                !isSubscribed ||
+                !hasAiKey
               }
               className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
             >
@@ -901,6 +906,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             {!isSubscribed && (
               <p className="mt-2 text-sm text-red-600 text-center">
                 Please subscribe to use AI features.
+              </p>
+            )}
+            {isSubscribed && !hasAiKey && (
+              <p className="mt-2 text-sm text-orange-500 text-center">
+                ⚠️ Add an API key in Settings → AI Provider.
               </p>
             )}
           </div>
@@ -921,7 +931,9 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             />
             <button
               onClick={handleRefineClick}
-              disabled={isRefining || !refinePrompt.trim() || !isSubscribed}
+              disabled={
+                isRefining || !refinePrompt.trim() || !isSubscribed || !hasAiKey
+              }
               className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
             >
               {isRefining ? "Refining..." : "Refine with AI"}
@@ -929,6 +941,11 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
             {!isSubscribed && (
               <p className="mt-2 text-sm text-red-600 text-center">
                 Please subscribe to use AI features.
+              </p>
+            )}
+            {isSubscribed && !hasAiKey && (
+              <p className="mt-2 text-sm text-orange-500 text-center">
+                ⚠️ Add an API key in Settings → AI Provider.
               </p>
             )}
           </div>
@@ -3790,7 +3807,8 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                         disabled={
                           isRefiningElement ||
                           !elementRefinePrompt.trim() ||
-                          !isSubscribed
+                          !isSubscribed ||
+                          !hasAiKey
                         }
                         className="mt-2 w-full bg-green-600 text-white py-2 rounded disabled:opacity-50"
                       >
@@ -3799,6 +3817,12 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
                       {!isSubscribed && (
                         <p className="mt-2 text-sm text-red-600 text-center">
                           Please subscribe to use AI features.
+                        </p>
+                      )}
+
+                      {isSubscribed && !hasAiKey && (
+                        <p className="mt-2 text-sm text-orange-500 text-center">
+                          ⚠️ Add an API key in Settings → AI Provider.
                         </p>
                       )}
                     </div>

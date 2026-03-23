@@ -1098,6 +1098,13 @@ function BuilderManager() {
               onLocationChange={setSelectedLocationId}
               categories={categories}
               websiteId={websiteData.website_id}
+              hasAiKey={
+                !!(
+                  websiteData?.has_openai_key ||
+                  websiteData?.has_claude_key ||
+                  websiteData?.has_gemini_key
+                )
+              }
             />
           </aside>
 
@@ -1230,6 +1237,13 @@ function BuilderManager() {
               onRefineElement={handleRefineElement}
               onCreateStandalonePage={handleCreateStandalonePage}
               onRefineDataAppElement={handleRefineDataAppElement}
+              hasAiKey={
+                !!(
+                  websiteData?.has_openai_key ||
+                  websiteData?.has_claude_key ||
+                  websiteData?.has_gemini_key
+                )
+              }
             />
           </aside>
         </div>
