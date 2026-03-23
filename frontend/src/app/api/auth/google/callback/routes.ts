@@ -1,3 +1,4 @@
+// app/api/auth/google/callback/route.ts
 import { NextRequest, NextResponse } from "next/server";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "";
@@ -5,10 +6,24 @@ const GOOGLE_SITE_CLIENT_ID = process.env.GOOGLE_SITE_CLIENT_ID!;
 const GOOGLE_SITE_CLIENT_SECRET = process.env.GOOGLE_SITE_CLIENT_SECRET!;
 const REDIRECT_URI = "https://www.zygoflow.com/api/auth/google/callback";
 
-export async function GET(req: NextRequest) {
-  const { searchParams } = new URL(req.url);
-  const code = searchParams.get("code");
-  const stateRaw = searchParams.get("state");
+// The core logic for handling the callback
+async function handleGoogleCallback(req: NextRequest) {
+  // If it's a POST request (form_post), we need to get data from formData
+  // If it's a GET request, we get it from searchParams
+  let code: string | null = null;
+  let stateRaw: string | null = null;
+
+  if (req.method === "POST") {
+    const formData = await req.formData().catch(() => null);
+    if (formData) {
+      code = formData.get("code")?.toString() || null;
+      stateRaw = formData.get("state")?.toString() || null;
+    }
+  } else {
+    const { searchParams } = new URL(req.url);
+    code = searchParams.get("code");
+    stateRaw = searchParams.get("state");
+  }
 
   if (!code || !stateRaw) {
     return NextResponse.redirect(
@@ -71,20 +86,17 @@ export async function GET(req: NextRequest) {
     const authData = await backendRes.json();
 
     // 4. Redirect back to the site with token
-    // Determine where to redirect
     const isCustomDomain =
       return_to && !return_to.includes("zygoflow.com") && return_to !== "";
 
     let redirectUrl: string;
 
     if (isCustomDomain) {
-      // Custom domain: redirect to their domain
       const base = return_to.startsWith("http")
         ? return_to
         : `https://${return_to}`;
       redirectUrl = `${base}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}`;
     } else {
-      // Subdomain: redirect to zygoflow.com/subdomain
       redirectUrl = `https://www.zygoflow.com/${subdomain}/auth/callback?token=${authData.access_token}&member_id=${authData.member_id}&email=${encodeURIComponent(authData.email)}`;
     }
 
@@ -95,4 +107,13 @@ export async function GET(req: NextRequest) {
       `https://www.zygoflow.com/${subdomain}?error=auth_failed`,
     );
   }
+}
+
+// EXPORT BOTH GET AND POST HANDLERS!
+export async function GET(req: NextRequest) {
+  return handleGoogleCallback(req);
+}
+
+export async function POST(req: NextRequest) {
+  return handleGoogleCallback(req);
 }
