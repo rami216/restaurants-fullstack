@@ -39,7 +39,7 @@ function AISettingsPanel({ websiteId }: { websiteId: string }) {
   const [loading, setLoading] = useState(true);
   const [settings, setSettings] = useState<any>(null);
   const [open, setOpen] = useState(false);
-
+  const [hasAiKey, setHasAiKey] = useState(false);
   useEffect(() => {
     api
       .get(`/builder/websites/${websiteId}/ai-settings`)

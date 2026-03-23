@@ -59,7 +59,7 @@ function BuilderManager() {
   const [isPaletteExpanded, setIsPaletteExpanded] = useState(true);
   const [isPropertiesExpanded, setIsPropertiesExpanded] = useState(true);
   const [deletedItems, setDeletedItems] = useState<DeletedItem[]>([]);
-
+  const [hasAiKey, setHasAiKey] = useState(false); // ✅ 1. ADD THIS STATE
   // --- START: ADD STATE FOR CLIPBOARD ---
   const [clipboard, setClipboard] = useState<Element | null>(null);
   // --- END: ADD STATE FOR CLIPBOARD ---
@@ -114,6 +114,19 @@ function BuilderManager() {
         setOriginalWebsiteData(JSON.parse(JSON.stringify(websiteRes.data)));
         if (websiteRes.data.pages?.length > 0 && !activePageId) {
           setActivePageId(websiteRes.data.pages[0].page_id);
+        }
+        // ✅ 2. ADD THIS BLOCK: Fetch the secure AI boolean flags
+        try {
+          const aiRes = await api.get(
+            `/builder/websites/${websiteRes.data.website_id}/ai-settings`,
+          );
+          setHasAiKey(
+            !!aiRes.data.has_openai_key ||
+              !!aiRes.data.has_claude_key ||
+              !!aiRes.data.has_gemini_key,
+          );
+        } catch (e) {
+          console.error("Failed to fetch secure AI settings:", e);
         }
       } else if (websiteRes?.status === 404) {
         // Try to create one on the fly
@@ -1098,13 +1111,7 @@ function BuilderManager() {
               onLocationChange={setSelectedLocationId}
               categories={categories}
               websiteId={websiteData.website_id}
-              hasAiKey={
-                !!(
-                  websiteData?.has_openai_key ||
-                  websiteData?.has_claude_key ||
-                  websiteData?.has_gemini_key
-                )
-              }
+              hasAiKey={hasAiKey}
             />
           </aside>
 
@@ -1237,13 +1244,7 @@ function BuilderManager() {
               onRefineElement={handleRefineElement}
               onCreateStandalonePage={handleCreateStandalonePage}
               onRefineDataAppElement={handleRefineDataAppElement}
-              hasAiKey={
-                !!(
-                  websiteData?.has_openai_key ||
-                  websiteData?.has_claude_key ||
-                  websiteData?.has_gemini_key
-                )
-              }
+              hasAiKey={hasAiKey} // ✅ 4. PASS IT HERE
             />
           </aside>
         </div>
