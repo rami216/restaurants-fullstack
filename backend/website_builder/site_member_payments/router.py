@@ -6,7 +6,7 @@ import traceback
 from fastapi import APIRouter, Depends, HTTPException, Header, Request
 from pydantic import BaseModel
 from sqlalchemy.ext.asyncio import AsyncSession
-from sqlalchemy import select
+from sqlalchemy import select,delete
 from database import get_db
 from config import get_app_url
 from website_builder.site_auth_router import site_member_required
@@ -20,6 +20,7 @@ from email.mime.text import MIMEText # <--- Add this
 from email.mime.multipart import MIMEMultipart # <--- Add this
 from website_builder.models import WebsiteEmailConfig
 from ..site_commerce_models import SiteMemberUsage
+from website_builder.site_commerce_models import ProductAutomation
 
 router = APIRouter(prefix="/users-stripe-account", tags=["SiteMemberPayments"])
 
@@ -307,7 +308,46 @@ async def webhook(
                 
                 # Commit the purchase first to ensure data integrity
                 await db.commit()
-
+                # 🚀 --- START: POST-PURCHASE AUTOMATION ENGINE --- 🚀
+                from sqlalchemy.sql import text # make sure this is imported at top
+                
+                # We need to import ProductAutomation at the top of your router file:
+                # from website_builder.site_commerce_models import ProductAutomation
+                
+                automations = await db.scalars(
+                    select(ProductAutomation).where(
+                        ProductAutomation.product_id == UUID(product_id),
+                        ProductAutomation.website_id == UUID(website_id)
+                    )
+                )
+                
+                for auto in automations.all():
+                    if auto.action_type == "insert_row":
+                        # 1. Convert template to string to safely replace the dynamic variable
+                        raw_template = json.dumps(auto.payload_template)
+                        
+                        # 2. Swap out the placeholder with the actual buyer's member_id!
+                        filled_template = raw_template.replace("{{member_id}}", str(member_id))
+                        
+                        # 3. Parse it back to a dictionary
+                        final_data = json.loads(filled_template)
+                        
+                        # 4. Insert the row directly into the custom data table
+                        # Note: Replace 'custom_data_rows' with your actual table name if different!
+                        await db.execute(
+                            text("""
+                                INSERT INTO custom_data_rows (schema_id, data)
+                                VALUES (:schema_id, :data)
+                            """),
+                            {
+                                "schema_id": str(auto.target_schema_id), 
+                                "data": json.dumps(final_data)
+                            }
+                        )
+                        print(f"🤖 Automation Executed: Inserted row into schema {auto.target_schema_id} for member {member_id}")
+                
+                # Commit the automation inserts
+                await db.commit()
                 # --- STEP B: MONTH 1 AI RESET GATEKEEPER ---
                 # Only attempt reset if this is a subscription type
                 if md.get("type") == "site_member_subscription":
@@ -745,3 +785,78 @@ async def get_price_details(
         "product_id": stripe_product_id,
         "product_name": product_name,
     }
+
+
+# ==========================================
+# POST-PURCHASE AUTOMATION BUILDER ENDPOINTS
+# ==========================================
+
+class AutomationDTO(BaseModel):
+    target_schema_id: str
+    action_type: str = "insert_row"
+    payload_template: dict
+
+# We import ProductAutomation here assuming it's in site_commerce_models
+from website_builder.site_commerce_models import ProductAutomation
+
+@router.post("/builder/websites/{website_id}/products/{product_id}/automations")
+async def save_product_automation(
+    website_id: str,
+    product_id: str,
+    body: AutomationDTO,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    # Verify ownership
+    website = await db.scalar(_get_owned_website_stmt(website_id, current_user.id))
+    if not website:
+        raise HTTPException(403, "You do not own this website.")
+
+    # ✅ PREVENT DUPLICATES: Delete existing automation for this exact product and schema
+    await db.execute(
+        delete(ProductAutomation).where(
+            ProductAutomation.website_id == UUID(website_id),
+            ProductAutomation.product_id == UUID(product_id),
+            ProductAutomation.target_schema_id == UUID(body.target_schema_id)
+        )
+    )
+
+    # Insert the new rule
+    automation = ProductAutomation(
+        website_id=UUID(website_id),
+        product_id=UUID(product_id),
+        target_schema_id=UUID(body.target_schema_id),
+        action_type=body.action_type,
+        payload_template=body.payload_template
+    )
+    db.add(automation)
+    await db.commit()
+    return {"status": "success", "automation_id": str(automation.id)}
+
+@router.get("/builder/websites/{website_id}/products/{product_id}/automations")
+async def get_product_automations(
+    website_id: str,
+    product_id: str,
+    db: AsyncSession = Depends(get_db),
+    current_user = Depends(get_current_user),
+):
+    # Verify ownership
+    website = await db.scalar(_get_owned_website_stmt(website_id, current_user.id))
+    if not website:
+        raise HTTPException(403, "You do not own this website.")
+
+    rows = await db.scalars(
+        select(ProductAutomation).where(
+            ProductAutomation.website_id == UUID(website_id),
+            ProductAutomation.product_id == UUID(product_id)
+        )
+    )
+    
+    return [
+        {
+            "id": str(r.id),
+            "target_schema_id": str(r.target_schema_id),
+            "action_type": r.action_type,
+            "payload_template": r.payload_template
+        } for r in rows.all()
+    ]

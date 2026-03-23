@@ -1,7 +1,7 @@
 #website_builder/site_commerce_models.py
 
-from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Boolean, UniqueConstraint,Integer,Float
-from sqlalchemy.dialects.postgresql import UUID
+from sqlalchemy import Column, String, DateTime, ForeignKey, Numeric, Boolean, UniqueConstraint,Integer,Float,text
+from sqlalchemy.dialects.postgresql import UUID,JSONB
 from sqlalchemy.sql import func
 from database import Base
 
@@ -81,3 +81,21 @@ class SiteMemberUsage(Base):
     # Track their specific usage
     ai_spend_usd = Column(Float, default=0.0)
     ai_calls_count = Column(Integer, default=0)
+
+class ProductAutomation(Base):
+    __tablename__ = "product_automations"
+
+    id = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id", ondelete="CASCADE"), nullable=False)
+    
+    # The internal SiteProduct ID this automation is attached to
+    product_id = Column(UUID(as_uuid=True), ForeignKey("site_products.product_id", ondelete="CASCADE"), nullable=False)
+    
+    # The ID of the Custom Data Table (Schema) they want to modify
+    target_schema_id = Column(UUID(as_uuid=True), nullable=False)
+    
+    # E.g., "insert_row"
+    action_type = Column(String, nullable=False, default="insert_row")
+    
+    # The JSON data to insert. Example: {"credits": 5, "sitemember_id": "{{member_id}}"}
+    payload_template = Column(JSONB, nullable=False)
