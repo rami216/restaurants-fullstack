@@ -1,4 +1,3 @@
-// src/app/builder/custom-domain/page.tsx
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
@@ -13,6 +12,7 @@ import {
   AlertCircle,
   Copy as CopyIcon,
   Check,
+  Info,
 } from "lucide-react";
 
 /** API shapes */
@@ -147,7 +147,6 @@ export default function CustomDomainPage() {
     }
   };
 
-  // ✅ THE REMOVE FUNCTION IS HERE!
   const handleRemoveDomain = async () => {
     if (!site?.primary_custom_domain_id) return;
     if (
@@ -188,7 +187,7 @@ export default function CustomDomainPage() {
           <Clock size={14} /> Pending Verification
         </span>
       );
-    } else if (status?.includes("fail")) {
+    } else if (status?.includes("fail") || status?.includes("error")) {
       return (
         <span className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full text-xs font-semibold bg-red-100 text-red-800 border border-red-200">
           <AlertCircle size={14} /> Verification Failed
@@ -290,7 +289,6 @@ export default function CustomDomainPage() {
                 </button>
               )}
 
-              {/* ✅ THE REMOVE BUTTON */}
               {site?.primary_custom_domain_id && (
                 <button
                   onClick={handleRemoveDomain}

@@ -1177,7 +1177,7 @@ function BuilderManager() {
                 {websiteData.subdomain && (
                   <>
                     <a
-                      href="/builder/custom-domain"
+                      href={`/builder/websites/${websiteData.website_id}/custom-domain`}
                       className="inline-flex items-center px-3 py-1.5 rounded bg-slate-200 text-slate-900 text-sm"
                     >
                       Custom Domain
