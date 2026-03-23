@@ -4,7 +4,7 @@ import { NextRequest, NextResponse } from "next/server";
 const API_BASE = process.env.NEXT_PUBLIC_API_BASE_URL?.replace(/\/$/, "") || "";
 const GOOGLE_SITE_CLIENT_ID = process.env.GOOGLE_SITE_CLIENT_ID!;
 const GOOGLE_SITE_CLIENT_SECRET = process.env.GOOGLE_SITE_CLIENT_SECRET!;
-const REDIRECT_URI = "https://www.zygoflow.com/api/auth/google/callback";
+const REDIRECT_URI = "https://www.zygoflow.com/auth-callback/google";
 
 // The core logic for handling the callback
 async function handleGoogleCallback(req: NextRequest) {
