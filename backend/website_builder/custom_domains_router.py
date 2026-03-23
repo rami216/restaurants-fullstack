@@ -29,68 +29,7 @@ def _clean_domain(s: str) -> str:
     s = s.strip().lower().replace("https://", "").replace("http://", "").strip("/")
     return s
 
-# --- API Endpoints ---
-# @router.post("")
-# async def create_custom_domain(
-#     body: schemas.CustomDomainCreate,
-#     db: AsyncSession = Depends(get_db),
-#     user=Depends(get_current_active_user),
-# ):
-#     domain_name = _clean_domain(body.domain)
-#     if not _domain_re.match(domain_name):
-#         raise HTTPException(status_code=400, detail="Invalid domain format")
-        
-#     existing = await db.scalar(select(CustomDomain).where(CustomDomain.domain == domain_name))
-    
-#     # --- NEW LOGIC ---
-#     if existing and existing.last_error:
-#         # If domain exists, just return the instructions we already have.
-#         try:
-#             cf_data = json.loads(existing.last_error)
-#             verification_details = cf_data.get("ownership_verification", {})
-#             if verification_details:
-#                  return {
-#                     "message": "This domain already exists. Please add the following DNS record.",
-#                     "record_type": verification_details.get("type"),
-#                     "record_name": verification_details.get("name"),
-#                     "record_value": verification_details.get("value"),
-#                 }
-#         except:
-#              # If parsing fails, fall through to the create logic
-#              pass
-#     elif existing:
-#         raise HTTPException(status_code=400, detail="Domain already exists but has no Cloudflare data.")
 
-#     # --- Original Logic to Create New Domain ---
-#     headers = {"Authorization": f"Bearer {CLOUDFLARE_API_TOKEN}"}
-#     payload = {"hostname": domain_name, "ssl": {"method": "http", "type": "dv"}}
-    
-#     async with httpx.AsyncClient() as client:
-#         r = await client.post(
-#             f"https://api.cloudflare.com/client/v4/zones/{CLOUDFLARE_ZONE_ID}/custom_hostnames",
-#             headers=headers,
-#             json=payload,
-#         )
-#         if r.status_code >= 400:
-#             raise HTTPException(status_code=400, detail=f"Cloudflare API error: {r.text}")
-#         cf_data = r.json().get("result", {})
-
-#     new_domain = CustomDomain(
-#         website_id=body.website_id,
-#         domain=domain_name,
-#         status=cf_data.get("status"),
-#         last_error=json.dumps(cf_data),
-#     )
-#     db.add(new_domain)
-#     await db.commit()
-
-#     verification_details = cf_data.get("ownership_verification", {})
-#     return {
-#         "message": "Domain is pending verification. Please add the following DNS record.",
-#         "record_type": verification_details.get("type"),
-#         "record_name": verification_details.get("name"),
-#         "record_value": verification_details.get("value"),
-#     }
 @router.post("")
 async def create_custom_domain(
     body: schemas.CustomDomainCreate,
