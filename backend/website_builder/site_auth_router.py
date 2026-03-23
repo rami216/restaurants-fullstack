@@ -30,7 +30,7 @@ SITE_JWT_EXP_MIN = int(os.getenv("SITE_JWT_EXP_MIN", "43200"))  # 30 days
 
 GOOGLE_SITE_CLIENT_ID = os.getenv("GOOGLE_SITE_CLIENT_ID")
 GOOGLE_SITE_CLIENT_SECRET = os.getenv("GOOGLE_SITE_CLIENT_SECRET")
-GOOGLE_REDIRECT_URI = "https://www.zygoflow.com/api/auth/google/callback"
+GOOGLE_REDIRECT_URI = "https://www.zygoflow.com/auth-callback/google"
 
 class CodeConfirmationRequest(BaseModel):
     email: EmailStr
