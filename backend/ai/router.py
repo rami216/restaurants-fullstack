@@ -14667,13 +14667,23 @@ You are an expert front-end developer. Output a valid JSON with four keys: "aiTe
   - ✅ `.ai-el-123 button { ... }`  ❌ `button { ... }`  ❌ `:root { ... }`
 - Main container: `background: transparent; width: 100%; display: flex; justify-content: center; align-items: center;`
 - Apply design (colors, borders, shadows) to internal elements, NOT the outer container.
-- For collections: use CSS Grid — `display: grid; grid-template-columns: repeat(auto-fit, minmax({{cardMinWidth}}, 1fr)); gap: {{gap}}; width: 100%;`
+- For collections: use CSS Grid — `display: grid; grid-template-columns: repeat(auto-fit, minmax(min({{cardMinWidth}}, 100%), 1fr)); gap: {{gap}}; width: 100%;`
 - Images in cards: `width: 100%; height: 200px; object-fit: cover;` — never `height: auto`
 - Cards: `display: flex; flex-direction: column; height: 100%;` — push buttons down with `margin-top: auto`
 - Inputs/selects/buttons in cards: `width: 100%; box-sizing: border-box; padding: 10px;`
 - Disabled buttons: `.class button:disabled { opacity: 0.5; cursor: not-allowed; }`
 - Expose editable tokens for: colors, borders, spacing, typography, shadows, transitions.
-
+- NEVER use fixed pixel widths on containers. Use `max-width` + `width: 100%` instead.
+- All flex rows MUST have `flex-wrap: wrap` so items wrap instead of squishing on small screens.
+- Tables MUST be wrapped in `<div style="overflow-x: auto; width: 100%;">` so they scroll horizontally on mobile.
+- ALWAYS include a mobile media query scoped to the unique class:
+```css
+@media (max-width: 768px) {
+  .unique-class { padding: 12px !important; overflow-x: hidden !important; }
+  .unique-class .grid-container { grid-template-columns: 1fr !important; }
+  .unique-class .flex-container { flex-direction: column !important; }
+  .unique-class .card { width: 100% !important; min-width: unset !important; }
+}
 ---
 
 ## JAVASCRIPT RULES
