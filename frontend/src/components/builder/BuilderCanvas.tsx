@@ -757,6 +757,207 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           ))}
         </select>,
       );
+    } else if (effectiveType === "DIVIDER") {
+      return (
+        <hr
+          style={{
+            borderColor: style?.borderColor || "#e5e7eb",
+            borderTopWidth: style?.borderWidth || "1px",
+            marginTop: style?.marginTop || "1rem",
+            marginBottom: style?.marginBottom || "1rem",
+            width: "100%",
+            borderStyle: "solid",
+          }}
+        />
+      );
+    } else if (effectiveType === "SPACER") {
+      return <div style={{ height: style?.height || "48px", width: "100%" }} />;
+    } else if (effectiveType === "EMBED") {
+      return wrap(
+        <div style={{ width: "100%", position: "relative" }}>
+          <iframe
+            src={props.src || ""}
+            style={{
+              width: "100%",
+              height: style?.height || "400px",
+              border: "0",
+              borderRadius: style?.borderRadius || "8px",
+              pointerEvents: "none",
+            }}
+            allowFullScreen
+            title="Embed"
+          />
+          {/* Overlay prevents iframe from capturing builder clicks */}
+          <div style={{ position: "absolute", inset: 0, cursor: "default" }} />
+        </div>,
+      );
+    } else if (effectiveType === "COUNTDOWN") {
+      return wrap(
+        <div style={style}>
+          {props.title && (
+            <p
+              style={{
+                fontSize: "0.875rem",
+                marginBottom: "1rem",
+                textAlign: "center",
+                color: style?.color || "#9ca3af",
+              }}
+            >
+              {props.title}
+            </p>
+          )}
+          <div
+            style={{
+              display: "flex",
+              gap: "1.5rem",
+              justifyContent: "center",
+              flexWrap: "wrap",
+            }}
+          >
+            {["Days", "Hours", "Minutes", "Seconds"].map((unit) => (
+              <div key={unit} style={{ textAlign: "center", minWidth: "60px" }}>
+                <div
+                  style={
+                    props.numberStyle || {
+                      fontSize: "2.5rem",
+                      fontWeight: 700,
+                      color: "#ffffff",
+                    }
+                  }
+                >
+                  --
+                </div>
+                <div
+                  style={
+                    props.labelStyle || {
+                      fontSize: "0.75rem",
+                      color: "#9ca3af",
+                      textTransform: "uppercase",
+                    }
+                  }
+                >
+                  {unit}
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>,
+      );
+    } else if (effectiveType === "SOCIAL_LINKS") {
+      const iconMap: Record<string, string> = {
+        instagram: "📷",
+        facebook: "👤",
+        tiktok: "🎵",
+        whatsapp: "💬",
+        twitter: "🐦",
+        linkedin: "💼",
+        youtube: "▶️",
+        telegram: "✈️",
+      };
+      return wrap(
+        <div
+          style={
+            style || {
+              display: "flex",
+              gap: "12px",
+              flexWrap: "wrap",
+              justifyContent: "center",
+            }
+          }
+        >
+          {(props.links || []).map((link: any, i: number) => (
+            <span
+              key={i}
+              style={
+                props.iconStyle || {
+                  width: "40px",
+                  height: "40px",
+                  borderRadius: "50%",
+                  backgroundColor: "#111827",
+                  color: "#ffffff",
+                  display: "inline-flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                  fontSize: "1.2rem",
+                }
+              }
+            >
+              {iconMap[link.platform] || "🔗"}
+            </span>
+          ))}
+        </div>,
+      );
+    } else if (effectiveType === "RATING") {
+      const rating = props.rating || 4;
+      const max = props.maxRating || 5;
+      return wrap(
+        <div style={style || { textAlign: "center", padding: "1rem" }}>
+          <div>
+            {Array.from({ length: max }).map((_, i) => (
+              <span
+                key={i}
+                style={{
+                  color: i < rating ? props.starColor || "#f59e0b" : "#d1d5db",
+                  fontSize: "1.5rem",
+                }}
+              >
+                ★
+              </span>
+            ))}
+          </div>
+          {props.label && (
+            <p
+              style={
+                props.labelStyle || {
+                  fontSize: "1rem",
+                  color: "#374151",
+                  marginTop: "8px",
+                }
+              }
+            >
+              {props.label}
+            </p>
+          )}
+        </div>,
+      );
+    } else if (effectiveType === "PROGRESS_BAR") {
+      return wrap(
+        <div style={style || { padding: "1rem", width: "100%" }}>
+          {props.label && (
+            <p
+              style={
+                props.labelStyle || {
+                  fontSize: "0.875rem",
+                  color: "#374151",
+                  marginBottom: "6px",
+                }
+              }
+            >
+              {props.label} — {props.percentage || 0}%
+            </p>
+          )}
+          <div
+            style={{
+              width: "100%",
+              backgroundColor: props.trackColor || "#e5e7eb",
+              borderRadius: "9999px",
+              height: "12px",
+            }}
+          >
+            <div
+              style={{
+                width: `${props.percentage || 0}%`,
+                backgroundColor: props.barColor || "#3b82f6",
+                borderRadius: "9999px",
+                height: "100%",
+                transition: "width 0.5s ease",
+              }}
+            />
+          </div>
+        </div>,
+      );
+    } else if (effectiveType === "BADGE") {
+      return <span style={style || {}}>{props.text || "Badge"}</span>;
     } else {
       return wrap(
         <div className="border p-2 bg-gray-300 text-black rounded">

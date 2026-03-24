@@ -3796,7 +3796,436 @@ const PropertyEditor: React.FC<PropertyEditorProps> = ({
         return renderAuthFormEditor("LOGIN_FORM");
       case "REGISTER_FORM":
         return renderAuthFormEditor("REGISTER_FORM");
+      case "DIVIDER": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Color
+              </label>
+              <input
+                type="color"
+                value={selectedItem.properties.style?.borderColor || "#e5e7eb"}
+                onChange={(e) =>
+                  handleStyleChange("borderColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Thickness
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.borderWidth || "1px"}
+                onChange={(e) =>
+                  handleStyleChange("borderWidth", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                placeholder="e.g. 1px, 2px"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Margin Top
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.marginTop || "1rem"}
+                onChange={(e) => handleStyleChange("marginTop", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Margin Bottom
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.marginBottom || "1rem"}
+                onChange={(e) =>
+                  handleStyleChange("marginBottom", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
 
+      case "SPACER": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Height
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.height || "48px"}
+                onChange={(e) => handleStyleChange("height", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                placeholder="e.g. 48px, 4rem"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
+
+      case "EMBED": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Embed URL
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.src || ""}
+                onChange={(e) => handlePropertyChange("src", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                placeholder="https://www.youtube.com/embed/..."
+              />
+              <p className="text-xs text-gray-500 mt-1">
+                Works with YouTube, Vimeo, Calendly, Typeform, Google Forms,
+                etc.
+              </p>
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Height
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.height || "400px"}
+                onChange={(e) => handleStyleChange("height", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Border Radius
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.borderRadius || "8px"}
+                onChange={(e) =>
+                  handleStyleChange("borderRadius", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
+
+      case "COUNTDOWN": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Title
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.title || ""}
+                onChange={(e) => handlePropertyChange("title", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Target Date
+              </label>
+              <input
+                type="date"
+                value={selectedItem.properties.targetDate || ""}
+                onChange={(e) =>
+                  handlePropertyChange("targetDate", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Background Color
+              </label>
+              <input
+                type="color"
+                value={
+                  selectedItem.properties.style?.backgroundColor || "#111827"
+                }
+                onChange={(e) =>
+                  handleStyleChange("backgroundColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Number Color
+              </label>
+              <input
+                type="color"
+                value={selectedItem.properties.numberStyle?.color || "#ffffff"}
+                onChange={(e) =>
+                  handlePropertyChange("numberStyle", {
+                    ...selectedItem.properties.numberStyle,
+                    color: e.target.value,
+                  })
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Border Radius
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.borderRadius || "12px"}
+                onChange={(e) =>
+                  handleStyleChange("borderRadius", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
+
+      case "SOCIAL_LINKS": {
+        const links = selectedItem.properties.links || [];
+        editorBody = (
+          <div className="space-y-4">
+            <p className="text-xs text-gray-500">
+              Edit the URL for each platform.
+            </p>
+            {links.map((link: any, i: number) => (
+              <div
+                key={i}
+                className="p-3 border rounded-md bg-gray-50 space-y-2"
+              >
+                <span className="text-xs font-bold text-gray-600 capitalize">
+                  {link.platform}
+                </span>
+                <input
+                  type="text"
+                  value={link.url}
+                  onChange={(e) => {
+                    const next = [...links];
+                    next[i] = { ...next[i], url: e.target.value };
+                    handlePropertyChange("links", next);
+                  }}
+                  className="block w-full border border-gray-300 rounded-md shadow-sm p-1 text-sm"
+                  placeholder={`https://${link.platform}.com/...`}
+                />
+              </div>
+            ))}
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Layout
+              </label>
+              <select
+                value={
+                  selectedItem.properties.style?.justifyContent || "center"
+                }
+                onChange={(e) =>
+                  handleStyleChange("justifyContent", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              >
+                <option value="center">Center</option>
+                <option value="flex-start">Left</option>
+                <option value="flex-end">Right</option>
+              </select>
+            </div>
+          </div>
+        );
+        break;
+      }
+
+      case "RATING": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Rating (1–5)
+              </label>
+              <input
+                type="number"
+                min={1}
+                max={5}
+                value={selectedItem.properties.rating || 4}
+                onChange={(e) =>
+                  handlePropertyChange("rating", parseInt(e.target.value))
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Label
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.label || ""}
+                onChange={(e) => handlePropertyChange("label", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Star Color
+              </label>
+              <input
+                type="color"
+                value={selectedItem.properties.starColor || "#f59e0b"}
+                onChange={(e) =>
+                  handlePropertyChange("starColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
+
+      case "PROGRESS_BAR": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Label
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.label || ""}
+                onChange={(e) => handlePropertyChange("label", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Percentage (0–100)
+              </label>
+              <input
+                type="number"
+                min={0}
+                max={100}
+                value={selectedItem.properties.percentage || 65}
+                onChange={(e) =>
+                  handlePropertyChange("percentage", parseInt(e.target.value))
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Bar Color
+              </label>
+              <input
+                type="color"
+                value={selectedItem.properties.barColor || "#3b82f6"}
+                onChange={(e) =>
+                  handlePropertyChange("barColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Track Color
+              </label>
+              <input
+                type="color"
+                value={selectedItem.properties.trackColor || "#e5e7eb"}
+                onChange={(e) =>
+                  handlePropertyChange("trackColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
+
+      case "BADGE": {
+        editorBody = (
+          <div className="space-y-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Text
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.text || ""}
+                onChange={(e) => handlePropertyChange("text", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Background Color
+              </label>
+              <input
+                type="color"
+                value={
+                  selectedItem.properties.style?.backgroundColor || "#3b82f6"
+                }
+                onChange={(e) =>
+                  handleStyleChange("backgroundColor", e.target.value)
+                }
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Text Color
+              </label>
+              <input
+                type="color"
+                value={selectedItem.properties.style?.color || "#ffffff"}
+                onChange={(e) => handleStyleChange("color", e.target.value)}
+                className="mt-1 block w-full h-10 p-1 border border-gray-300 rounded-md"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Border Radius
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.borderRadius || "9999px"}
+                onChange={(e) =>
+                  handleStyleChange("borderRadius", e.target.value)
+                }
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+                placeholder="e.g. 9999px, 4px"
+              />
+            </div>
+            <div>
+              <label className="block text-sm font-medium text-gray-700">
+                Font Size
+              </label>
+              <input
+                type="text"
+                value={selectedItem.properties.style?.fontSize || "0.75rem"}
+                onChange={(e) => handleStyleChange("fontSize", e.target.value)}
+                className="mt-1 block w-full border border-gray-300 rounded-md shadow-sm p-2"
+              />
+            </div>
+          </div>
+        );
+        break;
+      }
       default: {
         editorBody = <p>No editor for this element.</p>;
       }

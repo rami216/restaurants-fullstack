@@ -256,6 +256,146 @@ const availableElements = [
       videoStyle: { width: "100%", borderRadius: "10px" },
     },
   },
+  {
+    type: "DIVIDER",
+    name: "Divider",
+    defaultProps: {
+      style: {
+        borderColor: "#e5e7eb",
+        borderWidth: "1px",
+        marginTop: "1rem",
+        marginBottom: "1rem",
+        width: "100%",
+      },
+    },
+  },
+  {
+    type: "SPACER",
+    name: "Spacer",
+    defaultProps: {
+      style: { height: "48px", width: "100%" },
+    },
+  },
+  {
+    type: "EMBED",
+    name: "Embed (YouTube / Calendly / etc.)",
+    defaultProps: {
+      src: "https://www.youtube.com/embed/dQw4w9WgXcQ",
+      style: {
+        width: "100%",
+        height: "400px",
+        border: "0",
+        borderRadius: "8px",
+      },
+    },
+  },
+  {
+    type: "COUNTDOWN",
+    name: "Countdown Timer",
+    defaultProps: {
+      targetDate: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000)
+        .toISOString()
+        .split("T")[0],
+      title: "Launching In",
+      style: {
+        textAlign: "center",
+        padding: "2rem",
+        backgroundColor: "#111827",
+        borderRadius: "12px",
+        color: "#ffffff",
+      },
+      labelStyle: {
+        fontSize: "0.75rem",
+        color: "#9ca3af",
+        textTransform: "uppercase",
+      },
+      numberStyle: { fontSize: "2.5rem", fontWeight: "700", color: "#ffffff" },
+    },
+  },
+  {
+    type: "SOCIAL_LINKS",
+    name: "Social Links",
+    defaultProps: {
+      links: [
+        {
+          platform: "instagram",
+          url: "https://instagram.com",
+          label: "Instagram",
+        },
+        {
+          platform: "facebook",
+          url: "https://facebook.com",
+          label: "Facebook",
+        },
+        { platform: "tiktok", url: "https://tiktok.com", label: "TikTok" },
+        {
+          platform: "whatsapp",
+          url: "https://wa.me/1234567890",
+          label: "WhatsApp",
+        },
+      ],
+      style: {
+        display: "flex",
+        gap: "12px",
+        flexWrap: "wrap",
+        justifyContent: "center",
+      },
+      iconStyle: {
+        width: "40px",
+        height: "40px",
+        borderRadius: "50%",
+        backgroundColor: "#111827",
+        color: "#ffffff",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+      },
+    },
+  },
+  {
+    type: "RATING",
+    name: "Star Rating",
+    defaultProps: {
+      rating: 4,
+      maxRating: 5,
+      label: "Excellent service!",
+      style: { textAlign: "center", padding: "1rem" },
+      starColor: "#f59e0b",
+      labelStyle: { fontSize: "1rem", color: "#374151", marginTop: "8px" },
+    },
+  },
+  {
+    type: "PROGRESS_BAR",
+    name: "Progress Bar",
+    defaultProps: {
+      label: "Goal Progress",
+      percentage: 65,
+      style: { padding: "1rem", width: "100%" },
+      barColor: "#3b82f6",
+      trackColor: "#e5e7eb",
+      labelStyle: {
+        fontSize: "0.875rem",
+        color: "#374151",
+        marginBottom: "6px",
+      },
+    },
+  },
+  {
+    type: "BADGE",
+    name: "Badge / Tag",
+    defaultProps: {
+      text: "New",
+      style: {
+        display: "inline-block",
+        backgroundColor: "#3b82f6",
+        color: "#ffffff",
+        padding: "4px 12px",
+        borderRadius: "9999px",
+        fontSize: "0.75rem",
+        fontWeight: "600",
+      },
+    },
+  },
 ];
 
 const ElementPalette: React.FC<ElementPaletteProps> = ({
