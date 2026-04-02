@@ -4,25 +4,25 @@ import React from "react";
 import { motion } from "framer-motion";
 import Typewriter from "typewriter-effect";
 import AccordionCard from "@/components/Accordion";
-import { CheckCircle, Globe, Bot, ArrowRight } from "lucide-react";
+import { CheckCircle, Globe, Bot, ArrowRight, Key } from "lucide-react";
 import Link from "next/link";
 
 export default function PricingPage() {
   const faqs = [
     {
+      question: "How does AI generation billing work?",
+      answer:
+        "We don't charge you a single cent for AI generation. Zygoflow uses a Bring-Your-Own-Key (BYOK) model. You simply plug in your own API key (OpenAI, Anthropic Claude, or Google Gemini) in your dashboard. You pay the base wholesale rates directly to the AI provider for exactly what you use, with absolutely zero markup from us.",
+    },
+    {
+      question: "What does the $10/month cover?",
+      answer:
+        "The $10/month subscription covers the core Zygoflow platform: premium secure hosting, custom domain mapping, live database management, Stripe webhook infrastructure, and access to all our visual builder tools.",
+    },
+    {
       question: "Are the desktop agents really free?",
       answer:
         "Yes! You can download the Zygoflow Desktop app and build completely unrestricted agent pipelines on your local machine. They don't even have to be related to your website—you can build any automation you want.",
-    },
-    {
-      question: "What happens after my 50 free cloud runs?",
-      answer:
-        "Your agents will pause until the next month, or you can upgrade to the Unlimited Agents plan for $20/month to keep your webhooks and scheduled tasks running 24/7 without limits.",
-    },
-    {
-      question: "Do I pay extra for the AI generation?",
-      answer:
-        "You simply connect your own OpenAI API key. This means you pay base wholesale rates directly to OpenAI for the exact tokens you use, with zero markup or hidden fees from us.",
     },
     {
       question: "Do I need both plans?",
@@ -57,7 +57,7 @@ export default function PricingPage() {
             <Typewriter
               onInit={(tw) =>
                 tw
-                  .typeString("Pick the tools you need.")
+                  .typeString("Bring your own API key.")
                   .pauseFor(1000)
                   .deleteAll()
                   .typeString("Scale your business on autopilot.")
@@ -77,10 +77,10 @@ export default function PricingPage() {
           <div className="grid md:grid-cols-2 gap-8 items-stretch">
             {/* ── CARD 1: WEBSITE BUILDER ── */}
             <div className="bg-white rounded-3xl p-8 border border-gray-200 shadow-xl flex flex-col relative overflow-hidden transition-transform duration-300 hover:-translate-y-2">
-              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-pink-500 to-red-500"></div>
+              <div className="absolute top-0 left-0 w-full h-2 bg-gradient-to-r from-blue-500 to-indigo-500"></div>
 
               <div className="flex items-center gap-3 mb-6">
-                <div className="bg-pink-100 p-3 rounded-xl text-pink-600">
+                <div className="bg-blue-100 p-3 rounded-xl text-blue-600">
                   <Globe className="w-6 h-6" />
                 </div>
                 <h2 className="text-2xl font-bold text-gray-900">
@@ -89,25 +89,28 @@ export default function PricingPage() {
               </div>
 
               <div className="mb-6">
-                <span className="text-5xl font-black text-gray-900">$20</span>
+                <span className="text-5xl font-black text-gray-900">$10</span>
                 <span className="text-gray-500 font-medium"> / month</span>
               </div>
 
               <p className="text-gray-600 mb-8 h-12">
-                Everything you need to generate, host, and manage a full-stack
-                website with a database.
+                Everything you need to host, manage, and scale a full-stack
+                website. Just plug in your AI key and build.
               </p>
 
               <ul className="space-y-4 mb-10 flex-grow">
+                <li className="flex items-start gap-3 text-gray-900 font-semibold bg-blue-50 p-2 rounded-lg border border-blue-100">
+                  <Key className="w-5 h-5 text-blue-600 flex-shrink-0 mt-0.5" />
+                  <span>Bring Your Own Key (OpenAI, Claude, Gemini)</span>
+                </li>
                 {[
-                  "Unlimited AI UI Generation",
                   "Integrated Database & CMS",
                   "1-Click Stripe E-commerce",
                   "Custom Domain Hosting",
                   "Zero setup or coding required",
                 ].map((item, i) => (
                   <li key={i} className="flex items-start gap-3 text-gray-700">
-                    <CheckCircle className="w-5 h-5 text-pink-500 flex-shrink-0 mt-0.5" />
+                    <CheckCircle className="w-5 h-5 text-blue-500 flex-shrink-0 mt-0.5" />
                     <span>{item}</span>
                   </li>
                 ))}
@@ -149,6 +152,10 @@ export default function PricingPage() {
               </p>
 
               <ul className="space-y-4 mb-10 flex-grow">
+                <li className="flex items-start gap-3 text-gray-900 font-semibold bg-purple-100/50 p-2 rounded-lg border border-purple-100">
+                  <Key className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
+                  <span>Bring Your Own Key (OpenAI, Claude, Gemini)</span>
+                </li>
                 <li className="flex items-start gap-3 text-gray-900 font-semibold">
                   <CheckCircle className="w-5 h-5 text-purple-600 flex-shrink-0 mt-0.5" />
                   <span>Local Desktop App (Build Anything)</span>
@@ -160,10 +167,6 @@ export default function PricingPage() {
                 <li className="flex items-start gap-3 text-gray-700">
                   <CheckCircle className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
                   <span>Unlimited Cloud Runs for $20/mo</span>
-                </li>
-                <li className="flex items-start gap-3 text-gray-700">
-                  <CheckCircle className="w-5 h-5 text-purple-400 flex-shrink-0 mt-0.5" />
-                  <span>Stripe, Telegram & Webhook Triggers</span>
                 </li>
               </ul>
 

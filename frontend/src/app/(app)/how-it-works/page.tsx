@@ -1,7 +1,7 @@
 "use client";
 
-import React from "react";
-import { motion } from "framer-motion";
+import React, { useState, useEffect } from "react";
+import { motion, AnimatePresence } from "framer-motion";
 import Typewriter from "typewriter-effect";
 import AccordionCard from "@/components/Accordion";
 import {
@@ -13,9 +13,24 @@ import {
   Zap,
   CheckCircle,
   CloudLightning,
+  Key,
 } from "lucide-react";
+import Link from "next/link";
 
 export default function PricingPage() {
+  // --- Animation State for the Website Builder Mockup ---
+  const [mockStep, setMockStep] = useState(0);
+
+  useEffect(() => {
+    // 0: Typing DB | 1: Loading DB | 2: Show DB | 3: Typing UI | 4: Loading UI | 5: Show UI
+    const timings = [3500, 1500, 2500, 3500, 1500, 4000];
+    const timer = setTimeout(() => {
+      setMockStep((prev) => (prev + 1) % 6);
+    }, timings[mockStep]);
+    return () => clearTimeout(timer);
+  }, [mockStep]);
+  // -------------------------------------------------------
+
   const faqs = [
     {
       question: "Is this another complicated, node-based builder?",
@@ -23,19 +38,19 @@ export default function PricingPage() {
         "Absolutely not! No connecting nodes, no complex setup. Just describe what you want, and our AI builds the frontend and database for you.",
     },
     {
-      question: "How do the pay-as-you-go credits work?",
+      question: "How does the BYOK (Bring-Your-Own-Key) billing work?",
       answer:
-        "You only pay for what you use. The core builder is free. When you ask the AI to generate a page or when your Agents run tasks in the cloud, it deducts a tiny fraction of a credit. You can top up anytime.",
+        "We don't charge you a single cent for AI generation or execution environments. You simply plug in your own API keys (OpenAI, Anthropic Claude, Google Gemini, and E2B for secure code execution). You pay the base wholesale rates directly to the providers with absolutely zero markup from us.",
+    },
+    {
+      question: "What does the $10/month Website Builder cover?",
+      answer:
+        "The $10/month subscription covers the core Zygoflow platform: premium secure hosting, custom domain mapping, live database management, Stripe webhook infrastructure, and access to all visual builder tools.",
     },
     {
       question: "Can I test my agents before paying?",
       answer:
-        "Yes! You can download the Zygoflow Desktop app to build and test your agent pipelines locally on your machine for completely free.",
-    },
-    {
-      question: "Do I need my own OpenAI or Stripe keys?",
-      answer:
-        "Yes, you connect your own API keys. This means Zygoflow doesn't upcharge you on OpenAI usage or take hidden cuts from your Stripe payments. You keep 100% of your revenue.",
+        "Yes! You can download the Zygoflow Desktop app to build and test your agent pipelines locally on your machine for completely free. You only pay the $20/mo if you want unlimited 24/7 cloud executions.",
     },
   ];
 
@@ -68,13 +83,13 @@ export default function PricingPage() {
             <Typewriter
               onInit={(tw) =>
                 tw
-                  .typeString("Build AI websites for free.")
+                  .typeString("Build AI websites instantly.")
                   .pauseFor(1000)
                   .deleteAll()
-                  .typeString("Deploy autonomous agents instantly.")
+                  .typeString("Deploy autonomous agents.")
                   .pauseFor(1000)
                   .deleteAll()
-                  .typeString("Pay only for the AI power you use.")
+                  .typeString("Bring your own API keys. Zero markup.")
                   .start()
               }
               options={{ loop: true, delay: 50, deleteSpeed: 30 }}
@@ -102,8 +117,8 @@ export default function PricingPage() {
               </h2>
               <p className="text-lg text-gray-600 mb-8 leading-relaxed">
                 Stop fighting with drag-and-drop templates. Describe what you
-                want, and Zygoflow generates the UI, connects the database, and
-                sets up your products instantly.
+                want, plug in your AI key, and Zygoflow generates the UI,
+                connects the database, and sets up your products instantly.
               </p>
 
               <div className="space-y-6">
@@ -134,23 +149,146 @@ export default function PricingPage() {
               </div>
             </motion.div>
 
+            {/* 🚀 ANIMATED MOCKUP CARD 🚀 */}
             <motion.div
               initial={{ opacity: 0, x: 30 }}
               whileInView={{ opacity: 1, x: 0 }}
               viewport={{ once: true }}
-              className="bg-gray-50 rounded-2xl p-8 border border-gray-200 shadow-xl relative"
+              className="bg-white rounded-2xl border border-gray-200 shadow-2xl relative overflow-hidden h-[380px] flex flex-col"
             >
-              {/* Fake UI mockup of the builder */}
-              <div className="w-full h-8 bg-gray-200 rounded-t-lg mb-4 flex items-center px-3 gap-2">
+              {/* Fake Browser Header */}
+              <div className="w-full h-10 bg-gray-100 flex items-center px-4 gap-2 border-b border-gray-200 shrink-0">
                 <div className="w-3 h-3 rounded-full bg-red-400"></div>
                 <div className="w-3 h-3 rounded-full bg-yellow-400"></div>
                 <div className="w-3 h-3 rounded-full bg-green-400"></div>
+                <div className="mx-auto bg-white h-5 w-1/2 rounded shadow-sm"></div>
               </div>
-              <div className="space-y-4">
-                <div className="h-4 bg-gray-200 rounded w-3/4"></div>
-                <div className="h-4 bg-gray-200 rounded w-1/2"></div>
-                <div className="h-32 bg-pink-100 rounded-lg border border-pink-200 flex items-center justify-center text-pink-500 font-mono text-sm">
-                  Generating AI layout...
+
+              <div className="flex flex-col p-4 h-full bg-gray-50/50">
+                {/* AI Command Input Area */}
+                <div className="bg-white border border-gray-200 rounded-xl p-4 shadow-sm h-[80px] shrink-0 mb-4 flex items-start gap-3">
+                  <span className="text-pink-500 font-black mt-0.5">❯</span>
+                  <div className="flex-1 font-mono text-sm text-gray-700">
+                    {mockStep === 0 && (
+                      <Typewriter
+                        options={{
+                          strings:
+                            "Create a 'Real Estate' table with 3 mock properties...",
+                          autoStart: true,
+                          delay: 30,
+                          cursor: "█",
+                        }}
+                      />
+                    )}
+                    {mockStep >= 1 && mockStep <= 2 && (
+                      <span>
+                        Create a 'Real Estate' table with 3 mock properties...
+                      </span>
+                    )}
+                    {mockStep === 3 && (
+                      <Typewriter
+                        options={{
+                          strings:
+                            "Generate a UI gallery loading the Real Estate data...",
+                          autoStart: true,
+                          delay: 30,
+                          cursor: "█",
+                        }}
+                      />
+                    )}
+                    {mockStep >= 4 && (
+                      <span>
+                        Generate a UI gallery loading the Real Estate data...
+                      </span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Dynamic Generation Area */}
+                <div className="flex-grow relative border border-dashed border-gray-300 rounded-xl bg-white overflow-hidden flex items-center justify-center p-4">
+                  {/* Loading State */}
+                  <AnimatePresence mode="wait">
+                    {(mockStep === 1 || mockStep === 4) && (
+                      <motion.div
+                        key="loading"
+                        initial={{ opacity: 0, scale: 0.9 }}
+                        animate={{ opacity: 1, scale: 1 }}
+                        exit={{ opacity: 0, scale: 0.9 }}
+                        className="flex flex-col items-center gap-3"
+                      >
+                        <div className="w-8 h-8 border-4 border-pink-100 border-t-pink-500 rounded-full animate-spin"></div>
+                        <span className="text-xs font-mono text-gray-400 uppercase tracking-wider">
+                          {mockStep === 1
+                            ? "Provisioning Database..."
+                            : "Compiling Components..."}
+                        </span>
+                      </motion.div>
+                    )}
+
+                    {/* Database Result State */}
+                    {mockStep === 2 && (
+                      <motion.div
+                        key="db-result"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="w-full h-full flex flex-col"
+                      >
+                        <div className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest flex items-center gap-1">
+                          <Database size={12} /> custom_data_rows
+                        </div>
+                        <div className="w-full bg-white border border-gray-200 rounded-lg shadow-sm overflow-hidden text-xs text-gray-600">
+                          <div className="grid grid-cols-3 bg-gray-100 p-2 font-bold border-b border-gray-200">
+                            <div>Image</div>
+                            <div>Price</div>
+                            <div>Location</div>
+                          </div>
+                          {[...Array(3)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="grid grid-cols-3 p-2 border-b border-gray-50 items-center"
+                            >
+                              <div className="w-6 h-6 bg-gray-200 rounded object-cover"></div>
+                              <div>${500 + i * 150},000</div>
+                              <div>Miami, FL</div>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+
+                    {/* UI Result State */}
+                    {mockStep === 5 && (
+                      <motion.div
+                        key="ui-result"
+                        initial={{ opacity: 0, y: 10 }}
+                        animate={{ opacity: 1, y: 0 }}
+                        exit={{ opacity: 0, y: -10 }}
+                        className="w-full h-full flex flex-col"
+                      >
+                        <div className="text-[10px] font-bold text-gray-400 mb-2 uppercase tracking-widest flex items-center gap-1">
+                          <Globe size={12} /> Live Website Preview
+                        </div>
+                        <div className="grid grid-cols-3 gap-3 w-full">
+                          {[...Array(3)].map((_, i) => (
+                            <div
+                              key={i}
+                              className="bg-white rounded-lg border border-gray-200 shadow-sm overflow-hidden flex flex-col h-full"
+                            >
+                              <div className="h-16 bg-gradient-to-br from-pink-200 to-orange-200 w-full shrink-0"></div>
+                              <div className="p-2 space-y-2 flex-grow">
+                                <div className="h-2 bg-gray-800 rounded w-3/4"></div>
+                                <div className="h-2 bg-gray-300 rounded w-1/2"></div>
+                                <div className="h-5 bg-pink-500 rounded w-full flex items-center justify-center mt-auto">
+                                  <div className="h-1 bg-white rounded w-1/3"></div>
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
                 </div>
               </div>
             </motion.div>
@@ -242,7 +380,7 @@ export default function PricingPage() {
       </section>
 
       {/* ══════════════════════════════════════════ */}
-      {/* PRICING (PAY AS YOU GO) */}
+      {/* PRICING (NEW BYOK MODEL) */}
       {/* ══════════════════════════════════════════ */}
       <section className="py-24 bg-white">
         <div className="container mx-auto px-4 max-w-4xl text-center">
@@ -250,55 +388,76 @@ export default function PricingPage() {
             Simple, Transparent Pricing
           </h2>
           <p className="text-xl text-gray-500 mb-12">
-            No massive monthly subscriptions. Top up when you need it.
+            No massive monthly subscriptions. No hidden AI markups.
           </p>
 
           <div className="grid md:grid-cols-2 gap-8 text-left">
-            {/* Free Tier */}
-            <div className="bg-gray-50 rounded-2xl p-8 border border-gray-200">
+            {/* Website Builder Tier */}
+            <div className="bg-gray-50 rounded-2xl p-8 border border-gray-200 hover:shadow-lg transition-shadow relative overflow-hidden">
+              <div className="absolute top-0 right-0 bg-blue-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                BYOK Model
+              </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                The Platform
+                Website Builder
               </h3>
-              <div className="text-4xl font-black text-gray-900 mb-6">Free</div>
+              <div className="text-4xl font-black text-gray-900 mb-6">
+                $10
+                <span className="text-lg text-gray-500 font-medium"> / mo</span>
+              </div>
               <ul className="space-y-3 mb-8">
                 {[
-                  "Host your Website",
-                  "Access to CMS / Database",
-                  "Stripe E-commerce Setup",
-                  "Test Agents Locally on Desktop",
+                  "Premium Cloud Hosting",
+                  "Live Database & CMS",
+                  "1-Click Stripe E-commerce",
+                  "Custom Domain Mapping",
                 ].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-gray-700">
-                    <CheckCircle className="w-5 h-5 text-green-500" /> {item}
+                    <CheckCircle className="w-5 h-5 text-blue-500" /> {item}
                   </li>
                 ))}
               </ul>
+              <div className="bg-white p-4 rounded-xl text-sm text-gray-700 border border-gray-200 flex items-start gap-3">
+                <Key className="w-5 h-5 text-blue-500 flex-shrink-0" />
+                <p>
+                  Bring your own OpenAI, Gemini, or Claude key for UI generation
+                  (Zero markup).
+                </p>
+              </div>
             </div>
 
-            {/* Credit Tier */}
-            <div className="bg-gradient-to-br from-pink-50 to-orange-50 rounded-2xl p-8 border border-pink-200 shadow-lg relative overflow-hidden">
-              <div className="absolute top-0 right-0 bg-pink-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
-                Pay As You Go
+            {/* Agents Tier */}
+            <div className="bg-gradient-to-br from-purple-50 to-pink-50 rounded-2xl p-8 border border-purple-200 shadow-lg relative overflow-hidden transition-shadow hover:shadow-xl">
+              <div className="absolute top-0 right-0 bg-purple-500 text-white text-xs font-bold px-3 py-1 rounded-bl-lg">
+                BYOK Model
               </div>
               <h3 className="text-2xl font-bold text-gray-900 mb-2">
-                AI & Cloud Power
+                Autonomous Agents
               </h3>
-              <div className="text-4xl font-black text-pink-600 mb-6">
-                Credits
+              <div className="text-4xl font-black text-purple-600 mb-6">
+                Free
+                <span className="text-lg font-medium text-purple-400">
+                  {" "}
+                  to start
+                </span>
               </div>
               <ul className="space-y-3 mb-8">
                 {[
-                  "Generate AI UI & Layouts",
-                  "Deploy Agents to ZygoCloud",
-                  "Execute Webhooks 24/7",
-                  "Run Scheduled Tasks",
+                  "Free Local Desktop App",
+                  "50 Free Cloud Runs / month",
+                  "Unlimited Cloud Runs for $20/mo",
+                  "Execute Webhooks & Schedules",
                 ].map((item, i) => (
                   <li key={i} className="flex items-center gap-3 text-gray-800">
-                    <CheckCircle className="w-5 h-5 text-pink-500" /> {item}
+                    <CheckCircle className="w-5 h-5 text-purple-500" /> {item}
                   </li>
                 ))}
               </ul>
-              <div className="bg-white/60 p-4 rounded-xl text-sm text-gray-700 border border-pink-100">
-                Top up with $5, $10, or $20 whenever you need more AI power.
+              <div className="bg-white/60 p-4 rounded-xl text-sm text-gray-700 border border-purple-100 flex items-start gap-3">
+                <Key className="w-5 h-5 text-purple-500 flex-shrink-0" />
+                <p>
+                  Plug in your own API keys (OpenAI, Gemini, Claude, and E2B).
+                  You pay the providers directly, we take zero cut.
+                </p>
               </div>
             </div>
           </div>
