@@ -98,6 +98,7 @@ class ZygoPipelineCreate(BaseModel):
     agent_names: List[str] = []
     max_rounds: int = 1
     auto_mode: bool = False
+    is_xyz: bool = False
 
 class ZygoPipelineUpdate(BaseModel):
     name: Optional[str] = None
@@ -117,6 +118,7 @@ class ZygoPipelineOut(BaseModel):
     is_active: bool
     agents: List[ZygoAgentOut] = []
     created_at: datetime
+    is_xyz: bool = False
 
     class Config:
         from_attributes = True

@@ -611,7 +611,7 @@ async def receive_webhook(slug: str, request: Request, background_tasks: Backgro
 
 def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                                google_sa, custom_apis, pipeline_max_rounds,
-                               pipeline_auto_mode, agents_data, trigger_payload, database_url,website_id, zygo_token, website_tables):
+                               pipeline_auto_mode, pipeline_is_xyz, agents_data, trigger_payload, database_url, website_id, zygo_token, website_tables):
     from e2b_code_interpreter import Sandbox
     import json, asyncio
     from sqlalchemy import create_engine
@@ -622,7 +622,8 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
     def log(msg):
         logs.append(msg)
         print(f"[E2B:{run_id}] {msg}", flush=True)
-    def update_run(status, log_text):   # ← define BEFORE calling it
+        
+    def update_run(status, log_text):
         try:
             sync_url = database_url.replace("postgresql+asyncpg://", "postgresql://")
             engine = create_engine(sync_url)
@@ -637,16 +638,11 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             engine.dispose()
         except Exception as e:
             print(f"DB update error: {e}")
-    # Force update run to failed with debug info if anything goes wrong
+
     log(f"🚀 Starting E2B sync function")
     log(f"🔑 E2B key present: {bool(e2b_key)}")
-    log(f"🔑 E2B key starts with: {e2b_key[:8] if e2b_key else 'NONE'}")
-    log(f"📊 DB URL present: {bool(database_url)}")
-    log(f"📊 DB URL starts with: {database_url[:30] if database_url else 'NONE'}")
     log(f"🤖 Agents count: {len(agents_data)}")
     update_run(ZygoRunStatusEnum.running, "\n".join(logs))
-    
-    
 
     try:
         if not e2b_key:
@@ -658,7 +654,6 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
 
         # Install packages
         import re as _re
-
         all_code = " ".join([code for _, code in agents_data])
 
         package_map = {
@@ -695,22 +690,16 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             'importlib', 'inspect', 'traceback', 'warnings', 'dataclasses'
         }
 
-        packages = {
-            'openai', 'anthropic',
-            'google-auth', 'google-auth-httplib2', 'google-api-python-client',
-            'requests'
-        }
+        packages = {'openai', 'anthropic', 'google-auth', 'google-auth-httplib2', 'google-api-python-client', 'requests'}
 
         imported = set()
         for match in _re.findall(r'^(?:import|from)\s+([a-zA-Z0-9_]+)', all_code, _re.MULTILINE):
             imported.add(match)
 
         for pkg in imported:
-            if pkg in stdlib:
-                continue
+            if pkg in stdlib: continue
             if pkg in package_map:
-                for p in package_map[pkg].split():
-                    packages.add(p)
+                for p in package_map[pkg].split(): packages.add(p)
             else:
                 packages.add(pkg)
 
@@ -720,21 +709,17 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
 
         # Bootstrap
         bootstrap_lines = [
-        "import json, os",
-        "import requests",  # ✅ INJECT REQUESTS HERE
-        f"import json as _json; trigger_payload = _json.loads({repr(json.dumps(trigger_payload))})",
-        f"openai_api_key = {repr(openai_key)}",
-        f"claude_api_key = {repr(claude_key)}",
-        f"if openai_api_key:",
-        f"    from openai import OpenAI",
-        f"    openai_client = OpenAI(api_key=openai_api_key)",
-        f"if claude_api_key:",
-        f"    from anthropic import Anthropic",
-        f"    claude_client = Anthropic(api_key=claude_api_key)",
-        f"website_id = {repr(website_id)}",
-        f"zygo_token = {repr(zygo_token)}",
-        f"ZYGO_HEADERS = {{'Authorization': f'Bearer {{zygo_token}}'}}", # ✅ THIS IS THE MAGIC LINE
-        f"website_tables = _json.loads({repr(json.dumps(website_tables))})",
+            "import json, os",
+            "import requests",
+            f"import json as _json; trigger_payload = _json.loads({repr(json.dumps(trigger_payload))})",
+            f"openai_api_key = {repr(openai_key)}",
+            f"claude_api_key = {repr(claude_key)}",
+            "if openai_api_key:\n    from openai import OpenAI\n    openai_client = OpenAI(api_key=openai_api_key)",
+            "if claude_api_key:\n    from anthropic import Anthropic\n    claude_client = Anthropic(api_key=claude_api_key)",
+            f"website_id = {repr(website_id)}",
+            f"zygo_token = {repr(zygo_token)}",
+            f"ZYGO_HEADERS = {{'Authorization': f'Bearer {{zygo_token}}'}}",
+            f"website_tables = _json.loads({repr(json.dumps(website_tables))})",
         ]       
 
         if custom_apis:
@@ -755,86 +740,147 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
                 "def _get_google_creds(scopes):",
                 "    from google.oauth2 import service_account",
                 "    return service_account.Credentials.from_service_account_file(_sa_path, scopes=scopes)",
-                "def read_sheet(spreadsheet_id, sheet_name, cell_range='A1:Z1000'):",
-                "    from googleapiclient.discovery import build",
-                "    creds = _get_google_creds(['https://www.googleapis.com/auth/spreadsheets.readonly'])",
-                "    service = build('sheets', 'v4', credentials=creds)",
-                "    return service.spreadsheets().values().get(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!{cell_range}').execute().get('values', [])",
-                "def append_sheet(spreadsheet_id, sheet_name, values):",
-                "    from googleapiclient.discovery import build",
-                "    creds = _get_google_creds(['https://www.googleapis.com/auth/spreadsheets'])",
-                "    service = build('sheets', 'v4', credentials=creds)",
-                "    service.spreadsheets().values().append(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!A1', valueInputOption='USER_ENTERED', insertDataOption='INSERT_ROWS', body={'values': values}).execute()",
-                "def write_sheet(spreadsheet_id, sheet_name, cell_range, values):",
-                "    from googleapiclient.discovery import build",
-                "    creds = _get_google_creds(['https://www.googleapis.com/auth/spreadsheets'])",
-                "    service = build('sheets', 'v4', credentials=creds)",
-                "    service.spreadsheets().values().update(spreadsheetId=spreadsheet_id, range=f'{sheet_name}!{cell_range}', valueInputOption='USER_ENTERED', body={'values': values}).execute()",
             ]
 
         bootstrap_code = "\n".join(bootstrap_lines)
         log("✅ Bootstrap injected")
 
-        # Run agents
-        # Run agents dynamically
-        # Run agents dynamically
+        # ── Execution Logic ──
         agents_dict = {name: code for name, code in agents_data}
         agent_names = [name for name, _ in agents_data]
 
-        if pipeline_auto_mode:
-            pipeline_max_rounds = 999999
+        if pipeline_is_xyz:
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # 🕸️ ROUTE 1: XYZ SWARM MODE (PARALLEL)
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            log("🕸️ XYZ Mode Detected: Launching Parallel Swarm in E2B")
+            
+            xyz_bootstrap = """
+import threading
+import time
 
-        current_agent_name = agent_names[0]
-        round_num = 0
+_blackboard = {}
+_bb_lock = threading.Lock()
 
-        while True:
-            round_num += 1
-            if round_num > pipeline_max_rounds:
-                break
+def pm_push(key, value):
+    with _bb_lock:
+        _blackboard[key] = value
+    print(f"📌 Pushed '{key}' to blackboard.")
 
-            code = agents_dict.get(current_agent_name)
-            if not code:
-                break
+def semantic_wait(description, expected_count, timeout=300):
+    print(f"🚦 Consumer waiting for {expected_count} items...")
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        with _bb_lock:
+            if len(_blackboard) >= expected_count:
+                vals = list(_blackboard.values())
+                return vals[0] if expected_count == 1 else vals
+        time.sleep(2)
+    raise Exception(f"Timeout waiting for {expected_count} items.")
 
-            log(f"▶ Running: {current_agent_name}")
-            update_run(ZygoRunStatusEnum.running, "\n".join(logs))  # ← UPDATE AFTER EACH AGENT STARTS
+def save_file(default_ext=".txt", file_types=None):
+    return f"final_output{default_ext}"
+"""
+            producers = []
+            consumer_code = ""
+            for name, code in agents_data:
+                if "semantic_wait" in code or "pm_wait" in code:
+                    consumer_code = code
+                else:
+                    producers.append((name, code))
 
-            sbx.run_code("if 'next_agent' in globals(): del globals()['next_agent']")
+            xyz_run_script = """
+def run_producer(name, code_str):
+    try:
+        print(f"▶ Running: {name}")
+        exec(code_str, globals())
+    except Exception as e:
+        print(f"❌ Execution error in {name}: {e}")
 
-            result = sbx.run_code(bootstrap_code + "\n\n" + code)
+threads = []
+"""
+            for i, (p_name, p_code) in enumerate(producers):
+                xyz_run_script += f"\np_code_{i} = {repr(p_code)}\n"
+                xyz_run_script += f"t = threading.Thread(target=run_producer, args=({repr(p_name)}, p_code_{i}))\n"
+                xyz_run_script += "threads.append(t)\nt.start()\n"
 
+            if consumer_code:
+                xyz_run_script += f"\nprint('▶ Running: Consumer')\nexec({repr(consumer_code)}, globals())\n"
+            else:
+                xyz_run_script += f"\nfor t in threads: t.join()\n"
+
+            result = sbx.run_code(bootstrap_code + "\n" + xyz_bootstrap + "\n" + xyz_run_script)
+            
             output = "\n".join(getattr(result.logs, 'stdout', None) or [])
             errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
-            if output: log(f"📤 {output[:500]}")
-            if errors: log(f"⚠️ {errors[:300]}")
+            if output: log(f"📤\n{output}")
+            if errors: log(f"⚠️\n{errors}")
+            
             if hasattr(result, 'error') and result.error:
                 log(f"❌ Execution error: {result.error}")
-                update_run(ZygoRunStatusEnum.failed, "\n".join(logs))  # ← MARK FAILED
-                break
-
-            update_run(ZygoRunStatusEnum.running, "\n".join(logs))  # ← UPDATE AFTER EACH AGENT FINISHES
-
-            check_done = sbx.run_code("print(str(globals().get('is_done', False)))")
-            if check_done.logs.stdout and "True" in check_done.logs.stdout[0]:
-                log("✅ Pipeline complete (is_done=True)")
-                break
-
-            check_routing = sbx.run_code("print(str(globals().get('next_agent', 'None')))")
-            next_agent = check_routing.logs.stdout[0].strip() if check_routing.logs.stdout else "None"
-
-            if next_agent != "None" and next_agent in agents_dict:
-                current_agent_name = next_agent
+                update_run(ZygoRunStatusEnum.failed, "\n".join(logs))
+            elif "❌" in output:
+                update_run(ZygoRunStatusEnum.failed, "\n".join(logs))
             else:
-                idx = agent_names.index(current_agent_name)
-                current_agent_name = agent_names[(idx + 1) % len(agent_names)]
+                log("✅ Pipeline complete (is_done=True)")
+                update_run(ZygoRunStatusEnum.success, "\n".join(logs))
 
-            if not pipeline_auto_mode:
-                break
+        else:
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            # 🔗 ROUTE 2: STANDARD SEQUENTIAL MODE
+            # ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
+            if pipeline_auto_mode:
+                pipeline_max_rounds = 999999
+
+            current_agent_name = agent_names[0]
+            round_num = 0
+
+            while True:
+                round_num += 1
+                if round_num > pipeline_max_rounds: break
+
+                code = agents_dict.get(current_agent_name)
+                if not code: break
+
+                log(f"▶ Running: {current_agent_name}")
+                update_run(ZygoRunStatusEnum.running, "\n".join(logs))  
+
+                sbx.run_code("if 'next_agent' in globals(): del globals()['next_agent']")
+                result = sbx.run_code(bootstrap_code + "\n\n" + code)
+
+                output = "\n".join(getattr(result.logs, 'stdout', None) or [])
+                errors = "\n".join(getattr(result.logs, 'stderr', None) or [])
+                if output: log(f"📤 {output[:500]}")
+                if errors: log(f"⚠️ {errors[:300]}")
+                
+                if hasattr(result, 'error') and result.error:
+                    log(f"❌ Execution error: {result.error}")
+                    update_run(ZygoRunStatusEnum.failed, "\n".join(logs))  
+                    break
+
+                update_run(ZygoRunStatusEnum.running, "\n".join(logs))  
+
+                check_done = sbx.run_code("print(str(globals().get('is_done', False)))")
+                if check_done.logs.stdout and "True" in check_done.logs.stdout[0]:
+                    log("✅ Pipeline complete (is_done=True)")
+                    update_run(ZygoRunStatusEnum.success, "\n".join(logs))
+                    break
+
+                check_routing = sbx.run_code("print(str(globals().get('next_agent', 'None')))")
+                next_agent = check_routing.logs.stdout[0].strip() if check_routing.logs.stdout else "None"
+
+                if next_agent != "None" and next_agent in agents_dict:
+                    current_agent_name = next_agent
+                else:
+                    idx = agent_names.index(current_agent_name)
+                    current_agent_name = agent_names[(idx + 1) % len(agent_names)]
+
+                if not pipeline_auto_mode:
+                    log("✅ Pipeline complete")
+                    update_run(ZygoRunStatusEnum.success, "\n".join(logs))
+                    break
 
         sbx.kill()
-        log("✅ Done")
-        update_run(ZygoRunStatusEnum.success, "\n".join(logs))  # ← FINAL SUCCESS
-
 
     except Exception as e:
         log(f"❌ {e}")

@@ -97,7 +97,7 @@ class ZygoPipeline(Base):
     agents = relationship("ZygoAgent", back_populates="pipeline", cascade="all, delete-orphan")
     triggers = relationship("ZygoTrigger", back_populates="pipeline")
     runs = relationship("ZygoRun", back_populates="pipeline", cascade="all, delete-orphan")
-
+    is_xyz = Column(Boolean, default=False)
 
 # ── zygo_agents ────────────────────────────────────────────────────────────
 
