@@ -439,11 +439,12 @@ async def deploy_pipeline(
         )
     )
     pipeline = result.scalars().first()
-
+    is_xyz_flag = data.get("is_xyz", False) # Extract it from the payload
     if pipeline:
         pipeline.agent_names = [a["name"] for a in agents_data]
         pipeline.max_rounds = max_rounds
         pipeline.auto_mode = auto_mode
+        pipeline.is_xyz = is_xyz_flag # 🔥 Update existing
         # Delete old agents and replace
         old = await db.execute(select(ZygoAgent).where(ZygoAgent.pipeline_id == pipeline.id))
         for agent in old.scalars().all():
@@ -454,7 +455,8 @@ async def deploy_pipeline(
             name=pipeline_name,
             agent_names=[a["name"] for a in agents_data],
             max_rounds=max_rounds,
-            auto_mode=auto_mode
+            auto_mode=auto_mode,
+            is_xyz=is_xyz_flag # 🔥 Create new
         )
         db.add(pipeline)
         await db.flush()

@@ -106,6 +106,7 @@ class ZygoPipelineUpdate(BaseModel):
     agent_names: Optional[List[str]] = None
     max_rounds: Optional[int] = None
     auto_mode: Optional[bool] = None
+    is_xyz: Optional[bool] = None  # 🔥 ADD THIS
     is_active: Optional[bool] = None
 
 class ZygoPipelineOut(BaseModel):
