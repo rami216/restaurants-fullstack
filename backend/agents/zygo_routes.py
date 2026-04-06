@@ -759,67 +759,67 @@ def run_pipeline_on_e2b_sync(run_id, owner_id, e2b_key, openai_key, claude_key,
             log("🕸️ XYZ Mode Detected: Launching Parallel Swarm in E2B")
             
             xyz_bootstrap = f"""
-            import threading
-            import time
-            import json as _json
-            import openai as _oai
+import threading
+import time
+import json as _json
+import openai as _oai
 
-            _blackboard = {{}}
-            _bb_lock = threading.Lock()
-            _openai_key = {repr(openai_key)}
+_blackboard = {{}}
+_bb_lock = threading.Lock()
+_openai_key = {repr(openai_key)}
 
-            def pm_push(key, value):
-                with _bb_lock:
-                    _blackboard[key] = value
-                print(f"📌 Pushed '{{key}}' to blackboard.")
+def pm_push(key, value):
+    with _bb_lock:
+        _blackboard[key] = value
+    print(f"📌 Pushed '{{key}}' to blackboard.")
 
-            def semantic_wait(description, expected_count, timeout=300):
-                print(f"🚦 Semantic Wait: waiting for {{expected_count}} items on blackboard...")
-                
-                # 1. Block until expected_count items are on blackboard
-                start_time = time.time()
-                while time.time() - start_time < timeout:
-                    with _bb_lock:
-                        if len(_blackboard) >= expected_count:
-                            break
-                    time.sleep(1)
-                else:
-                    raise Exception(f"Timeout waiting for {{expected_count}} items on blackboard.")
+def semantic_wait(description, expected_count, timeout=300):
+    print(f"🚦 Semantic Wait: waiting for {{expected_count}} items on blackboard...")
+    
+    # 1. Block until expected_count items are on blackboard
+    start_time = time.time()
+    while time.time() - start_time < timeout:
+        with _bb_lock:
+            if len(_blackboard) >= expected_count:
+                break
+        time.sleep(1)
+    else:
+        raise Exception(f"Timeout waiting for {{expected_count}} items on blackboard.")
 
-                # 2. Build lightweight Memory Map (keys + types + sizes only — NOT the data)
-                with _bb_lock:
-                    m_map = {{k: f"Type: {{type(v).__name__}}, Size: {{len(v) if isinstance(v, (str, list, dict)) else 1}}" for k, v in _blackboard.items()}}
-                print(f"🗺️ Memory Map: {{m_map}}")
+    # 2. Build lightweight Memory Map (keys + types + sizes only — NOT the data)
+    with _bb_lock:
+        m_map = {{k: f"Type: {{type(v).__name__}}, Size: {{len(v) if isinstance(v, (str, list, dict)) else 1}}" for k, v in _blackboard.items()}}
+    print(f"🗺️ Memory Map: {{m_map}}")
 
-                # 3. Ask AI router to match description to variable keys
-                prompt = (
-                    f"You are a Swarm Semantic Router.\\n"
-                    f"An agent is asking for this data: '{{description}}'\\n"
-                    f"Here is the current Memory Map of the blackboard: {{json.dumps(m_map)}}\\n"
-                    f"Return a JSON object with a 'keys' array containing the exact variable names that match.\\n"
-                    f"Example: {{{{\\\"keys\\\": [\\\"var1\\\", \\\"var2\\\"]}}}}"
-                )
-                client = _oai.OpenAI(api_key=_openai_key)
-                resp = client.chat.completions.create(
-                    model="gpt-4o-mini",
-                    messages=[{{"role": "user", "content": prompt}}],
-                    response_format={{"type": "json_object"}}
-                )
-                keys_data = _json.loads(resp.choices[0].message.content)
-                target_keys = keys_data.get("keys", [])
-                print(f"🎯 Router matched keys: {{target_keys}}")
+    # 3. Ask AI router to match description to variable keys
+    prompt = (
+        f"You are a Swarm Semantic Router.\\n"
+        f"An agent is asking for this data: '{{description}}'\\n"
+        f"Here is the current Memory Map of the blackboard: {{_json.dumps(m_map)}}\\n"
+        f"Return a JSON object with a 'keys' array containing the exact variable names that match.\\n"
+        f"Example: {{{{\\\"keys\\\": [\\\"var1\\\", \\\"var2\\\"]}}}}"
+    )
+    client = _oai.OpenAI(api_key=_openai_key)
+    resp = client.chat.completions.create(
+        model="gpt-4o-mini",
+        messages=[{{"role": "user", "content": prompt}}],
+        response_format={{"type": "json_object"}}
+    )
+    keys_data = _json.loads(resp.choices[0].message.content)
+    target_keys = keys_data.get("keys", [])
+    print(f"🎯 Router matched keys: {{target_keys}}")
 
-                # 4. Grab the actual heavy data from blackboard
-                with _bb_lock:
-                    results = [_blackboard[k] for k in target_keys if k in _blackboard]
-                
-                if len(results) == 1:
-                    return results[0]
-                return results
+    # 4. Grab the actual heavy data from blackboard
+    with _bb_lock:
+        results = [_blackboard[k] for k in target_keys if k in _blackboard]
+    
+    if len(results) == 1:
+        return results[0]
+    return results
 
-            def save_file(default_ext=".txt", file_types=None):
-                return f"final_output{{default_ext}}"
-            """
+def save_file(default_ext=".txt", file_types=None):
+    return f"final_output{{default_ext}}"
+"""
             producers = []
             consumer_code = ""
             for name, code in agents_data:
