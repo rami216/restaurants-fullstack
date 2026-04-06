@@ -841,10 +841,9 @@ threads = []
             for i, (p_name, p_code) in enumerate(producers):
                 xyz_run_script += f"\np_code_{i} = {repr(p_code)}\n"
                 xyz_run_script += f"t = threading.Thread(target=run_producer, args=({repr(p_name)}, p_code_{i}))\n"
-                xyz_run_script += "threads.append(t)\nt.start()\n"
+                xyz_run_script += "threads.append(t)\n"
 
-            # Start all producer threads first, then launch consumer
-            # Consumer uses semantic_wait() which blocks itself internally
+            # Start ALL threads together, then launch consumer
             xyz_run_script += "\nfor t in threads: t.start()\n"
             if consumer_code:
                 xyz_run_script += f"\nprint('▶ Running: Consumer (waiting for producers...)')\nexec({repr(consumer_code)}, globals())\n"
