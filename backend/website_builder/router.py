@@ -1,5 +1,7 @@
 # website_builder/router.py
-from fastapi import APIRouter, Depends, HTTPException, status,Response
+import socket, ipaddress
+from urllib.parse import urlparse
+from fastapi import APIRouter, Depends, HTTPException, status, Response, Header
 from uuid import UUID
 from sqlalchemy import desc
 from sqlalchemy.ext.asyncio import AsyncSession
@@ -316,7 +318,11 @@ async def update_element_by_slot_key(
     slot_key: str,
     payload: SlotKeyUpdate,
     db: AsyncSession = Depends(get_db),
+    x_agent_key: Optional[str] = Header(None),
 ):
+    website = await db.get(Website, website_id)
+    if not website or str(website.agent_api_key) != str(x_agent_key):
+        raise HTTPException(status_code=403, detail="Invalid agent key.")
     # Find the element by slot_key inside properties JSON
     result = await db.execute(
         select(Element)
@@ -346,7 +352,11 @@ async def get_element_by_slot_key(
     website_id: UUID,
     slot_key: str,
     db: AsyncSession = Depends(get_db),
+    x_agent_key: Optional[str] = Header(None),
 ):
+    website = await db.get(Website, website_id)
+    if not website or str(website.agent_api_key) != str(x_agent_key):
+        raise HTTPException(status_code=403, detail="Invalid agent key.")
     # Securely find the element by slot_key
     result = await db.execute(
         select(Element)
@@ -383,7 +393,12 @@ async def delete_schema_by_element(
     Finds a schema linked to an element and deletes it.
     This is used when a data-driven element is deleted from the builder.
     """
-    element = await db.get(Element, element_id)
+    result = await db.execute(
+        select(Element)
+        .join(Subsection).join(Section).join(Page).join(Website).join(RestaurantOwner)
+        .where(Element.element_id == element_id, RestaurantOwner.user_id == current_user.id)
+    )
+    element = result.scalars().first()
     if not element:
         return Response(status_code=204)
 
@@ -1129,6 +1144,8 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
                 detail=f"AI Limit Reached (${member_limit:.2f} max). Please upgrade your plan."
             )
 
+    if not payload.member_id:
+        raise HTTPException(status_code=401, detail="member_id required for AI calls.")
     # ==========================================
     # 3. CALL OPENAI & TRACK SPENDING
     # ==========================================
@@ -1152,7 +1169,7 @@ async def call_openai_proxy(payload: OpenAIPayload, db: AsyncSession = Depends(g
             total_cost = prompt_cost + comp_cost
             
             # Update the Website Owner's total analytics ledger
-            website.current_ai_spend_usd = getattr(website, 'current_ai_spend_usd', 0.0) + total_cost
+            website.total_spend_usd = float(website.total_spend_usd or 0) + total_cost
             
             # Update the member's tracking wallet
             if member_usage:
@@ -1252,6 +1269,20 @@ class FetchExternalPayload(BaseModel):
     body: Optional[dict] = None
 
 
+# above fetch_external_api:
+def _is_private_url(url: str) -> bool:
+    """Resolve the host and block private/loopback/link-local/reserved IPs (SSRF)."""
+    try:
+        host = urlparse(url).hostname or ""
+        if not host:
+            return True
+        for info in socket.getaddrinfo(host, None):
+            ip = ipaddress.ip_address(info[4][0])
+            if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+                return True
+        return False
+    except Exception:
+        return True  # can't resolve → don't fetch
 @router.post("/fetch-external")
 async def fetch_external_api(payload: FetchExternalPayload):
     """
@@ -1260,7 +1291,7 @@ async def fetch_external_api(payload: FetchExternalPayload):
     # ⚠️ SECURITY WARNING (SSRF Protection):
     # In a real production app, you should restrict which URLs can be fetched 
     # to prevent people from scanning your internal AWS/server network (localhost, 169.254.x.x)
-    if "localhost" in payload.url or "127.0.0.1" in payload.url:
+    if _is_private_url(payload.url):
         raise HTTPException(status_code=403, detail="Internal network requests blocked.")
 
     try:
@@ -1379,3 +1410,12 @@ async def get_ai_settings(
         "has_claude_key": bool(website.user_claude_key),
         "has_gemini_key": bool(website.user_gemini_key),
     }
+    
+@router.get("/websites/{website_id}/agent-key")
+async def get_agent_key(
+    website_id: UUID,
+    db: AsyncSession = Depends(get_db),
+    current_user: User = Depends(get_current_active_user),
+):
+    website = await get_website_and_check_ownership(website_id, current_user, db)
+    return {"agent_api_key": str(website.agent_api_key)}

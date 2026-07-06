@@ -50,6 +50,7 @@ class Website(Base):
     user_claude_model = Column(String, nullable=True, default="claude-sonnet-4-6")
     user_gemini_model = Column(String, nullable=True, default="gemini-2.0-flash")
     preferred_ai_provider = Column(String, nullable=True, default="platform")
+    agent_api_key = Column(UUID(as_uuid=True), server_default=text("gen_random_uuid()"))
     
 class AIUsageLog(Base):
     __tablename__ = "ai_usage_logs"
@@ -227,3 +228,39 @@ class WebsiteEmailConfig(Base):
     # Relationship back to Website
     website = relationship("Website", back_populates="email_config")
 #endregion
+
+#region from fable
+class SchemaAutomation(Base):
+    """
+    A server-side rule attached to a data schema.
+ 
+    trigger:      on_create | on_update | on_delete
+    action_type:  mutate_row | webhook | send_email
+    config (jsonb), examples:
+ 
+      mutate_row (booking lock — replaces crossTableMutations JS):
+        {
+          "source_field": "time",                 # field in the NEW row holding the target row_id
+          "conditions":  {"available": true},     # 409 + abort if target doesn't match (race-safe)
+          "set":         {"available": false},    # values to set on the target row
+          "increments":  {"stock": -1},           # numeric deltas applied to the target row
+          "condition_error": "That slot was just taken — please pick another."
+        }
+ 
+      webhook:
+        { "url": "https://hooks.zapier.com/..." }
+    """
+    __tablename__ = "schema_automations"
+ 
+    id          = Column(UUID(as_uuid=True), primary_key=True, server_default=text("gen_random_uuid()"))
+    schema_id   = Column(
+        UUID(as_uuid=True),
+        ForeignKey("custom_data_schemas.schema_id", ondelete="CASCADE"),
+        nullable=False,
+        index=True,
+    )
+    trigger     = Column(String, nullable=False)   # on_create | on_update | on_delete
+    action_type = Column(String, nullable=False)   # mutate_row | webhook | send_email
+    config      = Column(JSONB, nullable=False, server_default=text("'{}'::jsonb"))
+    enabled     = Column(Boolean, nullable=False, server_default=text("true"))
+    created_at  = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

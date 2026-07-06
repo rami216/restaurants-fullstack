@@ -13,7 +13,6 @@ class SiteMember(Base):
     website_id = Column(UUID(as_uuid=True), ForeignKey("websites.website_id"), nullable=False, index=True)
     email = Column(String, nullable=False)
     password_hash = Column(String, nullable=True)
-    is_active = Column(Boolean, nullable=False, default=True)
     role = Column(String, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now())
     is_active = Column(Boolean, default=False)
