@@ -64,15 +64,24 @@ MODULE_CRUD = """
 - PUT/DELETE on a row the USER created → currentUserId (null gives 403). On a SHARED/admin-created row (booking a slot) → null (currentUserId gives 403). Rule: match whoever created the row.
 - NEVER use the zero UUID "00000000-..." — it is rejected on public sites.
 
-## LIST WITH EDIT/DELETE
+## RENDERING FETCHED ROWS (CRITICAL)
+{{tokens}} in aiTemplate are ONLY for owner-editable settings (title, colors, button text). Row data must NEVER be a static {{token}} — Mustache does not loop; those tokens render as literal "{{name}}" text on the page.
+Build each row's HTML inside the script with template literals reading row.data:
 let rows = []; // top-level
 const fetchAndRenderRows = async () => {
   const res = await api.get(`/custom-data/rows/${schemaId}?skip=${page*limit}&limit=${limit}`);
   rows = res.data.rows;
   if (!rows.length) { list.innerHTML = '<p>No items found</p>'; return; }
-  list.innerHTML = rows.map(r => `...<button class="edit" data-id="${r.row_id}">Edit</button><button class="delete" data-id="${r.row_id}">Delete</button>`).join('');
+  list.innerHTML = rows.map(r => `
+    <div class="row-card">
+      <div class="row-main"><strong>${r.data.name ?? ''}</strong> <span>${r.data.email ?? ''}</span></div>
+      <p>${r.data.inquiry ?? ''}</p>
+      <button class="edit" data-id="${r.row_id}">Edit</button>
+      <button class="delete" data-id="${r.row_id}">Delete</button>
+    </div>`).join('');
   attachEventListeners();
 };
+Use (r.data.field ?? '') fallbacks for every field; relations via r.data.field?.data?.some_name; booleans via (v===true||v==='true'); adapt the inner HTML/classes to the actual schema fields and requested design.
 attachEventListeners: loop container.querySelectorAll('.edit'/'.delete'), read btn.getAttribute('data-id'), apply loading/confirm rules, refresh via fetchAndRenderRows(). API-calling listeners are attached ONCE per render pass — never nested inside another render loop.
 """.strip()
 
@@ -269,7 +278,16 @@ def lint_component(payload: Dict[str, Any]) -> List[str]:
     tokens = set(_TOKEN_RE.findall(tmpl)) - {"data", "row_id"}
     missing_props = tokens - set(props.keys())
     if missing_props:
-        errors.append(f"Add these template tokens to properties (with sensible initial values): {sorted(missing_props)}")
+        if "custom-data/rows" in script:
+            errors.append(
+                f"Tokens {sorted(missing_props)} are in aiTemplate but not in properties. "
+                "If they are ROW DATA fields: REMOVE them from aiTemplate and render the rows "
+                "inside the script with template literals (row.data.<field>) — static Mustache "
+                "tokens cannot display fetched rows. If they are owner-editable settings, add "
+                "them to properties AND editableProps instead."
+            )
+        else:
+            errors.append(f"Add these template tokens to properties (with sensible initial values): {sorted(missing_props)}")
     eprop_keys = {e.get("key") for e in eprops if isinstance(e, dict)}
     missing_eprops = tokens - eprop_keys - {"website_id", "schema_id", "all_schemas", "schema_fields", "subdomain"}
     if missing_eprops:
