@@ -5,7 +5,7 @@ from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy import select, func, Float, desc, literal_column
 import httpx
 from fastapi.security import OAuth2PasswordBearer
-from models import SchemaAutomation
+from .models import SchemaAutomation
 from uuid import UUID
 from typing import List, Dict, Any, Optional
 
