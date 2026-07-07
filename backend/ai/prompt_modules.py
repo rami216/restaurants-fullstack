@@ -151,7 +151,7 @@ MODULE_CRUD = f"""
 {_HELPERS_JS}
 
 ## RENDERING FETCHED ROWS (complete pattern — adapt columns/markup to the actual fields)
-let rows = []; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0;
+let rows = []; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0; const smId = null; // or currentUserId when user-scoped — ALWAYS declared
 const fetchAndRenderRows = async () => {{
   const list = container.querySelector('.list-container');
   list.innerHTML = '<p style="color:#6b7280;font-size:14px">Loading...</p>';
@@ -552,7 +552,7 @@ _DISPLAY_WORDS = ["show", "display", "list", "get data", "view", "table of", "se
 
 REPAIR_PROMPT = """
 You are fixing a generated component. You receive ERRORS TO FIX and the COMPONENT JSON.
-Fix ONLY the listed errors. Change nothing else — do not restructure, do not remove working features. Return the complete corrected JSON object (same four keys), no markdown, no explanation.
+Fix ONLY the listed errors. Change nothing else — do not restructure, do not remove working features. Return the complete corrected JSON object with ALL keys you received (never drop keys like schema, automations, schemas_to_create), no markdown, no explanation.
 Key rules while fixing:
 - {{tokens}} are ONLY for owner settings. Fetched data renders inside the script via template literals into an empty container — remove row-data tokens from aiTemplate rather than adding them to properties.
 - Every displayed field value goes through displayValue()/firstValue(); every relation value written to a select/input goes through extractRowId(). Define these helpers at the top of the script if missing.
@@ -583,7 +583,11 @@ def sanitize_injected_params(script: str) -> str:
             body = script[open_idx + 1:close_idx]
             suffix = re.sub(r"^[\s;()]*", "", script[close_idx + 1:])
             script = prefix.rstrip() + "\n" + body.strip() + "\n" + suffix
-    return _REDECL_LINE.sub("", script)
+    script = _REDECL_LINE.sub("", script)
+    # backstop: smId used but never declared → safe default (non-user-scoped)
+    if re.search(r"\bsmId\b", script) and not re.search(r"\b(?:const|let|var)\s+smId\b", script):
+        script = "const smId = null;\n" + script
+    return script
     
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
@@ -658,7 +662,11 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     # --- data hygiene ---
     if "api.delete(" in script and "confirm(" not in script:
         errors.append("Every delete must be guarded: if (!confirm('Are you sure you want to delete this item?')) return;")
-
+    # convention identifiers must be declared before use
+    for ident, fix in [("smId", "const smId = null; // or currentUserId when user-scoped"),
+                       ("currentUserId", "const currentUserId = localStorage.getItem('siteMemberId:' + (properties.subdomain || ''));")]:
+        if re.search(r"\b" + ident + r"\b", script) and not re.search(r"\b(?:const|let|var)\s+" + ident + r"\b", script):
+            errors.append(f"`{ident}` is used but never declared — the whole handler throws ReferenceError. Add to the state block: {fix}")
     # --- prompt-aware: read-only default (conservative — only pure display prompts) ---
     if user_prompt:
         wants_management = any(w in p for w in _MANAGEMENT_WORDS)
@@ -790,7 +798,8 @@ THE SCRIPT IS A FUNCTION BODY — never wrap it in (container, api, schemaId, ..
 
 Then, in order:
 1. Sync static UI from properties (title text/color, add-button text/bg). const fields = properties.schema_fields || [];
-2. State: let rows = []; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0; let editingRowId = null;
+2. State (ALL of these, always — smId is used by every write/delete and omitting it throws ReferenceError):
+   let rows = []; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0; let editingRowId = null; const smId = null; // or currentUserId when user-scoped
 2b. WIRE STATIC CONTROLS ONCE, AT TOP LEVEL, IMMEDIATELY AFTER STATE — never inside render functions or attachEventListeners (those don't run when the table is empty, leaving the button dead):
    const addBtn = container.querySelector('.add-new-btn');
    if (addBtn) addBtn.onclick = () => {{ editingRowId = null; openForm({{}}); }};

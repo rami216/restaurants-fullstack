@@ -911,7 +911,7 @@ async def generate_data_app_element(
         # V3 returns ONE flat object:
         # {name, schema, aiTemplate, properties, editableProps, script,
         #  automations, schemas_to_create (optional helpers)}
-        payload = call_ai_json(client, model, provider, DATA_APP_PROMPT_V3, user_content, temperature=0.5)
+        payload = generate_with_repair(client, model, provider, DATA_APP_PROMPT_V3, user_content)
 
         main_fields = payload.get("schema", []) or []
         if not main_fields or "script" not in payload:
