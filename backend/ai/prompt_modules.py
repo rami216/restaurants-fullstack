@@ -119,8 +119,10 @@ If a value comes from api.get/api.post, it is type 2. This is the #1 rule.
 # RUNTIME BINDING — always included, before all other modules
 # ------------------------------------------------------------------
 MODULE_BINDING = """
-## RUNTIME BINDING (READ FIRST — violating this makes the WHOLE script fail to compile)
-The script body executes as: new Function('container','api','schemaId','properties','Mustache','addToCart')(...)
+## RUNTIME BINDING (READ FIRST — violating either rule makes NOTHING run)
+The script executes as the BODY of: new Function('container','api','schemaId','properties','Mustache','addToCart')(...)
+RULE 1 — THE SCRIPT IS A FUNCTION BODY, NOT A FUNCTION. NEVER wrap the code in (container, api, ...) => { ... } or function(...) { ... } — a wrapper is defined but never invoked, so zero lines execute (empty display, dead buttons). Write top-level statements directly and END the script by calling your entry point, e.g. fetchAndRenderRows();
+RULE 2 — NEVER REDECLARE THE INJECTED NAMES.
 → container, api, schemaId, properties, Mustache, addToCart are ALREADY-DEFINED function parameters.
 NEVER write `const schemaId = ...`, `let api = ...`, or any const/let/var declaration of these six names — a single redeclaration throws "Identifier 'schemaId' has already been declared" and NOTHING runs (empty display, dead buttons).
 Need the id? Just use `schemaId` directly — it already equals properties.schema_id.
@@ -195,6 +197,7 @@ const renderPagination = () => {{
   const pg = container.querySelector('.pagination');
   if (!pg) return;
   const totalPages = Math.max(1, Math.ceil(totalRows / rowsPerPage));
+  if (totalPages <= 1) {{ pg.innerHTML = ''; return; }}   // no controls when everything fits on one page
   pg.innerHTML = `
     <button class="pg-prev" ${{currentPage===0?'disabled':''}}>Previous</button>
     <span style="font-size:13px;color:#6b7280">Page ${{currentPage+1}} of ${{totalPages}}</span>
@@ -560,14 +563,27 @@ _REDECL_LINE = re.compile(
     r"^[ \t]*(?:const|let|var)\s+(?:" + "|".join(_INJECTED_PARAMS) + r")\b\s*=[^;\n]*;?[ \t]*$",
     re.MULTILINE,
 )
+_WRAPPER_RE = re.compile(
+    r"(?:(?:const|let|var)\s+\w+\s*=\s*)?(?:async\s*)?(?:function\s*\w*\s*)?"
+    r"\(\s*container\s*,\s*api\s*,\s*schemaId[^)]*\)\s*(?:=>)?\s*\{"
+)
 
 def sanitize_injected_params(script: str) -> str:
-    """Remove redeclarations of injected function params — one redeclaration
-    makes the entire script throw at compile time and nothing runs."""
+    """Two deterministic repairs: (1) unwrap a never-invoked wrapper function
+    that takes the injected params; (2) strip redeclarations of injected names."""
     if not script:
         return script
+    m = _WRAPPER_RE.search(script)
+    if m:
+        prefix = script[:m.start()]
+        open_idx = script.index("{", m.start())
+        close_idx = script.rfind("}")
+        if close_idx > open_idx:
+            body = script[open_idx + 1:close_idx]
+            suffix = re.sub(r"^[\s;()]*", "", script[close_idx + 1:])
+            script = prefix.rstrip() + "\n" + body.strip() + "\n" + suffix
     return _REDECL_LINE.sub("", script)
-  
+    
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
     tmpl = payload.get("aiTemplate", "") or ""
@@ -583,6 +599,12 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     redecl = re.findall(r"\b(?:const|let|var)\s+(container|api|schemaId|properties|Mustache|addToCart)\b", script)
     if redecl:
         errors.append(f"Remove all declarations of {sorted(set(redecl))} — these are injected function parameters; redeclaring any one makes the ENTIRE script fail to compile.")
+    if _WRAPPER_RE.search(script):
+        errors.append("The script is wrapped in a function taking (container, api, schemaId, ...) that is never invoked — remove the wrapper entirely and write the statements at top level, ending with a call to the entry function (e.g. fetchAndRenderRows()).")
+    # containers the script queries must exist somewhere (template or script-generated HTML)
+    for cls in set(re.findall(r"container\.querySelector(?:All)?\(\s*['\"]\.([A-Za-z0-9_-]+)", script)):
+        if cls not in tmpl and not re.search(r"class=[^>]*\b" + re.escape(cls) + r"\b", script):
+            errors.append(f"The script queries '.{cls}' but no such element exists in aiTemplate or in script-generated HTML — add <div class=\"{cls}\"></div> to aiTemplate.")
     if fetches_rows and "${schemaId}" in script and not props.get("schema_id"):
         errors.append("The script uses the injected schemaId but properties.schema_id is missing — set properties.schema_id to the matching schema's uuid from EXISTING_SCHEMAS_ON_WEBSITE.")
     if re.search(r"container\.innerHTML\s*=", script):
@@ -758,7 +780,7 @@ source_field = the field in THIS schema holding the related row_id. The server r
 - All owner-facing text and colors are {{{{tokens}}}} with entries in properties AND editableProps. Append the slot_key entry last. Row data is NEVER a token.
 
 ## script (receives container, api, schemaId, properties, Mustache — container.querySelector ONLY, arrow functions, no console.log)
-START THE SCRIPT WITH THESE HELPERS, VERBATIM:
+THE SCRIPT IS A FUNCTION BODY — never wrap it in (container, api, schemaId, ...) => {{...}} or function(...){{...}} (a wrapper is never invoked and nothing runs). Top-level statements execute directly; the last line calls fetchAndRenderRows(). START THE SCRIPT WITH THESE HELPERS, VERBATIM:
 {_HELPERS_JS}
 
 Then, in order:
