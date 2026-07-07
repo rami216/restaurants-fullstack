@@ -115,7 +115,24 @@ If a value comes from api.get/api.post, it is type 2. This is the #1 rule.
 - Booleans arrive as true/'true'/false/'false' — always compare (v===true||v==='true').
 """.strip()
 
+# ------------------------------------------------------------------
+# RUNTIME BINDING — always included, before all other modules
+# ------------------------------------------------------------------
+MODULE_BINDING = """
+## RUNTIME BINDING (READ FIRST — violating this makes the WHOLE script fail to compile)
+The script body executes as: new Function('container','api','schemaId','properties','Mustache','addToCart')(...)
+→ container, api, schemaId, properties, Mustache, addToCart are ALREADY-DEFINED function parameters.
+NEVER write `const schemaId = ...`, `let api = ...`, or any const/let/var declaration of these six names — a single redeclaration throws "Identifier 'schemaId' has already been declared" and NOTHING runs (empty display, dead buttons).
+Need the id? Just use `schemaId` directly — it already equals properties.schema_id.
 
+## CONNECTING TO EXISTING TABLES (elements here do NOT create tables — they bind to existing ones)
+You are given EXISTING_SCHEMAS_ON_WEBSITE: [{name, schema_id, fields:[{id,label,type,related_schema_id?}]}].
+1. Pick the schema whose name/fields best match the request ("load data from Inquiries" → the schema named "Inquiries").
+2. Set properties.schema_id to that schema's schema_id string. The runtime injects it as `schemaId`.
+3. Use that schema's EXACT field ids in every r.data.<id> read and every form input name — never invent field names; if the schema has "inquiry", the column is r.data.inquiry, not r.data.message.
+4. SECONDARY tables (multi-table elements): a differently-named const with the literal uuid from the list is allowed: const bookingsSchemaId = '3f2a-...'; api.get(`/custom-data/rows/${bookingsSchemaId}?limit=20`).
+5. If NO existing schema matches the request, do not invent one: render '<p>Please create the "<Name>" data table first, then regenerate this element.</p>' and stop.
+""".strip()
 # ------------------------------------------------------------------
 # MODULE: CRUD CORE — API + rendering (complete pattern)
 # ------------------------------------------------------------------
@@ -513,7 +530,7 @@ def build_system_prompt(user_prompt: str, base: str = BASE_RULES) -> str:
         chosen.append(MODULE_FORMS)
     if not chosen:
         chosen = [MODULE_CRUD]
-    return base + "\n\n" + "\n\n".join(chosen)
+    return base + "\n\n" + MODULE_BINDING + "\n\n" + "\n\n".join(chosen)
 
 
 # ------------------------------------------------------------------
@@ -538,7 +555,19 @@ Key rules while fixing:
 - Mustache supports only {{var}} and {{{html}}}. `container` is injected. container.querySelector only. Write into child elements, never container.innerHTML.
 """.strip()
 
+_INJECTED_PARAMS = ("container", "api", "schemaId", "properties", "Mustache", "addToCart")
+_REDECL_LINE = re.compile(
+    r"^[ \t]*(?:const|let|var)\s+(?:" + "|".join(_INJECTED_PARAMS) + r")\b\s*=[^;\n]*;?[ \t]*$",
+    re.MULTILINE,
+)
 
+def sanitize_injected_params(script: str) -> str:
+    """Remove redeclarations of injected function params — one redeclaration
+    makes the entire script throw at compile time and nothing runs."""
+    if not script:
+        return script
+    return _REDECL_LINE.sub("", script)
+  
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
     tmpl = payload.get("aiTemplate", "") or ""
@@ -551,8 +580,11 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     # --- hard JS rules ---
     if "document.querySelector" in script:
         errors.append("Replace every document.querySelector with container.querySelector.")
-    if re.search(r"\b(const|let|var)\s+container\b", script):
-        errors.append("Do not redeclare `container` — it is injected by the runtime.")
+    redecl = re.findall(r"\b(?:const|let|var)\s+(container|api|schemaId|properties|Mustache|addToCart)\b", script)
+    if redecl:
+        errors.append(f"Remove all declarations of {sorted(set(redecl))} — these are injected function parameters; redeclaring any one makes the ENTIRE script fail to compile.")
+    if fetches_rows and "${schemaId}" in script and not props.get("schema_id"):
+        errors.append("The script uses the injected schemaId but properties.schema_id is missing — set properties.schema_id to the matching schema's uuid from EXISTING_SCHEMAS_ON_WEBSITE.")
     if re.search(r"container\.innerHTML\s*=", script):
         errors.append("Never assign container.innerHTML — write into a child element (add e.g. <div class=\"list-container\"></div> to aiTemplate if missing).")
     if "console.log" in script:
