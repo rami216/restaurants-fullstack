@@ -290,7 +290,7 @@ const fetchAndRenderRows = async () => {{
     renderPagination();
   }} catch (e) {{ list.innerHTML = '<p style="color:#b91c1c;font-size:14px">Could not load data.</p>'; }}
 }};
-EVERY cell goes through displayValue() (relations render as their readable values, booleans as Yes/No, never [object Object]). Image fields render <img src="${{esc(firstValue(r.data.photo))}}" ...> instead of text. If management buttons are wanted, add an Actions column: <td><button class="edit" data-id="${{r.row_id}}">Edit</button><button class="delete" data-id="${{r.row_id}}">Delete</button></td>.
+EVERY cell goes through relDisplay(f, ...) (falls back to displayValue for non-relations) (relations render as their readable values, booleans as Yes/No, never [object Object]). Image fields render <img src="${{esc(firstValue(r.data.photo))}}" ...> instead of text. If management buttons are wanted, add an Actions column: <td><button class="edit" data-id="${{r.row_id}}">Edit</button><button class="delete" data-id="${{r.row_id}}">Delete</button></td>.
 Relation-field cells use relDisplay(f, r.data[f.id]) (defined in the FORMS section) instead of bare displayValue — a "name" relation column shows the name, an "email" relation column the email; unmatched relations (booking slots) fall back to full concatenation.
 ## EVENT LISTENERS
 STATIC buttons that exist in aiTemplate (add-new, refresh, toggles) are wired ONCE at top level right after state — never inside render functions (which may early-return on empty data, leaving them dead). attachEventListeners handles ONLY per-row buttons and runs after every render, never nested in another loop:
@@ -722,9 +722,9 @@ _WRAPPER_RE = re.compile(
 )
 
 def sanitize_injected_params(script: str) -> str:
-    """Deterministic repairs, in order: (1) unwrap never-invoked wrapper functions;
-    (2) strip redeclarations of injected params; (3) strip redefinitions of the
-    runtime library; (4) declare smId if used-but-undeclared."""
+    """Deterministic repairs: (1) unwrap never-invoked wrappers; (2) strip injected-param
+    redeclarations; (3) strip runtime-library redefinitions; (4) declare smId if missing;
+    (5) rewrite field-loop cells to relation-aware relDisplay (safe: falls back to displayValue)."""
     if not script:
         return script
     m = _WRAPPER_RE.search(script)
@@ -740,8 +740,13 @@ def sanitize_injected_params(script: str) -> str:
     script = strip_lib_redefinitions(script)
     if re.search(r"\bsmId\b", script) and not re.search(r"\b(?:const|let|var)\s+smId\b", script):
         script = "const smId = null;\n" + script
+    script = re.sub(
+        r"displayValue\(\s*([A-Za-z_$][\w$]*)\.data\[\s*([A-Za-z_$][\w$]*)\.id\s*\]\s*\)",
+        r"relDisplay(\2, \1.data[\2.id])",
+        script,
+    )
     return script
-      
+        
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
     tmpl = payload.get("aiTemplate", "") or ""
@@ -761,6 +766,17 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     lib_redefs = re.findall(r"\b(?:const|let|var)\s+(extractRowId|displayValue|firstValue|esc|rowData|relLabelField|relDisplay|populateRelationSelects|wireUploads)\b", script)
     if lib_redefs:
         errors.append(f"Delete your own definitions of {sorted(set(lib_redefs))} — these functions are pre-injected by the platform with the correct behavior; your simplified versions shadow them and break relation/boolean display. Call them, never define them.")
+    # save must be followed by a refetch (Scenario B) so the table reflects the change
+    if "fetchAndRenderRows" in script:
+        for mm in re.finditer(r"api\.(?:post|put)\([`'\"]/custom-data/rows/", script):
+            window = script[mm.start():mm.start() + 900]
+            if "fetchAndRenderRows" not in window and "alert('Saved successfully" not in window and 'alert("Saved successfully' not in window:
+                errors.append(
+                    "A save (api.post/api.put on /custom-data/rows) is not followed by a refetch — "
+                    "after `saved = true` and the reset/hide steps, call `try { await fetchAndRenderRows(); } catch(e) {}` "
+                    "so the table shows the new/edited row (Scenario B). Only pure Scenario A booking forms skip this."
+                )
+                break
     if _WRAPPER_RE.search(script):
         errors.append("The script is wrapped in a function taking (container, api, schemaId, ...) that is never invoked — remove the wrapper entirely and write the statements at top level, ending with a call to the entry function (e.g. fetchAndRenderRows()).")
     # containers the script queries must exist somewhere (template or script-generated HTML)
@@ -964,7 +980,7 @@ Then, in order:
    attachEventListeners() wires ONLY per-row buttons (.edit-btn/.delete-btn) after each render.
    Ownership: user-scoped prompt → const currentUserId = localStorage.getItem('siteMemberId:'+(properties.subdomain||'')); login guard; const smId = currentUserId. Otherwise const smId = null. NEVER the zero admin UUID.
 3. fetchAndRenderRows: first line `if (properties.hideData) return;`. GET /custom-data/rows/${{schemaId}}?skip=${{currentPage*rowsPerPage}}&limit=${{rowsPerPage}} (+ `&sitemember_id=${{currentUserId}}` when user-scoped) → rows = res.data.rows; totalRows = res.data.total.
-   Text-only schemas: assemble ONE .data-table with <thead> from field labels and one <tr> per row; EVERY cell = esc(displayValue(r.data[f.id])); image fields render <img src="${{esc(firstValue(r.data[f.id]))}}">; long text cells get class "wrap". Empty → "No items found". Then attachEventListeners(); renderPagination().
+   Text-only schemas: assemble ONE .data-table with <thead> from field labels and one <tr> per row; EVERY cell = esc(relDisplay(f, r.data[f.id])) — relDisplay, not displayValue, so relation columns show their matched field; image fields render <img src="${{esc(firstValue(r.data[f.id]))}}">; long text cells get class "wrap". Empty → "No items found". Then attachEventListeners(); renderPagination().
 4. renderPagination into .pagination-controls: Previous/Next ("px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed") + "Page X of Y", disabled at bounds, clicks change currentPage and refetch.
 4b. RELATION LABELING (mandatory): define relLabelField(f) — find the related schema in properties.all_schemas by f.related_schema_id, return the id of its field whose id or label matches f's; and relDisplay(f, v) = matched ? displayValue(v.data[matchedId]) : displayValue(v). TABLE CELLS for relation fields and DROPDOWN option labels both use relDisplay. Edit prefill: openForm's initial = (row && row.data) ? row.data : (row || {{}}). Submit: try/catch wraps ONLY the api call; success-path UI (reset/hide/refetch) runs after it.
 5. FORM — build with this exact machinery:
