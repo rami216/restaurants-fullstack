@@ -169,7 +169,21 @@ export default function AiDatabasePage() {
     // 2. Relation/Object Handling
     if (typeof cellData === "object" && cellData !== null && cellData.data) {
       const data = cellData.data;
-
+      const relSchema = schemas.find(
+        (s) => s.schema_id === String((field as any).related_schema_id),
+      );
+      const matched = relSchema?.fields.find(
+        (rf) =>
+          rf.id === field.id ||
+          rf.label.toLowerCase() === field.label.toLowerCase(),
+      );
+      if (
+        matched &&
+        data[matched.id] !== undefined &&
+        data[matched.id] !== null
+      ) {
+        return String(data[matched.id]);
+      }
       // Extract all printable values
       const values = Object.values(data).filter(
         (v): v is string | number =>
@@ -476,6 +490,16 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
   }, [field.related_schema_id, api]);
 
   const getOptionLabel = (option: DataRow) => {
+    const relSchema = schemas.find(
+      (s) => s.schema_id === String(field.related_schema_id),
+    );
+    const matched = relSchema?.fields.find(
+      (rf) =>
+        rf.id === field.id ||
+        rf.label.toLowerCase() === field.label.toLowerCase(),
+    );
+    if (matched && option.data[matched.id] != null)
+      return String(option.data[matched.id]);
     const values = Object.values(option.data).filter(
       (v): v is string | number =>
         (typeof v === "string" || typeof v === "number") && v !== null,
