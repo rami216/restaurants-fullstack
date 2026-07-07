@@ -25,11 +25,19 @@ from typing import Any, Dict, List
 # exact same helpers (models copy them verbatim).
 # ------------------------------------------------------------------
 _HELPERS_JS = """
-// ===== MANDATORY HELPERS — copy these EXACTLY at the top of the script =====
-// Values from the API can be strings, numbers, booleans, null, or RESOLVED
-// RELATION OBJECTS ({row_id, sitemember_id, data:{...}}). Interpolating a raw
-// value into HTML or an input produces "[object Object]". NEVER interpolate
-// r.data.<field> directly — ALWAYS go through these helpers:
+## PROVIDED RUNTIME LIBRARY (pre-injected by the platform — call these, NEVER redefine them)
+extractRowId(v)            → row_id string from a value that may be a resolved relation object
+displayValue(v, sep=' - ') → human-readable text for ANY value (relations, booleans, null) — use for every displayed field
+firstValue(v)              → best single label (name columns, image URLs)
+esc(s)                     → HTML-escape; wrap EVERY interpolated value: ${esc(displayValue(x))}
+rowData(row)               → row.data whether given a row or already-data; ALWAYS use for edit prefill: openForm(rowData(target))
+relLabelField(f) / relDisplay(f, v) → relation labeling (matches the relation field to the related schema's field); use relDisplay for relation TABLE CELLS and DROPDOWN labels
+populateRelationSelects(form, initial={}) → fills every select[name][data-relation="<related_schema_id>"] (value=row_id, label=relDisplay) and preselects extractRowId(initial[name]) — call after inserting a form containing relation selects
+wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
+These exist at runtime even though you don't see their code. Do not re-implement them; just call them.
+""".strip()
+
+RUNTIME_LIB_JS = r"""/*__ZY_RUNTIME_LIB__*/
 const extractRowId = (v) => (v && typeof v === 'object') ? (v.row_id || '') : (v ?? '');
 const displayValue = (v, sep = ' - ') => {
   if (v === true || v === 'true') return 'Yes';
@@ -42,7 +50,7 @@ const displayValue = (v, sep = ' - ') => {
   }
   return String(v);
 };
-const firstValue = (v) => {                      // best single label (dropdown options, name columns)
+const firstValue = (v) => {
   if (v && typeof v === 'object' && v.data) {
     const vals = Object.values(v.data).filter(x => typeof x === 'string' || typeof x === 'number');
     return vals.length ? String(vals[0]) : (v.row_id || '');
@@ -50,9 +58,65 @@ const firstValue = (v) => {                      // best single label (dropdown 
   return displayValue(v);
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
-// ===========================================================================
-""".strip()
+const rowData = (row) => (row && row.data) ? row.data : (row || {});
+const relLabelField = (f) => {
+  const schemas = (typeof properties !== 'undefined' && properties.all_schemas) || [];
+  const rel = schemas.find(s => String(s.schema_id) === String(f && f.related_schema_id));
+  const m = rel && (rel.fields || []).find(rf => rf.id === (f && f.id) || String(rf.label || '').toLowerCase() === String((f && f.label) || '').toLowerCase());
+  return m ? m.id : null;
+};
+const relDisplay = (f, v) => {
+  const lf = relLabelField(f);
+  return (lf && v && typeof v === 'object' && v.data) ? displayValue(v.data[lf]) : displayValue(v);
+};
+const populateRelationSelects = async (form, initial = {}) => {
+  for (const sel of form.querySelectorAll('select[data-relation]')) {
+    const name = sel.getAttribute('name');
+    const f = ((typeof properties !== 'undefined' && properties.schema_fields) || []).find(x => x.id === name) || { id: name };
+    try {
+      const res = await api.get(`/custom-data/rows/${sel.getAttribute('data-relation')}?limit=1000`);
+      sel.innerHTML = '<option value="">Select...</option>' +
+        res.data.rows.map(r => `<option value="${r.row_id}">${esc(relDisplay(f, r))}</option>`).join('');
+      const initId = extractRowId(initial[name]);
+      if (initId) sel.value = initId;
+    } catch (e) { sel.innerHTML = '<option value="">Failed to load</option>'; }
+  }
+};
+const wireUploads = (form) => {
+  form.querySelectorAll('input[data-upload]').forEach(fi => fi.onchange = async () => {
+    if (!fi.files.length) return;
+    const hidden = form.querySelector(`input[name="${fi.getAttribute('data-upload')}"]`);
+    fi.disabled = true;
+    try {
+      if (fi.multiple) {
+        const urls = [];
+        for (const file of fi.files) { const fd = new FormData(); fd.append('file', file); const up = await api.post('/uploads/', fd); urls.push(up.data ? up.data.url : up.url); }
+        if (hidden) hidden.value = JSON.stringify(urls);
+      } else {
+        const fd = new FormData(); fd.append('file', fi.files[0]);
+        const up = await api.post('/uploads/', fd);
+        if (hidden) hidden.value = up.data ? up.data.url : up.url;
+      }
+    } catch (e) { alert('Upload failed.'); }
+    finally { fi.disabled = false; }
+  });
+};
+"""
 
+_RUNTIME_MARKER = "/*__ZY_RUNTIME_LIB__*/"
+
+def inject_runtime_lib(script: str) -> str:
+    """Prepend the canonical library and wrap the model's script in an async IIFE.
+    Idempotent (marker check). Model redefinitions merely shadow — never crash."""
+    if not script or _RUNTIME_MARKER in script:
+        return script
+    return (
+        RUNTIME_LIB_JS
+        + "\n;(async () => {\n" + script + "\n})().catch((err) => {\n"
+        + "  try { const d = container.querySelector('.list-container') || container.querySelector('.data-display') || container.firstElementChild; "
+        + "if (d) d.innerHTML = '<p style=\"color:#b91c1c;font-size:14px\">Something went wrong in this element.</p>'; } catch (_) {}\n"
+        + "});"
+    )
 
 # ------------------------------------------------------------------
 # BASE — always included
@@ -661,10 +725,11 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     # --- object-safety: fetched rows must go through the helpers ---
     if fetches_rows and "displayValue" not in script:
         errors.append(
-            "The script reads row data but is missing the mandatory helpers. Add extractRowId/"
-            "displayValue/firstValue at the top of the script and route EVERY displayed field "
-            "through displayValue() (and every relation value written to a select/input through "
-            "extractRowId()) — raw interpolation of r.data.<field> renders [object Object]."
+            "The script reads row data but never calls displayValue()/relDisplay() — these are "
+            "provided by the pre-injected runtime library (do NOT redefine them); route every "
+            "displayed field through displayValue() (relation cells through relDisplay(f, v)) and "
+            "every relation value written to a select/input through extractRowId() — raw "
+            "interpolation of r.data.<field> renders [object Object]."
         )
 
     # --- must actually fetch when asked to display data ---
@@ -828,7 +893,7 @@ source_field = the field in THIS schema holding the related row_id. The server r
 - All owner-facing text and colors are {{{{tokens}}}} with entries in properties AND editableProps. Append the slot_key entry last. Row data is NEVER a token.
 
 ## script (receives container, api, schemaId, properties, Mustache — container.querySelector ONLY, arrow functions, no console.log)
-THE SCRIPT IS A FUNCTION BODY — never wrap it in (container, api, schemaId, ...) => {{...}} or function(...){{...}} (a wrapper is never invoked and nothing runs). Top-level statements execute directly; the last line calls fetchAndRenderRows(). START THE SCRIPT WITH THESE HELPERS, VERBATIM:
+THE SCRIPT IS A FUNCTION BODY — never wrap it in (container, api, schemaId, ...) => {{...}} or function(...){{...}} (a wrapper is never invoked and nothing runs). Top-level statements execute directly; the last line calls fetchAndRenderRows(). THE RUNTIME LIBRARY BELOW IS PRE-INJECTED — call its functions, never redefine them:
 {_HELPERS_JS}
 
 Then, in order:
@@ -849,8 +914,8 @@ Then, in order:
    populateRelationSelects(form, initial): for each select[data-relation], GET /custom-data/rows/${{relId}}?limit=1000, options = rows.map(r => `<option value="${{r.row_id}}">${{esc(displayValue(r))}}</option>`), then sel.value = extractRowId(initial[name]) — THIS extractRowId call is mandatory (resolved relation objects otherwise render [object Object] / fail to preselect).
    CASCADING (parent → child, e.g. Day → Time): parent options from GET /custom-data/rows/${{relId}}/distinct/<field> (never Set() dedup); cache child rows once (limit=1000); parentSelect.onchange filters cached children — plain parent values compare String(displayValue(r.data.day)) === parentSelect.value, relation parents compare extractRowId(r.data.parent) === parentSelect.value; when the schema has availability, also filter (r.data.available===true||r.data.available==='true'); child option labels concatenate readable values (`${{esc(displayValue(r.data.start_time))}} - ${{esc(displayValue(r.data.end_time))}}`); submitted value = child select.value (a row_id).
    wireUploads(form): input[data-upload].onchange uploads via api.post('/uploads/', formData) with disabled state, writes URL(s) into the sibling hidden input (gallery: JSON.stringify array).
-6. handleSubmit: e.preventDefault(); build data from all input[name]/select[name]/textarea[name] (skip type=file — hidden inputs carry URLs); editingRowId ? PUT /custom-data/rows/${{editingRowId}} {{data, sitemember_id: smId}} : POST /custom-data/rows/${{schemaId}} {{data, sitemember_id: smId}}. Loading state on the submit button. catch → alert(err.response?.data?.detail || 'Save failed') — surfaces 422 validation AND 409 automation blocks (double-booking). PRIVACY: Scenario A (public/booking/"don't show data") → alert success + form.reset() + hide form, never fetchAndRenderRows. Scenario B (manage/list views) → refresh after submit AND call fetchAndRenderRows() at the bottom of the script. Default = B.
-7. Edit (management only): .edit-btn click → editingRowId = id; openForm(rows.find(r=>r.row_id===id)) — prefill goes through buildFieldHTML initial + populateRelationSelects(initial). Delete: confirm() → loading → DELETE /custom-data/rows/${{id}}?sitemember_id=${{smId ?? 'null'}} → fetchAndRenderRows(). Skip step 7 entirely when no management buttons exist.
+6. handleSubmit: e.preventDefault(); build data from all input[name]/select[name]/textarea[name] (skip type=file — hidden inputs carry URLs). EXACT control flow: disable submit btn; let saved=false; try {{ editingRowId ? await api.put(`/custom-data/rows/${{editingRowId}}`, {{data, sitemember_id: smId}}) : await api.post(`/custom-data/rows/${{schemaId}}`, {{data, sitemember_id: smId}}); saved=true; }} catch(err) {{ alert(err.response?.data?.detail || 'Save failed'); }} finally {{ re-enable btn }}; if(!saved) return; THEN OUTSIDE the try: form.reset(); hide .form-container; editingRowId=null; Scenario B: try {{ await fetchAndRenderRows(); }} catch(e) {{}}. The try/catch wraps ONLY the api call — putting reset/refetch inside it shows 'Save failed' for saves that succeeded. PRIVACY: Scenario A (public/booking/"don't show data") → alert success + reset + hide, never fetchAndRenderRows. Default = B.
+7. Edit (management only): .edit-btn click → const target = rows.find(r=>r.row_id===id); editingRowId = id; openForm(rowData(target)) — rowData() is MANDATORY here (passing the raw row leaves every input empty); relation prefill happens inside populateRelationSelects. Delete: confirm() → loading → DELETE /custom-data/rows/${{id}}?sitemember_id=${{smId ?? 'null'}} → fetchAndRenderRows(). Skip step 7 entirely when no management buttons exist.
 
 ## Minimal shape example (structure only — the script implements everything above):
 {{"name":"Booking System","schema":[{{"id":"name","label":"Name","type":"text","required":true}},{{"id":"email","label":"Email","type":"email","required":true}},{{"id":"time","label":"Time Slot","type":"relation","related_schema_id":"<existing-uuid>"}}],"automations":[{{"trigger":"on_create","action_type":"mutate_row","config":{{"source_field":"time","conditions":{{"available":true}},"set":{{"available":false}},"condition_error":"That slot was just taken."}}}}],"aiTemplate":"<style>...</style><div class=...>...</div>","properties":{{"title":"Book a Slot","addButtonText":"New Booking","titleColor":"#111827","buttonBgColor":"#3b82f6","slot_key":""}},"editableProps":[{{"key":"title","label":"Title","type":"text"}},{{"key":"addButtonText","label":"Add Button Text","type":"text"}},{{"key":"titleColor","label":"Title Color","type":"color"}},{{"key":"buttonBgColor","label":"Button Color","type":"color"}},{{"key":"slot_key","label":"⚡ Agent Slot Key","type":"text"}}],"script":"..."}}

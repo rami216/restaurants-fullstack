@@ -34,6 +34,7 @@ from .prompt_modules import (
     PAGE_PLAN_PROMPT,
     DATA_APP_PROMPT_V3,
     sanitize_injected_params,   # ← ADD THIS
+    inject_runtime_lib,
 )
 from website_builder.models import SchemaAutomation
 #region helpers
@@ -230,7 +231,7 @@ async def generate_ai_element(
         payload = generate_with_repair(client, model, provider, system_prompt, user_content)
         payload = clean_script(payload)
         payload = inject_schemas(payload, existing_schemas, body.website_id)
-        payload["script"] = sanitize_injected_params(payload.get("script", ""))
+        payload["script"] = inject_runtime_lib(sanitize_injected_params(payload.get("script", "")))
         return payload
 
     except HTTPException:
@@ -987,7 +988,7 @@ async def generate_data_app_element(
             "aiTemplate": f'<div class="{body.unique_class_name}">{payload["aiTemplate"]}</div>',
             "properties": final_props,
             "editableProps": payload.get("editableProps", []),
-            "script": sanitize_injected_params(payload["script"]),
+            "script": inject_runtime_lib(sanitize_injected_params(payload["script"])),
         }
 
     except HTTPException:
