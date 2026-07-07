@@ -34,7 +34,7 @@ rowData(row)               → row.data whether given a row or already-data; ALW
 relLabelField(f) / relDisplay(f, v) → relation labeling (matches the relation field to the related schema's field); use relDisplay for relation TABLE CELLS and DROPDOWN labels
 populateRelationSelects(form, initial={}) → fills every select[name][data-relation="<related_schema_id>"] (value=row_id, label=relDisplay) and preselects extractRowId(initial[name]) — call after inserting a form containing relation selects
 wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
-These exist at runtime even though you don't see their code. Do not re-implement them; just call them.
+These exist at runtime even though you don't see their code. Redefining ANY of these names is a hard error — the platform deletes your definition, so code written against a simplified version will misbehave. Do not re-implement them; just call them.
 """.strip()
 
 RUNTIME_LIB_JS = r"""/*__ZY_RUNTIME_LIB__*/
@@ -102,7 +102,60 @@ const wireUploads = (form) => {
   });
 };
 """
+_LIB_NAMES = ("extractRowId", "displayValue", "firstValue", "esc", "rowData",
+              "relLabelField", "relDisplay", "populateRelationSelects", "wireUploads")
 
+_LIB_REDEF_RE = re.compile(
+    r"(?:const|let|var)\s+(?:%s)\s*=|(?:async\s+)?function\s+(?:%s)\s*\(" % (
+        "|".join(_LIB_NAMES), "|".join(_LIB_NAMES))
+)
+
+def _statement_end(src: str, i: int) -> int:
+    """Scan forward from i to the end of the JS statement starting there."""
+    depth = 0
+    in_str = None
+    seen_brace = False
+    n = len(src)
+    while i < n:
+        c = src[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if c == in_str:
+                in_str = None
+        elif c in "\"'`":
+            in_str = c
+        elif c in "({[":
+            depth += 1
+            if c == "{":
+                seen_brace = True
+        elif c in ")}]":
+            depth -= 1
+            if depth <= 0 and c == "}" and seen_brace:
+                j = i + 1
+                while j < n and src[j] in " \t":
+                    j += 1
+                return (j + 1) if (j < n and src[j] == ";") else (i + 1)
+        elif depth == 0 and c == ";":
+            return i + 1
+        elif depth == 0 and c == "\n" and not seen_brace:
+            return i + 1
+        i += 1
+    return n
+
+def strip_lib_redefinitions(script: str) -> str:
+    """Delete model redefinitions of runtime-library functions so the injected
+    canonical versions are the ones that actually run (degenerate shadows like
+    `const displayValue = v => v ?? ''` were breaking relation display)."""
+    if not script or _RUNTIME_MARKER in script:
+        return script
+    while True:
+        m = _LIB_REDEF_RE.search(script)
+        if not m:
+            return script
+        script = script[:m.start()] + script[_statement_end(script, m.end()):]
+        
 _RUNTIME_MARKER = "/*__ZY_RUNTIME_LIB__*/"
 
 def inject_runtime_lib(script: str) -> str:
@@ -669,8 +722,9 @@ _WRAPPER_RE = re.compile(
 )
 
 def sanitize_injected_params(script: str) -> str:
-    """Two deterministic repairs: (1) unwrap a never-invoked wrapper function
-    that takes the injected params; (2) strip redeclarations of injected names."""
+    """Deterministic repairs, in order: (1) unwrap never-invoked wrapper functions;
+    (2) strip redeclarations of injected params; (3) strip redefinitions of the
+    runtime library; (4) declare smId if used-but-undeclared."""
     if not script:
         return script
     m = _WRAPPER_RE.search(script)
@@ -683,11 +737,11 @@ def sanitize_injected_params(script: str) -> str:
             suffix = re.sub(r"^[\s;()]*", "", script[close_idx + 1:])
             script = prefix.rstrip() + "\n" + body.strip() + "\n" + suffix
     script = _REDECL_LINE.sub("", script)
-    # backstop: smId used but never declared → safe default (non-user-scoped)
+    script = strip_lib_redefinitions(script)
     if re.search(r"\bsmId\b", script) and not re.search(r"\b(?:const|let|var)\s+smId\b", script):
         script = "const smId = null;\n" + script
     return script
-    
+      
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
     tmpl = payload.get("aiTemplate", "") or ""
@@ -703,6 +757,10 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     redecl = re.findall(r"\b(?:const|let|var)\s+(container|api|schemaId|properties|Mustache|addToCart)\b", script)
     if redecl:
         errors.append(f"Remove all declarations of {sorted(set(redecl))} — these are injected function parameters; redeclaring any one makes the ENTIRE script fail to compile.")
+    
+    lib_redefs = re.findall(r"\b(?:const|let|var)\s+(extractRowId|displayValue|firstValue|esc|rowData|relLabelField|relDisplay|populateRelationSelects|wireUploads)\b", script)
+    if lib_redefs:
+        errors.append(f"Delete your own definitions of {sorted(set(lib_redefs))} — these functions are pre-injected by the platform with the correct behavior; your simplified versions shadow them and break relation/boolean display. Call them, never define them.")
     if _WRAPPER_RE.search(script):
         errors.append("The script is wrapped in a function taking (container, api, schemaId, ...) that is never invoked — remove the wrapper entirely and write the statements at top level, ending with a call to the entry function (e.g. fetchAndRenderRows()).")
     # containers the script queries must exist somewhere (template or script-generated HTML)
