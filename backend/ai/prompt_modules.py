@@ -175,7 +175,8 @@ const fetchAndRenderRows = async () => {{
 }};
 EVERY cell goes through displayValue() (relations render as their readable values, booleans as Yes/No, never [object Object]). Image fields render <img src="${{esc(firstValue(r.data.photo))}}" ...> instead of text. If management buttons are wanted, add an Actions column: <td><button class="edit" data-id="${{r.row_id}}">Edit</button><button class="delete" data-id="${{r.row_id}}">Delete</button></td>.
 
-## EVENT LISTENERS (attach after every render, never nested in another loop)
+## EVENT LISTENERS
+STATIC buttons that exist in aiTemplate (add-new, refresh, toggles) are wired ONCE at top level right after state — never inside render functions (which may early-return on empty data, leaving them dead). attachEventListeners handles ONLY per-row buttons and runs after every render, never nested in another loop:
 const attachEventListeners = () => {{
   container.querySelectorAll('.delete').forEach(btn => btn.onclick = async () => {{
     if (!confirm('Are you sure you want to delete this item?')) return;
@@ -605,6 +606,10 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     for cls in set(re.findall(r"container\.querySelector(?:All)?\(\s*['\"]\.([A-Za-z0-9_-]+)", script)):
         if cls not in tmpl and not re.search(r"class=[^>]*\b" + re.escape(cls) + r"\b", script):
             errors.append(f"The script queries '.{cls}' but no such element exists in aiTemplate or in script-generated HTML — add <div class=\"{cls}\"></div> to aiTemplate.")
+    # every semantic button in the template must be referenced by the script
+    for btn_cls in set(re.findall(r"<button[^>]*class=[\"']([A-Za-z0-9_-]+)", tmpl)):
+        if btn_cls not in script:
+            errors.append(f"aiTemplate has a <button class=\"{btn_cls}\"> the script never wires — add container.querySelector('.{btn_cls}').onclick = ... at TOP LEVEL (outside render functions).")
     if fetches_rows and "${schemaId}" in script and not props.get("schema_id"):
         errors.append("The script uses the injected schemaId but properties.schema_id is missing — set properties.schema_id to the matching schema's uuid from EXISTING_SCHEMAS_ON_WEBSITE.")
     if re.search(r"container\.innerHTML\s*=", script):
@@ -786,6 +791,10 @@ THE SCRIPT IS A FUNCTION BODY — never wrap it in (container, api, schemaId, ..
 Then, in order:
 1. Sync static UI from properties (title text/color, add-button text/bg). const fields = properties.schema_fields || [];
 2. State: let rows = []; let currentPage = 0; const rowsPerPage = 20; let totalRows = 0; let editingRowId = null;
+2b. WIRE STATIC CONTROLS ONCE, AT TOP LEVEL, IMMEDIATELY AFTER STATE — never inside render functions or attachEventListeners (those don't run when the table is empty, leaving the button dead):
+   const addBtn = container.querySelector('.add-new-btn');
+   if (addBtn) addBtn.onclick = () => {{ editingRowId = null; openForm({{}}); }};
+   attachEventListeners() wires ONLY per-row buttons (.edit-btn/.delete-btn) after each render.
    Ownership: user-scoped prompt → const currentUserId = localStorage.getItem('siteMemberId:'+(properties.subdomain||'')); login guard; const smId = currentUserId. Otherwise const smId = null. NEVER the zero admin UUID.
 3. fetchAndRenderRows: first line `if (properties.hideData) return;`. GET /custom-data/rows/${{schemaId}}?skip=${{currentPage*rowsPerPage}}&limit=${{rowsPerPage}} (+ `&sitemember_id=${{currentUserId}}` when user-scoped) → rows = res.data.rows; totalRows = res.data.total.
    Text-only schemas: assemble ONE .data-table with <thead> from field labels and one <tr> per row; EVERY cell = esc(displayValue(r.data[f.id])); image fields render <img src="${{esc(firstValue(r.data[f.id]))}}">; long text cells get class "wrap". Empty → "No items found". Then attachEventListeners(); renderPagination().
