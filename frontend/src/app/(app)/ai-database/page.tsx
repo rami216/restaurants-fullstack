@@ -29,7 +29,7 @@ interface DataRow {
 export default function AiDatabasePage() {
   const [schemas, setSchemas] = useState<CustomSchema[]>([]);
   const [selectedSchema, setSelectedSchema] = useState<CustomSchema | null>(
-    null
+    null,
   );
   const [loadingSchemas, setLoadingSchemas] = useState(true);
   const [rows, setRows] = useState<DataRow[]>([]);
@@ -66,7 +66,7 @@ export default function AiDatabasePage() {
     try {
       const skip = page * ROWS_PER_PAGE;
       const response = await api.get(
-        `/custom-data/rows/${schemaId}?skip=${skip}&limit=${ROWS_PER_PAGE}`
+        `/custom-data/rows/${schemaId}?skip=${skip}&limit=${ROWS_PER_PAGE}`,
       );
       if (response.data && Array.isArray(response.data.rows)) {
         setRows(response.data.rows);
@@ -93,14 +93,17 @@ export default function AiDatabasePage() {
   const handleOpenModal = (row: DataRow | null) => {
     setEditingRow(row);
     const initialFormData = row
-      ? Object.entries(row.data).reduce((acc, [key, value]) => {
-          if (typeof value === "object" && value !== null && value.row_id) {
-            acc[key] = value.row_id;
-          } else {
-            acc[key] = value;
-          }
-          return acc;
-        }, {} as Record<string, any>)
+      ? Object.entries(row.data).reduce(
+          (acc, [key, value]) => {
+            if (typeof value === "object" && value !== null && value.row_id) {
+              acc[key] = value.row_id;
+            } else {
+              acc[key] = value;
+            }
+            return acc;
+          },
+          {} as Record<string, any>,
+        )
       : {};
     setFormData(initialFormData);
     setIsModalOpen(true);
@@ -131,8 +134,8 @@ export default function AiDatabasePage() {
       }
       await fetchRowsForSchema(selectedSchema.schema_id, currentPage);
       handleCloseModal();
-    } catch (err) {
-      setError("Failed to save data.");
+    } catch (err: any) {
+      setError(err?.response?.data?.detail || "Failed to save data.");
     }
   };
 
@@ -157,7 +160,7 @@ export default function AiDatabasePage() {
   const getDisplayValue = (
     cellData: any,
     field: SchemaField,
-    row?: DataRow
+    row?: DataRow,
   ) => {
     // 1. Boolean Fix: Explicitly return string "true"/"false" so they don't vanish
     if (cellData === false) return "false";
@@ -170,7 +173,7 @@ export default function AiDatabasePage() {
       // Extract all printable values
       const values = Object.values(data).filter(
         (v): v is string | number =>
-          (typeof v === "string" || typeof v === "number") && v !== null
+          (typeof v === "string" || typeof v === "number") && v !== null,
       );
 
       // Dynamic Role Detection
@@ -189,7 +192,7 @@ export default function AiDatabasePage() {
               const otherVal = row.data[otherField.id];
               if (typeof otherVal === "object" && otherVal?.data) {
                 Object.values(otherVal.data).forEach((v) =>
-                  parentValues.add(String(v))
+                  parentValues.add(String(v)),
                 );
               } else {
                 parentValues.add(String(otherVal));
@@ -370,7 +373,24 @@ export default function AiDatabasePage() {
                   >
                     {field.label}
                   </label>
-                  {field.type === "relation" ? (
+                  {(field as any).options?.length ? (
+                    <select
+                      id={field.id}
+                      value={formData[field.id] || ""}
+                      onChange={(e) =>
+                        handleFormChange(field.id, e.target.value)
+                      }
+                      className="block w-full px-3 py-2 mt-1 bg-white border border-gray-300 rounded-md shadow-sm focus:outline-none focus:ring-indigo-500 focus:border-indigo-500"
+                      required
+                    >
+                      <option value="">Select {field.label}</option>
+                      {(field as any).options.map((opt: string) => (
+                        <option key={opt} value={opt}>
+                          {opt}
+                        </option>
+                      ))}
+                    </select>
+                  ) : field.type === "relation" ? (
                     <RelationDropdown
                       api={api}
                       schemas={schemas}
@@ -440,7 +460,7 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
       setLoading(true);
       try {
         const response = await api.get(
-          `/custom-data/rows/${field.related_schema_id}?limit=1000`
+          `/custom-data/rows/${field.related_schema_id}?limit=1000`,
         );
         if (response.data && Array.isArray(response.data.rows)) {
           setOptions(response.data.rows);
@@ -458,7 +478,7 @@ const RelationDropdown: React.FC<RelationDropdownProps> = ({
   const getOptionLabel = (option: DataRow) => {
     const values = Object.values(option.data).filter(
       (v): v is string | number =>
-        (typeof v === "string" || typeof v === "number") && v !== null
+        (typeof v === "string" || typeof v === "number") && v !== null,
     );
 
     const isChild = field.id.toLowerCase().match(/time|slot|sub|model/i);
