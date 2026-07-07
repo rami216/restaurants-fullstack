@@ -174,7 +174,7 @@ const fetchAndRenderRows = async () => {{
   }} catch (e) {{ list.innerHTML = '<p style="color:#b91c1c;font-size:14px">Could not load data.</p>'; }}
 }};
 EVERY cell goes through displayValue() (relations render as their readable values, booleans as Yes/No, never [object Object]). Image fields render <img src="${{esc(firstValue(r.data.photo))}}" ...> instead of text. If management buttons are wanted, add an Actions column: <td><button class="edit" data-id="${{r.row_id}}">Edit</button><button class="delete" data-id="${{r.row_id}}">Delete</button></td>.
-
+Relation-field cells use relDisplay(f, r.data[f.id]) (defined in the FORMS section) instead of bare displayValue — a "name" relation column shows the name, an "email" relation column the email; unmatched relations (booking slots) fall back to full concatenation.
 ## EVENT LISTENERS
 STATIC buttons that exist in aiTemplate (add-new, refresh, toggles) are wired ONCE at top level right after state — never inside render functions (which may early-return on empty data, leaving them dead). attachEventListeners handles ONLY per-row buttons and runs after every render, never nested in another loop:
 const attachEventListeners = () => {{
@@ -246,9 +246,33 @@ const buildFieldHTML = (f, initial = {}) => {
 };
 
 const openForm = async (row = null) => {
-  editingRowId = row ? row.row_id : null;
+  editingRowId = row ? (row.row_id || null) : null;
   const fc = container.querySelector('.form-container');
-  const initial = row ? row.data : {};
+  ## SUBMIT (try/catch wraps ONLY the api call — UI code after it, or a render hiccup shows 'Save failed' for a committed save)
+const handleSubmit = async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const btn = form.querySelector('button[type="submit"]');
+  const data = {};
+  form.querySelectorAll('input[name],select[name],textarea[name]').forEach(el => {
+    if (el.type === 'file') return;
+    data[el.getAttribute('name')] = el.value;
+  });
+  btn.disabled = true; const prev = btn.textContent; btn.textContent = 'Saving...';
+  let saved = false;
+  try {
+    if (editingRowId) await api.put(`/custom-data/rows/${editingRowId}`, { data, sitemember_id: smId });
+    else await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id: smId });
+    saved = true;
+  } catch (err) {
+    alert(err.response?.data?.detail || 'Save failed.');
+  } finally { btn.disabled = false; btn.textContent = prev; }
+  if (!saved) return;
+  form.reset();
+  container.querySelector('.form-container').classList.add('hidden');
+  editingRowId = null;
+  try { await fetchAndRenderRows(); } catch (e) {}   // Scenario B; Scenario A: alert('Saved successfully!') instead
+};
   fc.innerHTML = `<form class="grid grid-cols-1 md:grid-cols-2 gap-4">
     ${properties.schema_fields.map(f => buildFieldHTML(f, initial)).join('')}
     <button type="submit" class="md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700">${editingRowId ? 'Update' : 'Save'}</button>
@@ -259,21 +283,32 @@ const openForm = async (row = null) => {
   fc.querySelector('form').onsubmit = handleSubmit;
 };
 
-## RELATION DROPDOWNS (prefill uses extractRowId — THIS is what prevents [object Object])
+## RELATION LABEL FIELD (makes multi-relation schemas readable)
+When a relation field's id/label matches a field in the RELATED schema, label with THAT field only; otherwise concatenate. Define once, use for BOTH table cells and dropdown options:
+const relLabelField = (f) => {
+  const rel = (properties.all_schemas || []).find(s => String(s.schema_id) === String(f.related_schema_id));
+  const m = rel && (rel.fields || []).find(rf => rf.id === f.id || (rf.label || '').toLowerCase() === (f.label || '').toLowerCase());
+  return m ? m.id : null;
+};
+const relDisplay = (f, v) => {
+  const lf = relLabelField(f);
+  return (lf && v && typeof v === 'object' && v.data) ? displayValue(v.data[lf]) : displayValue(v);
+};
+
+## RELATION DROPDOWNS (prefill via extractRowId — prevents [object Object])
 const populateRelationSelects = async (form, initial = {}) => {
   for (const sel of form.querySelectorAll('select[data-relation]')) {
-    const relId = sel.getAttribute('data-relation');
     const name = sel.getAttribute('name');
+    const f = (properties.schema_fields || []).find(x => x.id === name) || {};
     try {
-      const res = await api.get(`/custom-data/rows/${relId}?limit=1000`);
+      const res = await api.get(`/custom-data/rows/${sel.getAttribute('data-relation')}?limit=1000`);
       sel.innerHTML = '<option value="">Select...</option>' +
-        res.data.rows.map(r => `<option value="${r.row_id}">${esc(displayValue(r))}</option>`).join('');
-      const initId = extractRowId(initial[name]);   // resolved relation object → its row_id
+        res.data.rows.map(r => `<option value="${r.row_id}">${esc(relDisplay(f, r))}</option>`).join('');
+      const initId = extractRowId(initial[name]);
       if (initId) sel.value = initId;
     } catch (e) { sel.innerHTML = '<option value="">Failed to load</option>'; }
   }
 };
-
 ## CASCADING DROPDOWNS (parent → child, e.g. Day → Time Slot)
 When one dropdown filters another:
 // PARENT: unique labels via distinct (never new Set() client dedup):
@@ -808,6 +843,7 @@ Then, in order:
 3. fetchAndRenderRows: first line `if (properties.hideData) return;`. GET /custom-data/rows/${{schemaId}}?skip=${{currentPage*rowsPerPage}}&limit=${{rowsPerPage}} (+ `&sitemember_id=${{currentUserId}}` when user-scoped) → rows = res.data.rows; totalRows = res.data.total.
    Text-only schemas: assemble ONE .data-table with <thead> from field labels and one <tr> per row; EVERY cell = esc(displayValue(r.data[f.id])); image fields render <img src="${{esc(firstValue(r.data[f.id]))}}">; long text cells get class "wrap". Empty → "No items found". Then attachEventListeners(); renderPagination().
 4. renderPagination into .pagination-controls: Previous/Next ("px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed") + "Page X of Y", disabled at bounds, clicks change currentPage and refetch.
+4b. RELATION LABELING (mandatory): define relLabelField(f) — find the related schema in properties.all_schemas by f.related_schema_id, return the id of its field whose id or label matches f's; and relDisplay(f, v) = matched ? displayValue(v.data[matchedId]) : displayValue(v). TABLE CELLS for relation fields and DROPDOWN option labels both use relDisplay. Edit prefill: openForm's initial = (row && row.data) ? row.data : (row || {{}}). Submit: try/catch wraps ONLY the api call; success-path UI (reset/hide/refetch) runs after it.
 5. FORM — build with this exact machinery:
    buildFieldHTML(f, initial): relation → <select name data-relation=related_schema_id> (options async); boolean → Yes/No select preselected via (val===true||val==='true'); f.options → fixed select; image/file/gallery → file input with data-upload + hidden input[name] holding the URL (gallery: multiple, JSON array string); else typed <input> with value="${{esc(initial[f.id] ?? '')}}". Inputs: "w-full p-2 border rounded-lg border-gray-300 focus:ring-2 focus:ring-blue-500 outline-none"; labels: "block text-sm font-semibold text-gray-700 mb-1"; form: "grid grid-cols-1 md:grid-cols-2 gap-4"; submit: "md:col-span-2 w-full bg-blue-600 text-white font-bold py-2.5 rounded-lg hover:bg-blue-700".
    populateRelationSelects(form, initial): for each select[data-relation], GET /custom-data/rows/${{relId}}?limit=1000, options = rows.map(r => `<option value="${{r.row_id}}">${{esc(displayValue(r))}}</option>`), then sel.value = extractRowId(initial[name]) — THIS extractRowId call is mandatory (resolved relation objects otherwise render [object Object] / fail to preselect).
