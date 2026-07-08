@@ -379,50 +379,69 @@ async def generate_ai_page(
         website = await get_website(body.website_id, db)
         client, model, provider = get_ai_client(website)
 
-        # ---- PASS 1: plan — one small, fast call returns the theme
-        # (shared palette/fonts) + 5-8 section briefs
-        plan = call_ai_json(
-            client, model, provider, PAGE_PLAN_PROMPT, body.prompt,
-            temperature=0.4, max_tokens=1500,
-        )
+        # PASS 1 — plan: theme + section briefs + data tables the page needs
+        plan = call_ai_json(client, model, provider, PAGE_PLAN_PROMPT, body.prompt,
+                            temperature=0.4, max_tokens=2000)
         theme = plan.get("theme", {})
         section_briefs = plan.get("sections", [])
         if not section_briefs:
             raise HTTPException(500, "Page planner returned no sections.")
 
-        # ---- PASS 2: generate every section IN PARALLEL with the shared theme
+        # PASS 1.5 — create (or reuse by name) the declared tables
+        table_map = {}
+        for t in plan.get("data_tables", []) or []:
+            if not isinstance(t, dict) or not t.get("fields"):
+                continue
+            name = t.get("name", "Page Data")
+            existing = (await db.execute(select(CustomDataSchema).where(
+                CustomDataSchema.website_id == body.website_id,
+                CustomDataSchema.name == name,
+            ))).scalars().first()
+            if existing:
+                table_map[name] = {"schema_id": str(existing.schema_id), "fields": existing.fields}
+            else:
+                ns = CustomDataSchema(website_id=body.website_id, name=name, fields=t["fields"])
+                db.add(ns)
+                await db.flush()
+                table_map[name] = {"schema_id": str(ns.schema_id), "fields": t["fields"]}
+        if table_map:
+            await db.commit()
+
+        # PASS 2 — sections in parallel, data-bound where the plan says so
         def _gen_section(brief):
             content = (
                 f'PROMPT: "{brief.get("description", "")}"\n'
                 f'LAYOUT: {brief.get("layout", "column")}\n'
                 f'THEME (use these exact colors/fonts for consistency): {json.dumps(theme)}'
             )
-            return call_ai_json(
-                client, model, provider, SECTION_GENERATOR_PROMPT, content,
-                temperature=0.5, max_tokens=4096,
-            )
+            binding = table_map.get(brief.get("data_binding") or "")
+            if binding:
+                content += f"\nDATA_TABLE (bind the form to this): {json.dumps(binding)}"
+            return call_ai_json(client, model, provider, SECTION_GENERATOR_PROMPT, content,
+                                temperature=0.5, max_tokens=4096)
 
         sections = await asyncio.gather(
             *[asyncio.to_thread(_gen_section, b) for b in section_briefs]
         )
 
-        # ---- STAMP WEBSITE ID AND CLEAN IN PARALLEL SECTIONS ----
+        # stamp website_id + run every script through sanitize + runtime lib
         cleaned = []
         for s in sections:
             s = clean_script(s)
-            def _stamp(node):
+            def _walk(node):
                 if isinstance(node, dict):
                     props = node.get("properties")
                     if isinstance(props, dict) and "website_id" in props:
                         props["website_id"] = str(body.website_id)
+                    if isinstance(node.get("script"), str) and node["script"].strip():
+                        node["script"] = inject_runtime_lib(sanitize_injected_params(node["script"]))
                     for v in node.values():
-                        _stamp(v)
+                        _walk(v)
                 elif isinstance(node, list):
                     for v in node:
-                        _stamp(v)
-            _stamp(s)
+                        _walk(v)
+            _walk(s)
             cleaned.append(s)
-
         return {"sections": cleaned, "theme": theme}
 
     except HTTPException:
@@ -430,7 +449,6 @@ async def generate_ai_page(
     except Exception as e:
         import traceback; traceback.print_exc()
         raise HTTPException(500, f"generate-ai-page failed: {e}")
-
 # --- END: NEW PAGE GENERATION FEATURE ---
 
 
@@ -541,6 +559,10 @@ await api.post('/builder/form-submissions', {
 });
 On success replace the form with a thank-you line ({{successMessage}} token); on error alert(err.response?.data?.detail || 'Something went wrong').
 Requirements: properties must include "website_id": "WEBSITE_ID_PLACEHOLDER" and "form_id": a literal random UUID string you generate (e.g. "a3f1c2d4-5b6e-4f7a-8c9d-0e1f2a3b4c5d"); button uses btn.onclick with e.preventDefault-safe form; container.querySelector only. The owner sees submissions in their dashboard.
+## DATA_TABLE BINDING (when the user content includes a DATA_TABLE json)
+Bind the form to it instead of form-submissions: properties.schema_id = its schema_id; inputs named with its exact field ids; submit → await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id: null }) (schemaId is injected at runtime from properties.schema_id); on error alert(err.response?.data?.detail || 'Something went wrong') — the server enforces required/unique and returns readable messages (e.g. duplicate newsletter email → 409). Success: replace form with {{successMessage}}.
+## ENTRANCE ANIMATIONS
+Give content blocks class "reveal" with the scroll-gated pattern (.reveal hidden → .visible via onVisible, prefers-reduced-motion respected) — onVisible is pre-injected. Below-the-fold sections must NOT animate on load.
 
 ---
 

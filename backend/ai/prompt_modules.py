@@ -34,6 +34,7 @@ rowData(row)               → row.data whether given a row or already-data; ALW
 relLabelField(f) / relDisplay(f, v) → relation labeling (matches the relation field to the related schema's field); use relDisplay for relation TABLE CELLS and DROPDOWN labels
 populateRelationSelects(form, initial={}) → fills every select[name][data-relation="<related_schema_id>"] (value=row_id, label=relDisplay) and preselects extractRowId(initial[name]) — call after inserting a form containing relation selects
 wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
+onVisible(el, cb)          → runs cb ONCE when el scrolls into view (IntersectionObserver; immediate fallback) — ALL scroll/reveal animations go through this
 These exist at runtime even though you don't see their code. Redefining ANY of these names is a hard error — the platform deletes your definition, so code written against a simplified version will misbehave. Do not re-implement them; just call them.
 """.strip()
 
@@ -82,6 +83,14 @@ const populateRelationSelects = async (form, initial = {}) => {
       if (initId) sel.value = initId;
     } catch (e) { sel.innerHTML = '<option value="">Failed to load</option>'; }
   }
+};
+const onVisible = (el, cb, threshold = 0.15) => {
+  if (!el) return;
+  if (typeof IntersectionObserver === 'undefined') { cb(el); return; }
+  const io = new IntersectionObserver((entries) => {
+    entries.forEach(en => { if (en.isIntersecting) { cb(en.target); io.unobserve(en.target); } });
+  }, { threshold });
+  io.observe(el);
 };
 const wireUploads = (form) => {
   form.querySelectorAll('input[data-upload]').forEach(fi => fi.onchange = async () => {
@@ -654,6 +663,13 @@ Detail page: const rowId = new URLSearchParams(window.location.search).get('id')
 # ------------------------------------------------------------------
 # INTENT ROUTER
 # ------------------------------------------------------------------
+MODULE_ANIMATION = """
+## SCROLL ANIMATIONS (below-the-fold content must animate when SEEN, not on load)
+CSS (scoped): .cls .reveal { opacity:0; transform:translateY(24px); transition:opacity .6s ease, transform .6s ease; } .cls .reveal.visible { opacity:1; transform:none; }
+Stagger siblings with transition-delay (.1s, .2s...). Always include: @media (prefers-reduced-motion: reduce){ .cls .reveal{transition:none; opacity:1; transform:none} }
+Script (one line — onVisible is pre-injected): container.querySelectorAll('.reveal').forEach(el => onVisible(el, () => el.classList.add('visible')));
+Variants: slide-left/right = translateX(±32px); zoom = scale(.95); fade = opacity only. Hover/click micro-interactions stay pure CSS (:hover/:active). Continuous loops (marquee, pulse, spinner) may run on load — only entrance animations are scroll-gated.
+""".strip()
 _FORM_WORDS = ["form", "add", "create", "submit", "book", "reserv", "register", "sign up",
                "apply", "order", "edit", "manage", "update", "crud", "admin", "upload",
                "dropdown", "select", "relate", "relation", "profile", "settings", "own"]
@@ -673,6 +689,7 @@ _INTENT_MAP = [
     (["form", "submit", "save", "table", "list", "track", "manage", "database", "store", "entries",
       "records", "crud", "sum", "total", "count", "show", "display", "get data", "view", "data"], [MODULE_CRUD, MODULE_STATS]),
 ]
+(["animat", "fade", "slide in", "reveal", "scroll effect", "parallax", "transition", "bounce", "zoom in"], [MODULE_ANIMATION]),
 
 
 def build_system_prompt(user_prompt: str, base: str = BASE_RULES) -> str:
@@ -927,11 +944,12 @@ PAGE_PLAN_PROMPT = """
 You are a lead designer planning a landing page. Given the user's prompt, output ONLY this JSON:
 {
   "theme": {"primaryColor":"#hex","accentColor":"#hex","bgDark":"#hex","bgLight":"#hex","textOnDark":"#hex","textOnLight":"#hex","fontFamily":"css font stack","mood":"one short phrase"},
-  "sections": [{"section_type":"hero","layout":"row|column","description":"1-2 sentence brief for a section designer, including concrete copy hints"}]
+  "data_tables": [{"name":"Newsletter Subscribers","fields":[{"id":"email","label":"Email","type":"email","required":true,"unique":true}]}],
+  "sections": [{"section_type":"hero","layout":"row|column","description":"1-2 sentence brief for a section designer, including concrete copy hints","data_binding":null}]
 }
-Rules: 5-8 sections; hero first; footer last; cohesive professional palette matching the business; every description self-contained (the section designer sees ONLY it plus the theme).
+Rules: 5-8 sections; hero first; footer last; cohesive professional palette; every description self-contained (the section designer sees ONLY it plus the theme).
+DATA PLANNING: any section that COLLECTS user input (newsletter signup, contact form, waitlist, RSVP, quote request) needs a table — declare it in data_tables (snake_case field ids; types text/email/number/date/boolean) and set that section's "data_binding" to the table's exact name. Purely visual sections: "data_binding": null and data_tables may be []. One table can serve multiple sections.
 """.strip()
-
 
 # ------------------------------------------------------------------
 # DATA APP GENERATOR — v4 spec, exported under the same name
