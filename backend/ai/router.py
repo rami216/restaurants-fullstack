@@ -276,6 +276,21 @@ async def refine_element(
         # Untouched keys structurally cannot be lost.
         refine_system = build_system_prompt(body.prompt, base=REFINE_OPS_BASE)
         raw = call_ai_json(client, model, provider, refine_system, user_content)
+        # refine may request a new data table (upgrades static elements to functional)
+        new_schema_def = raw.get("create_schema")
+        if isinstance(new_schema_def, dict) and new_schema_def.get("fields"):
+            ns = CustomDataSchema(
+                website_id=body.website_id,
+                name=new_schema_def.get("name", "New Table"),
+                fields=new_schema_def["fields"],
+            )
+            db.add(ns)
+            await db.commit()
+            await db.refresh(ns)
+            raw.setdefault("ops", []).extend([
+                {"op": "set", "path": "properties.schema_id", "value": str(ns.schema_id)},
+                {"op": "set", "path": "properties.schema_fields", "value": new_schema_def["fields"]},
+            ])
         payload = apply_ops(body.currentState, raw.get("ops", []))
  
         # Safety net: strip Mustache conditionals if the model snuck them in
@@ -391,17 +406,30 @@ async def generate_ai_page(
             *[asyncio.to_thread(_gen_section, b) for b in section_briefs]
         )
 
-        return {
-            "sections": [clean_script(s) for s in sections],
-            "theme": theme,
-        }
+        # ---- STAMP WEBSITE ID AND CLEAN IN PARALLEL SECTIONS ----
+        cleaned = []
+        for s in sections:
+            s = clean_script(s)
+            def _stamp(node):
+                if isinstance(node, dict):
+                    props = node.get("properties")
+                    if isinstance(props, dict) and "website_id" in props:
+                        props["website_id"] = str(body.website_id)
+                    for v in node.values():
+                        _stamp(v)
+                elif isinstance(node, list):
+                    for v in node:
+                        _stamp(v)
+            _stamp(s)
+            cleaned.append(s)
+
+        return {"sections": cleaned, "theme": theme}
 
     except HTTPException:
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(500, f"generate-ai-page failed: {e}") 
-
+        raise HTTPException(500, f"generate-ai-page failed: {e}")
 
 # --- END: NEW PAGE GENERATION FEATURE ---
 
@@ -435,6 +463,7 @@ async def generate_ai_section(
  
 
 SECTION_GENERATOR_PROMPT = """
+
 You are a Lead UI/UX Designer and Frontend Architect. Your task is to generate the JSON for a **single, high-fidelity website section** based on a user's prompt.
 
 **OUTPUT FORMAT:**
@@ -497,6 +526,21 @@ Do NOT wrap this in a "sections" array. Return the single section object directl
 
 **C. INTERACTIVITY:**
    - No forms/databases unless explicitly requested. Use visual elements only.
+   
+## GRANULARITY (non-negotiable)
+- Every distinct link gets its OWN URL token: social icons → facebookUrl, twitterUrl, instagramUrl in properties AND editableProps (type "text"), used as href="{{facebookUrl}}" etc. NEVER href="#", never one shared link for several targets.
+- Every button gets {{...Text}} + {{...Url}} tokens. Nav-like link lists: one token pair per link.
+- Split into separate elements anything the owner will edit/move independently (each feature card's image, a CTA button vs its heading).
+
+## FUNCTIONAL WIDGETS (newsletter / subscribe / contact capture must WORK, not just render)
+Include a script that: reads the input, disables the button with a loading label, then:
+await api.post('/builder/form-submissions', {
+  website_id: properties.website_id,
+  form_element_id: properties.form_id,
+  submission_data: { email: emailInput.value }
+});
+On success replace the form with a thank-you line ({{successMessage}} token); on error alert(err.response?.data?.detail || 'Something went wrong').
+Requirements: properties must include "website_id": "WEBSITE_ID_PLACEHOLDER" and "form_id": a literal random UUID string you generate (e.g. "a3f1c2d4-5b6e-4f7a-8c9d-0e1f2a3b4c5d"); button uses btn.onclick with e.preventDefault-safe form; container.querySelector only. The owner sees submissions in their dashboard.
 
 ---
 

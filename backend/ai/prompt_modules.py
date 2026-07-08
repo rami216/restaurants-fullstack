@@ -241,6 +241,7 @@ MODULE_BINDING = """
 The script executes as the BODY of: new Function('container','api','schemaId','properties','Mustache','addToCart')(...)
 RULE 1 — THE SCRIPT IS A FUNCTION BODY, NOT A FUNCTION. NEVER wrap the code in (container, api, ...) => { ... } or function(...) { ... } — a wrapper is defined but never invoked, so zero lines execute (empty display, dead buttons). Write top-level statements directly and END the script by calling your entry point, e.g. fetchAndRenderRows();
 RULE 2 — NEVER REDECLARE THE INJECTED NAMES.
+RULE 3 — an optional 7th param `zy` exists: {mode:'builder'|'public', isPreview, subdomain, websiteId, addToCart, navigate(url)}. Prefer properties.* for data; use zy only for capabilities (zy.addToCart, zy.navigate). Guard: if (typeof zy !== 'undefined' && zy.addToCart) — older runtimes may not pass it.
 → container, api, schemaId, properties, Mustache, addToCart are ALREADY-DEFINED function parameters.
 NEVER write `const schemaId = ...`, `let api = ...`, or any const/let/var declaration of these six names — a single redeclaration throws "Identifier 'schemaId' has already been declared" and NOTHING runs (empty display, dead buttons).
 Need the id? Just use `schemaId` directly — it already equals properties.schema_id.
@@ -878,6 +879,7 @@ Rules:
 - Every NEW {{token}} in aiTemplate needs: a set op for properties.<token>, and a set op replacing the whole "editableProps" array with the appended entry. Tokens are for OWNER SETTINGS only — fetched data is rendered in the script through displayValue()/firstValue(), relations via extractRowId().
 - Mustache has NO conditionals. Follow the compact design defaults (dense tables for text data, no phantom image space).
 - Preserve the unique class name, the helper functions, and ALL existing behavior you weren't asked to change.
+- CREATING A DATA TABLE DURING REFINE: if the request requires storing/reading rows and properties.schema_id is missing, output a top-level "create_schema" key ALONGSIDE "ops": {"name":"Subscribers","fields":[{"id":"email","label":"Email","type":"email","required":true,"unique":true}]}. The platform creates the table and injects properties.schema_id — your new script just uses the injected `schemaId` as usual (POST /custom-data/rows/${schemaId} {data, sitemember_id: null}). For simple capture (newsletter/contact) you may instead post to /builder/form-submissions with {website_id: properties.website_id, form_element_id: properties.form_id, submission_data:{...}} — then add set ops for properties.form_id (a literal uuid string).
 - api usage must follow the API rules appended below (if any).
 """.strip()
 
