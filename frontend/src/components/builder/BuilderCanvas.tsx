@@ -225,93 +225,13 @@ const normalizeBackground = (bg?: string) => {
 interface AiElementRunnerProps {
   element: ElementType;
   isPreview: boolean;
+  subdomain?: string; // pass from website data at the call site
 }
 
-// const AiElementRunner: React.FC<AiElementRunnerProps> = ({
-//   element,
-//   isPreview,
-// }) => {
-//   const { aiPayload } = element;
-//   const ref = useRef<HTMLDivElement>(null);
-
-//   useLayoutEffect(() => {
-//     if (!aiPayload || !ref.current) return;
-
-//     // ✅ THE FIX: Merge sources to prevent empty displays on new elements
-//     // 1. aiPayload.properties provides the base (titles, content, etc.)
-//     // 2. element.properties provides the live overrides (price registry, manual edits)
-//     const processedProps = {
-//       ...(aiPayload.properties || {}),
-//       ...(element.properties || {}),
-//     };
-
-//     // Process image URLs for both content and style
-//     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
-//       if (processedProps[key])
-//         processedProps[key] = resolveImageSrc(processedProps[key]);
-//     }
-
-//     let htmlOnly = (aiPayload.aiTemplate || "").replace(
-//       /<script[\s\S]*?<\/script>/g,
-//       "",
-//     );
-
-//     // Protect the displayTemplate from the first render pass
-//     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
-//     const templateMatch = htmlOnly.match(templateRegex);
-//     const templateContent = templateMatch ? templateMatch[0] : "";
-
-//     if (templateContent) {
-//       htmlOnly = htmlOnly.replace(
-//         templateContent,
-//         '<div id="displayTemplate-placeholder"></div>',
-//       );
-//     }
-
-//     // ✅ Render using the MERGED properties
-//     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
-
-//     if (templateContent) {
-//       const placeholder = ref.current.querySelector(
-//         "#displayTemplate-placeholder",
-//       );
-//       if (placeholder) {
-//         const tempDiv = document.createElement("div");
-//         tempDiv.innerHTML = templateContent;
-//         const templateElement = tempDiv.firstChild;
-//         if (templateElement) placeholder.replaceWith(templateElement);
-//       }
-//     }
-
-//     if (aiPayload.script) {
-//       const jsBody = aiPayload.script
-//         .replace(/^\s*<script[^>]*>/, "")
-//         .replace(/<\/script>\s*$/, "");
-//       try {
-//         const schemaId = element.properties?.schema_id;
-//         const apiClient = isPreview ? saasApi : api;
-//         const fn = new Function(
-//           "container",
-//           "api",
-//           "schemaId",
-//           "properties",
-//           "Mustache",
-//           jsBody,
-//         );
-//         // Pass merged properties to the script so it can interact with live data
-//         fn(ref.current, apiClient, schemaId, processedProps, Mustache);
-//       } catch (jsErr) {
-//         console.error("Error running AI script:", jsErr);
-//       }
-//     }
-//     // Dependency on element.properties ensures it re-renders on price updates
-//   }, [aiPayload, element.properties, isPreview]);
-
-//   return <div ref={ref} />;
-// };
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   element,
   isPreview,
+  subdomain,
 }) => {
   const { aiPayload } = element;
   const ref = useRef<HTMLDivElement>(null);
@@ -319,48 +239,34 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
 
-    // Merge sources
     const processedProps = {
       ...(aiPayload.properties || {}),
       ...(element.properties || {}),
     };
 
-    // --- START: SMARTER IMAGE RESOLVER ---
-    // 1. Standard keys that always need resolving
     const keysToResolve = new Set([
       "src",
       "poster",
       "image_url",
       "backgroundImage",
     ]);
-
-    // 2. Dynamically add keys from editableProps if they are type 'image'
     if (aiPayload.editableProps) {
       aiPayload.editableProps.forEach((prop: any) => {
-        if (prop.type === "image") {
-          keysToResolve.add(prop.key);
-        }
+        if (prop.type === "image") keysToResolve.add(prop.key);
       });
     }
-
-    // 3. Resolve URLs
     keysToResolve.forEach((key) => {
-      if (processedProps[key]) {
+      if (processedProps[key])
         processedProps[key] = resolveImageSrc(processedProps[key]);
-      }
     });
-    // --- END: SMARTER IMAGE RESOLVER ---
 
     let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
       "",
     );
-
-    // Protect displayTemplate
     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
     const templateMatch = htmlOnly.match(templateRegex);
     const templateContent = templateMatch ? templateMatch[0] : "";
-
     if (templateContent) {
       htmlOnly = htmlOnly.replace(
         templateContent,
@@ -368,7 +274,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       );
     }
 
-    // Render with Mustache
     try {
       ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
     } catch (e) {
@@ -383,8 +288,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       if (placeholder) {
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = templateContent;
-        const templateElement = tempDiv.firstChild;
-        if (templateElement) placeholder.replaceWith(templateElement);
+        if (tempDiv.firstChild) placeholder.replaceWith(tempDiv.firstChild);
       }
     }
 
@@ -395,20 +299,53 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       try {
         const schemaId = element.properties?.schema_id;
         const apiClient = isPreview ? saasApi : api;
+        const propsWithExtras = {
+          ...processedProps,
+          subdomain: subdomain ?? processedProps.subdomain ?? "",
+        };
+        // Builder stub: cart isn't live here, but scripts must not crash
+        const addToCartStub = (item: any) =>
+          alert(
+            `(Builder preview) "${item?.name ?? "Item"}" would be added to the cart on the live site.`,
+          );
+        const zy = {
+          mode: "builder" as const,
+          isPreview,
+          subdomain: propsWithExtras.subdomain,
+          websiteId: processedProps.website_id,
+          addToCart: addToCartStub,
+          navigate: (_url: string) => {}, // no-op in builder so links don't yank you out
+        };
         const fn = new Function(
           "container",
           "api",
           "schemaId",
           "properties",
           "Mustache",
+          "addToCart",
+          "zy",
           jsBody,
         );
-        fn(ref.current, apiClient, schemaId, processedProps, Mustache);
-      } catch (jsErr) {
+        fn(
+          ref.current,
+          apiClient,
+          schemaId,
+          propsWithExtras,
+          Mustache,
+          addToCartStub,
+          zy,
+        );
+      } catch (jsErr: any) {
         console.error("Error running AI script:", jsErr);
+        // visible error in the builder = instant diagnosis instead of dead elements
+        const box = document.createElement("div");
+        box.style.cssText =
+          "margin-top:8px;padding:10px 12px;border:1px solid #fca5a5;background:#fef2f2;color:#b91c1c;font-size:13px;border-radius:8px;";
+        box.textContent = `Element script error: ${jsErr?.message ?? jsErr}`;
+        ref.current.appendChild(box);
       }
     }
-  }, [aiPayload, element.properties, isPreview]);
+  }, [aiPayload, element.properties, isPreview, subdomain]);
 
   return <div ref={ref} />;
 };
@@ -533,6 +470,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           key={element.aiPayload?.id || element.element_id}
           element={element}
           isPreview={isPreview} // ✅ Pass down the isPreview prop
+          subdomain={websiteData?.subdomain} // ← ADD THIS
         />;
       } else {
         const hasHover = Object.keys(style).some((k) =>
@@ -582,6 +520,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
               key={element.aiPayload?.id || element.element_id}
               element={{ ...element, properties: props }}
               isPreview={isPreview}
+              subdomain={websiteData?.subdomain} // ← ADD THIS
             />
           </motion.div>
         );
@@ -612,6 +551,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
             key={element.aiPayload?.id || element.element_id}
             element={element}
             isPreview={isPreview}
+            subdomain={websiteData?.subdomain} // ← ADD THIS
           />,
         );
       } else {
@@ -675,6 +615,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           key={element.aiPayload?.id || element.element_id}
           element={element}
           isPreview={isPreview} // ✅ Pass down the isPreview prop
+          subdomain={websiteData?.subdomain} // ← ADD THIS
         />,
       );
     }

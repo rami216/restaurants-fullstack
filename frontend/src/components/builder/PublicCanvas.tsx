@@ -1215,106 +1215,18 @@ const MainContent = ({
     </GatedContent>
   );
 };
+
 interface AiElementRunnerProps {
   element: ElementType;
   isPreview: boolean;
-  websiteData: PublicWebsiteData; // ✅ ADD THIS
-  addToCart: (item: any) => void; // ✅ ADD THIS
-}
-
-// const AiElementRunner: React.FC<AiElementRunnerProps> = ({
-//   element,
-//   isPreview,
-//   websiteData, // ✅ ADD THIS
-// }) => {
-//   const { aiPayload } = element;
-//   const ref = useRef<HTMLDivElement>(null);
-
-//   useLayoutEffect(() => {
-//     if (!aiPayload || !ref.current) return;
-
-//     // ✅ THE FIX: Point to merged properties to handle both new and live elements
-//     const processedProps = {
-//       ...(aiPayload.properties || {}),
-//       ...(element.properties || {}),
-//     };
-
-//     for (const key of ["src", "poster", "image_url", "backgroundImage"]) {
-//       if (processedProps[key])
-//         processedProps[key] = resolveImageSrc(processedProps[key]);
-//     }
-
-//     let htmlOnly = (aiPayload.aiTemplate || "").replace(
-//       /<script[\s\S]*?<\/script>/g,
-//       "",
-//     );
-
-//     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
-//     const templateMatch = htmlOnly.match(templateRegex);
-//     const templateContent = templateMatch ? templateMatch[0] : "";
-
-//     if (templateContent) {
-//       htmlOnly = htmlOnly.replace(
-//         templateContent,
-//         '<div id="displayTemplate-placeholder"></div>',
-//       );
-//     }
-
-//     // Inject merged data into the Mustache template
-//     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
-
-//     if (templateContent) {
-//       const placeholder = ref.current.querySelector(
-//         "#displayTemplate-placeholder",
-//       );
-//       if (placeholder) {
-//         const tempDiv = document.createElement("div");
-//         tempDiv.innerHTML = templateContent;
-//         const templateElement = tempDiv.firstChild;
-//         if (templateElement) placeholder.replaceWith(templateElement);
-//       }
-//     }
-
-//     if (aiPayload.script) {
-//       const jsBody = aiPayload.script
-//         .replace(/^\s*<script[^>]*>/, "")
-//         .replace(/<\/script>\s*$/, "");
-//       try {
-//         const schemaId = element.properties?.schema_id;
-//         const apiClient = isPreview ? saasApi : api;
-
-//         const fn = new Function(
-//           "container",
-//           "api",
-//           "schemaId",
-//           "properties",
-//           "Mustache",
-//           jsBody,
-//         );
-//         // ✅ ADD subdomain to properties so AI scripts can access it
-//         const propsWithSubdomain = {
-//           ...processedProps,
-//           subdomain: websiteData.subdomain,
-//         };
-//         fn(ref.current, apiClient, schemaId, propsWithSubdomain, Mustache); // ✅ USE propsWithSubdomain, not processedProps
-//       } catch (jsErr) {
-//         console.error("Error running AI script:", jsErr);
-//       }
-//     }
-//   }, [aiPayload, element.properties, isPreview]);
-
-//   return <div ref={ref} />;
-// };
-interface AiElementRunnerProps {
-  element: ElementType;
-  isPreview: boolean;
-  websiteData: PublicWebsiteData; // ✅ ADD THIS
+  websiteData: PublicWebsiteData;
+  addToCart: (item: any) => void;
 }
 
 const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   element,
   isPreview,
-  websiteData, // ✅ ADD THIS
+  websiteData,
   addToCart,
 }) => {
   const { aiPayload } = element;
@@ -1323,47 +1235,34 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
   useLayoutEffect(() => {
     if (!aiPayload || !ref.current) return;
 
-    // ✅ THE FIX: Point to merged properties to handle both new and live elements
     const processedProps = {
       ...(aiPayload.properties || {}),
       ...(element.properties || {}),
     };
 
-    // --- START: SMARTER IMAGE RESOLVER ---
-    // 1. Standard keys that always need resolving
     const keysToResolve = new Set([
       "src",
       "poster",
       "image_url",
       "backgroundImage",
     ]);
-
-    // 2. Dynamically add keys from editableProps if they are type 'image'
     if (aiPayload.editableProps) {
       aiPayload.editableProps.forEach((prop: any) => {
-        if (prop.type === "image") {
-          keysToResolve.add(prop.key);
-        }
+        if (prop.type === "image") keysToResolve.add(prop.key);
       });
     }
-
-    // 3. Resolve URLs
     keysToResolve.forEach((key) => {
-      if (processedProps[key]) {
+      if (processedProps[key])
         processedProps[key] = resolveImageSrc(processedProps[key]);
-      }
     });
-    // --- END: SMARTER IMAGE RESOLVER ---
 
     let htmlOnly = (aiPayload.aiTemplate || "").replace(
       /<script[\s\S]*?<\/script>/g,
       "",
     );
-
     const templateRegex = /<template id="displayTemplate">[\s\S]*?<\/template>/;
     const templateMatch = htmlOnly.match(templateRegex);
     const templateContent = templateMatch ? templateMatch[0] : "";
-
     if (templateContent) {
       htmlOnly = htmlOnly.replace(
         templateContent,
@@ -1371,7 +1270,6 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       );
     }
 
-    // Inject merged data into the Mustache template
     ref.current.innerHTML = Mustache.render(htmlOnly, processedProps);
 
     if (templateContent) {
@@ -1381,8 +1279,7 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       if (placeholder) {
         const tempDiv = document.createElement("div");
         tempDiv.innerHTML = templateContent;
-        const templateElement = tempDiv.firstChild;
-        if (templateElement) placeholder.replaceWith(templateElement);
+        if (tempDiv.firstChild) placeholder.replaceWith(tempDiv.firstChild);
       }
     }
 
@@ -1393,34 +1290,45 @@ const AiElementRunner: React.FC<AiElementRunnerProps> = ({
       try {
         const schemaId = element.properties?.schema_id;
         const apiClient = isPreview ? saasApi : api;
-
+        const propsWithExtras = {
+          ...processedProps,
+          subdomain: websiteData.subdomain,
+        };
+        // zy = extensible context: add capabilities here, NEVER new positional params
+        const zy = {
+          mode: "public" as const,
+          isPreview,
+          subdomain: websiteData.subdomain,
+          websiteId: processedProps.website_id,
+          addToCart,
+          navigate: (url: string) => {
+            window.location.href = url;
+          },
+        };
         const fn = new Function(
           "container",
           "api",
           "schemaId",
           "properties",
           "Mustache",
-          "addToCart", // <-- ADD THIS
+          "addToCart",
+          "zy",
           jsBody,
         );
-        // ✅ ADD subdomain to properties so AI scripts can access it
-        const propsWithSubdomain = {
-          ...processedProps,
-          subdomain: websiteData.subdomain,
-        };
         fn(
           ref.current,
           apiClient,
           schemaId,
-          propsWithSubdomain,
+          propsWithExtras,
           Mustache,
           addToCart,
-        ); // ✅ USE propsWithSubdomain, not processedProps
+          zy,
+        );
       } catch (jsErr) {
         console.error("Error running AI script:", jsErr);
       }
     }
-  }, [aiPayload, element.properties, isPreview]);
+  }, [aiPayload, element.properties, isPreview, websiteData?.subdomain]);
 
   return <div ref={ref} />;
 };
