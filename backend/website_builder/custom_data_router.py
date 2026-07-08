@@ -551,7 +551,51 @@ async def grouped_stats(
 
 #endregion grouped_stats
 
+#region referential_integrity
 
+async def get_row_references(db: AsyncSession, row: CustomDataRow):
+    """[(table_name, field_label, count)] of rows in other tables referencing this row."""
+    schema = await db.get(CustomDataSchema, row.schema_id)
+    if not schema:
+        return []
+    all_schemas = (await db.execute(
+        select(CustomDataSchema).where(CustomDataSchema.website_id == schema.website_id)
+    )).scalars().all()
+    refs, rid = [], str(row.row_id)
+    for s in all_schemas:
+        for f in (s.fields or []):
+            if f.get("type") == "relation" and str(f.get("related_schema_id")) == str(row.schema_id):
+                cnt = (await db.execute(
+                    select(func.count(CustomDataRow.row_id)).where(
+                        CustomDataRow.schema_id == s.schema_id,
+                        CustomDataRow.data.op("->>")(f["id"]) == rid,
+                    )
+                )).scalar_one()
+                if cnt:
+                    refs.append((s.name, f.get("label", f["id"]), cnt))
+    return refs
+
+
+async def delete_dependent_rows(db: AsyncSession, row: CustomDataRow):
+    """Cascade (one level): delete every row referencing this one."""
+    schema = await db.get(CustomDataSchema, row.schema_id)
+    all_schemas = (await db.execute(
+        select(CustomDataSchema).where(CustomDataSchema.website_id == schema.website_id)
+    )).scalars().all()
+    rid = str(row.row_id)
+    for s in all_schemas:
+        for f in (s.fields or []):
+            if f.get("type") == "relation" and str(f.get("related_schema_id")) == str(row.schema_id):
+                deps = (await db.execute(
+                    select(CustomDataRow).where(
+                        CustomDataRow.schema_id == s.schema_id,
+                        CustomDataRow.data.op("->>")(f["id"]) == rid,
+                    )
+                )).scalars().all()
+                for dr in deps:
+                    await db.delete(dr)
+
+#endregion referential_integrity
 #region distinct
 
 @router.get("/rows/{schema_id}/distinct/{field}")
@@ -818,6 +862,7 @@ async def update_data_row(
 async def delete_data_row(
     row_id: UUID,
     sitemember_id: Optional[str] = None,
+    cascade: bool = Query(False, description="Admin only: also delete rows referencing this one"),
     db: AsyncSession = Depends(get_db),
     user: Optional[User] = Depends(get_optional_user),
 ):
@@ -825,9 +870,11 @@ async def delete_data_row(
     if not row_to_delete:
         return None
 
+    is_verified_admin = False
     if sitemember_id == ADMIN_UUID:
         schema = await db.get(CustomDataSchema, row_to_delete.schema_id)
         await verify_admin_override(schema.website_id, user, db)
+        is_verified_admin = True
     elif row_to_delete.sitemember_id is not None:
         member_id_or_none: Optional[UUID] = None
         if sitemember_id and sitemember_id != "null":
@@ -837,6 +884,18 @@ async def delete_data_row(
                 raise HTTPException(status_code=400, detail="Invalid sitemember_id format.")
         if row_to_delete.sitemember_id != member_id_or_none:
             raise HTTPException(status_code=403, detail="Permission denied to delete this row.")
+
+    # 🔒 referential integrity: never silently orphan referencing rows
+    refs = await get_row_references(db, row_to_delete)
+    if refs:
+        if cascade and is_verified_admin:
+            await delete_dependent_rows(db, row_to_delete)
+        else:
+            detail = "; ".join(f"{c} row(s) in '{n}' (field '{l}')" for n, l, c in refs)
+            raise HTTPException(
+                status_code=409,
+                detail=f"Cannot delete: this entry is still used by {detail}. Delete those entries first.",
+            )
 
     await db.delete(row_to_delete)
     await db.commit()
@@ -1162,6 +1221,12 @@ async def bulk_row_operations(
                         if op.sitemember_id is None or str(row.sitemember_id) != str(op.sitemember_id):
                             raise ValueError("Permission denied to delete this row.")
 
+                    refs = await get_row_references(db, row)
+                    if refs:
+                        raise ValueError(
+                            "Cannot delete: entry is still used by "
+                            + "; ".join(f"{c} row(s) in '{n}'" for n, l, c in refs)
+                        )
                     await db.delete(row)
                     
                     results.append(BulkRowResult(

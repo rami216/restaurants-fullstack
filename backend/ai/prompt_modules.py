@@ -66,6 +66,7 @@ const relLabelField = (f) => {
   return m ? m.id : null;
 };
 const relDisplay = (f, v) => {
+  if (f && f.type === 'relation' && typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v)) return '(deleted)';
   const lf = relLabelField(f);
   return (lf && v && typeof v === 'object' && v.data) ? displayValue(v.data[lf]) : displayValue(v);
 };
@@ -740,6 +741,11 @@ def sanitize_injected_params(script: str) -> str:
     script = strip_lib_redefinitions(script)
     if re.search(r"\bsmId\b", script) and not re.search(r"\b(?:const|let|var)\s+smId\b", script):
         script = "const smId = null;\n" + script
+    script = re.sub(
+        r"relDisplay\(\s*([A-Za-z_$][\w$]*)\s*,\s*displayValue\(\s*([A-Za-z_$][\w$]*\.data\[[A-Za-z_$][\w$]*\.id\])\s*\)\s*\)",
+        r"relDisplay(\1, \2)",
+        script,
+    )
     script = re.sub(
         r"displayValue\(\s*([A-Za-z_$][\w$]*)\.data\[\s*([A-Za-z_$][\w$]*)\.id\s*\]\s*\)",
         r"relDisplay(\2, \1.data[\2.id])",
