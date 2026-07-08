@@ -251,6 +251,7 @@ The script executes as the BODY of: new Function('container','api','schemaId','p
 RULE 1 — THE SCRIPT IS A FUNCTION BODY, NOT A FUNCTION. NEVER wrap the code in (container, api, ...) => { ... } or function(...) { ... } — a wrapper is defined but never invoked, so zero lines execute (empty display, dead buttons). Write top-level statements directly and END the script by calling your entry point, e.g. fetchAndRenderRows();
 RULE 2 — NEVER REDECLARE THE INJECTED NAMES.
 RULE 3 — an optional 7th param `zy` exists: {mode:'builder'|'public', isPreview, subdomain, websiteId, addToCart, navigate(url)}. Prefer properties.* for data; use zy only for capabilities (zy.addToCart, zy.navigate). Guard: if (typeof zy !== 'undefined' && zy.addToCart) — older runtimes may not pass it.
+RULE 4 — the Mustache object has ONLY .render(template, data): no registerHelper, no registerPartial, no loops. And {{tokens}} are NEVER rendered inside the script itself — in JS always read properties.<key>; a literal '{{x}}' string in JS prints as-is on the page.
 → container, api, schemaId, properties, Mustache, addToCart are ALREADY-DEFINED function parameters.
 NEVER write `const schemaId = ...`, `let api = ...`, or any const/let/var declaration of these six names — a single redeclaration throws "Identifier 'schemaId' has already been declared" and NOTHING runs (empty display, dead buttons).
 Need the id? Just use `schemaId` directly — it already equals properties.schema_id.
@@ -819,6 +820,10 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
         errors.append("Remove all console.log calls.")
     if re.search(r"onclick\s*=\s*[\"']", tmpl):
         errors.append("Remove inline onclick=\"\" attributes from aiTemplate — attach handlers in the script.")
+    if re.search(r"\{\{[^}]+\}\}", script) and "Mustache.render" not in script:
+        errors.append("Mustache tokens ({{...}}) inside the SCRIPT are never rendered — they print literally. Read properties.<key> instead (e.g. el.textContent = properties.successMessage || 'Thanks!').")
+    if "Mustache.registerHelper" in script or "Mustache.registerPartial" in script:
+        errors.append("Mustache has ONLY Mustache.render — registerHelper/registerPartial do not exist (that's Handlebars). Do per-letter/conditional transforms in plain JS: split the text, wrap chars in <span>s, style the spans.")
 
     # --- object-safety: fetched rows must go through the helpers ---
     if fetches_rows and "displayValue" not in script:

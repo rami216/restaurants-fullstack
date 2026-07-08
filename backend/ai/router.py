@@ -301,7 +301,9 @@ async def refine_element(
                 ai_template = re.sub(tag, '', ai_template)
             payload["aiTemplate"] = ai_template
  
-        return clean_script(payload)
+        payload = clean_script(payload)
+        payload["script"] = inject_runtime_lib(sanitize_injected_params(payload.get("script", "")))
+        return payload
  
     except HTTPException:
         raise
@@ -560,9 +562,9 @@ await api.post('/builder/form-submissions', {
 On success replace the form with a thank-you line ({{successMessage}} token); on error alert(err.response?.data?.detail || 'Something went wrong').
 Requirements: properties must include "website_id": "WEBSITE_ID_PLACEHOLDER" and "form_id": a literal random UUID string you generate (e.g. "a3f1c2d4-5b6e-4f7a-8c9d-0e1f2a3b4c5d"); button uses btn.onclick with e.preventDefault-safe form; container.querySelector only. The owner sees submissions in their dashboard.
 ## DATA_TABLE BINDING (when the user content includes a DATA_TABLE json)
-Bind the form to it instead of form-submissions: properties.schema_id = its schema_id; inputs named with its exact field ids; submit → await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id: null }) (schemaId is injected at runtime from properties.schema_id); on error alert(err.response?.data?.detail || 'Something went wrong') — the server enforces required/unique and returns readable messages (e.g. duplicate newsletter email → 409). Success: replace form with {{successMessage}}.
+Bind the form to it instead of form-submissions: properties.schema_id = its schema_id; inputs named with its exact field ids; submit → await api.post(`/custom-data/rows/${schemaId}`, { data, sitemember_id: null }) (schemaId is injected at runtime from properties.schema_id); on error alert(err.response?.data?.detail || 'Something went wrong') — the server enforces required/unique and returns readable messages (e.g. duplicate newsletter email → 409). Success: in the SCRIPT do msgEl.textContent = properties.successMessage || 'Thanks for subscribing!' — never write a literal {{token}} in JS (it prints as-is); {{successMessage}} belongs only in aiTemplate if pre-placed as a hidden element.
 ## ENTRANCE ANIMATIONS
-Give content blocks class "reveal" with the scroll-gated pattern (.reveal hidden → .visible via onVisible, prefers-reduced-motion respected) — onVisible is pre-injected. Below-the-fold sections must NOT animate on load.
+Give content blocks class "reveal" with the scroll-gated pattern (.reveal hidden → .visible via onVisible, prefers-reduced-motion respected) — onVisible is pre-injected. Below-the-fold sections must NOT animate on load. MANDATORY: every non-hero section's main inner wrapper carries class "reveal" (opacity:0/translateY CSS + onVisible → .visible + prefers-reduced-motion guard); only the hero may animate immediately.
 
 ---
 
