@@ -22,7 +22,7 @@ from website_builder.models import Website
 from sqlalchemy.orm import selectinload
 from sqlalchemy.orm.attributes import flag_modified
 from website_builder.models import (
-    CustomDataSchema, Page, Section, Subsection, Element, Navbar, NavbarItem
+    Page, Section, Subsection, Element, Navbar, NavbarItem
 )
 from website_builder.models import SchemaAutomation
 
