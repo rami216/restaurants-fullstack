@@ -64,6 +64,28 @@ function BuilderManager() {
   const [clipboard, setClipboard] = useState<Element | null>(null);
   // --- END: ADD STATE FOR CLIPBOARD ---
 
+  const [buildingApp, setBuildingApp] = useState(false);
+
+  const handleBuildApp = async (prompt: string) => {
+    if (!prompt.trim() || !websiteData) return;
+    setBuildingApp(true);
+    try {
+      const { data: manifest } = await api.post("/ai/generate-app", {
+        website_id: websiteData.website_id, // ⚠️ confirm this is the id field on WebsiteData
+        prompt,
+      });
+      if (manifest.errors?.length)
+        console.warn("Section failures:", manifest.errors);
+      await fetchWebsiteData(); // your existing reload fn
+      alert(
+        `Built "${manifest.app_name}": ${manifest.pages.length} pages, ${manifest.tables.length} tables, ${manifest.automations} automations.`,
+      );
+    } catch (e: any) {
+      alert(e?.response?.data?.detail || "App build failed.");
+    } finally {
+      setBuildingApp(false);
+    }
+  };
   const isTempId = (id: string) =>
     typeof id === "string" &&
     !id.match(
@@ -1212,6 +1234,7 @@ function BuilderManager() {
                 onUpdate={updateWebsiteData}
                 onPageSwitch={setActivePageId}
                 onGeneratePage={handleGeneratePage}
+                onBuildApp={handleBuildApp}
               />
             </main>
           </div>

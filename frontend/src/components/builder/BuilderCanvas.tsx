@@ -359,6 +359,7 @@ interface BuilderCanvasProps {
   websiteData: WebsiteData | null;
   isPreview?: boolean;
   onGeneratePage: (prompt: string) => Promise<void>; // <-- ADD THIS
+  onBuildApp?: (prompt: string) => Promise<void>;
 }
 
 const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
@@ -371,6 +372,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   websiteData,
   isPreview = false,
   onGeneratePage,
+  onBuildApp,
 }) => {
   const [priceRegistry, setPriceRegistry] = useState<Record<string, number>>(
     {},
@@ -380,6 +382,10 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
   const [isGeneratingPage, setIsGeneratingPage] = useState(false);
   // --- State for preview navigation ---
   const [currentPage, setCurrentPage] = useState(page);
+  //appbuilder
+  const [appPrompt, setAppPrompt] = useState("");
+  const [isBuildingApp, setIsBuildingApp] = useState(false);
+
   const handlePreviewPageSwitch = (pageId: string) => {
     const newPage = websiteData?.pages.find((p) => p.page_id === pageId);
     if (newPage) setCurrentPage(newPage);
@@ -907,6 +913,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
       );
     }
   }
+
   useEffect(() => {
     if (!currentPage) return;
 
@@ -1261,6 +1268,41 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
           </div>
         )}
         {/* --- END: NEW PAGE GENERATOR UI --- */}
+
+        {/* --- START: NEW APP GENERATOR UI --- */}
+        {!isPreview && (
+          <div className="mt-4 p-4 border-2 border-dashed border-indigo-400 rounded-lg bg-indigo-50">
+            <h3 className="text-lg font-semibold text-indigo-800 mb-2">
+              Generate Entire App with AI
+            </h3>
+            <p className="text-xs text-indigo-600 mb-2">
+              Creates multiple pages, navbar links, data tables, and working
+              forms in one go.
+            </p>
+            <textarea
+              className="w-full border rounded p-2 text-sm"
+              rows={3}
+              placeholder="Describe a whole app, e.g., 'A barbershop with a services list and online booking where picking a slot marks it taken.'"
+              value={appPrompt}
+              onChange={(e) => setAppPrompt(e.target.value)}
+            />
+            <button
+              onClick={async () => {
+                setIsBuildingApp(true);
+                await onBuildApp?.(appPrompt);
+                setIsBuildingApp(false);
+                setAppPrompt("");
+              }}
+              disabled={isBuildingApp || !appPrompt.trim()}
+              className="mt-2 w-full bg-indigo-600 text-white py-2 rounded disabled:opacity-50"
+            >
+              {isBuildingApp
+                ? "Building App… (can take a minute)"
+                : "Generate App"}
+            </button>
+          </div>
+        )}
+        {/* --- END: NEW APP GENERATOR UI --- */}
 
         {!isPreview && (
           <button
