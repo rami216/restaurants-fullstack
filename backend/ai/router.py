@@ -147,154 +147,131 @@ async def generate_app(
             {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas
         ]
  
-        # ---- STEP 4: PAGES + SECTIONS + ELEMENTS ----
+        # ---- STEP 4: PAGES via the full page engine + data-apps as extra sections ----
         for p_idx, page_plan in enumerate(plan.get("pages", []) or []):
             if not isinstance(page_plan, dict):
                 continue
             slug = page_plan.get("slug") or (f"/{page_plan.get('title','page').lower().replace(' ','-')}")
-            # reuse an existing page by slug (Home lives at "/"); else create
+
             page = (await db.execute(select(Page).where(
                 Page.website_id == body.website_id, Page.slug == slug))).scalars().first()
             if not page:
-                page = Page(
-                    title=page_plan.get("title", "Page"),
-                    slug=slug,
-                    website_id=body.website_id,
-                    properties={},
-                )
+                page = Page(title=page_plan.get("title", "Page"), slug=slug,
+                            website_id=body.website_id, properties={})
                 db.add(page)
                 await db.flush()
-
-                # add to navbar (skip "/" — Home is already there — and skip if item exists)
                 if slug != "/" and page_plan.get("in_navbar", True):
                     nav = (await db.execute(
                         select(Navbar).options(selectinload(Navbar.items))
                         .where(Navbar.website_id == body.website_id)
                     )).scalars().first()
-                    if nav:
-                        already = any(i.link_url == slug for i in nav.items)
-                        if not already:
-                            db.add(NavbarItem(
-                                navbar_id=nav.navbar_id,
-                                text=page.title,
-                                link_url=slug,
-                                position=len(nav.items) + 1,
-                            ))
+                    if nav and not any(i.link_url == slug for i in nav.items):
+                        db.add(NavbarItem(navbar_id=nav.navbar_id, text=page.title,
+                                          link_url=slug, position=len(nav.items) + 1))
                 await db.commit()
                 await db.refresh(page)
- 
-            page_manifest = {"title": page.title, "slug": slug, "sections": 0}
- 
-            # generate all sections for this page in parallel
-            def _gen_section(brief):
-                content = (
-                    f'PROMPT: "{brief.get("description","")}"\n'
-                    f'LAYOUT: {brief.get("layout","column")}\n'
-                    f'THEME (use exactly): {json.dumps(theme)}'
-                )
-                binding_name = brief.get("data_binding")
-                binding = None
-                if binding_name and binding_name in name_to_schema_id:
-                    binding = {"schema_id": name_to_schema_id[binding_name],
-                               "fields": next((s["fields"] for s in all_schemas_summary
-                                               if s["name"] == binding_name), [])}
-                    content += f"\nDATA_TABLE (bind form to this): {json.dumps(binding)}"
-                # a data_app section goes through the data-app generator; visual ones through section gen
-                if brief.get("element_kind") == "data_app" and binding:
-                    da_content = (
-                        f'PROMPT: "{brief.get("element_prompt", brief.get("description",""))}"\n\n'
-                        f'UNIQUE_CLASS_NAME: `.app-el-{p_idx}`\n\n'
-                        f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(all_schemas_summary)}\n\n'
-                        f'BIND_TO_EXISTING_SCHEMA_ID: {binding["schema_id"]}'
-                    )
-                    return ("data_app", call_ai_json(client, model, provider,
-                            DATA_APP_PROMPT_V3, da_content, temperature=0.5))
-                return ("section", call_ai_json(client, model, provider,
-                        SECTION_GENERATOR_PROMPT, content, temperature=0.5, max_tokens=4096))
- 
+
+            page_manifest = {"title": page.title, "slug": slug, "sections": 0, "data_apps": 0}
             briefs = page_plan.get("sections", []) or []
-            results = await asyncio.gather(
-                *[asyncio.to_thread(_gen_section, b) for b in briefs],
-                return_exceptions=True,
-            )
- 
-            for s_idx, (brief, res) in enumerate(zip(briefs, results)):
-                if isinstance(res, Exception):
-                    manifest["errors"].append(f"{slug} section {s_idx}: {res}")
-                    continue
-                kind, payload = res
-                payload = clean_script(payload)
- 
-                # build a Section + Subsection to hold the element(s)
-                section = Section(page_id=page.page_id, section_type=brief.get("section_type","content"),
-                                  position=s_idx + 1, properties={})
+            visual_briefs = [b for b in briefs if b.get("element_kind") != "data_app"]
+            data_briefs = [b for b in briefs if b.get("element_kind") == "data_app"]
+
+            # 4a. VISUAL sections through the full page engine (rich prompt from the plan)
+            try:
+                page_prompt = (
+                    f"A page titled '{page_plan.get('title','Page')}' for the app "
+                    f"'{plan.get('app_name','')}'. It must contain these sections, "
+                    f"in this order and spirit:\n"
+                    + "\n".join(f"- {b.get('section_type','content')}: {b.get('description','')}"
+                                for b in visual_briefs)
+                    + "\nAll required data tables already exist — declare data_tables: []."
+                )
+                sections, _ = await build_page_sections(
+                    client, model, provider, page_prompt, db,
+                    body.website_id, website.subdomain, theme=theme,
+                )
+            except Exception as e:
+                manifest["errors"].append(f"{slug} page engine: {e}")
+                sections = []
+
+            pos = 1
+            for spayload in sections:
+                section = Section(page_id=page.page_id,
+                                  section_type="content", position=pos, properties={})
                 db.add(section)
                 await db.flush()
                 subsection = Subsection(section_id=section.section_id, position=1,
-                                        properties={"flexDirection": brief.get("layout","column"),
-                                                    "alignItems": "center"})
+                                        properties={"flexDirection": "column", "alignItems": "center"})
                 db.add(subsection)
                 await db.flush()
- 
-                if kind == "data_app":
-                    # data-app: bind to the pre-created schema, save its automations, stamp props
+                db.add(Element(
+                    subsection_id=subsection.subsection_id, element_type="AI", position=1,
+                    properties=spayload.get("properties", {}),
+                    ai_payload={
+                        "aiTemplate": spayload.get("aiTemplate", ""),
+                        "properties": spayload.get("properties", {}),
+                        "editableProps": spayload.get("editableProps", []),
+                        "script": spayload.get("script", ""),   # already sanitized+lib'd by the engine
+                    },
+                ))
+                pos += 1
+                page_manifest["sections"] += 1
+
+            # 4b. DATA-APP sections via the specialist generator, appended after the visuals
+            for brief in data_briefs:
+                try:
                     binding_name = brief.get("data_binding")
                     sid = name_to_schema_id.get(binding_name)
+                    if not sid:
+                        manifest["errors"].append(f"{slug}: data_binding '{binding_name}' not found")
+                        continue
+                    da_content = (
+                        f'PROMPT: "{brief.get("element_prompt", brief.get("description",""))}"\n\n'
+                        f'UNIQUE_CLASS_NAME: `.app-el-{p_idx}-{pos}`\n\n'
+                        f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(all_schemas_summary)}\n\n'
+                        f'BIND_TO_EXISTING_SCHEMA_ID: {sid}'
+                    )
+                    payload = call_ai_json(client, model, provider, DATA_APP_PROMPT_V3,
+                                           da_content, temperature=0.5)
+                    payload = clean_script(payload)
                     props = payload.get("properties", {}) or {}
-                    props["schema_id"] = sid
-                    props["originalType"] = "DATA_TABLE"
-                    props["schema_fields"] = next((s["fields"] for s in all_schemas_summary
-                                                   if s["name"] == binding_name), [])
-                    props["all_schemas"] = all_schemas_summary
-                    props["website_id"] = str(body.website_id)
-                    props["subdomain"] = website.subdomain
+                    props.update({
+                        "schema_id": sid, "originalType": "DATA_TABLE",
+                        "schema_fields": next((s["fields"] for s in all_schemas_summary
+                                               if s["name"] == binding_name), []),
+                        "all_schemas": all_schemas_summary,
+                        "website_id": str(body.website_id),
+                        "subdomain": website.subdomain,
+                    })
                     for auto in payload.get("automations", []) or []:
-                        if isinstance(auto, dict) and sid:
-                            db.add(SchemaAutomation(
-                                schema_id=UUID(sid),
-                                trigger=auto.get("trigger","on_create"),
-                                action_type=auto.get("action_type","mutate_row"),
-                                config=auto.get("config",{}) or {},
-                            ))
-                    el = Element(
-                        subsection_id=subsection.subsection_id,
-                        element_type="AI", position=1,
+                        if isinstance(auto, dict):
+                            db.add(SchemaAutomation(schema_id=UUID(sid),
+                                                    trigger=auto.get("trigger", "on_create"),
+                                                    action_type=auto.get("action_type", "mutate_row"),
+                                                    config=auto.get("config", {}) or {}))
+                    section = Section(page_id=page.page_id, section_type="data_app",
+                                      position=pos, properties={})
+                    db.add(section)
+                    await db.flush()
+                    subsection = Subsection(section_id=section.section_id, position=1,
+                                            properties={"flexDirection": "column", "alignItems": "center"})
+                    db.add(subsection)
+                    await db.flush()
+                    db.add(Element(
+                        subsection_id=subsection.subsection_id, element_type="AI", position=1,
                         properties=props,
                         ai_payload={
-                            "aiTemplate": payload.get("aiTemplate",""),
+                            "aiTemplate": payload.get("aiTemplate", ""),
                             "properties": props,
                             "editableProps": payload.get("editableProps", []),
-                            "script": inject_runtime_lib(sanitize_injected_params(payload.get("script",""))),
+                            "script": inject_runtime_lib(sanitize_injected_params(payload.get("script", ""))),
                         },
-                    )
-                    db.add(el)
-                else:
-                    # visual section: it may itself contain several elements; if your
-                    # SECTION_GENERATOR returns one AI element payload, store it as one AI element.
-                    # ⚠️ if your section generator returns a richer structure (multiple elements),
-                    #    adapt this to iterate them the way generate_ai_page does.
-                    def _stamp(props):
-                        props = dict(props or {})
-                        if "website_id" in props:
-                            props["website_id"] = str(body.website_id)
-                        props.setdefault("subdomain", website.subdomain)
-                        return props
-                    props = _stamp(payload.get("properties", {}))
-                    el = Element(
-                        subsection_id=subsection.subsection_id,
-                        element_type="AI", position=1,
-                        properties=props,
-                        ai_payload={
-                            "aiTemplate": payload.get("aiTemplate",""),
-                            "properties": props,
-                            "editableProps": payload.get("editableProps", []),
-                            "script": inject_runtime_lib(sanitize_injected_params(payload.get("script",""))),
-                        },
-                    )
-                    db.add(el)
- 
-                page_manifest["sections"] += 1
- 
+                    ))
+                    pos += 1
+                    page_manifest["data_apps"] += 1
+                except Exception as e:
+                    manifest["errors"].append(f"{slug} data-app: {e}")
+
             await db.commit()
             manifest["pages"].append(page_manifest)
  
@@ -643,7 +620,73 @@ async def refine_ai_section(
 # --- START: NEW PAGE GENERATION FEATURE ---
 
 
+async def build_page_sections(client, model, provider, page_prompt, db, website_id, subdomain, theme=None):
+    """The 'good' page generator as a reusable engine: plan → create/reuse declared
+    tables → parallel theme-consistent sections → stamp + sanitize + runtime lib.
+    Used by /generate-ai-page AND the app orchestrator."""
+    plan = call_ai_json(client, model, provider, PAGE_PLAN_PROMPT, page_prompt,
+                        temperature=0.4, max_tokens=2000)
+    theme = theme or plan.get("theme", {})
+    briefs = plan.get("sections", []) or []
+    if not briefs:
+        raise HTTPException(500, "Page planner returned no sections.")
 
+    # create (or reuse by name) tables this page declares
+    table_map = {}
+    for t in plan.get("data_tables", []) or []:
+        if not isinstance(t, dict) or not t.get("fields"):
+            continue
+        name = t.get("name", "Page Data")
+        existing = (await db.execute(select(CustomDataSchema).where(
+            CustomDataSchema.website_id == website_id,
+            CustomDataSchema.name == name,
+        ))).scalars().first()
+        if existing:
+            table_map[name] = {"schema_id": str(existing.schema_id), "fields": existing.fields}
+        else:
+            ns = CustomDataSchema(website_id=website_id, name=name, fields=t["fields"])
+            db.add(ns)
+            await db.flush()
+            table_map[name] = {"schema_id": str(ns.schema_id), "fields": t["fields"]}
+    if table_map:
+        await db.commit()
+
+    def _gen_section(brief):
+        content = (
+            f'PROMPT: "{brief.get("description", "")}"\n'
+            f'LAYOUT: {brief.get("layout", "column")}\n'
+            f'THEME (use these exact colors/fonts for consistency): {json.dumps(theme)}'
+        )
+        binding = table_map.get(brief.get("data_binding") or "")
+        if binding:
+            content += f"\nDATA_TABLE (bind the form to this): {json.dumps(binding)}"
+        return call_ai_json(client, model, provider, SECTION_GENERATOR_PROMPT, content,
+                            temperature=0.5, max_tokens=4096)
+
+    raw_sections = await asyncio.gather(
+        *[asyncio.to_thread(_gen_section, b) for b in briefs]
+    )
+
+    cleaned = []
+    for s in raw_sections:
+        s = clean_script(s)
+        def _walk(node):
+            if isinstance(node, dict):
+                props = node.get("properties")
+                if isinstance(props, dict):
+                    if "website_id" in props:
+                        props["website_id"] = str(website_id)
+                    props.setdefault("subdomain", subdomain)
+                if isinstance(node.get("script"), str) and node["script"].strip():
+                    node["script"] = inject_runtime_lib(sanitize_injected_params(node["script"]))
+                for v in node.values():
+                    _walk(v)
+            elif isinstance(node, list):
+                for v in node:
+                    _walk(v)
+        _walk(s)
+        cleaned.append(s)
+    return cleaned, theme
 @router.post("/generate-ai-page")
 async def generate_ai_page(
     body: GenerateRequest,
@@ -653,78 +696,16 @@ async def generate_ai_page(
     try:
         website = await get_website(body.website_id, db)
         client, model, provider = get_ai_client(website)
-
-        # PASS 1 — plan: theme + section briefs + data tables the page needs
-        plan = call_ai_json(client, model, provider, PAGE_PLAN_PROMPT, body.prompt,
-                            temperature=0.4, max_tokens=2000)
-        theme = plan.get("theme", {})
-        section_briefs = plan.get("sections", [])
-        if not section_briefs:
-            raise HTTPException(500, "Page planner returned no sections.")
-
-        # PASS 1.5 — create (or reuse by name) the declared tables
-        table_map = {}
-        for t in plan.get("data_tables", []) or []:
-            if not isinstance(t, dict) or not t.get("fields"):
-                continue
-            name = t.get("name", "Page Data")
-            existing = (await db.execute(select(CustomDataSchema).where(
-                CustomDataSchema.website_id == body.website_id,
-                CustomDataSchema.name == name,
-            ))).scalars().first()
-            if existing:
-                table_map[name] = {"schema_id": str(existing.schema_id), "fields": existing.fields}
-            else:
-                ns = CustomDataSchema(website_id=body.website_id, name=name, fields=t["fields"])
-                db.add(ns)
-                await db.flush()
-                table_map[name] = {"schema_id": str(ns.schema_id), "fields": t["fields"]}
-        if table_map:
-            await db.commit()
-
-        # PASS 2 — sections in parallel, data-bound where the plan says so
-        def _gen_section(brief):
-            content = (
-                f'PROMPT: "{brief.get("description", "")}"\n'
-                f'LAYOUT: {brief.get("layout", "column")}\n'
-                f'THEME (use these exact colors/fonts for consistency): {json.dumps(theme)}'
-            )
-            binding = table_map.get(brief.get("data_binding") or "")
-            if binding:
-                content += f"\nDATA_TABLE (bind the form to this): {json.dumps(binding)}"
-            return call_ai_json(client, model, provider, SECTION_GENERATOR_PROMPT, content,
-                                temperature=0.5, max_tokens=4096)
-
-        sections = await asyncio.gather(
-            *[asyncio.to_thread(_gen_section, b) for b in section_briefs]
+        sections, theme = await build_page_sections(
+            client, model, provider, body.prompt, db,
+            body.website_id, website.subdomain,
         )
-
-        # stamp website_id + run every script through sanitize + runtime lib
-        cleaned = []
-        for s in sections:
-            s = clean_script(s)
-            def _walk(node):
-                if isinstance(node, dict):
-                    props = node.get("properties")
-                    if isinstance(props, dict) and "website_id" in props:
-                        props["website_id"] = str(body.website_id)
-                    if isinstance(node.get("script"), str) and node["script"].strip():
-                        node["script"] = inject_runtime_lib(sanitize_injected_params(node["script"]))
-                    for v in node.values():
-                        _walk(v)
-                elif isinstance(node, list):
-                    for v in node:
-                        _walk(v)
-            _walk(s)
-            cleaned.append(s)
-        return {"sections": cleaned, "theme": theme}
-
+        return {"sections": sections, "theme": theme}
     except HTTPException:
         raise
     except Exception as e:
         import traceback; traceback.print_exc()
-        raise HTTPException(500, f"generate-ai-page failed: {e}")
-# --- END: NEW PAGE GENERATION FEATURE ---
+        raise HTTPException(500, f"generate-ai-page failed: {e}")# --- END: NEW PAGE GENERATION FEATURE ---
 
 
 #endregion pagegenerator  

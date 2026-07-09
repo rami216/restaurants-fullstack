@@ -30,7 +30,7 @@ You are a senior software architect planning a COMPLETE web application for a sm
 {
   "app_name": "Bookings for Bella's Salon",
   "theme": {"primaryColor":"#hex","accentColor":"#hex","bgDark":"#hex","bgLight":"#hex","textOnDark":"#hex","textOnLight":"#hex","fontFamily":"css stack","mood":"short phrase"},
- 
+  "seed_rows": {"Time Slots": [{"day":"Mon","start_time":"09:00","available":true},{"day":"Mon","start_time":"10:00","available":true},{"day":"Tue","start_time":"14:00","available":true}], "Services":[{"service_name":"Haircut","price":25},{"service_name":"Beard Trim","price":15}]},
   "tables": [
     {
       "name": "Services",
@@ -84,7 +84,7 @@ You are a senior software architect planning a COMPLETE web application for a sm
 RULES:
 - TABLES: snake_case field ids. Types: text, number, email, date, boolean, image, gallery, file, relation. Relations reference another table BY NAME via "related_table" (the platform resolves the name to an id). Add validation keys where sensible: required, unique, default, min, max, options.
 - AUTOMATIONS: use for cross-table effects (booking locks a slot, order decrements stock). "table" names the table the automation lives on; "source_field" is the field on THAT table holding the related row id.
-- PAGES: 1-5 pages. Exactly one page has slug "/". Home first. Every page has 2-6 sections. Set in_navbar true for primary pages.
+- PAGES: 1-5 pages. Exactly one page has slug "/". Home first. Each page lists the KEY sections it needs (2-5 bullet points is enough — the page builder will expand them into a full, rich layout). Home should mention a hero plus services/about/CTA ideas. Set in_navbar true for primary pages.
 - SECTIONS: each has a self-contained "description". If a section stores or reads data, set "data_binding" to a table name AND "element_kind":"data_app" AND a detailed "element_prompt" (this is fed verbatim to the data-app generator — be specific about relations, filtering, privacy, and what submit does). Purely visual sections: "data_binding":null and omit element_kind/element_prompt.
 - Keep it COHERENT: buttons that say "Book Now" must link to the page whose slug hosts the booking section. Reuse tables across pages/sections when natural.
 - Output ONLY the JSON object.
@@ -1018,7 +1018,7 @@ You are a lead designer planning a landing page. Given the user's prompt, output
   "data_tables": [{"name":"Newsletter Subscribers","fields":[{"id":"email","label":"Email","type":"email","required":true,"unique":true}]}],
   "sections": [{"section_type":"hero","layout":"row|column","description":"1-2 sentence brief for a section designer, including concrete copy hints","data_binding":null}]
 }
-Rules: 5-8 sections; hero first; footer last; cohesive professional palette; every description self-contained (the section designer sees ONLY it plus the theme).
+Rules: 5-8 sections; hero first; footer last; cohesive professional palette; - SECTIONS: each "description" must be RICH and self-contained — 2-3 sentences with concrete copy (real headlines, subtext, button labels, and what each visual block contains), as if briefing a designer who sees nothing else. Thin one-line descriptions produce empty-looking sections. Home pages need a strong hero (headline + subtext + primary CTA) PLUS at least 2 more content sections (services/features, about, testimonials, or a call-to-action band) — never just one or two bare blocks. (the section designer sees ONLY it plus the theme).
 DATA PLANNING: any section that COLLECTS user input (newsletter signup, contact form, waitlist, RSVP, quote request) needs a table — declare it in data_tables (snake_case field ids; types text/email/number/date/boolean) and set that section's "data_binding" to the table's exact name. Purely visual sections: "data_binding": null and data_tables may be []. One table can serve multiple sections.
 """.strip()
 
