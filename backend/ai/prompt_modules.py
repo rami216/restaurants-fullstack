@@ -24,6 +24,72 @@ from typing import Any, Dict, List
 # Defined once here so CRUD / FORMS / DATA_APP all quote the
 # exact same helpers (models copy them verbatim).
 # ------------------------------------------------------------------
+APP_ARCHITECT_PROMPT = r"""
+You are a senior software architect planning a COMPLETE web application for a small business, to be built on a no-code platform. Given the user's request, output ONE valid JSON object describing the entire build. No markdown, no prose — JSON only.
+ 
+{
+  "app_name": "Bookings for Bella's Salon",
+  "theme": {"primaryColor":"#hex","accentColor":"#hex","bgDark":"#hex","bgLight":"#hex","textOnDark":"#hex","textOnLight":"#hex","fontFamily":"css stack","mood":"short phrase"},
+ 
+  "tables": [
+    {
+      "name": "Services",
+      "fields": [
+        {"id":"service_name","label":"Service","type":"text","required":true},
+        {"id":"price","label":"Price","type":"number","required":true},
+        {"id":"duration_min","label":"Duration (min)","type":"number"}
+      ]
+    },
+    {
+      "name": "Time Slots",
+      "fields": [
+        {"id":"day","label":"Day","type":"text","required":true,"options":["Mon","Tue","Wed","Thu","Fri"]},
+        {"id":"start_time","label":"Start","type":"text","required":true},
+        {"id":"available","label":"Available","type":"boolean","default":true}
+      ]
+    },
+    {
+      "name": "Bookings",
+      "fields": [
+        {"id":"customer_name","label":"Name","type":"text","required":true},
+        {"id":"email","label":"Email","type":"email","required":true},
+        {"id":"service","label":"Service","type":"relation","related_table":"Services","required":true},
+        {"id":"slot","label":"Time Slot","type":"relation","related_table":"Time Slots","required":true}
+      ]
+    }
+  ],
+ 
+  "automations": [
+    {"table":"Bookings","trigger":"on_create","action_type":"mutate_row",
+     "config":{"source_field":"slot","conditions":{"available":true},"set":{"available":false},
+               "condition_error":"That slot was just booked — please pick another."}}
+  ],
+ 
+  "pages": [
+    {"title":"Home","slug":"/","in_navbar":true,
+     "sections":[
+        {"section_type":"hero","layout":"column","description":"Hero for the salon: headline, subtext, a 'Book Now' button linking to /book.","data_binding":null},
+        {"section_type":"features","layout":"row","description":"Three cards describing the salon's signature services with short blurbs.","data_binding":null}
+     ]},
+    {"title":"Book","slug":"/book","in_navbar":true,
+     "sections":[
+        {"section_type":"booking","layout":"column",
+         "description":"A booking form: customer name, email, pick a Service, then pick an available Time Slot (Day dropdown filters the slots). Submitting creates a Booking.",
+         "data_binding":"Bookings","element_kind":"data_app",
+         "element_prompt":"Booking form bound to the Bookings table. Service is a relation dropdown to Services. Time Slot is a relation to Time Slots; show only available slots, with a Day dropdown that filters them. On submit create the booking; the server automation marks the slot unavailable and returns 409 if already taken — show that message. Public booking form: do not list existing bookings."}
+     ]}
+  ]
+}
+ 
+RULES:
+- TABLES: snake_case field ids. Types: text, number, email, date, boolean, image, gallery, file, relation. Relations reference another table BY NAME via "related_table" (the platform resolves the name to an id). Add validation keys where sensible: required, unique, default, min, max, options.
+- AUTOMATIONS: use for cross-table effects (booking locks a slot, order decrements stock). "table" names the table the automation lives on; "source_field" is the field on THAT table holding the related row id.
+- PAGES: 1-5 pages. Exactly one page has slug "/". Home first. Every page has 2-6 sections. Set in_navbar true for primary pages.
+- SECTIONS: each has a self-contained "description". If a section stores or reads data, set "data_binding" to a table name AND "element_kind":"data_app" AND a detailed "element_prompt" (this is fed verbatim to the data-app generator — be specific about relations, filtering, privacy, and what submit does). Purely visual sections: "data_binding":null and omit element_kind/element_prompt.
+- Keep it COHERENT: buttons that say "Book Now" must link to the page whose slug hosts the booking section. Reuse tables across pages/sections when natural.
+- Output ONLY the JSON object.
+"""
+
 _HELPERS_JS = """
 ## PROVIDED RUNTIME LIBRARY (pre-injected by the platform — call these, NEVER redefine them)
 extractRowId(v)            → row_id string from a value that may be a resolved relation object
@@ -972,7 +1038,7 @@ Human-readable, taken directly from the user's prompt.
 Array of {{id, label, type}}. id = lowercase snake_case. Types: text, number, email, date, boolean, image, gallery, file, relation.
 - relation fields need "related_schema_id" — when the prompt mentions a concept matching an EXISTING_SCHEMAS_ON_WEBSITE entry, you MUST reuse its schema_id. If a needed related schema does not exist, describe it in "schemas_to_create": [{{"name":"Time Slots","fields":[...]}}] and reference it as "related_schema_id": "PLACEHOLDER_FOR_Time Slots".
 - Add server-enforced validation keys where sensible: required(bool), unique(bool), default, min, max, options([...strings] → fixed dropdown). Emails unique for signups; required on essentials; options for status/category fields.
-
+If the input contains BIND_TO_EXISTING_SCHEMA_ID: do NOT design a new schema — output "schema" as the bound schema's exact existing fields (copy them from EXISTING_SCHEMAS_ON_WEBSITE), emit no schemas_to_create, and write the script against those field ids.
 ## automations (server-side — REPLACES all client-side cross-table mutation JS)
 If creating/updating a row must change ANOTHER table (booking marks a slot unavailable, an order decreases stock), do NOT write JS for it. Emit:
 "automations": [

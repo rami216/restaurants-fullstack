@@ -19,6 +19,13 @@ from models import CustomDataSchema
 from website_builder.custom_data_router import SchemaField
 from .utils import get_ai_client
 from website_builder.models import Website
+from sqlalchemy.orm import selectinload
+from sqlalchemy.orm.attributes import flag_modified
+from website_builder.models import (
+    CustomDataSchema, Page, Section, Subsection, Element, Navbar, NavbarItem
+)
+from website_builder.models import SchemaAutomation
+
 router = APIRouter(prefix="/ai", tags=["Extras"])
 openai = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 ## using: NON_TABLE_COMPRESSED_TRY1, REFINE_MASTER_PROMPT_2,REFINE_SECTION_SYSTEM_PROMPT,page_generator_test_2,NEW_2_DATA_APP_GENERATOR_PROMPT,VIEW_ONLY_GENERATOR_PROMPT,REFINE_DATA_APP_PROMPT
@@ -35,9 +42,275 @@ from .prompt_modules import (
     DATA_APP_PROMPT_V3,
     sanitize_injected_params,   # ← ADD THIS
     inject_runtime_lib,
+    APP_ARCHITECT_PROMPT
 )
 from website_builder.models import SchemaAutomation
+
+
+#region appbuilder
+
+class GenerateAppRequest(BaseModel):
+    website_id: UUID
+    prompt: str
+ 
+ 
+@router.post("/generate-app")
+async def generate_app(
+    body: GenerateAppRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    '''
+    Orchestrated multi-step build: plan -> tables -> automations -> pages/sections/elements.
+    Returns a manifest of everything created. The frontend then refetches the website.
+    '''
+    try:
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
+        # ---- STEP 1: ARCHITECT ----
+        plan = call_ai_json(
+            client, model, provider, APP_ARCHITECT_PROMPT, body.prompt,
+            temperature=0.4, max_tokens=4000,
+        )
+        theme = plan.get("theme", {})
+        manifest = {"app_name": plan.get("app_name", "New App"),
+                    "tables": [], "pages": [], "automations": 0, "errors": []}
+ 
+        # ---- STEP 2: TABLES (two passes so relations can resolve by name) ----
+        name_to_schema_id = {}
+ 
+        # pass 2a: create every table WITHOUT relation fields first (so targets exist)
+        raw_tables = plan.get("tables", []) or []
+        for t in raw_tables:
+            if not isinstance(t, dict) or not t.get("name"):
+                continue
+            name = t["name"]
+            existing = (await db.execute(select(CustomDataSchema).where(
+                CustomDataSchema.website_id == body.website_id,
+                CustomDataSchema.name == name,
+            ))).scalars().first()
+            if existing:
+                name_to_schema_id[name] = str(existing.schema_id)
+                continue
+            non_rel_fields = [f for f in (t.get("fields") or []) if f.get("type") != "relation"]
+            ns = CustomDataSchema(website_id=body.website_id, name=name, fields=non_rel_fields)
+            db.add(ns)
+            await db.flush()
+            name_to_schema_id[name] = str(ns.schema_id)
+        await db.commit()
+ 
+        # pass 2b: now resolve relation fields (related_table name -> schema_id) and patch each schema
+        for t in raw_tables:
+            if not isinstance(t, dict) or not t.get("name"):
+                continue
+            name = t["name"]
+            sid = name_to_schema_id.get(name)
+            if not sid:
+                continue
+            resolved = []
+            for f in (t.get("fields") or []):
+                fd = dict(f)
+                if fd.get("type") == "relation":
+                    target = name_to_schema_id.get(fd.pop("related_table", ""))
+                    if not target:
+                        continue  # skip a relation whose target wasn't created
+                    fd["related_schema_id"] = target
+                resolved.append(fd)
+            schema = await db.get(CustomDataSchema, UUID(sid))
+            if schema:
+                schema.fields = resolved
+                flag_modified(schema, "fields")   # ⚠️ ensure JSON change is detected
+            manifest["tables"].append({"name": name, "schema_id": sid})
+        await db.commit()
+ 
+        # ---- STEP 3: AUTOMATIONS (resolve table name -> schema_id) ----
+        for a in plan.get("automations", []) or []:
+            if not isinstance(a, dict):
+                continue
+            sid = name_to_schema_id.get(a.get("table", ""))
+            if not sid:
+                continue
+            db.add(SchemaAutomation(
+                schema_id=UUID(sid),
+                trigger=a.get("trigger", "on_create"),
+                action_type=a.get("action_type", "mutate_row"),
+                config=a.get("config", {}) or {},
+            ))
+            manifest["automations"] += 1
+        await db.commit()
+ 
+        # snapshot of all schemas for injecting into element props (relation labeling needs this)
+        all_schemas = (await db.execute(select(CustomDataSchema).where(
+            CustomDataSchema.website_id == body.website_id))).scalars().all()
+        all_schemas_summary = [
+            {"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields} for s in all_schemas
+        ]
+ 
+        # ---- STEP 4: PAGES + SECTIONS + ELEMENTS ----
+        for p_idx, page_plan in enumerate(plan.get("pages", []) or []):
+            if not isinstance(page_plan, dict):
+                continue
+            slug = page_plan.get("slug") or (f"/{page_plan.get('title','page').lower().replace(' ','-')}")
+            # reuse an existing page by slug (Home lives at "/"); else create
+            page = (await db.execute(select(Page).where(
+                Page.website_id == body.website_id, Page.slug == slug))).scalars().first()
+            if not page:
+                page = Page(
+                    title=page_plan.get("title", "Page"),
+                    slug=slug,
+                    website_id=body.website_id,
+                    properties={},
+                )
+                db.add(page)
+                await db.flush()
+
+                # add to navbar (skip "/" — Home is already there — and skip if item exists)
+                if slug != "/" and page_plan.get("in_navbar", True):
+                    nav = (await db.execute(
+                        select(Navbar).options(selectinload(Navbar.items))
+                        .where(Navbar.website_id == body.website_id)
+                    )).scalars().first()
+                    if nav:
+                        already = any(i.link_url == slug for i in nav.items)
+                        if not already:
+                            db.add(NavbarItem(
+                                navbar_id=nav.navbar_id,
+                                text=page.title,
+                                link_url=slug,
+                                position=len(nav.items) + 1,
+                            ))
+                await db.commit()
+                await db.refresh(page)
+ 
+            page_manifest = {"title": page.title, "slug": slug, "sections": 0}
+ 
+            # generate all sections for this page in parallel
+            def _gen_section(brief):
+                content = (
+                    f'PROMPT: "{brief.get("description","")}"\n'
+                    f'LAYOUT: {brief.get("layout","column")}\n'
+                    f'THEME (use exactly): {json.dumps(theme)}'
+                )
+                binding_name = brief.get("data_binding")
+                binding = None
+                if binding_name and binding_name in name_to_schema_id:
+                    binding = {"schema_id": name_to_schema_id[binding_name],
+                               "fields": next((s["fields"] for s in all_schemas_summary
+                                               if s["name"] == binding_name), [])}
+                    content += f"\nDATA_TABLE (bind form to this): {json.dumps(binding)}"
+                # a data_app section goes through the data-app generator; visual ones through section gen
+                if brief.get("element_kind") == "data_app" and binding:
+                    da_content = (
+                        f'PROMPT: "{brief.get("element_prompt", brief.get("description",""))}"\n\n'
+                        f'UNIQUE_CLASS_NAME: `.app-el-{p_idx}`\n\n'
+                        f'EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(all_schemas_summary)}\n\n'
+                        f'BIND_TO_EXISTING_SCHEMA_ID: {binding["schema_id"]}'
+                    )
+                    return ("data_app", call_ai_json(client, model, provider,
+                            DATA_APP_PROMPT_V3, da_content, temperature=0.5))
+                return ("section", call_ai_json(client, model, provider,
+                        SECTION_GENERATOR_PROMPT, content, temperature=0.5, max_tokens=4096))
+ 
+            briefs = page_plan.get("sections", []) or []
+            results = await asyncio.gather(
+                *[asyncio.to_thread(_gen_section, b) for b in briefs],
+                return_exceptions=True,
+            )
+ 
+            for s_idx, (brief, res) in enumerate(zip(briefs, results)):
+                if isinstance(res, Exception):
+                    manifest["errors"].append(f"{slug} section {s_idx}: {res}")
+                    continue
+                kind, payload = res
+                payload = clean_script(payload)
+ 
+                # build a Section + Subsection to hold the element(s)
+                section = Section(page_id=page.page_id, section_type=brief.get("section_type","content"),
+                                  position=s_idx + 1, properties={})
+                db.add(section)
+                await db.flush()
+                subsection = Subsection(section_id=section.section_id, position=1,
+                                        properties={"flexDirection": brief.get("layout","column"),
+                                                    "alignItems": "center"})
+                db.add(subsection)
+                await db.flush()
+ 
+                if kind == "data_app":
+                    # data-app: bind to the pre-created schema, save its automations, stamp props
+                    binding_name = brief.get("data_binding")
+                    sid = name_to_schema_id.get(binding_name)
+                    props = payload.get("properties", {}) or {}
+                    props["schema_id"] = sid
+                    props["originalType"] = "DATA_TABLE"
+                    props["schema_fields"] = next((s["fields"] for s in all_schemas_summary
+                                                   if s["name"] == binding_name), [])
+                    props["all_schemas"] = all_schemas_summary
+                    props["website_id"] = str(body.website_id)
+                    props["subdomain"] = website.subdomain
+                    for auto in payload.get("automations", []) or []:
+                        if isinstance(auto, dict) and sid:
+                            db.add(SchemaAutomation(
+                                schema_id=UUID(sid),
+                                trigger=auto.get("trigger","on_create"),
+                                action_type=auto.get("action_type","mutate_row"),
+                                config=auto.get("config",{}) or {},
+                            ))
+                    el = Element(
+                        subsection_id=subsection.subsection_id,
+                        element_type="AI", position=1,
+                        properties=props,
+                        ai_payload={
+                            "aiTemplate": payload.get("aiTemplate",""),
+                            "properties": props,
+                            "editableProps": payload.get("editableProps", []),
+                            "script": inject_runtime_lib(sanitize_injected_params(payload.get("script",""))),
+                        },
+                    )
+                    db.add(el)
+                else:
+                    # visual section: it may itself contain several elements; if your
+                    # SECTION_GENERATOR returns one AI element payload, store it as one AI element.
+                    # ⚠️ if your section generator returns a richer structure (multiple elements),
+                    #    adapt this to iterate them the way generate_ai_page does.
+                    def _stamp(props):
+                        props = dict(props or {})
+                        if "website_id" in props:
+                            props["website_id"] = str(body.website_id)
+                        props.setdefault("subdomain", website.subdomain)
+                        return props
+                    props = _stamp(payload.get("properties", {}))
+                    el = Element(
+                        subsection_id=subsection.subsection_id,
+                        element_type="AI", position=1,
+                        properties=props,
+                        ai_payload={
+                            "aiTemplate": payload.get("aiTemplate",""),
+                            "properties": props,
+                            "editableProps": payload.get("editableProps", []),
+                            "script": inject_runtime_lib(sanitize_injected_params(payload.get("script",""))),
+                        },
+                    )
+                    db.add(el)
+ 
+                page_manifest["sections"] += 1
+ 
+            await db.commit()
+            manifest["pages"].append(page_manifest)
+ 
+        return manifest
+ 
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(500, f"generate-app failed: {e}")
+
+#endregion
 #region helpers
+
+
+
 async def get_website(website_id, db: AsyncSession) -> Website:
     result = await db.execute(select(Website).where(Website.website_id == website_id))
     website = result.scalars().first()
