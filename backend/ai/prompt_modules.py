@@ -101,6 +101,9 @@ relLabelField(f) / relDisplay(f, v) → relation labeling (matches the relation 
 populateRelationSelects(form, initial={}) → fills every select[name][data-relation="<related_schema_id>"] (value=row_id, label=relDisplay) and preselects extractRowId(initial[name]) — call after inserting a form containing relation selects
 wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
 onVisible(el, cb)          → runs cb ONCE when el scrolls into view (IntersectionObserver; immediate fallback) — ALL scroll/reveal animations go through this
+loadLibs(urls, cb)         → loads external <script> libs then calls cb — ALL library-dependent code goes inside cb
+loadDoc(userId)            → the user's saved app document (parsed JSON) or null — for document-persistence elements
+saveDoc(userId, state, title) → debounced upsert of the whole state as one JSON document (call after EVERY state mutation)
 These exist at runtime even though you don't see their code. Redefining ANY of these names is a hard error — the platform deletes your definition, so code written against a simplified version will misbehave. Do not re-implement them; just call them.
 """.strip()
 
@@ -158,6 +161,42 @@ const onVisible = (el, cb, threshold = 0.15) => {
   }, { threshold });
   io.observe(el);
 };
+const loadLibs = (urls, cb) => {
+  const list = (urls || []).filter(Boolean);
+  if (!list.length) { cb(); return; }
+  let left = list.length;
+  list.forEach(u => {
+    const s = document.createElement('script');
+    s.src = u;
+    s.onload = () => { if (--left === 0) cb(); };
+    s.onerror = () => { console.warn('lib failed: ' + u); if (--left === 0) cb(); };
+    container.appendChild(s);
+  });
+};
+const loadDoc = async (userId) => {
+  if (!userId || !schemaId) return null;
+  try {
+    const r = await api.get(`/custom-data/rows/${schemaId}?sitemember_id=${userId}&limit=1`);
+    const row = r.data.rows[0];
+    if (!row) return null;
+    try { return JSON.parse(row.data.doc); } catch (e) { return null; }
+  } catch (e) { return null; }
+};
+let _saveTimer = null;
+const saveDoc = (userId, state, title) => {
+  if (!userId || !schemaId) return;
+  clearTimeout(_saveTimer);
+  _saveTimer = setTimeout(async () => {
+    try {
+      await api.post(`/custom-data/rows/${schemaId}/upsert`, {
+        match: { sitemember_id: userId },
+        data: { title: title || 'Untitled', doc: JSON.stringify(state) },
+        sitemember_id: userId,
+      });
+    } catch (e) { console.warn('saveDoc failed'); }
+  }, 600);
+};
+
 const wireUploads = (form) => {
   form.querySelectorAll('input[data-upload]').forEach(fi => fi.onchange = async () => {
     if (!fi.files.length) return;
@@ -1091,3 +1130,66 @@ Then, in order:
 ## Minimal shape example (structure only — the script implements everything above):
 {{"name":"Booking System","schema":[{{"id":"name","label":"Name","type":"text","required":true}},{{"id":"email","label":"Email","type":"email","required":true}},{{"id":"time","label":"Time Slot","type":"relation","related_schema_id":"<existing-uuid>"}}],"automations":[{{"trigger":"on_create","action_type":"mutate_row","config":{{"source_field":"time","conditions":{{"available":true}},"set":{{"available":false}},"condition_error":"That slot was just taken."}}}}],"aiTemplate":"<style>...</style><div class=...>...</div>","properties":{{"title":"Book a Slot","addButtonText":"New Booking","titleColor":"#111827","buttonBgColor":"#3b82f6","slot_key":""}},"editableProps":[{{"key":"title","label":"Title","type":"text"}},{{"key":"addButtonText","label":"Add Button Text","type":"text"}},{{"key":"titleColor","label":"Title Color","type":"color"}},{{"key":"buttonBgColor","label":"Button Color","type":"color"}},{{"key":"slot_key","label":"⚡ Agent Slot Key","type":"text"}}],"script":"..."}}
 """.strip()
+
+COMPLEX_LIB_REGISTRY = {
+    "pdf":        {"url": "https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js",
+                   "global": "window.jspdf.jsPDF", "what": "generate/export PDF files"},
+    "screenshot": {"url": "https://cdnjs.cloudflare.com/ajax/libs/html2canvas/1.4.1/html2canvas.min.js",
+                   "global": "window.html2canvas", "what": "capture DOM as image (also for putting images into PDFs)"},
+    "canvas":     {"url": "https://cdnjs.cloudflare.com/ajax/libs/fabric.js/5.3.1/fabric.min.js",
+                   "global": "window.fabric", "what": "interactive drawing/design canvas (move, resize, layer objects)"},
+    "charts":     {"url": "https://cdn.jsdelivr.net/npm/chart.js",
+                   "global": "window.Chart", "what": "charts and graphs"},
+    "qr":         {"url": "https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js",
+                   "global": "window.QRCode", "what": "QR code generation"},
+    "audio":      {"url": "https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js",
+                   "global": "window.Tone", "what": "audio synthesis/playback"},
+}
+COMPLEX_ARCHITECT_PROMPT = """
+You are a senior application architect. Decompose the user's request for a complex interactive tool into a formal, buildable SPEC. Output ONLY this JSON — no markdown, no prose:
+ 
+{
+  "element_name": "Short Name",
+  "persistence": "document" | "rows" | "none",
+  "document_table_name": "Book Projects",
+  "row_tables": [{"name":"Entries","fields":[{"id":"...","label":"...","type":"text|number|email|date|boolean|image|relation","related_table":"OtherTable?"}]}],
+  "libraries": ["pdf","canvas"],
+  "state_shape": { "view":"main", "items":[{"title":"","imageUrl":""}], "currentIndex":0 },
+  "views": [
+    {"id":"main","purpose":"what the user does here","ui":"3-4 sentences: exact layout, controls, what each button does and which action it triggers, what data is shown and from where in state"}
+  ],
+  "actions": [
+    {"name":"addItem","effect":"push a blank item into state.items, set currentIndex to it, render()","persist":true}
+  ],
+  "user_scoped": true,
+  "notes": "edge cases, empty states, validation the builder must handle"
+}
+ 
+RULES:
+- persistence: "document" = the whole tool state is ONE JSON blob per user (editors, wizards, planners, builders — anything with rich nested state). "rows" = classic records other elements/pages also need. "none" = pure client tool (calculator, converter). Prefer "document" for anything editor-like. document_table_name only when persistence=document; row_tables only when persistence=rows.
+- libraries: ONLY from this registry (name → capability): {LIB_MENU}. Empty array if none needed. Do not invent libraries.
+- state_shape: a CONCRETE example JSON of the full state, including "view" (the current view id) when there are multiple views.
+- views: every distinct screen/mode. ONE view is fine for single-screen tools. Each ui description must be rich enough to build from alone.
+- actions: every mutation. "persist":true means the builder must call saveDoc (document mode) or the rows API after it.
+- user_scoped: true when each logged-in member has their own data/state; false for shared/public tools.
+- Think about the FULL user journey: empty state on first visit, creating, editing, deleting, and (if requested) exporting.
+"""
+ 
+COMPLEX_BUILDER_PROMPT = """
+You are an expert front-end engineer. Build ONE self-contained element from the SPEC you are given. Output ONE valid JSON object with keys: "aiTemplate", "properties", "editableProps", "script". No markdown.
+ 
+## NON-NEGOTIABLE ARCHITECTURE
+1. SINGLE STATE OBJECT: let state = <the spec's state_shape>; It is the only source of truth.
+2. SINGLE RENDER PATH: const render = () => { ... } redraws the CURRENT view (switch on state.view) into ONE root div (.app-root inside aiTemplate). Every view is its own renderXxx(root) function producing complete HTML for that view, then wiring that view's handlers. NEVER sprinkle innerHTML writes across handlers — mutate state, then call render().
+3. ACTIONS: implement every spec action as a function that mutates state, persists when the spec says so, then calls render().
+4. PERSISTENCE (per spec):
+   - document: on init → const saved = await loadDoc(currentUserId); if (saved) state = {...state, ...saved}; after every persisting action → saveDoc(currentUserId, state, state.title). loadDoc/saveDoc are pre-injected.
+   - rows: use the standard rows API (POST/PUT/GET on /custom-data/rows/${schemaId}) with the provided field ids.
+   - none: no persistence code at all.
+5. LIBRARIES: you receive LIBRARIES as [{name,url,global}]. Wrap ALL code that touches them in loadLibs([urls...], () => { ...init + first render... }); access via the given global exactly (e.g. const { jsPDF } = window.jspdf). If LIBRARIES is empty, call init directly.
+6. user_scoped=true → login guard first: read currentUserId from localStorage('siteMemberId:'+(properties.subdomain||'')); if missing, render a friendly "Please log in" message into .app-root and stop.
+7. All base rules apply: container.querySelector only; never redeclare injected names; the script is a FUNCTION BODY (no wrapper); esc() every interpolated value; displayValue()/relDisplay() for row data; loading/disabled states on async buttons; confirm() before destructive actions; images upload via api.post('/uploads/', fd) and store URLs in state; compact professional styling scoped to the unique class; the mobile media query.
+8. Empty states: every view renders something helpful when its data is empty (per the spec's notes).
+9. Owner-editable text/colors (title, accent color, button labels) are {{tokens}} in aiTemplate with properties + editableProps entries (+ the slot_key entry last). App data is NEVER a token.
+Build the COMPLETE tool — every view, every action, every edge case in the spec. Long scripts are expected and fine.
+"""

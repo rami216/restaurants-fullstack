@@ -42,7 +42,10 @@ from .prompt_modules import (
     DATA_APP_PROMPT_V3,
     sanitize_injected_params,   # ← ADD THIS
     inject_runtime_lib,
-    APP_ARCHITECT_PROMPT
+    APP_ARCHITECT_PROMPT,
+    COMPLEX_ARCHITECT_PROMPT,
+    COMPLEX_BUILDER_PROMPT,
+    COMPLEX_LIB_REGISTRY
 )
 from website_builder.models import SchemaAutomation
 
