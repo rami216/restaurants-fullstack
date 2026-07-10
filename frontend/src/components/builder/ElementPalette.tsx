@@ -428,6 +428,55 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
   const [aiDataViewPrompt, setAiDataViewPrompt] = useState("");
   const [isGeneratingDataView, setIsGeneratingDataView] = useState(false);
 
+  // --- Complex Generator State ---
+  const [aiComplexPrompt, setAiComplexPrompt] = useState("");
+  const [isGeneratingComplex, setIsGeneratingComplex] = useState(false);
+
+  const handleGenerateComplexElement = async () => {
+    if (!aiComplexPrompt.trim() || !selectedSubsectionId || !activePage) return;
+    setIsGeneratingComplex(true);
+    try {
+      const unique_class_name = `ai-complex-${Date.now()}`;
+
+      const { data: aiPayload } = await api.post(
+        "/ai/generate-complex-element",
+        {
+          prompt: aiComplexPrompt,
+          website_id: websiteId,
+          unique_class_name: unique_class_name,
+        },
+      );
+
+      const newElement: ElementType = {
+        element_id: `complex_${Date.now()}`,
+        element_type: "AI",
+        position: 999,
+        properties: aiPayload.properties,
+        aiPayload: aiPayload, // Matches your existing schema
+      };
+
+      const updatedPage = {
+        ...activePage,
+        sections: activePage.sections.map((sec) => ({
+          ...sec,
+          subsections: sec.subsections.map((sub) =>
+            sub.subsection_id === selectedSubsectionId
+              ? { ...sub, elements: [...sub.elements, newElement] }
+              : sub,
+          ),
+        })),
+      };
+      onUpdate(updatedPage);
+      setAiComplexPrompt("");
+    } catch (err: any) {
+      console.error("AI Complex Element generation failed:", err);
+      const errorMsg =
+        err.response?.data?.detail || "An unexpected error occurred.";
+      alert(`AI Complex Element generation failed: ${errorMsg}`);
+    } finally {
+      setIsGeneratingComplex(false);
+    }
+  };
   const handleGenerateAi = async () => {
     if (!aiPrompt.trim() || !selectedSubsectionId || !activePage) return;
     setLoadingAi(true);
@@ -738,6 +787,52 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
               </p>
             )}
           </div>
+
+          <hr className="my-4 border-gray-300" />
+
+          {/* --- AI GENERATOR (Complex Elements) --- */}
+          <div className="mb-4">
+            <label className="text-sm font-semibold text-gray-700">
+              Generate a Complex Element
+            </label>
+            <p className="text-xs text-gray-500 mb-1 leading-tight">
+              Multi-view tools: editors, wizards, planners, builders — with
+              per-user saving and export.
+            </p>
+            <textarea
+              rows={3}
+              className="w-full border rounded p-2 mt-1 text-sm border-teal-400 bg-teal-50"
+              placeholder="e.g. 'An editor where my clients build a photo book page by page...'"
+              value={aiComplexPrompt}
+              onChange={(e) => setAiComplexPrompt(e.target.value)}
+            />
+            <button
+              onClick={handleGenerateComplexElement}
+              disabled={
+                isGeneratingComplex ||
+                !aiComplexPrompt.trim() ||
+                !isSubscribed ||
+                !hasAiKey
+              }
+              className="mt-2 w-full bg-teal-600 text-white py-2 rounded disabled:opacity-50 font-semibold"
+            >
+              {isGeneratingComplex
+                ? "Architecting & building..."
+                : "Generate Complex Element"}
+            </button>
+            {!isSubscribed && (
+              <p className="mt-2 text-sm text-red-600 text-center">
+                Please subscribe to use AI features.
+              </p>
+            )}
+            {isSubscribed && !hasAiKey && (
+              <p className="mt-2 text-sm text-orange-500 text-center">
+                ⚠️ Add an API key in Settings → AI Provider to use AI features.
+              </p>
+            )}
+          </div>
+
+          <hr className="my-4 border-gray-300" />
 
           <hr className="my-4 border-gray-300" />
           <p

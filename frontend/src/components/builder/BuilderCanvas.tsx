@@ -1270,7 +1270,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
         {/* --- END: NEW PAGE GENERATOR UI --- */}
 
         {/* --- START: NEW APP GENERATOR UI --- */}
-        {!isPreview && (
+        {/* {!isPreview && (
           <div className="mt-4 p-4 border-2 border-dashed border-indigo-400 rounded-lg bg-indigo-50">
             <h3 className="text-lg font-semibold text-indigo-800 mb-2">
               Generate Entire App with AI
@@ -1301,7 +1301,7 @@ const BuilderCanvas: React.FC<BuilderCanvasProps> = ({
                 : "Generate App"}
             </button>
           </div>
-        )}
+        )} */}
         {/* --- END: NEW APP GENERATOR UI --- */}
 
         {!isPreview && (
