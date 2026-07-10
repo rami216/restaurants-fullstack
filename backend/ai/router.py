@@ -2956,3 +2956,145 @@ No markdown. No backticks. No extra text outside the JSON. Ever.
     except Exception as e:
         print(f"Architect Claude Error: {e}")
         raise HTTPException(status_code=500, detail=str(e))
+
+
+class GenerateComplexRequest(BaseModel):
+    website_id: UUID
+    prompt: str
+    unique_class_name: str
+ 
+ 
+@router.post("/generate-complex-element")
+async def generate_complex_element(
+    body: GenerateComplexRequest,
+    db: AsyncSession = Depends(get_db),
+    user: User = Depends(get_current_active_user),
+):
+    """Two-pass generic pipeline: architect spec → provision persistence → build element."""
+    try:
+        website = await get_website(body.website_id, db)
+        client, model, provider = get_ai_client(website)
+ 
+        # ---- PASS 1: ARCHITECT ----
+        lib_menu = ", ".join(f"{k} ({v['what']})" for k, v in COMPLEX_LIB_REGISTRY.items())
+        spec = call_ai_json(
+            client, model, provider,
+            COMPLEX_ARCHITECT_PROMPT.replace("{LIB_MENU}", lib_menu),
+            f'REQUEST: "{body.prompt}"',
+            temperature=0.3, max_tokens=3000,
+        )
+        if not isinstance(spec, dict) or not spec.get("views"):
+            raise HTTPException(500, "Architect produced no usable spec.")
+ 
+        # ---- PROVISION PERSISTENCE ----
+        schema_id = None
+        schema_fields = []
+        persistence = spec.get("persistence", "none")
+ 
+        if persistence == "document":
+            tname = spec.get("document_table_name") or f"{spec.get('element_name','App')} Documents"
+            existing = (await db.execute(select(CustomDataSchema).where(
+                CustomDataSchema.website_id == body.website_id,
+                CustomDataSchema.name == tname))).scalars().first()
+            doc_fields = [
+                {"id": "title", "label": "Title", "type": "text"},
+                {"id": "doc", "label": "Document", "type": "text"},
+            ]
+            if existing:
+                schema_id, schema_fields = str(existing.schema_id), existing.fields
+            else:
+                ns = CustomDataSchema(website_id=body.website_id, name=tname, fields=doc_fields)
+                db.add(ns)
+                await db.commit()
+                await db.refresh(ns)
+                schema_id, schema_fields = str(ns.schema_id), doc_fields
+ 
+        elif persistence == "rows":
+            name_map = {}
+            existing_all = (await db.execute(select(CustomDataSchema).where(
+                CustomDataSchema.website_id == body.website_id))).scalars().all()
+            for s in existing_all:
+                name_map[s.name] = str(s.schema_id)
+            # two-pass: non-relation fields first, then resolve related_table names
+            raw_tables = spec.get("row_tables", []) or []
+            for t in raw_tables:
+                if not isinstance(t, dict) or not t.get("name") or t["name"] in name_map:
+                    continue
+                base_fields = [f for f in (t.get("fields") or []) if f.get("type") != "relation"]
+                ns = CustomDataSchema(website_id=body.website_id, name=t["name"], fields=base_fields)
+                db.add(ns)
+                await db.flush()
+                name_map[t["name"]] = str(ns.schema_id)
+            await db.commit()
+            for t in raw_tables:
+                sid = name_map.get(t.get("name", ""))
+                if not sid:
+                    continue
+                resolved = []
+                for f in (t.get("fields") or []):
+                    fd = dict(f)
+                    if fd.get("type") == "relation":
+                        target = name_map.get(fd.pop("related_table", ""))
+                        if not target:
+                            continue
+                        fd["related_schema_id"] = target
+                    resolved.append(fd)
+                sch = await db.get(CustomDataSchema, UUID(sid))
+                if sch:
+                    sch.fields = resolved
+                    flag_modified(sch, "fields")
+            await db.commit()
+            first = (spec.get("row_tables") or [{}])[0].get("name")
+            if first and first in name_map:
+                schema_id = name_map[first]
+                sch = await db.get(CustomDataSchema, UUID(schema_id))
+                schema_fields = sch.fields if sch else []
+ 
+        # ---- PASS 2: BUILD ----
+        libs = [
+            {"name": n, "url": COMPLEX_LIB_REGISTRY[n]["url"], "global": COMPLEX_LIB_REGISTRY[n]["global"]}
+            for n in (spec.get("libraries") or []) if n in COMPLEX_LIB_REGISTRY
+        ]
+        all_schemas = (await db.execute(select(CustomDataSchema).where(
+            CustomDataSchema.website_id == body.website_id))).scalars().all()
+        all_schemas_summary = [{"name": s.name, "schema_id": str(s.schema_id), "fields": s.fields}
+                               for s in all_schemas]
+ 
+        build_content = (
+            f"SPEC:\n{json.dumps(spec, indent=2)}\n\n"
+            f"LIBRARIES: {json.dumps(libs)}\n\n"
+            f"UNIQUE_CLASS_NAME: `.{body.unique_class_name}`\n\n"
+            f"SCHEMA_ID: {schema_id or 'none'}\n"
+            f"SCHEMA_FIELDS: {json.dumps(schema_fields)}\n"
+            f"EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(all_schemas_summary)}"
+        )
+        payload = generate_with_repair(
+            client, model, provider, COMPLEX_BUILDER_PROMPT, build_content,
+        )
+ 
+        # ---- ASSEMBLE (same shape as generate-ai-element) ----
+        props = payload.get("properties", {}) or {}
+        if schema_id:
+            props["schema_id"] = schema_id
+            props["schema_fields"] = schema_fields
+        props["all_schemas"] = all_schemas_summary
+        props["website_id"] = str(body.website_id)
+        props["subdomain"] = website.subdomain
+ 
+        return {
+            "aiTemplate": f'<div class="{body.unique_class_name}">{payload.get("aiTemplate", "")}</div>'
+                          if not payload.get("aiTemplate", "").strip().startswith(f'<div class="{body.unique_class_name}"')
+                          else payload.get("aiTemplate", ""),
+            "properties": props,
+            "editableProps": payload.get("editableProps", []),
+            "script": inject_runtime_lib(sanitize_injected_params(payload.get("script", ""))),
+        }
+ 
+    except HTTPException:
+        raise
+    except Exception as e:
+        import traceback; traceback.print_exc()
+        raise HTTPException(500, f"Complex element generation failed: {e}")
+
+ 
+ 
