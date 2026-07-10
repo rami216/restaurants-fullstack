@@ -184,11 +184,16 @@ async def generate_app(
                     f"in this order and spirit:\n"
                     + "\n".join(f"- {b.get('section_type','content')}: {b.get('description','')}"
                                 for b in visual_briefs)
-                    + "\nAll required data tables already exist — declare data_tables: []."
+                    + "+ \n EXISTING TABLES you may bind sections to (use the exact name as data_binding): "
+                    + ", ".join(app_tables.keys())
+                    + ". Declare data_tables: [] — never redefine these."
                 )
+                app_tables = {s["name"]: {"schema_id": s["schema_id"], "fields": s["fields"]}
+                              for s in all_schemas_summary}
                 sections, _ = await build_page_sections(
                     client, model, provider, page_prompt, db,
                     body.website_id, website.subdomain, theme=theme,
+                    preexisting_tables=app_tables,
                 )
             except Exception as e:
                 manifest["errors"].append(f"{slug} page engine: {e}")
@@ -196,24 +201,34 @@ async def generate_app(
 
             pos = 1
             for spayload in sections:
-                section = Section(page_id=page.page_id,
-                                  section_type="content", position=pos, properties={})
+                el_payloads = extract_element_payloads(spayload)
+                if not el_payloads:
+                    manifest["errors"].append(
+                        f"{slug}: section had no extractable elements (keys: {list(spayload.keys()) if isinstance(spayload, dict) else type(spayload)})"
+                    )
+                    continue
+                section = Section(page_id=page.page_id, section_type="content",
+                                  position=pos, properties={})
                 db.add(section)
                 await db.flush()
                 subsection = Subsection(section_id=section.section_id, position=1,
-                                        properties={"flexDirection": "column", "alignItems": "center"})
+                                        properties={"flexDirection": spayload.get("layout", "column") if isinstance(spayload, dict) else "column",
+                                                    "alignItems": "center"})
                 db.add(subsection)
                 await db.flush()
-                db.add(Element(
-                    subsection_id=subsection.subsection_id, element_type="AI", position=1,
-                    properties=spayload.get("properties", {}),
-                    ai_payload={
-                        "aiTemplate": spayload.get("aiTemplate", ""),
-                        "properties": spayload.get("properties", {}),
-                        "editableProps": spayload.get("editableProps", []),
-                        "script": spayload.get("script", ""),   # already sanitized+lib'd by the engine
-                    },
-                ))
+                for e_idx, ep in enumerate(el_payloads):
+                    props = ep.get("properties", {}) or {}
+                    props.setdefault("subdomain", website.subdomain)
+                    db.add(Element(
+                        subsection_id=subsection.subsection_id, element_type="AI",
+                        position=e_idx + 1, properties=props,
+                        ai_payload={
+                            "aiTemplate": ep.get("aiTemplate", ""),
+                            "properties": props,
+                            "editableProps": ep.get("editableProps", []),
+                            "script": ep.get("script", ""),   # engine already sanitized+lib'd nested scripts
+                        },
+                    ))
                 pos += 1
                 page_manifest["sections"] += 1
 
@@ -618,9 +633,24 @@ async def refine_ai_section(
 
 #region pagegenerator
 # --- START: NEW PAGE GENERATION FEATURE ---
+def extract_element_payloads(section_payload: dict) -> list:
+    """Tolerates every shape the section generator may return:
+    {elements:[...]} | {subsections:[{elements:[...]}]} | a single element payload."""
+    if not isinstance(section_payload, dict):
+        return []
+    if isinstance(section_payload.get("elements"), list):
+        return [e for e in section_payload["elements"] if isinstance(e, dict)]
+    if isinstance(section_payload.get("subsections"), list):
+        out = []
+        for sub in section_payload["subsections"]:
+            if isinstance(sub, dict) and isinstance(sub.get("elements"), list):
+                out.extend(e for e in sub["elements"] if isinstance(e, dict))
+        return out
+    if section_payload.get("aiTemplate"):
+        return [section_payload]
+    return []
 
-
-async def build_page_sections(client, model, provider, page_prompt, db, website_id, subdomain, theme=None):
+async def build_page_sections(client, model, provider, page_prompt, db, website_id, subdomain, theme=None, preexisting_tables=None):
     """The 'good' page generator as a reusable engine: plan → create/reuse declared
     tables → parallel theme-consistent sections → stamp + sanitize + runtime lib.
     Used by /generate-ai-page AND the app orchestrator."""
@@ -632,7 +662,7 @@ async def build_page_sections(client, model, provider, page_prompt, db, website_
         raise HTTPException(500, "Page planner returned no sections.")
 
     # create (or reuse by name) tables this page declares
-    table_map = {}
+    table_map = dict(preexisting_tables or {})
     for t in plan.get("data_tables", []) or []:
         if not isinstance(t, dict) or not t.get("fields"):
             continue
