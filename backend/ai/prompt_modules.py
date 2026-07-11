@@ -274,18 +274,19 @@ def strip_lib_redefinitions(script: str) -> str:
 _RUNTIME_MARKER = "/*__ZY_RUNTIME_LIB__*/"
 
 def inject_runtime_lib(script: str) -> str:
-    """Prepend the canonical library and wrap the model's script in an async IIFE.
-    Idempotent (marker check). Model redefinitions merely shadow — never crash."""
-    if not script or _RUNTIME_MARKER in script:
+    """Prepend the canonical library + wrap in an async IIFE. Idempotent."""
+    if not script:
+        return script
+    if _RUNTIME_MARKER in script:
         return script
     return (
         RUNTIME_LIB_JS
         + "\n;(async () => {\n" + script + "\n})().catch((err) => {\n"
-        + "  try { const d = container.querySelector('.list-container') || container.querySelector('.data-display') || container.firstElementChild; "
-        + "if (d) d.innerHTML = '<p style=\"color:#b91c1c;font-size:14px\">Something went wrong in this element.</p>'; } catch (_) {}\n"
+        + "  console.error('Element error:', err);\n"
+        + "  try { const d = container.querySelector('.app-root') || container.querySelector('.list-container') || container.firstElementChild; "
+        + "if (d) d.innerHTML = '<p style=\"color:#b91c1c;font-size:14px;padding:16px\">Something went wrong in this element.</p>'; } catch (_) {}\n"
         + "});"
     )
-
 # ------------------------------------------------------------------
 # BASE — always included
 # ------------------------------------------------------------------
@@ -852,6 +853,8 @@ def sanitize_injected_params(script: str) -> str:
     (5) rewrite field-loop cells to relation-aware relDisplay (safe: falls back to displayValue)."""
     if not script:
         return script
+    if _RUNTIME_MARKER in script:
+        return script          # already injected — never touch the library
     m = _WRAPPER_RE.search(script)
     if m:
         prefix = script[:m.start()]
