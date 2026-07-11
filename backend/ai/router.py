@@ -343,23 +343,41 @@ def _openai_kwargs(model, system_prompt, user_content, temperature, max_tokens, 
     return kwargs
 
 
+def _repair_json_text(s: str) -> str:
+    """Fix the common model JSON quirks: trailing commas before } or ]."""
+    return re.sub(r",\s*([}\]])", r"\1", s)
+
+
 def _extract_json(content: str) -> dict:
-    content = content.strip()
+    content = (content or "").strip()
     content = re.sub(r"^```json?\s*", "", content)
     content = re.sub(r"\s*```$", "", content)
+
+    # 1. straight parse
     try:
         return json.loads(content)
     except json.JSONDecodeError:
         pass
+
+    # 2. parse after repairing trailing commas
+    try:
+        return json.loads(_repair_json_text(content))
+    except json.JSONDecodeError:
+        pass
+
+    # 3. extract the outermost object, then repair
     m = re.search(r"\{[\s\S]*\}", content)
     if not m:
         raise HTTPException(500, "Model returned no valid JSON (possibly truncated — raise max_tokens).")
+    blob = m.group(0)
     try:
-        return json.loads(m.group(0))
+        return json.loads(blob)
+    except json.JSONDecodeError:
+        pass
+    try:
+        return json.loads(_repair_json_text(blob))
     except json.JSONDecodeError as e:
-        raise HTTPException(500, f"Model returned malformed JSON (likely truncated — raise max_tokens): {e}")
-
-
+        raise HTTPException(500, f"Model returned malformed JSON (raise max_tokens if truncated): {e}")
 def call_ai_json(client, model: str, provider: str, system_prompt: str,
                  user_content: str, temperature: float = 0.2,
                  max_tokens: int = 4096) -> dict:
