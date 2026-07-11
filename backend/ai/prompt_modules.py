@@ -260,17 +260,38 @@ def _statement_end(src: str, i: int) -> int:
     return n
 
 def strip_lib_redefinitions(script: str) -> str:
-    """Delete model redefinitions of runtime-library functions so the injected
-    canonical versions are the ones that actually run (degenerate shadows like
-    `const displayValue = v => v ?? ''` were breaking relation display)."""
-    if not script or _RUNTIME_MARKER in script:
-        return script
-    while True:
-        m = _LIB_REDEF_RE.search(script)
-        if not m:
-            return script
-        script = script[:m.start()] + script[_statement_end(script, m.end()):]
-        
+    """Disabled: brace-scanning surgery was corrupting valid scripts.
+    Redefinitions now shadow the library harmlessly inside the IIFE, and
+    lint_component still flags them so the repair pass removes them cleanly."""
+    return script
+
+def script_is_balanced(script: str) -> bool:
+    """Cheap sanity check: balanced braces/parens/brackets outside strings."""
+    if not script:
+        return True
+    depth = {"(": 0, "[": 0, "{": 0}
+    pairs = {")": "(", "]": "[", "}": "{"}
+    in_str = None
+    i, n = 0, len(script)
+    while i < n:
+        c = script[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if c == in_str:
+                in_str = None
+        elif c in "\"'`":
+            in_str = c
+        elif c in depth:
+            depth[c] += 1
+        elif c in pairs:
+            depth[pairs[c]] -= 1
+            if depth[pairs[c]] < 0:
+                return False
+        i += 1
+    return all(v == 0 for v in depth.values())
+  
 _RUNTIME_MARKER = "/*__ZY_RUNTIME_LIB__*/"
 
 def inject_runtime_lib(script: str) -> str:
@@ -938,6 +959,8 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
         errors.append("Never assign container.innerHTML — write into a child element (add e.g. <div class=\"list-container\"></div> to aiTemplate if missing).")
     if "console.log" in script:
         errors.append("Remove all console.log calls.")
+    if script and not script_is_balanced(script):
+        errors.append("The script has unbalanced braces/parentheses (syntax error). Rewrite the script so it parses — check that every function and block is properly closed.")
     if re.search(r"onclick\s*=\s*[\"']", tmpl):
         errors.append("Remove inline onclick=\"\" attributes from aiTemplate — attach handlers in the script.")
     if re.search(r"\{\{[^}]+\}\}", script) and "Mustache.render" not in script:
