@@ -102,9 +102,9 @@ populateRelationSelects(form, initial={}) → fills every select[name][data-rela
 wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
 onVisible(el, cb)          → runs cb ONCE when el scrolls into view (IntersectionObserver; immediate fallback) — ALL scroll/reveal animations go through this
 loadLibs(urls, cb)         → loads external <script> libs then calls cb — ALL library-dependent code goes inside cb
-loadDoc(userId)            → the user's saved app document (parsed JSON) or null — for document-persistence elements
-saveDoc(userId, state, title) → debounced upsert of the whole state as one JSON document (call after EVERY state mutation)
-These exist at runtime even though you don't see their code. Redefining ANY of these names is a hard error — the platform deletes your definition, so code written against a simplified version will misbehave. Do not re-implement them; just call them.
+loadDoc(userId)            → Promise of the user's saved app document (parsed JSON) or null — for document-persistence elements
+saveDoc(userId, state, title) → debounced upsert of the whole state as one JSON document; RETURNS A PROMISE (safe to await or .then) — call after every persisting action
+These exist at runtime even though you don't see their code. Redefining ANY of these names is a hard error — your simplified version shadows the correct one and breaks relation/boolean display and persistence. Do not re-implement them; just call them.
 """.strip()
 
 RUNTIME_LIB_JS = r"""/*__ZY_RUNTIME_LIB__*/
@@ -184,17 +184,23 @@ const loadDoc = async (userId) => {
 };
 let _saveTimer = null;
 const saveDoc = (userId, state, title) => {
-  if (!userId || !schemaId) return;
+  if (!userId || !schemaId) return Promise.resolve(null);
   clearTimeout(_saveTimer);
-  _saveTimer = setTimeout(async () => {
-    try {
-      await api.post(`/custom-data/rows/${schemaId}/upsert`, {
-        match: { sitemember_id: userId },
-        data: { title: title || 'Untitled', doc: JSON.stringify(state) },
-        sitemember_id: userId,
-      });
-    } catch (e) { console.warn('saveDoc failed'); }
-  }, 600);
+  return new Promise((resolve) => {
+    _saveTimer = setTimeout(async () => {
+      try {
+        const r = await api.post(`/custom-data/rows/${schemaId}/upsert`, {
+          match: { sitemember_id: userId },
+          data: { title: title || 'Untitled', doc: JSON.stringify(state) },
+          sitemember_id: userId,
+        });
+        resolve(r && r.data ? r.data : null);
+      } catch (e) {
+        console.warn('saveDoc failed', e);
+        resolve(null);
+      }
+    }, 600);
+  });
 };
 
 const wireUploads = (form) => {
