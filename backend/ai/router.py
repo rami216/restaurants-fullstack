@@ -45,7 +45,8 @@ from .prompt_modules import (
     APP_ARCHITECT_PROMPT,
     COMPLEX_ARCHITECT_PROMPT,
     COMPLEX_BUILDER_PROMPT,
-    COMPLEX_LIB_REGISTRY
+    COMPLEX_LIB_REGISTRY,
+    normalize_editable_props
 )
 from website_builder.models import SchemaAutomation
 
@@ -539,6 +540,7 @@ async def generate_ai_element(
         
         system_prompt = build_system_prompt(body.prompt)
         payload = generate_with_repair(client, model, provider, system_prompt, user_content)
+        payload = normalize_editable_props(payload)
         payload = clean_script(payload)
         payload = inject_schemas(payload, existing_schemas, body.website_id)
         payload["script"] = inject_runtime_lib(sanitize_injected_params(payload.get("script", "")))
@@ -3130,10 +3132,13 @@ async def generate_complex_element(
             f"SCHEMA_FIELDS: {json.dumps(schema_fields)}\n"
             f"EXISTING_SCHEMAS_ON_WEBSITE: {json.dumps(all_schemas_summary)}"
         )
+        
         payload = generate_with_repair(
             client, model, provider, COMPLEX_BUILDER_PROMPT, build_content,
             max_tokens=32000,
         )
+        payload = normalize_editable_props(payload)
+        
         if not isinstance(payload, dict):
             raise HTTPException(500, "Builder returned an unusable payload.")
         if not isinstance(payload.get("properties"), dict):

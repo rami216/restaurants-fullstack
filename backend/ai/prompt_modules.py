@@ -835,7 +835,29 @@ def build_system_prompt(user_prompt: str, base: str = BASE_RULES) -> str:
         chosen = [MODULE_CRUD]
     return base + "\n\n" + MODULE_BINDING + "\n\n" + "\n\n".join(chosen)
 
-
+def normalize_editable_props(payload: dict) -> dict:
+    """Coerce editableProps into [{key,label,type}] — models sometimes emit bare strings."""
+    eprops = payload.get("editableProps")
+    if not isinstance(eprops, list):
+        eprops = []
+    props = payload.get("properties") if isinstance(payload.get("properties"), dict) else {}
+    fixed = []
+    for e in eprops:
+        if isinstance(e, dict) and e.get("key"):
+            fixed.append(e)
+        elif isinstance(e, str):
+            val = props.get(e, "")
+            t = "color" if (isinstance(val, str) and val.startswith("#")) else \
+                ("number" if isinstance(val, (int, float)) and not isinstance(val, bool) else "text")
+            label = e.replace("_", " ").replace("-", " ")
+            label = "".join(" " + c if c.isupper() else c for c in label).strip().title()
+            fixed.append({"key": e, "label": label, "type": t})
+    if not any(f.get("key") == "slot_key" for f in fixed):
+        fixed.append({"key": "slot_key", "label": "⚡ Agent Slot Key", "type": "text"})
+        props.setdefault("slot_key", "")
+    payload["editableProps"] = fixed
+    payload["properties"] = props
+    return payload
 # ------------------------------------------------------------------
 # LINT + REPAIR (prompt-aware, conservative)
 # ------------------------------------------------------------------
@@ -959,6 +981,8 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
         errors.append("Never assign container.innerHTML — write into a child element (add e.g. <div class=\"list-container\"></div> to aiTemplate if missing).")
     if "console.log" in script:
         errors.append("Remove all console.log calls.")
+    if re.search(r"oninput\s*=[^;]{0,200}?render\s*\(", script) or re.search(r"addEventListener\(\s*['\"]input['\"][^)]{0,200}?render\s*\(", script, re.S):
+        errors.append("An oninput/input handler calls render() — this destroys the focused input so users can only type one character. On input: update state (+ targeted textContent updates + saveDoc) only; call render() exclusively for structural changes (add/delete/reorder/view switch).")
     if script and not script_is_balanced(script):
         errors.append("The script has unbalanced braces/parentheses (syntax error). Rewrite the script so it parses — check that every function and block is properly closed.")
     if re.search(r"onclick\s*=\s*[\"']", tmpl):
@@ -1224,6 +1248,11 @@ You are an expert front-end engineer. Build ONE self-contained element from the 
 - Mobile (@media max-width:768px): sidebar collapses above the canvas (horizontal scroll list or accordion); toolbar wraps; app-root min-height:auto.
 - Every state change reflects instantly (rename in sidebar updates while typing via render()); show a subtle "Saved ✓ / Saving…" indicator in the toolbar tied to saveDoc.
 ## NON-NEGOTIABLE ARCHITECTURE
+0. NEVER RE-RENDER ON KEYSTROKE. Text/number inputs must NOT call render() from oninput — that destroys the focused input and the user can only type one character.
+   - oninput → update state ONLY (state.items[i].name = e.target.value) plus targeted DOM updates of derived text (e.g. totalEl.textContent = computeTotal()) and saveDoc(...). NO render().
+   - Call render() only for STRUCTURAL changes: add/delete/reorder items, switching views/tabs, toggling done.
+   - After a structural render(), if the user was typing, do not steal focus back arbitrarily; keep handlers bound by re-attaching in the view's wiring step.
+   - Number inputs: <input type="number" step="any" inputmode="decimal"> and read Number(e.target.value) || 0 — never rebuild the input mid-typing.
 1. SINGLE STATE OBJECT: let state = <the spec's state_shape>; It is the only source of truth.
 2. SINGLE RENDER PATH: const render = () => { ... } redraws the CURRENT view (switch on state.view) into ONE root div (.app-root inside aiTemplate). Every view is its own renderXxx(root) function producing complete HTML for that view, then wiring that view's handlers. NEVER sprinkle innerHTML writes across handlers — mutate state, then call render().
 3. ACTIONS: implement every spec action as a function that mutates state, persists when the spec says so, then calls render().
