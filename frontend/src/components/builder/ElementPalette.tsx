@@ -451,8 +451,8 @@ const ElementPalette: React.FC<ElementPaletteProps> = ({
         element_id: `complex_${Date.now()}`,
         element_type: "AI",
         position: 999,
-        properties: aiPayload.properties,
-        aiPayload: aiPayload, // Matches your existing schema
+        properties: { ...aiPayload.properties, bgColor: "transparent" },
+        aiPayload: { ...aiPayload, id: `ai_payload_${Date.now()}` },
       };
 
       const updatedPage = {
