@@ -260,11 +260,12 @@ def _statement_end(src: str, i: int) -> int:
     return n
 
 def strip_lib_redefinitions(script: str) -> str:
-    """Disabled: brace-scanning surgery was corrupting valid scripts.
-    Redefinitions now shadow the library harmlessly inside the IIFE, and
-    lint_component still flags them so the repair pass removes them cleanly."""
+    """Disabled: the brace-scanning surgery corrupted valid scripts (it ate
+    `const` declarations, producing syntax errors). Redefinitions now merely
+    shadow the injected library inside the IIFE — harmless — and lint_component
+    flags them so the repair pass removes them cleanly."""
     return script
-
+  
 def script_is_balanced(script: str) -> bool:
     """Cheap sanity check: balanced braces/parens/brackets outside strings."""
     if not script:
