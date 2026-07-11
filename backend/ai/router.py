@@ -3025,8 +3025,21 @@ async def generate_complex_element(
             f'REQUEST: "{body.prompt}"',
             temperature=0.3, max_tokens=3000,
         )
-        if not isinstance(spec, dict) or not spec.get("views"):
+        if isinstance(spec, list):
+            spec = next((s for s in spec if isinstance(s, dict)), None)
+        if not isinstance(spec, dict) or not isinstance(spec.get("views"), list) or not spec["views"]:
             raise HTTPException(500, "Architect produced no usable spec.")
+        # normalize shapes a model may get wrong (reasoning models especially)
+        if not isinstance(spec.get("state_shape"), dict):
+            spec["state_shape"] = {}
+        if not isinstance(spec.get("libraries"), list):
+            spec["libraries"] = []
+        if not isinstance(spec.get("row_tables"), list):
+            spec["row_tables"] = []
+        if not isinstance(spec.get("actions"), list):
+            spec["actions"] = []
+        if not isinstance(spec.get("shell"), dict):
+            spec["shell"] = {}
  
         # ---- PROVISION PERSISTENCE ----
         schema_id = None
@@ -3093,9 +3106,16 @@ async def generate_complex_element(
                 schema_fields = sch.fields if sch else []
  
         # ---- PASS 2: BUILD ----
+        raw_libs = spec.get("libraries") or []
+        lib_names = []
+        for n in raw_libs:
+            if isinstance(n, str):
+                lib_names.append(n)
+            elif isinstance(n, dict):
+                lib_names.append(str(n.get("name", "")))
         libs = [
             {"name": n, "url": COMPLEX_LIB_REGISTRY[n]["url"], "global": COMPLEX_LIB_REGISTRY[n]["global"]}
-            for n in (spec.get("libraries") or []) if n in COMPLEX_LIB_REGISTRY
+            for n in lib_names if n in COMPLEX_LIB_REGISTRY
         ]
         all_schemas = (await db.execute(select(CustomDataSchema).where(
             CustomDataSchema.website_id == body.website_id))).scalars().all()
