@@ -347,37 +347,57 @@ def _repair_json_text(s: str) -> str:
     """Fix the common model JSON quirks: trailing commas before } or ]."""
     return re.sub(r",\s*([}\]])", r"\1", s)
 
+def _first_json_object(s: str):
+    """Return the first complete top-level {...} block (brace-balanced, string-aware)."""
+    start = s.find("{")
+    if start == -1:
+        return None
+    depth = 0
+    in_str = None
+    i = start
+    while i < len(s):
+        c = s[i]
+        if in_str:
+            if c == "\\":
+                i += 2
+                continue
+            if c == in_str:
+                in_str = None
+        elif c in "\"'":
+            in_str = c
+        elif c == "{":
+            depth += 1
+        elif c == "}":
+            depth -= 1
+            if depth == 0:
+                return s[start:i + 1]
+        i += 1
+    return None
+
 
 def _extract_json(content: str) -> dict:
     content = (content or "").strip()
     content = re.sub(r"^```json?\s*", "", content)
     content = re.sub(r"\s*```$", "", content)
 
-    # 1. straight parse
-    try:
-        return json.loads(content)
-    except json.JSONDecodeError:
-        pass
+    for candidate in (content, _repair_json_text(content)):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
 
-    # 2. parse after repairing trailing commas
-    try:
-        return json.loads(_repair_json_text(content))
-    except json.JSONDecodeError:
-        pass
-
-    # 3. extract the outermost object, then repair
-    m = re.search(r"\{[\s\S]*\}", content)
-    if not m:
+    blob = _first_json_object(content)
+    if not blob:
         raise HTTPException(500, "Model returned no valid JSON (possibly truncated — raise max_tokens).")
-    blob = m.group(0)
-    try:
-        return json.loads(blob)
-    except json.JSONDecodeError:
-        pass
-    try:
-        return json.loads(_repair_json_text(blob))
-    except json.JSONDecodeError as e:
-        raise HTTPException(500, f"Model returned malformed JSON (raise max_tokens if truncated): {e}")
+
+    for candidate in (blob, _repair_json_text(blob)):
+        try:
+            return json.loads(candidate)
+        except json.JSONDecodeError:
+            pass
+
+    raise HTTPException(500, "Model returned malformed JSON (raise max_tokens if truncated).")
+
 def call_ai_json(client, model: str, provider: str, system_prompt: str,
                  user_content: str, temperature: float = 0.2,
                  max_tokens: int = 4096) -> dict:
