@@ -3132,8 +3132,18 @@ async def generate_complex_element(
         )
         payload = generate_with_repair(
             client, model, provider, COMPLEX_BUILDER_PROMPT, build_content,
-            max_tokens=20000,
+            max_tokens=32000,
         )
+        if not isinstance(payload, dict):
+            raise HTTPException(500, "Builder returned an unusable payload.")
+        if not isinstance(payload.get("properties"), dict):
+            payload["properties"] = {}
+        if not isinstance(payload.get("editableProps"), list):
+            payload["editableProps"] = []
+        if not isinstance(payload.get("aiTemplate"), str):
+            payload["aiTemplate"] = ""
+        if not isinstance(payload.get("script"), str):
+            payload["script"] = ""
  
         # ---- ASSEMBLE (same shape as generate-ai-element) ----
         props = payload.get("properties", {}) or {}

@@ -879,10 +879,22 @@ def sanitize_injected_params(script: str) -> str:
         
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
+    if not isinstance(payload, dict):
+        return ["The output must be a single JSON object with keys aiTemplate, properties, editableProps, script."]
     tmpl = payload.get("aiTemplate", "") or ""
     script = payload.get("script", "") or ""
     props = payload.get("properties", {}) or {}
     eprops = payload.get("editableProps", []) or []
+    if not isinstance(tmpl, str):
+        tmpl = ""
+    if not isinstance(script, str):
+        script = ""
+    if not isinstance(props, dict):
+        errors.append('"properties" must be a JSON OBJECT mapping each token name to its initial value (e.g. {"title":"My App","accentColor":"#3498db"}) — not an array.')
+        props = {}
+    if not isinstance(eprops, list):
+        errors.append('"editableProps" must be a JSON ARRAY of {key,label,type} objects.')
+        eprops = []
     p = (user_prompt or "").lower()
     fetches_rows = "custom-data/rows" in script
 
