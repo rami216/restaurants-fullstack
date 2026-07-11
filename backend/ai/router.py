@@ -321,8 +321,12 @@ def _is_newer_openai(model: str) -> bool:
     return any(t in m for t in ["gpt-5", "gpt-6", "o1", "o3", "o4", "luna"])
 
 
-def _openai_kwargs(model: str, system_prompt: str, user_content: str,
-                   temperature: float, max_tokens: int, json_mode: bool) -> dict:
+def _is_reasoning_model(model: str) -> bool:
+    m = str(model).lower()
+    return any(t in m for t in ["gpt-5", "gpt-6", "o1", "o3", "o4", "luna"])
+
+
+def _openai_kwargs(model, system_prompt, user_content, temperature, max_tokens, json_mode):
     kwargs = {
         "model": model,
         "messages": [
@@ -332,14 +336,9 @@ def _openai_kwargs(model: str, system_prompt: str, user_content: str,
     }
     if json_mode:
         kwargs["response_format"] = {"type": "json_object"}
-    if _is_newer_openai(model):
-        if max_tokens:
-            kwargs["max_completion_tokens"] = max_tokens
-        # newer models reject custom temperature — omit it (uses default 1.0)
-    else:
-        if max_tokens:
-            kwargs["max_tokens"] = max_tokens
-        kwargs["temperature"] = temperature
+    if max_tokens:
+        kwargs["max_tokens"] = max_tokens
+    kwargs["temperature"] = temperature
     return kwargs
 
 
@@ -368,14 +367,22 @@ def call_ai_json(client, model: str, provider: str, system_prompt: str,
             model=model,
             max_tokens=max_tokens or 4096,
             temperature=temperature,
-            system=[{
-                "type": "text",
-                "text": system_prompt,
-                "cache_control": {"type": "ephemeral"},
-            }],
+            system=[{"type": "text", "text": system_prompt,
+                     "cache_control": {"type": "ephemeral"}}],
             messages=[{"role": "user", "content": user_content}],
         )
         return _extract_json(resp.content[0].text)
+
+    if _is_reasoning_model(model):
+        # Reasoning models use the Responses API
+        resp = client.responses.create(
+            model=model,
+            instructions=system_prompt,
+            input=user_content,
+            reasoning={"effort": "medium"},
+            max_output_tokens=max_tokens or 8000,
+        )
+        return _extract_json(resp.output_text or "")
 
     resp = client.chat.completions.create(
         **_openai_kwargs(model, system_prompt, user_content, temperature, max_tokens, json_mode=True)
@@ -396,10 +403,20 @@ def call_ai_text(client, model: str, provider: str, system_prompt: str,
         )
         return resp.content[0].text.strip()
 
+    if _is_reasoning_model(model):
+        resp = client.responses.create(
+            model=model,
+            instructions=system_prompt,
+            input=user_content,
+            reasoning={"effort": "medium"},
+            max_output_tokens=max_tokens or 8000,
+        )
+        return (resp.output_text or "").strip()
+
     resp = client.chat.completions.create(
         **_openai_kwargs(model, system_prompt, user_content, temperature, max_tokens, json_mode=False)
     )
-    return (resp.choices[0].message.content or "").strip() 
+    return (resp.choices[0].message.content or "").strip()
  
 def clean_script(payload: dict) -> dict:
     if isinstance(payload.get("script"), str):
