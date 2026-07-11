@@ -1376,20 +1376,23 @@ async def update_ai_settings(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ):
-    result = await db.execute(select(Website).where(Website.website_id == website_id))
-    website = result.scalars().first()
-    if not website:
-        raise HTTPException(404, "Website not found")
-    
+    website = await get_website_and_check_ownership(website_id, user, db)
+
     if body.user_openai_key is not None:
         website.user_openai_key = body.user_openai_key
     if body.user_claude_key is not None:
         website.user_claude_key = body.user_claude_key
     if body.user_gemini_key is not None:
         website.user_gemini_key = body.user_gemini_key
+    if body.user_openai_model is not None:
+        website.user_openai_model = body.user_openai_model
+    if body.user_claude_model is not None:
+        website.user_claude_model = body.user_claude_model
+    if body.user_gemini_model is not None:
+        website.user_gemini_model = body.user_gemini_model
     if body.preferred_ai_provider is not None:
         website.preferred_ai_provider = body.preferred_ai_provider
-    
+
     await db.commit()
     return {"ok": True}
 
@@ -1399,18 +1402,18 @@ async def get_ai_settings(
     db: AsyncSession = Depends(get_db),
     user: User = Depends(get_current_active_user),
 ):
-    result = await db.execute(select(Website).where(Website.website_id == website_id))
-    website = result.scalars().first()
-    if not website:
-        raise HTTPException(404, "Website not found")
-    
+    website = await get_website_and_check_ownership(website_id, user, db)
+
     return {
         "preferred_ai_provider": website.preferred_ai_provider or "platform",
         "has_openai_key": bool(website.user_openai_key),
         "has_claude_key": bool(website.user_claude_key),
         "has_gemini_key": bool(website.user_gemini_key),
+        "user_openai_model": website.user_openai_model,
+        "user_claude_model": website.user_claude_model,
+        "user_gemini_model": website.user_gemini_model,
     }
-    
+        
 @router.get("/websites/{website_id}/agent-key")
 async def get_agent_key(
     website_id: UUID,

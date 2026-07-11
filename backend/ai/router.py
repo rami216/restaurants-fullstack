@@ -314,13 +314,59 @@ async def get_website(website_id, db: AsyncSession) -> Website:
     return website
  
  
+def _is_newer_openai(model: str) -> bool:
+    """Newer OpenAI models (gpt-5.x, o-series, luna...) renamed max_tokens →
+    max_completion_tokens and only accept the default temperature."""
+    m = str(model).lower()
+    return any(t in m for t in ["gpt-5", "gpt-6", "o1", "o3", "o4", "luna"])
+
+
+def _openai_kwargs(model: str, system_prompt: str, user_content: str,
+                   temperature: float, max_tokens: int, json_mode: bool) -> dict:
+    kwargs = {
+        "model": model,
+        "messages": [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_content},
+        ],
+    }
+    if json_mode:
+        kwargs["response_format"] = {"type": "json_object"}
+    if _is_newer_openai(model):
+        if max_tokens:
+            kwargs["max_completion_tokens"] = max_tokens
+        # newer models reject custom temperature — omit it (uses default 1.0)
+    else:
+        if max_tokens:
+            kwargs["max_tokens"] = max_tokens
+        kwargs["temperature"] = temperature
+    return kwargs
+
+
+def _extract_json(content: str) -> dict:
+    content = content.strip()
+    content = re.sub(r"^```json?\s*", "", content)
+    content = re.sub(r"\s*```$", "", content)
+    try:
+        return json.loads(content)
+    except json.JSONDecodeError:
+        pass
+    m = re.search(r"\{[\s\S]*\}", content)
+    if not m:
+        raise HTTPException(500, "Model returned no valid JSON (possibly truncated — raise max_tokens).")
+    try:
+        return json.loads(m.group(0))
+    except json.JSONDecodeError as e:
+        raise HTTPException(500, f"Model returned malformed JSON (likely truncated — raise max_tokens): {e}")
+
+
 def call_ai_json(client, model: str, provider: str, system_prompt: str,
                  user_content: str, temperature: float = 0.2,
                  max_tokens: int = 4096) -> dict:
     if provider == "claude":
         resp = client.messages.create(
             model=model,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens or 4096,
             temperature=temperature,
             system=[{
                 "type": "text",
@@ -329,51 +375,31 @@ def call_ai_json(client, model: str, provider: str, system_prompt: str,
             }],
             messages=[{"role": "user", "content": user_content}],
         )
-        content = resp.content[0].text.strip()
-        content = re.sub(r"^```json?\s*", "", content)
-        content = re.sub(r"\s*```$", "", content)
-        m = re.search(r"\{[\s\S]*\}", content)
-        if not m:
-            raise HTTPException(500, "Claude returned no valid JSON")
-        return json.loads(m.group(0))
-    else:
-        resp = client.chat.completions.create(
-            model=model,
-            response_format={"type": "json_object"},
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return json.loads(resp.choices[0].message.content)
- 
- 
+        return _extract_json(resp.content[0].text)
+
+    resp = client.chat.completions.create(
+        **_openai_kwargs(model, system_prompt, user_content, temperature, max_tokens, json_mode=True)
+    )
+    return _extract_json(resp.choices[0].message.content or "")
+
+
 def call_ai_text(client, model: str, provider: str, system_prompt: str,
                  user_content: str, temperature: float = 0.2,
                  max_tokens: int = 4096) -> str:
     if provider == "claude":
         resp = client.messages.create(
             model=model,
-            max_tokens=max_tokens,
+            max_tokens=max_tokens or 4096,
             temperature=temperature,
             system=system_prompt,
             messages=[{"role": "user", "content": user_content}],
         )
         return resp.content[0].text.strip()
-    else:
-        resp = client.chat.completions.create(
-            model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_content},
-            ],
-            temperature=temperature,
-            max_tokens=max_tokens,
-        )
-        return resp.choices[0].message.content.strip()
- 
+
+    resp = client.chat.completions.create(
+        **_openai_kwargs(model, system_prompt, user_content, temperature, max_tokens, json_mode=False)
+    )
+    return (resp.choices[0].message.content or "").strip() 
  
 def clean_script(payload: dict) -> dict:
     if isinstance(payload.get("script"), str):
@@ -382,10 +408,8 @@ def clean_script(payload: dict) -> dict:
             payload["script"] = m.group(1).strip()
     return payload
 
-def generate_with_repair(client, model, provider, system_prompt, user_content, max_repairs=1):
-    """Generate → lint → one targeted repair pass. Deterministic checks
-    instead of hoping the model followed every prompt rule."""
-    payload = clean_script(call_ai_json(client, model, provider, system_prompt, user_content))
+def generate_with_repair(client, model, provider, system_prompt, user_content, max_repairs=1, max_tokens=4096):
+    payload = clean_script(call_ai_json(client, model, provider, system_prompt, user_content, max_tokens=max_tokens))
     for _ in range(max_repairs):
         errors = lint_component(payload)
         if not errors:
@@ -393,7 +417,8 @@ def generate_with_repair(client, model, provider, system_prompt, user_content, m
         payload = clean_script(call_ai_json(
             client, model, provider, REPAIR_PROMPT,
             "ERRORS TO FIX:\n- " + "\n- ".join(errors)
-            + "\n\nCOMPONENT JSON:\n" + json.dumps(payload)
+            + "\n\nCOMPONENT JSON:\n" + json.dumps(payload),
+            max_tokens=max_tokens,
         ))
     return payload
  
@@ -3070,6 +3095,7 @@ async def generate_complex_element(
         )
         payload = generate_with_repair(
             client, model, provider, COMPLEX_BUILDER_PROMPT, build_content,
+            max_tokens=20000,
         )
  
         # ---- ASSEMBLE (same shape as generate-ai-element) ----

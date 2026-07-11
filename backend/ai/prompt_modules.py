@@ -1161,6 +1161,7 @@ You are a senior application architect. Decompose the user's request for a compl
   "actions": [
     {"name":"addItem","effect":"push a blank item into state.items, set currentIndex to it, render()","persist":true}
   ],
+  "shell": {"type":"sidebar+canvas","toolbar":["primary actions like Add / Export / Save status"],"sidebar":"what the left panel lists (items/pages/steps) and what clicking does","canvas":"what the main working area shows for the selected item"},
   "user_scoped": true,
   "notes": "edge cases, empty states, validation the builder must handle"
 }
@@ -1172,12 +1173,18 @@ RULES:
 - views: every distinct screen/mode. ONE view is fine for single-screen tools. Each ui description must be rich enough to build from alone.
 - actions: every mutation. "persist":true means the builder must call saveDoc (document mode) or the rows API after it.
 - user_scoped: true when each logged-in member has their own data/state; false for shared/public tools.
+- shell: complex tools are FULL APPLICATIONS, not widgets. Choose type from: "sidebar+canvas" (item lists + workspace — editors, builders), "toolbar+canvas" (single workspace — designers), "tabs" (multi-step wizards), "single" (compact tools only). Describe every region concretely.
 - Think about the FULL user journey: empty state on first visit, creating, editing, deleting, and (if requested) exporting.
 """
  
 COMPLEX_BUILDER_PROMPT = """
 You are an expert front-end engineer. Build ONE self-contained element from the SPEC you are given. Output ONE valid JSON object with keys: "aiTemplate", "properties", "editableProps", "script". No markdown.
- 
+## APP SHELL & SCALE (this is a full application, not a widget)
+- The element fills its section: outer wrapper width:100%; .app-root is the application frame — min-height:72vh; width:100%; display:flex; flex-direction:column; background:#f8fafc; border:1px solid #e2e8f0; border-radius:12px; overflow:hidden.
+- Build the spec's shell literally: a TOOLBAR bar (flex, 12-16px padding, white bg, bottom border) holding the title + primary action buttons + save status; below it the working area. "sidebar+canvas" → display:flex row: sidebar 260px (scrollable item list, active item highlighted, add button) + flex-1 canvas (the workspace, generous padding). "tabs" → tab bar + panel. 
+- The CANVAS is where the user actually works — it must be substantial: real editing controls (inputs, textareas, image dropzones, reorder buttons), a visual preview of the current item, never a bare form row.
+- Mobile (@media max-width:768px): sidebar collapses above the canvas (horizontal scroll list or accordion); toolbar wraps; app-root min-height:auto.
+- Every state change reflects instantly (rename in sidebar updates while typing via render()); show a subtle "Saved ✓ / Saving…" indicator in the toolbar tied to saveDoc.
 ## NON-NEGOTIABLE ARCHITECTURE
 1. SINGLE STATE OBJECT: let state = <the spec's state_shape>; It is the only source of truth.
 2. SINGLE RENDER PATH: const render = () => { ... } redraws the CURRENT view (switch on state.view) into ONE root div (.app-root inside aiTemplate). Every view is its own renderXxx(root) function producing complete HTML for that view, then wiring that view's handlers. NEVER sprinkle innerHTML writes across handlers — mutate state, then call render().
