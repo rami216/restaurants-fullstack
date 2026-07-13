@@ -388,6 +388,7 @@ def _extract_json(content: str) -> dict:
 
     blob = _first_json_object(content)
     if not blob:
+        print("[AI RAW OUTPUT]", content[:500])
         raise HTTPException(500, "Model returned no valid JSON (possibly truncated — raise max_tokens).")
 
     for candidate in (blob, _repair_json_text(blob)):
@@ -1349,7 +1350,10 @@ async def generate_data_app_element(
         # V3 returns ONE flat object:
         # {name, schema, aiTemplate, properties, editableProps, script,
         #  automations, schemas_to_create (optional helpers)}
-        payload = generate_with_repair(client, model, provider, DATA_APP_PROMPT_V3, user_content)
+        payload = generate_with_repair(
+            client, model, provider, DATA_APP_PROMPT_V3, user_content,
+            max_tokens=16000,
+        )
 
         main_fields = payload.get("schema", []) or []
         if not main_fields or "script" not in payload:
