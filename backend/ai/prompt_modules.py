@@ -102,6 +102,9 @@ populateRelationSelects(form, initial={}) → fills every select[name][data-rela
 galleryUrls(v)             → array of image URLs from a gallery/image field (handles JSON-string arrays, plain strings, arrays) — NEVER put a raw gallery value in src=""
 firstImage(v)              → the first image URL of a gallery/image field (use for thumbnails/cards)
 wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
+goToPage(slug, params)     → navigate to another page of this site, handling subdomain/base path automatically: goToPage('apartment-details', { id: row.row_id })
+getUrlParam(key)           → read a query param on the current page: const id = getUrlParam('id')
+loadRowById(schemaId, id)  → Promise of a single row by row_id (or null)
 onVisible(el, cb)          → runs cb ONCE when el scrolls into view (IntersectionObserver; immediate fallback) — ALL scroll/reveal animations go through this
 loadLibs(urls, cb)         → loads external <script> libs then calls cb — ALL library-dependent code goes inside cb
 loadDoc(userId)            → Promise of the user's saved app document (parsed JSON) or null — for document-persistence elements
@@ -131,6 +134,22 @@ const firstValue = (v) => {
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rowData = (row) => (row && row.data) ? row.data : (row || {});
+const goToPage = (slug, params = {}) => {
+  const isMainHost = window.location.hostname.includes('zygoflow.com');
+  const sub = (typeof properties !== 'undefined' && properties.subdomain) || '';
+  const base = (isMainHost && sub) ? `/${sub}` : '';
+  const clean = String(slug || '').replace(/^\//, '');
+  const qs = new URLSearchParams(params).toString();
+  window.location.href = `${base}/${clean}${qs ? '?' + qs : ''}`;
+};
+const getUrlParam = (key) => new URLSearchParams(window.location.search).get(key) || '';
+const loadRowById = async (sid, rowId) => {
+  if (!sid || !rowId) return null;
+  try {
+    const res = await api.get(`/custom-data/rows/${sid}?limit=1000`);
+    return res.data.rows.find(r => r.row_id === rowId) || null;
+  } catch (e) { return null; }
+};
 const galleryUrls = (v) => {
   if (Array.isArray(v)) return v.filter(Boolean);
   if (typeof v === 'string') {
@@ -415,6 +434,16 @@ You are given EXISTING_SCHEMAS_ON_WEBSITE: [{name, schema_id, fields:[{id,label,
 # MODULE: CRUD CORE — API + rendering (complete pattern)
 # ------------------------------------------------------------------
 MODULE_CRUD = f"""
+## MASTER → DETAIL (whenever the user mentions view/details/open/more info/clicking an item)
+List side: give each card/row a "View" button and navigate with the pre-injected helper — NEVER hand-build URLs:
+  btn.onclick = () => goToPage(properties.detailPageSlug || 'details', {{ id: r.row_id }});
+Add "detailPageSlug" to properties AND editableProps (type text, label "Detail Page Slug") so the owner can point it at their page.
+Detail side (an element living on the detail page):
+  const id = getUrlParam('id');
+  if (!id) {{ target.innerHTML = '<p>No item selected</p>'; return; }}
+  const row = await loadRowById(schemaId, id);
+  if (!row) {{ target.innerHTML = '<p>Item not found</p>'; return; }}
+  render row.data fields (images via galleryUrls/firstImage, relations via relDisplay).
 ## DATA API
 - Read:   api.get(`/custom-data/rows/${{schemaId}}?skip=${{skip}}&limit=${{limit}}`) → res.data.rows, res.data.total. Single row: append &row_id is NOT supported — fetch list and .find(r=>r.row_id===id).
 - Create: api.post(`/custom-data/rows/${{schemaId}}`, {{ data, sitemember_id }})  (server validates required/unique/options → show err.response?.data?.detail)
@@ -1290,6 +1319,8 @@ You are an expert front-end engineer. Build ONE self-contained element from the 
 - The CANVAS is where the user actually works — it must be substantial: real editing controls (inputs, textareas, image dropzones, reorder buttons), a visual preview of the current item, never a bare form row.
 - Mobile (@media max-width:768px): sidebar collapses above the canvas (horizontal scroll list or accordion); toolbar wraps; app-root min-height:auto.
 - Every state change reflects instantly (rename in sidebar updates while typing via render()); show a subtle "Saved ✓ / Saving…" indicator in the toolbar tied to saveDoc.
+## NAVIGATION
+Use goToPage(slug, params) / getUrlParam(key) / loadRowById(schemaId, id) for anything that opens another page (details, checkout, confirmation). Never construct URLs manually. Expose the target slug as an editable property (e.g. detailPageSlug) so the owner can change it.
 ## NON-NEGOTIABLE ARCHITECTURE
 0. NEVER RE-RENDER ON KEYSTROKE. Text/number inputs must NOT call render() from oninput — that destroys the focused input and the user can only type one character.
    - oninput → update state ONLY (state.items[i].name = e.target.value) plus targeted DOM updates of derived text (e.g. totalEl.textContent = computeTotal()) and saveDoc(...). NO render().
