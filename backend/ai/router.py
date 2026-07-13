@@ -3109,12 +3109,20 @@ async def generate_complex_element(
                 schema_id, schema_fields = str(ns.schema_id), doc_fields
  
         elif persistence == "rows":
-            name_map = {}
             existing_all = (await db.execute(select(CustomDataSchema).where(
                 CustomDataSchema.website_id == body.website_id))).scalars().all()
-            for s in existing_all:
-                name_map[s.name] = str(s.schema_id)
-            # two-pass: non-relation fields first, then resolve related_table names
+            name_map = {s.name: str(s.schema_id) for s in existing_all}
+            by_id = {str(s.schema_id): s for s in existing_all}
+
+            # 1. bind to an EXISTING table when the spec names one (browsers/catalogs)
+            bind_name = spec.get("bind_table")
+            if bind_name:
+                for s in existing_all:
+                    if s.name.lower() == str(bind_name).lower():
+                        schema_id, schema_fields = str(s.schema_id), s.fields
+                        break
+
+            # 2. create any genuinely new tables (non-relation fields first)
             raw_tables = spec.get("row_tables", []) or []
             for t in raw_tables:
                 if not isinstance(t, dict) or not t.get("name") or t["name"] in name_map:
@@ -3124,6 +3132,35 @@ async def generate_complex_element(
                 db.add(ns)
                 await db.flush()
                 name_map[t["name"]] = str(ns.schema_id)
+            await db.commit()
+
+            # 3. resolve relation fields by table name
+            for t in raw_tables:
+                sid = name_map.get(t.get("name", ""))
+                if not sid:
+                    continue
+                resolved = []
+                for f in (t.get("fields") or []):
+                    fd = dict(f)
+                    if fd.get("type") == "relation":
+                        target = name_map.get(fd.pop("related_table", ""))
+                        if not target:
+                            continue
+                        fd["related_schema_id"] = target
+                    resolved.append(fd)
+                sch = await db.get(CustomDataSchema, UUID(sid))
+                if sch:
+                    sch.fields = resolved
+                    flag_modified(sch, "fields")
+            await db.commit()
+
+            # 4. if no bind_table matched, fall back to the first created row table
+            if not schema_id:
+                first = (raw_tables or [{}])[0].get("name")
+                if first and first in name_map:
+                    schema_id = name_map[first]
+                    sch = await db.get(CustomDataSchema, UUID(schema_id))
+                    schema_fields = sch.fields if sch else []
             await db.commit()
             for t in raw_tables:
                 sid = name_map.get(t.get("name", ""))

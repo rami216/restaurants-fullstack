@@ -1286,6 +1286,7 @@ You are a senior application architect. Decompose the user's request for a compl
   "element_name": "Short Name",
   "persistence": "document" | "rows" | "none",
   "document_table_name": "Book Projects",
+  "bind_table": "ExistingTableName or null",
   "row_tables": [{"name":"Entries","fields":[{"id":"...","label":"...","type":"text|number|email|date|boolean|image|relation","related_table":"OtherTable?"}]}],
   "libraries": ["pdf","canvas"],
   "state_shape": { "view":"main", "items":[{"title":"","imageUrl":""}], "currentIndex":0 },
@@ -1301,7 +1302,8 @@ You are a senior application architect. Decompose the user's request for a compl
 }
  
 RULES:
-- persistence: "document" = the whole tool state is ONE JSON blob per user (editors, wizards, planners, builders — anything with rich nested state). "rows" = classic records other elements/pages also need. "none" = pure client tool (calculator, converter). Prefer "document" for anything editor-like. document_table_name only when persistence=document; row_tables only when persistence=rows.
+- persistence: choose by WHO OWNS THE DATA. "document" = the tool's own state is private to each user and has no meaning outside the tool (editors, planners, wizards, drafts). "rows" = the element READS or WRITES shared business records that already exist or that other pages/elements also use (product/apartment/job browsers, catalogs, admin lists, booking forms). "none" = a pure client tool with no data. IF THE REQUEST IS ABOUT BROWSING / FILTERING / SEARCHING / VIEWING EXISTING RECORDS → ALWAYS "rows", NEVER "document" (browsers do not own their data; they read a table that already exists in EXISTING_SCHEMAS_ON_WEBSITE). Only use "document" when the user is authoring something of their own. document_table_name only when persistence=document; bind_table/row_tables only when persistence=rows.
+- bind_table: when the tool reads/writes an EXISTING table from EXISTING_SCHEMAS_ON_WEBSITE, put that table's exact name here and leave row_tables empty. Only create row_tables for genuinely new data the tool needs.
 - libraries: ONLY from this registry (name → capability): {LIB_MENU}. Empty array if none needed. Do not invent libraries.
 - state_shape: a CONCRETE example JSON of the full state, including "view" (the current view id) when there are multiple views.
 - views: every distinct screen/mode. ONE view is fine for single-screen tools. Each ui description must be rich enough to build from alone.
@@ -1332,7 +1334,7 @@ Use goToPage(slug, params) / getUrlParam(key) / loadRowById(schemaId, id) for an
 3. ACTIONS: implement every spec action as a function that mutates state, persists when the spec says so, then calls render().
 4. PERSISTENCE (per spec):
    - document: on init → const saved = await loadDoc(currentUserId); if (saved) state = {...state, ...saved}; after every persisting action → saveDoc(currentUserId, state, state.title). loadDoc/saveDoc are pre-injected.
-   - rows: use the standard rows API (POST/PUT/GET on /custom-data/rows/${schemaId}) with the provided field ids.
+   - rows: NEVER use loadDoc/saveDoc. Fetch with api.get(`/custom-data/rows/${schemaId}?limit=1000`) → res.data.rows; keep them in state as an ARRAY (state.items = res.data.rows.map(r => ({ row_id: r.row_id, ...r.data }))). Guard every array read: (Array.isArray(state.items) ? state.items : []).filter(...). Filtering/sorting/searching happens over that array in memory (or via the /search endpoint for large tables). Writes use POST/PUT/DELETE on /custom-data/rows.
    - none: no persistence code at all.
 5. LIBRARIES: you receive LIBRARIES as [{name,url,global}]. Wrap ALL code that touches them in loadLibs([urls...], () => { ...init + first render... }); access via the given global exactly (e.g. const { jsPDF } = window.jspdf). If LIBRARIES is empty, call init directly.
 6. user_scoped=true → login guard first: read currentUserId from localStorage('siteMemberId:'+(properties.subdomain||'')); if missing, render a friendly "Please log in" message into .app-root and stop.
