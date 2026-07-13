@@ -99,6 +99,8 @@ esc(s)                     → HTML-escape; wrap EVERY interpolated value: ${esc
 rowData(row)               → row.data whether given a row or already-data; ALWAYS use for edit prefill: openForm(rowData(target))
 relLabelField(f) / relDisplay(f, v) → relation labeling (matches the relation field to the related schema's field); use relDisplay for relation TABLE CELLS and DROPDOWN labels
 populateRelationSelects(form, initial={}) → fills every select[name][data-relation="<related_schema_id>"] (value=row_id, label=relDisplay) and preselects extractRowId(initial[name]) — call after inserting a form containing relation selects
+galleryUrls(v)             → array of image URLs from a gallery/image field (handles JSON-string arrays, plain strings, arrays) — NEVER put a raw gallery value in src=""
+firstImage(v)              → the first image URL of a gallery/image field (use for thumbnails/cards)
 wireUploads(form)          → wires input[data-upload="<field_id>"] to /uploads/ and writes URLs into the sibling hidden input[name="<field_id>"]
 onVisible(el, cb)          → runs cb ONCE when el scrolls into view (IntersectionObserver; immediate fallback) — ALL scroll/reveal animations go through this
 loadLibs(urls, cb)         → loads external <script> libs then calls cb — ALL library-dependent code goes inside cb
@@ -129,12 +131,23 @@ const firstValue = (v) => {
 };
 const esc = (s) => String(s ?? '').replace(/[&<>"]/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const rowData = (row) => (row && row.data) ? row.data : (row || {});
+const galleryUrls = (v) => {
+  if (Array.isArray(v)) return v.filter(Boolean);
+  if (typeof v === 'string') {
+    const s = v.trim();
+    if (s.startsWith('[')) { try { const a = JSON.parse(s); return Array.isArray(a) ? a.filter(Boolean) : []; } catch (e) { return []; } }
+    return s ? [s] : [];
+  }
+  return [];
+};
+const firstImage = (v) => galleryUrls(v)[0] || '';
 const relLabelField = (f) => {
   const schemas = (typeof properties !== 'undefined' && properties.all_schemas) || [];
   const rel = schemas.find(s => String(s.schema_id) === String(f && f.related_schema_id));
   const m = rel && (rel.fields || []).find(rf => rf.id === (f && f.id) || String(rf.label || '').toLowerCase() === String((f && f.label) || '').toLowerCase());
   return m ? m.id : null;
 };
+
 const relDisplay = (f, v) => {
   if (f && f.type === 'relation' && typeof v === 'string' && /^[0-9a-f-]{36}$/i.test(v)) return '(deleted)';
   const lf = relLabelField(f);
@@ -988,6 +1001,8 @@ def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
         errors.append("Never assign container.innerHTML — write into a child element (add e.g. <div class=\"list-container\"></div> to aiTemplate if missing).")
     if "console.log" in script:
         errors.append("Remove all console.log calls.")
+    if re.search(r"src=[\"'`]\$\{(?:esc\()?\s*\w+\.data\[[^\]]+\]", script) and "galleryUrls" not in script and "firstImage" not in script:
+        errors.append("An <img src> interpolates a raw image/gallery field — gallery values are JSON-string arrays and produce broken 404 URLs. Use firstImage(v) for a thumbnail or galleryUrls(v).map(...) for all images.")
     if re.search(r"oninput\s*=[^;]{0,200}?render\s*\(", script) or re.search(r"addEventListener\(\s*['\"]input['\"][^)]{0,200}?render\s*\(", script, re.S):
         errors.append("An oninput/input handler calls render() — this destroys the focused input so users can only type one character. On input: update state (+ targeted textContent updates + saveDoc) only; call render() exclusively for structural changes (add/delete/reorder/view switch).")
     if script and not script_is_balanced(script):
@@ -1185,7 +1200,7 @@ Then, in order:
    attachEventListeners() wires ONLY per-row buttons (.edit-btn/.delete-btn) after each render.
    Ownership: user-scoped prompt → const currentUserId = localStorage.getItem('siteMemberId:'+(properties.subdomain||'')); login guard; const smId = currentUserId. Otherwise const smId = null. NEVER the zero admin UUID.
 3. fetchAndRenderRows: first line `if (properties.hideData) return;`. GET /custom-data/rows/${{schemaId}}?skip=${{currentPage*rowsPerPage}}&limit=${{rowsPerPage}} (+ `&sitemember_id=${{currentUserId}}` when user-scoped) → rows = res.data.rows; totalRows = res.data.total.
-   Text-only schemas: assemble ONE .data-table with <thead> from field labels and one <tr> per row; EVERY cell = esc(relDisplay(f, r.data[f.id])) — relDisplay, not displayValue, so relation columns show their matched field; image fields render <img src="${{esc(firstValue(r.data[f.id]))}}">; long text cells get class "wrap". Empty → "No items found". Then attachEventListeners(); renderPagination().
+   Text-only schemas: assemble ONE .data-table with <thead> from field labels and one <tr> per row; EVERY cell = esc(relDisplay(f, r.data[f.id])) — relDisplay, not displayValue, so relation columns show their matched field; image/gallery fields render <img src="${{esc(firstImage(r.data[f.id]))}}"> for a thumbnail, or galleryUrls(r.data[f.id]).map(u => `<img src="${{esc(u)}}">`).join('') for all of them — NEVER interpolate the raw field value (a gallery is a JSON-string array and produces a broken 404 src); long text cells get class "wrap". Empty → "No items found". Then attachEventListeners(); renderPagination().
 4. renderPagination into .pagination-controls: Previous/Next ("px-3 py-1 border rounded bg-white hover:bg-gray-50 disabled:opacity-50 disabled:cursor-not-allowed") + "Page X of Y", disabled at bounds, clicks change currentPage and refetch.
 4b. RELATION LABELING (mandatory): define relLabelField(f) — find the related schema in properties.all_schemas by f.related_schema_id, return the id of its field whose id or label matches f's; and relDisplay(f, v) = matched ? displayValue(v.data[matchedId]) : displayValue(v). TABLE CELLS for relation fields and DROPDOWN option labels both use relDisplay. Edit prefill: openForm's initial = (row && row.data) ? row.data : (row || {{}}). Submit: try/catch wraps ONLY the api call; success-path UI (reset/hide/refetch) runs after it.
 5. FORM — build with this exact machinery:
