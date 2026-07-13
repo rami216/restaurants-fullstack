@@ -911,38 +911,59 @@ _WRAPPER_RE = re.compile(
 )
 
 def sanitize_injected_params(script: str) -> str:
-    """Deterministic repairs: (1) unwrap never-invoked wrappers; (2) strip injected-param
-    redeclarations; (3) strip runtime-library redefinitions; (4) declare smId if missing;
-    (5) rewrite field-loop cells to relation-aware relDisplay (safe: falls back to displayValue)."""
+    """Deterministic repairs. Every rewrite is validated: if a transform would
+    break syntax balance, it is discarded (a mangled script is worse than a
+    lint-flagged one)."""
     if not script:
         return script
     if _RUNTIME_MARKER in script:
-        return script          # already injected — never touch the library
+        return script  # already injected — never touch the library
+
+    original = script
+
+    # 1. unwrap a never-invoked wrapper function — ONLY if the result stays balanced
     m = _WRAPPER_RE.search(script)
     if m:
-        prefix = script[:m.start()]
-        open_idx = script.index("{", m.start())
-        close_idx = script.rfind("}")
-        if close_idx > open_idx:
-            body = script[open_idx + 1:close_idx]
-            suffix = re.sub(r"^[\s;()]*", "", script[close_idx + 1:])
-            script = prefix.rstrip() + "\n" + body.strip() + "\n" + suffix
-    script = _REDECL_LINE.sub("", script)
-    script = strip_lib_redefinitions(script)
+        try:
+            prefix = script[:m.start()]
+            open_idx = script.index("{", m.start())
+            close_idx = script.rfind("}")
+            if close_idx > open_idx:
+                body = script[open_idx + 1:close_idx]
+                suffix = re.sub(r"^[\s;()]*", "", script[close_idx + 1:])
+                candidate = prefix.rstrip() + "\n" + body.strip() + "\n" + suffix
+                if script_is_balanced(candidate):
+                    script = candidate
+        except (ValueError, IndexError):
+            pass
+
+    # 2. strip redeclarations of injected params (line-level, safe)
+    candidate = _REDECL_LINE.sub("", script)
+    if script_is_balanced(candidate):
+        script = candidate
+
+    # 3. declare smId if used but never declared
     if re.search(r"\bsmId\b", script) and not re.search(r"\b(?:const|let|var)\s+smId\b", script):
         script = "const smId = null;\n" + script
-    script = re.sub(
+
+    # 4. relation-aware cells (safe textual swaps)
+    candidate = re.sub(
         r"relDisplay\(\s*([A-Za-z_$][\w$]*)\s*,\s*displayValue\(\s*([A-Za-z_$][\w$]*\.data\[[A-Za-z_$][\w$]*\.id\])\s*\)\s*\)",
-        r"relDisplay(\1, \2)",
-        script,
-    )
-    script = re.sub(
+        r"relDisplay(\1, \2)", script)
+    if script_is_balanced(candidate):
+        script = candidate
+    candidate = re.sub(
         r"displayValue\(\s*([A-Za-z_$][\w$]*)\.data\[\s*([A-Za-z_$][\w$]*)\.id\s*\]\s*\)",
-        r"relDisplay(\2, \1.data[\2.id])",
-        script,
-    )
+        r"relDisplay(\2, \1.data[\2.id])", script)
+    if script_is_balanced(candidate):
+        script = candidate
+
+    # 5. final safety net: if anything broke it, return the original untouched
+    if not script_is_balanced(script) and script_is_balanced(original):
+        return original
     return script
-        
+  
+          
 def lint_component(payload: Dict[str, Any], user_prompt: str = "") -> List[str]:
     errors: List[str] = []
     if not isinstance(payload, dict):
